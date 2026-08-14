@@ -5,6 +5,7 @@
   <a href="https://www.npmjs.com/package/dsh-pet"><img alt="npm downloads" src="https://img.shields.io/npm/dm/dsh-pet?color=brightgreen"></a>
   <a href="https://github.com/PC2005-cloud/dsh-pet"><img alt="stars" src="https://img.shields.io/github/stars/PC2005-cloud/dsh-pet?style=social"></a>
   <a href="https://github.com/PC2005-cloud/dsh-pet/blob/master/LICENSE"><img alt="license" src="https://img.shields.io/github/license/PC2005-cloud/dsh-pet?color=orange"></a>
+  <a href="https://awesome-dsh-plugin.com"><img alt="awesome dsh plugin" src="https://awesome-dsh-plugin.com/badge.svg"></a>
   <img alt="platform" src="https://img.shields.io/badge/platform-DeepSeek%20Harness%20Web-8A2BE2">
   <img alt="assets" src="https://img.shields.io/badge/assets-25%20animations-ff69b4">
 </p>
