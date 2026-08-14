@@ -1,8 +1,26 @@
 {
   "name": "dsh-pet",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A floating desktop pet for the DeepSeek Harness Web UI: idle breathing, occasional direction turns, random actions, and screen wandering.",
-
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "desktop-pet",
+    "pet",
+    "floating-widget",
+    "web-ui",
+    "cordis",
+    "react"
+  ],
+  "homepage": "https://github.com/PC2005-cloud/dsh-pet#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PC2005-cloud/dsh-pet.git"
+  },
+  "bugs": {
+    "url": "https://github.com/PC2005-cloud/dsh-pet/issues"
+  },
   "_comment": [
     "=============== dsh-pet 包清单说明 ===============",
     "type: module —— 本包是 ESM",
@@ -16,7 +34,6 @@
     "peerDependencies —— 运行时由宿主（DSH）提供的模块，本包不打包它们",
     "================================================"
   ],
-
   "type": "module",
   "main": "lib/index.js",
   "exports": {
