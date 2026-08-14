@@ -1,0 +1,29 @@
+# ── 素材处理链中间产物（跑 scripts/*.py 可再生，不入仓库） ──
+step01/
+step02/
+step03/
+step04/
+
+# ── 本地工具（机器相关，不入仓库） ──
+.tools/
+
+# ── Python ──
+__pycache__/
+*.py[cod]
+.venv/
+.uv-cache/
+
+# ── Node ──
+node_modules/
+npm-debug.log*
+*.tgz
+
+# ── IDE / 编辑器 ──
+.idea/
+.vscode/
+*.swp
+
+# ── 系统文件 ──
+.DS_Store
+Thumbs.db
+desktop.ini
