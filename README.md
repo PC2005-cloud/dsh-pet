@@ -96,6 +96,15 @@ dsh plugin --profile web add file:D:/path/to/dsh-pet
 - **落地对齐**：动画统一脚底线，宠物始终站在地面上
 - **流畅切换**：双缓冲交叉淡入，切换无空白帧
 
+## 运行效果
+
+宠物实际运行在 DSH Web 界面中的样子：
+
+<p>
+  <img src="assets/screenshots/dsh-pet-running-1.png" width="380" alt="dsh-pet 运行效果 1" title="dsh-pet 运行效果 1">
+  <img src="assets/screenshots/dsh-pet-running-2.png" width="380" alt="dsh-pet 运行效果 2" title="dsh-pet 运行效果 2">
+</p>
+
 ## 效果预览
 
 全部 25 个动画（360×360，插件实际播放用的资源）——GitHub 只对仓库内图片渲染内联预览，故此处用 GIF 演示；完整透明视频见 `dsh-pet/assets/thumb/`：

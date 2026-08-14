@@ -50,6 +50,15 @@ dsh plugin --profile web add dsh-pet
 dsh plugin --profile web remove dsh-pet
 ```
 
+## 🖥️ 运行效果
+
+宠物实际运行在 DSH Web 界面中的样子：
+
+<p>
+  <img src="https://raw.githubusercontent.com/PC2005-cloud/dsh-pet/master/assets/screenshots/dsh-pet-running-1.png" width="380" alt="dsh-pet 运行效果 1" title="dsh-pet 运行效果 1">
+  <img src="https://raw.githubusercontent.com/PC2005-cloud/dsh-pet/master/assets/screenshots/dsh-pet-running-2.png" width="380" alt="dsh-pet 运行效果 2" title="dsh-pet 运行效果 2">
+</p>
+
 ## 🎬 效果预览
 
 > 动画为透明背景；GIF 预览中透明部分显示为页面底色，实际播放为透明。
