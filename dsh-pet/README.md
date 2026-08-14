@@ -55,8 +55,8 @@ dsh plugin --profile web remove dsh-pet
 宠物实际运行在 DSH Web 界面中的样子：
 
 <p>
-  <img src="https://raw.githubusercontent.com/PC2005-cloud/dsh-pet/master/assets/screenshots/dsh-pet-running-1.png" width="380" alt="dsh-pet running in DSH Web UI 1" title="dsh-pet running in DSH Web UI 1">
-  <img src="https://raw.githubusercontent.com/PC2005-cloud/dsh-pet/master/assets/screenshots/dsh-pet-running-2.png" width="380" alt="dsh-pet running in DSH Web UI 2" title="dsh-pet running in DSH Web UI 2">
+  <img src="https://raw.githubusercontent.com/PC2005-cloud/dsh-pet/main/assets/screenshots/dsh-pet-running-1.png" width="380" alt="dsh-pet running in DSH Web UI 1" title="dsh-pet running in DSH Web UI 1">
+  <img src="https://raw.githubusercontent.com/PC2005-cloud/dsh-pet/main/assets/screenshots/dsh-pet-running-2.png" width="380" alt="dsh-pet running in DSH Web UI 2" title="dsh-pet running in DSH Web UI 2">
 </p>
 
 ## 🎬 效果预览
@@ -64,12 +64,12 @@ dsh plugin --profile web remove dsh-pet
 > 动画为透明背景；GIF 预览中透明部分显示为页面底色，实际播放为透明。
 
 <p>
-  <img src="https://raw.githubusercontent.com/PC2005-cloud/dsh-pet/master/dsh-pet/assets/preview/%E5%BE%85%E6%9C%BA%E5%91%BC%E5%90%B8%E4%BC%91%E9%97%B2.gif" width="160" alt="待机呼吸休闲" title="待机呼吸休闲">
-  <img src="https://raw.githubusercontent.com/PC2005-cloud/dsh-pet/master/dsh-pet/assets/preview/%E4%B8%9C%E5%BC%A0%E8%A5%BF%E6%9C%9B.gif" width="160" alt="东张西望" title="东张西望">
-  <img src="https://raw.githubusercontent.com/PC2005-cloud/dsh-pet/master/dsh-pet/assets/preview/%E5%8E%9F%E5%9C%B0%E6%BC%82%E6%B5%AE%E8%B8%8F%E6%AD%A5.gif" width="160" alt="原地漂浮踏步" title="原地漂浮踏步">
-  <img src="https://raw.githubusercontent.com/PC2005-cloud/dsh-pet/master/dsh-pet/assets/preview/%E5%8E%9F%E5%9C%B0%E5%B0%8F%E6%86%A9%E6%B2%89%E7%9C%A0.gif" width="160" alt="原地小憩沉眠" title="原地小憩沉眠">
-  <img src="https://raw.githubusercontent.com/PC2005-cloud/dsh-pet/master/dsh-pet/assets/preview/%E7%82%B9%E5%87%BB%E5%9B%9E%E5%BA%94%20-%20%E5%BC%80%E5%BF%83%E8%B7%83%E5%8A%A8.gif" width="160" alt="点击回应 - 开心跃动" title="点击回应 - 开心跃动">
-  <img src="https://raw.githubusercontent.com/PC2005-cloud/dsh-pet/master/dsh-pet/assets/preview/%E8%A2%AB%E9%BC%A0%E6%A0%87%E6%8B%96%E6%8B%BD%E6%82%AC%E7%A9%BA%E5%8F%8D%E9%A6%88.gif" width="160" alt="被鼠标拖拽悬空反馈" title="被鼠标拖拽悬空反馈">
+  <img src="https://raw.githubusercontent.com/PC2005-cloud/dsh-pet/main/dsh-pet/assets/preview/%E5%BE%85%E6%9C%BA%E5%91%BC%E5%90%B8%E4%BC%91%E9%97%B2.gif" width="160" alt="待机呼吸休闲" title="待机呼吸休闲">
+  <img src="https://raw.githubusercontent.com/PC2005-cloud/dsh-pet/main/dsh-pet/assets/preview/%E4%B8%9C%E5%BC%A0%E8%A5%BF%E6%9C%9B.gif" width="160" alt="东张西望" title="东张西望">
+  <img src="https://raw.githubusercontent.com/PC2005-cloud/dsh-pet/main/dsh-pet/assets/preview/%E5%8E%9F%E5%9C%B0%E6%BC%82%E6%B5%AE%E8%B8%8F%E6%AD%A5.gif" width="160" alt="原地漂浮踏步" title="原地漂浮踏步">
+  <img src="https://raw.githubusercontent.com/PC2005-cloud/dsh-pet/main/dsh-pet/assets/preview/%E5%8E%9F%E5%9C%B0%E5%B0%8F%E6%86%A9%E6%B2%89%E7%9C%A0.gif" width="160" alt="原地小憩沉眠" title="原地小憩沉眠">
+  <img src="https://raw.githubusercontent.com/PC2005-cloud/dsh-pet/main/dsh-pet/assets/preview/%E7%82%B9%E5%87%BB%E5%9B%9E%E5%BA%94%20-%20%E5%BC%80%E5%BF%83%E8%B7%83%E5%8A%A8.gif" width="160" alt="点击回应 - 开心跃动" title="点击回应 - 开心跃动">
+  <img src="https://raw.githubusercontent.com/PC2005-cloud/dsh-pet/main/dsh-pet/assets/preview/%E8%A2%AB%E9%BC%A0%E6%A0%87%E6%8B%96%E6%8B%BD%E6%82%AC%E7%A9%BA%E5%8F%8D%E9%A6%88.gif" width="160" alt="被鼠标拖拽悬空反馈" title="被鼠标拖拽悬空反馈">
 </p>
 
 全部 25 个动画见仓库：`dsh-pet/assets/thumb/`。
