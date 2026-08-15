@@ -2,21 +2,33 @@
 
 <p align="center">
   <a href="https://www.npmjs.com/package/dsh-pet"><img alt="npm version" src="https://img.shields.io/npm/v/dsh-pet?label=npm&color=blue"></a>
-  <a href="https://www.npmjs.com/package/dsh-pet"><img alt="npm downloads" src="https://img.shields.io/npm/dm/dsh-pet?color=brightgreen"></a>
+  <a href="https://www.npmjs.com/package/dsh-pet"><img alt="npm monthly downloads" src="https://img.shields.io/npm/dm/dsh-pet?label=%E6%9C%88%E4%B8%8B%E8%BD%BD&color=brightgreen"></a>
+  <a href="https://www.npmjs.com/package/dsh-pet"><img alt="total downloads" src="https://img.shields.io/npm/dt/dsh-pet?label=%E6%80%BB%E4%B8%8B%E8%BD%BD&color=success"></a>
   <a href="https://github.com/PC2005-cloud/dsh-pet"><img alt="stars" src="https://img.shields.io/github/stars/PC2005-cloud/dsh-pet?style=social"></a>
   <a href="https://github.com/PC2005-cloud/dsh-pet/blob/master/LICENSE"><img alt="license" src="https://img.shields.io/github/license/PC2005-cloud/dsh-pet?color=orange"></a>
   <a href="https://awesome-dsh-plugin.com"><img alt="awesome dsh plugin" src="https://awesome-dsh-plugin.com/badge.svg"></a>
   <img alt="platform" src="https://img.shields.io/badge/platform-DeepSeek%20Harness%20Web-8A2BE2">
-  <img alt="assets" src="https://img.shields.io/badge/assets-25%20animations-ff69b4">
+  <img alt="assets" src="https://img.shields.io/badge/assets-28%20animations-ff69b4">
 </p>
 
 > A floating desktop pet for the [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) Web UI.
-> 一只住在 DeepSeek Harness Web 界面里的桌面宠物：待机呼吸、随机动作、屏幕漫游、点击反应、可拖拽。
+> 一只住在 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) Web 界面里的桌面宠物：待机呼吸、随机动作（含打瞌睡）、偶尔转向、屏幕漫游、点击反应、可拖拽。
 
 ---
 
+## 🚀 快速开始（安装插件）
+
+```sh
+dsh plugin --profile web add dsh-pet
+```
+
+重启 `dsh web`，宠物出现在界面右下角——28 个透明动画开箱即用，无需任何生成流程。
+
+> 💡 想自己造一只专属宠物？克隆 [PC2005-cloud/dsh-pet](https://github.com/PC2005-cloud/dsh-pet) 仓库，用内置素材链（AI 提示词 → 绿幕视频 → 透明动画，素材由豆包生成）从零生成，全流程可复现。
+
 ## ✨ 功能特性
 
+- **纯粹的桌宠**：不掺业务功能——没有天气查询、系统监控、Agent 状态感知，就一件事：陪你。零核心改动、零模型成本（运行时零 LLM/API 调用）
 - **28 个手绘风透明动画**：待机呼吸、打瞌睡、玩魔方、哼歌、炸毛、吐泡泡、玩水枪、小提琴演奏……全部无缝衔接
 - **永不停止的动画链**：每段动画播完立即按概率选下一个（30% 待机 / 10% 转向 / 40% 动作 / 20% 移动）
 - **屏幕漫游**：朝 facing 方向行走，自动检查空间、不走出屏幕
@@ -25,14 +37,6 @@
 - **落地对齐**：动画统一脚底线，宠物始终站在"地面"上
 - **流畅切换**：双缓冲 video 交叉淡入，切换零空白帧
 - **无障碍友好**：支持 `prefers-reduced-motion`
-
-## 📦 安装
-
-```sh
-dsh plugin --profile web add dsh-pet
-```
-
-重启 `dsh web`，宠物出现在界面右下角。
 
 ## ⚙️ 配置
 

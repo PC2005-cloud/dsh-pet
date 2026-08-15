@@ -2,7 +2,8 @@
 
 <p align="center">
   <a href="https://www.npmjs.com/package/dsh-pet"><img alt="npm version" src="https://img.shields.io/npm/v/dsh-pet?label=npm&color=blue"></a>
-  <a href="https://www.npmjs.com/package/dsh-pet"><img alt="npm downloads" src="https://img.shields.io/npm/dm/dsh-pet?color=brightgreen"></a>
+  <a href="https://www.npmjs.com/package/dsh-pet"><img alt="npm monthly downloads" src="https://img.shields.io/npm/dm/dsh-pet?label=%E6%9C%88%E4%B8%8B%E8%BD%BD&color=brightgreen"></a>
+  <a href="https://www.npmjs.com/package/dsh-pet"><img alt="total downloads" src="https://img.shields.io/npm/dt/dsh-pet?label=%E6%80%BB%E4%B8%8B%E8%BD%BD&color=success"></a>
   <a href="https://github.com/PC2005-cloud/dsh-pet"><img alt="stars" src="https://img.shields.io/github/stars/PC2005-cloud/dsh-pet?style=social"></a>
   <a href="https://github.com/PC2005-cloud/dsh-pet/blob/master/LICENSE"><img alt="license" src="https://img.shields.io/github/license/PC2005-cloud/dsh-pet?color=orange"></a>
   <a href="https://awesome-dsh-plugin.com"><img alt="awesome dsh plugin" src="https://awesome-dsh-plugin.com/badge.svg"></a>
@@ -37,7 +38,7 @@ dsh plugin --profile web add dsh-pet
 
 ### ① 提示词 → 源视频
 
-用 AI 视频生成工具（如可灵、Runway 等），按 `prompts/桌面宠物 10 秒动作提示词.md` 的配方生成 28 个 10 秒绿幕视频：
+用 AI 视频生成工具（如可灵、Runway、豆包等，本项目素材即由豆包生成），按 `prompts/桌面宠物 10 秒动作提示词.md` 的配方生成 28 个 10 秒绿幕视频：
 
 - 视频比例 16:9，背景纯绿幕（#00FF00）
 - 人物位置/大小固定（头顶 ~20% 高度、脚底 ~85% 高度）
@@ -89,6 +90,7 @@ dsh plugin --profile web add file:D:/path/to/dsh-pet
 
 ## 插件功能
 
+- **纯粹的桌宠**：不掺任何业务功能——没有天气查询、系统监控、Agent 状态感知，就一件事：陪你。零核心改动（不碰 DSH 内核）、零模型成本（运行时不需要调用任何 LLM 或 API）
 - **动画链**：每个动画（含待机）播完立即按概率选下一个——30% 待机 / 10% 转向 / 40% 动作 / 20% 移动，首尾相接永不停止
 - **屏幕漫游**：朝 facing 方向行走，先检查空间、不走出屏幕
 - **点击/拖拽**：点击有回应动画，可拖到任意位置
