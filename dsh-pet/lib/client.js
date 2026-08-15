@@ -44,9 +44,9 @@ window.__ModuleLoader__.load({
 		// ============================================================================
 		// 说明：
 		// - .dsh-pet-root       宠物的根容器，fixed 定位（相对视口），默认右下角
-		// - .dsh-pet-stage      内部舞台，承载两个 video 的层叠
+		// - .dsh-pet-stage      内部舞台，承载多个 video（视频槽池）的层叠
 		// - .dsh-pet-video      动画视频；opacity 默认 0（隐藏），.is-front 时显示
-		// - 双 video 层叠：一个显示、一个预加载，切换时交叉淡入避免闪空白
+		// - 多 video 层叠：一个显示、其余预加载，切换用硬切（等首帧上屏后直接换）
 		const css = [
 			// 根容器：fixed 固定定位、层级 40（在界面之上）、整体点击穿透（不挡界面操作）、禁止选中
 			'.dsh-pet-root{position:fixed;z-index:40;pointer-events:none;user-select:none}',
@@ -57,8 +57,8 @@ window.__ModuleLoader__.load({
 			// 舞台：正方形（尺寸由 --dsh-pet-size 控制，默认 260px），本身不响应鼠标
 			'.dsh-pet-stage{position:relative;width:var(--dsh-pet-size,260px);height:var(--dsh-pet-size,260px);pointer-events:none}',
 			// 视频：铺满舞台、保持比例、可交互（pointer-events:auto 重新开启）、抓取光标
-			// opacity:0 初始隐藏，transition 做 180ms 淡入淡出
-			'.dsh-pet-video{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;pointer-events:auto;cursor:grab;opacity:0;transition:opacity .18s ease;transform-origin:center}',
+			// opacity:0 初始隐藏；切换用硬切（transition:none），避免交叉淡入产生"双影/闪"
+			'.dsh-pet-video{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;pointer-events:auto;cursor:grab;opacity:0;transition:none;transform-origin:center}',
 			// 显示中的视频（is-front 类）
 			'.dsh-pet-video.is-front{opacity:1}',
 			// 按住时显示"抓取中"光标
@@ -140,8 +140,9 @@ window.__ModuleLoader__.load({
 		// ============================================================================
 		/**
 		 * 核心组件。职责：
-		 * 1. 渲染"双缓冲"的一对 <video>（A/B 交替显示），切换动画时交叉淡入，永无空白帧
-		 * 2. 状态机：待机 →（定时器随机）→ 转向/移动/动作；点击/拖拽可打断
+		 * 1. 用"视频槽池"（多个 <video> 层叠）播放动画，切换时交叉淡入，永无空白帧；
+		 *    同时常驻预加载待机/拖拽/预抽的下一个动作/预抽的点击回应，高频切换零解码
+		 * 2. 状态机：待机 →（随机）→ 转向/移动/动作；点击/拖拽可打断
 		 * 3. 朝向（facing）渲染：right 时 CSS 镜像
 		 *
 		 * 参数 config：来自 patch 配置。当前 DSH 客户端配置管线尚未打通，
@@ -165,76 +166,192 @@ window.__ModuleLoader__.load({
 			// ---- DOM 引用 ----
 			const rootRef = useRef(null);  // 根容器（fixed 定位）
 			const stageRef = useRef(null); // 内部舞台（落地对齐）
-			const videoARef = useRef(null); // 视频 A
-			const videoBRef = useRef(null); // 视频 B
-			// ---- 双缓冲/竞态相关 ref ----
-			const frontRef = useRef(0);  // 当前显示的是哪个视频：0=A, 1=B
-			const pendingRef = useRef(null); // 正在加载中的 {anim, once, gen}
-			const genRef = useRef(0);    // 切换代数：每次切换 +1，用于识别"过期回调"
+			// ---- 视频槽池（预加载）相关 ref ----
+			// 思路：不再用固定 A/B 两个 video，而是维护一个"视频槽池"。每个槽承载一个
+			// 已解码的动画；切换动画就是"把承载该动画的槽淡入"，无需重新解码。
+			// 池里常驻预加载：待机(IDLE)、拖拽(DRAG)、预抽的下一个动作(next)、预抽的
+			// 点击回应(click)，再加上当前播放 + 正在淡出的旧画面，8 个槽足够且有余量。
+			const POOL_SIZE = 8;           // 视频槽数量
+			const videoRefs = useRef(null); // 槽 DOM 引用数组（惰性创建，稳定引用避免 React 反复回调）
+			if (videoRefs.current === null) {
+				videoRefs.current = Array.from({ length: POOL_SIZE }, () => ({ current: null }));
+			}
+			const slotAnim = useRef(new Array(POOL_SIZE).fill(null)); // 每个槽当前承载的动画名（null=空）
+			const slotRecency = useRef(new Array(POOL_SIZE).fill(0)); // 每槽最近使用计数（LRU 淘汰用）
+			const tickRef = useRef(0);     // 使用计数递增器
+			const frontSlot = useRef(-1);  // 当前显示（is-front）的槽索引；-1=尚无
+			const genRef = useRef(0);      // 切换代数：每次切换 +1，用于识别"过期回调"
+			// ---- 预抽（提前随机）相关 ref ----
+			const nextActionRef = useRef(null);  // 预抽的"正常下一个动作"
+			const clickActionRef = useRef(null); // 预抽的"点击回应动作"
 			// ---- 交互相关 ref ----
 			const dragRef = useRef({ active: false, dragging: false, sx: 0, sy: 0 }); // 拖拽状态
 			const justDraggedRef = useRef(false); // 刚拖拽完（用于抑制拖拽后的误点击）
 			const animRef = useRef(IDLE); // 动画名镜像（供异步回调读当前值）
 			animRef.current = anim;
 
+			// 读取槽元素
+			const elOf = (i) => (videoRefs.current[i] ? videoRefs.current[i].current : null);
+			// 更新某槽的最近使用计数
+			const touch = (i) => { slotRecency.current[i] = ++tickRef.current; };
+			// 常驻预加载的动画集合：待机 + 拖拽 + 预抽的下一个 + 预抽的点击
+			const pinnedAnims = () => new Set([IDLE, DRAG, nextActionRef.current, clickActionRef.current].filter(Boolean));
+
 			// ============================================================================
-			// 双缓冲切换（switchTo）—— 核心播放逻辑
+			// 视频槽池切换（switchTo）—— 核心播放逻辑（预加载版）
 			// ============================================================================
-			// 思路：两个 video 层叠。切换动画时：
-			//   1. 把目标动画 src 设到"非当前显示"的那个 video 上
-			//   2. 等它 loadeddata（数据加载完成）
-			//   3. 新 video 淡入（加 is-front），旧 video 淡出（去 is-front）
-			//   4. frontRef 翻转，下次切换用另一个
-			// 这样切换时旧画面一直显示到新画面就绪，永远不会闪空白。
+			// 思路：维护一个"视频槽池"（POOL_SIZE 个 <video>）。每个槽承载一个已解码的
+			// 动画。切换动画时：
+			//   1. 若目标动画已在某个槽里（预加载命中），直接用它
+			//   2. 否则取一个空闲/可淘汰槽，加载目标动画
+			//   3. 等它的第一帧真正渲染上屏（requestVideoFrameCallback，兜底 loadeddata）
+			//   4. 新槽淡入（加 is-front），旧槽淡出（去 is-front）
+			// 常驻预加载（待机/拖拽/预抽的下一个/预抽的点击）始终留在池里，因此这些
+			// 高频切换都是"秒切"，不会重新解码，也不会闪空白。
 			//
-			// 竞态防护（重要）：快速连点/连续切换时，可能前一个动画还没加载完
-			// 就又要切下一个。每个切换有一个递增的"代数" gen，loadeddata 回调
-			// 执行时检查自己是否还是最新代——不是就放弃（避免两个 video 都被
-			// 移除 is-front 而全部透明、宠物消失）。
+			// 竞态防护（重要）：每个切换有一个递增的"代数" gen，就绪回调执行时检查
+			// 自己是否还是最新代——不是就放弃（避免多个 video 都被移除 is-front 而
+			// 全部透明、宠物消失）。
 			const switchTo = (next, nextOnce) => {
-				// 如果目标动画已经在加载中，直接跳过（避免重复加载）
-				const pending = pendingRef.current;
-				if (pending && pending.anim === next && pending.once === nextOnce) return;
+				if (!next) return;
 				const gen = ++genRef.current; // 本次切换的代数
-				pendingRef.current = { anim: next, once: nextOnce, gen };
+				let slot = slotAnim.current.indexOf(next);
+				if (slot === -1) {
+					// 未预加载：取一个槽加载
+					slot = acquireSlot();
+					if (slot === -1) return;
+					loadIntoSlot(slot, next);
+				}
+				playSlot(slot, gen, nextOnce);
+			};
 
-				// 目标 video = 当前"非显示"的那个（front 是 A 就用 B，反之用 A）
-				const target = frontRef.current === 0 ? videoBRef : videoARef;
-				const el = target.current;
+			// 把一个槽设为当前显示（交叉淡入），并把它正在播放的动画作为新前台。
+			const crossfadeTo = (slot, gen) => {
+				if (gen !== genRef.current) return; // 过期：期间又有更新的切换
+				const el = elOf(slot);
 				if (!el) return;
-				// 设置视频属性并开始加载
-				el.src = '/pet/thumb/' + encodeURIComponent(next) + '.webm';
-				el.loop = !nextOnce;           // 一次性动画不循环
-				el.muted = true;               // 静音（动画无声音）
-				el.autoplay = true;            // 自动播放
-				el.playsInline = true;         // 行内播放（移动端不弹全屏）
-				el.onended = nextOnce ? handleEnded : undefined; // 一次性动画播完 → 回待机
-				el.load();
+				const old = frontSlot.current;
+				el.classList.add('is-front');
+				const oldEl = old >= 0 ? elOf(old) : null;
+				if (oldEl && old !== slot) {
+					oldEl.classList.remove('is-front');
+					// 停掉旧画面并摘除其 ended 回调：否则它会在后台继续播放、播完触发
+					// handleEnded，从而打断刚切进来的新动画（槽池下可能有多个旧画面）。
+					oldEl.pause();
+					oldEl.onended = null;
+				}
+				frontSlot.current = slot;
+				touch(slot);
+				// 如果这是"计划中的移动"的动画，现在动画就绪了，开始驱动位置移动
+				if (pendingMoveRef.current) startMoveDrive(el);
+			};
 
-				// 数据加载完成后的回调
-				const onReady = () => {
-					el.removeEventListener('loadeddata', onReady);
-					// 过期检查：如果期间又有更新的切换，本回调作废
-					if (pendingRef.current?.gen !== gen) return;
-					// 交换前后台：新 video 加 is-front（淡入），旧 video 移除（淡出）
-					const old = frontRef.current === 0 ? videoARef : videoBRef;
-					el.classList.add('is-front');
-					// old !== el 守卫：防止把自己刚加的 is-front 又移除
-					if (old.current && old.current !== el) old.current.classList.remove('is-front');
-					frontRef.current = frontRef.current === 0 ? 1 : 0;
-					pendingRef.current = null;
-					el.play().catch(() => {}); // 开始播放（捕获自动播放策略异常）
-					// 如果这是"计划中的移动"的动画，现在动画就绪了，
-					// 开始驱动位置移动（见 startMoveDrive）
-					if (pendingMoveRef.current) startMoveDrive(el);
+			// 从某个槽开始播放动画（等待其第一帧真正上屏后交叉淡入）。
+			const playSlot = (slot, gen, nextOnce) => {
+				const el = elOf(slot);
+				if (!el) return;
+				el.loop = !nextOnce;               // 一次性动画不循环
+				el.onended = nextOnce ? handleEnded : null; // 一次性动画播完 → 回待机
+				el.muted = true;                   // 静音（动画无声音）
+				el.playsInline = true;             // 行内播放（移动端不弹全屏）
+				el.currentTime = 0;                // 回到动画开头
+				el.play().catch(() => {});         // 先起播（muted autoplay 通常立即成功）
+				waitFirstFrame(el, () => crossfadeTo(slot, gen));
+			};
+
+			// 等待一个 video 的第一帧真正渲染上屏后再执行 cb（避免淡入空白帧）。
+			const waitFirstFrame = (el, cb) => {
+				let done = false;
+				let dataReady = false;
+				const onData = () => { dataReady = true; };
+				const finish = () => {
+					if (done) return;
+					done = true;
+					el.removeEventListener('loadeddata', onData); // 防止复用槽时监听器堆积
+					cb();
 				};
-				el.addEventListener('loadeddata', onReady);
-				// 如果视频已缓存就绪（readyState>=2），立即触发回调
-				if (el.readyState >= 2) onReady();
+				if (typeof el.requestVideoFrameCallback === 'function') {
+					// requestVideoFrameCallback 在"新内容第一帧真正上屏"后触发，
+					// 比 loadeddata 更晚、更可靠，能确保淡入时不露空白。
+					el.requestVideoFrameCallback(finish);
+					el.addEventListener('loadeddata', onData);
+					// 兜底：数据已就绪但 rVFC 迟迟未触发（后台标签页/自动播放被拦）时，
+					// 1 秒后强制切换——帧已解码，最多只差一两帧，无肉眼可见的闪烁。
+					setTimeout(() => { if (dataReady) finish(); }, 1000);
+				} else {
+					// 旧浏览器无 rVFC：退回到 loadeddata 触发
+					const onReady = () => { el.removeEventListener('loadeddata', onReady); finish(); };
+					el.addEventListener('loadeddata', onReady);
+					if (el.readyState >= 2) onReady(); // 已缓存就绪则立即切换
+				}
+			};
+
+			// 把动画 `anim` 加载进槽 `slot`（只解码，不播放、不置前）。
+			const loadIntoSlot = (slot, anim) => {
+				const el = elOf(slot);
+				if (!el) return;
+				slotAnim.current[slot] = anim;
+				touch(slot);
+				el.src = '/pet/thumb/' + encodeURIComponent(anim) + '.webm';
+				el.preload = 'auto';
+				el.muted = true;
+				el.playsInline = true;
+				el.load();
+			};
+
+			// 取一个可用于加载"新动画"的槽：优先空槽；否则淘汰非保护、非前台的
+			// 最久未用槽。`protectAnims` 是"即将播放、不能淘汰"的动画名。
+			const acquireSlot = (protectAnims) => {
+				const protect = new Set(protectAnims || []);
+				// 1. 空槽（且不是当前前台）
+				for (let i = 0; i < POOL_SIZE; i++) {
+					if (i !== frontSlot.current && slotAnim.current[i] === null) return i;
+				}
+				// 2. 淘汰非保护、非前台的 LRU 槽
+				let best = -1, bestRec = Infinity;
+				for (let i = 0; i < POOL_SIZE; i++) {
+					if (i === frontSlot.current) continue;
+					const a = slotAnim.current[i];
+					if (a === null) continue;
+					if (protect.has(a) || pinnedAnims().has(a)) continue;
+					if (slotRecency.current[i] < bestRec) { bestRec = slotRecency.current[i]; best = i; }
+				}
+				if (best !== -1) return best;
+				// 3. 兜底：池已满，淘汰非前台的 LRU 槽（含保护项，极少发生）
+				best = -1; bestRec = Infinity;
+				for (let i = 0; i < POOL_SIZE; i++) {
+					if (i === frontSlot.current) continue;
+					if (slotRecency.current[i] < bestRec) { bestRec = slotRecency.current[i]; best = i; }
+				}
+				return best;
+			};
+
+			// 确保 `anim` 已解码进池（不播放）。`protectAnims` 传给 acquireSlot。
+			const preload = (anim, protectAnims) => {
+				if (!anim) return;
+				if (slotAnim.current.indexOf(anim) !== -1) return; // 已在池中
+				const slot = acquireSlot(protectAnims);
+				if (slot === -1) return;
+				loadIntoSlot(slot, anim);
+			};
+
+			// 刷新常驻预加载：待机 + 拖拽 + 预抽的下一个 + 预抽的点击。
+			const refreshPreloads = (protectAnims) => {
+				preload(IDLE, protectAnims);
+				preload(DRAG, protectAnims);
+				preload(nextActionRef.current, protectAnims);
+				preload(clickActionRef.current, protectAnims);
 			};
 
 			// ============================================================================
-			// 随机事件定时器 —— 待机时的"自主行为"
+			// 首次挂载：预抽下一个动作/点击动作，并预加载常驻动画
+			// ============================================================================
+			useEffect(() => {
+				if (nextActionRef.current === null) nextActionRef.current = rollNextAction(IDLE);
+				if (clickActionRef.current === null) clickActionRef.current = pick(CLICKS);
+				refreshPreloads();
+			}, []);
+
 			// ---- 状态驱动播放：anim/once/seq 一变就切换视频 ----
 			// seq 参与依赖：即使 anim/once 没变（连续选中同一动画），seq 变化也强制重播。
 			useEffect(() => {
@@ -256,30 +373,35 @@ window.__ModuleLoader__.load({
 			}, []);
 
 			// ============================================================================
-			// 动画链：每次动画播完 → 按概率选下一个
+			// 动画链：预抽下一个动作（把随机提前）→ 播完再提交
 			// ============================================================================
 			// 链式模型（无常驻待机、无定时器）：
-			//   每个动画（含待机呼吸休闲）都是一次性播放，播完 handleEnded 触发，
-			//   按概率选下一个：30% 待机 / 10% 转向 / 40% 动作 / 20% 移动。
-			//   点击/拖拽打断的动画播完后先回待机（作为缓冲），待机播完再进随机链。
-			const pickNext = () => {
+			//   每个动画（含待机呼吸休闲）都是一次性播放，播完 handleEnded 触发。
+			//   概率：30% 待机 / 10% 转向 / 40% 动作 / 20% 移动。
+			// 关键优化：不再"播完才随机"，而是当前动画播放期间就提前随机出"下一个
+			// 动作"并预加载它，播完直接秒切，无重新解码、无闪烁。
+			// `exclude`：排除刚结束的动画，避免连续重复（与原逻辑一致）。
+			const rollNextAction = (exclude) => {
 				const roll = Math.random();
-				if (roll < 0.3) {
-					// 30% 待机：待机呼吸休闲（也是一次性，播完再选）
-					setAnim(IDLE);
-				} else if (roll < 0.4) {
-					// 10% 转向：东张西望，播完 handleEnded 里翻转 facing
-					setAnim(TURN);
-				} else if (roll < 0.8) {
-					// 40% 随机动作（等概率 + 去重）
-					setAnim(pick(ACTS, animRef.current));
-				} else {
-					// 20% 尝试移动：tryMove 先检查空间，不够就回退随机动作
-					if (!tryMove()) {
-						setAnim(pick(ACTS, animRef.current));
-					}
+				if (roll < 0.3) return IDLE;                // 30% 待机
+				if (roll < 0.4) return TURN;                // 10% 转向
+				if (roll < 0.8) return pick(ACTS, exclude); // 40% 随机动作（去重）
+				return pick(MOVES);                         // 20% 移动（空间检查推迟到提交）
+			};
+
+			// 提交预抽的下一个动作：播放它，并立刻预抽 + 预加载"再下一个"。
+			const advanceChain = () => {
+				const next = nextActionRef.current;           // 预抽好的下一个（已预加载）
+				nextActionRef.current = rollNextAction(next); // 预抽再下一个（排除即将播放的 next）
+				refreshPreloads([next]);                      // 预加载再下一个，且保护 next 不被淘汰
+
+				let toPlay = next;
+				// 移动类动作：此刻才做空间检查（位置可能已变）；空间不够则回退随机动作
+				if (MOVES.includes(toPlay) && !planMove()) {
+					toPlay = pick(ACTS, animRef.current);
 				}
 				setOnce(true);        // 链式模型全部一次性
+				setAnim(toPlay);
 				setSeq((s) => s + 1); // 保证即使 anim 没变也重新播放
 			};
 
@@ -298,8 +420,8 @@ window.__ModuleLoader__.load({
 					setSeq((s) => s + 1);
 					return;
 				}
-				// 自主链动画播完 → 按概率选下一个
-				pickNext();
+				// 自主链动画播完 → 提交预抽好的下一个
+				advanceChain();
 			};
 
 			// ============================================================================
@@ -390,12 +512,11 @@ window.__ModuleLoader__.load({
 			};
 
 			/**
-			 * 尝试计划一次移动（朝当前 facing 方向）。
-			 * 只做两件事：检查空间是否够 + 记录计划；真正的位置驱动
-			 * 等移动动画就绪后由 switchTo 的 onReady 触发。
+			 * 计划一次移动（朝当前 facing 方向）。只做空间检查 + 记录计划；
+			 * 真正的位置驱动等移动动画就绪后由 crossfadeTo 触发。
 			 * @returns {boolean} true=移动已计划；false=空间不够（调用方回退随机动作）
 			 */
-			const tryMove = () => {
+			const planMove = () => {
 				if (moveRef.current !== null || pendingMoveRef.current) return true; // 已在移动/已计划
 				const dir = facingRef.current === 'right' ? 1 : -1; // 朝右=+1，朝左=-1
 				const W = window.innerWidth;
@@ -416,8 +537,6 @@ window.__ModuleLoader__.load({
 					totalRatio: Math.abs(target - cx) / W,
 				};
 				// 移动动画一次性播放（10s），播完 ended 触发 handleEnded → 进入动画链
-				setOnce(true);
-				setAnim(pick(MOVES));
 				return true;
 			};
 			// 停止移动（点击/拖拽打断时调用）：取消计划 + 使 rAF 失效 + 取消帧
@@ -430,7 +549,7 @@ window.__ModuleLoader__.load({
 				}
 			};
 
-			// facing 的 ref 镜像（tryMove/定时器读取当前朝向）
+			// facing 的 ref 镜像（planMove 读取当前朝向）
 			const facingRef = useRef(facing);
 			facingRef.current = facing;
 
@@ -504,8 +623,11 @@ window.__ModuleLoader__.load({
 				if (d.active || d.dragging || justDraggedRef.current) return; // 拖拽中/刚拖完：忽略
 				if (once && animRef.current !== IDLE) return; // 正在播一次性动画：不打断
 				stopMove(); // 点击打断移动
+				const playClick = clickActionRef.current;      // 预抽好的点击回应（已预加载）
+				clickActionRef.current = pick(CLICKS);         // 立刻预抽下一次点击回应
+				preload(clickActionRef.current, [playClick]);  // 预加载下一次，并保护本次即将播放的
 				setOnce(true);
-				setAnim(pick(CLICKS)); // 随机一个点击回应动画
+				setAnim(playClick); // 播放预加载好的点击回应
 			};
 
 			// ============================================================================
@@ -535,11 +657,12 @@ window.__ModuleLoader__.load({
 				})()
 				: {};
 
-			// 两个 video 共用的 props（事件绑定 + 播放属性）
+			// 视频共用的 props（事件绑定 + 基础属性）。不再设 autoPlay：
+			// 播放由 playSlot 显式调用 el.play() 控制，预加载槽只解码不播放。
 			const commonVideoProps = {
 				muted: true,
 				playsInline: true,
-				autoPlay: true,
+				preload: 'auto',
 				onClick: handleClick,
 				onPointerDown: handlePointerDown,
 				onPointerMove: handlePointerMove,
@@ -548,8 +671,8 @@ window.__ModuleLoader__.load({
 				title: 'dsh-pet',
 			};
 
-			// 渲染树：root > stage > [video A, video B]
-			// A 初始带 is-front（显示），B 隐藏待命
+			// 渲染树：root > stage > [视频槽池 POOL_SIZE 个 video]
+			// 槽之间层叠，只有一个槽带 is-front（显示）；其余隐藏/预加载。
 			return h('div', {
 				ref: rootRef,
 				className: 'dsh-pet-root',
@@ -560,10 +683,13 @@ window.__ModuleLoader__.load({
 					ref: stageRef,
 					className: 'dsh-pet-stage',
 					style: stageStyle,
-					children: [
-						h('video', Object.assign({}, commonVideoProps, { ref: videoARef, className: 'dsh-pet-video is-front' })),
-						h('video', Object.assign({}, commonVideoProps, { ref: videoBRef, className: 'dsh-pet-video' })),
-					],
+					children: Array.from({ length: POOL_SIZE }, (_, i) =>
+						h('video', Object.assign({}, commonVideoProps, {
+							key: 'v' + i,
+							ref: videoRefs.current[i],
+							className: 'dsh-pet-video',
+						}))
+					),
 				}),
 			});
 		}
