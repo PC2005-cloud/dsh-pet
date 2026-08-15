@@ -117,6 +117,19 @@ window.__ModuleLoader__.load({
 			'打瞌睡被惊醒', // 原独立闲置动画，已并入
 			'玩水枪',
 			'小提琴演奏',
+			'蓝鲸现世',
+			'吃白饭',
+			'照镜子',
+			'优雅女仆舞',
+			'轻快摇摆舞',
+			'可爱宅舞',
+			'整体换装试色',
+			'大口吃零食',
+			'吹气球',
+			'动物环绕',
+			'深度思考碎碎念',
+			'轻快记录',
+			'写代码',
 		];
 		// 点击回应动画池（3 选 1）
 		const CLICKS = ['点击回应 - 开心跃动', '点击回应 - 害羞惊讶', '点击回应 - 傲娇生气（侧身展示）'];
@@ -273,21 +286,36 @@ window.__ModuleLoader__.load({
 			//   点击/拖拽打断的动画播完后先回待机（作为缓冲），待机播完再进随机链。
 			const pickNext = () => {
 				const roll = Math.random();
+				let kind = '';
+				let next = '';
 				if (roll < 0.3) {
 					// 30% 待机：待机呼吸休闲（也是一次性，播完再选）
+					kind = 'IDLE';
+					next = IDLE;
 					setAnim(IDLE);
 				} else if (roll < 0.4) {
 					// 10% 转向：东张西望，播完 handleEnded 里翻转 facing
+					kind = 'TURN';
+					next = TURN;
 					setAnim(TURN);
 				} else if (roll < 0.8) {
 					// 40% 随机动作（等概率 + 去重）
-					setAnim(pick(ACTS, animRef.current));
+					kind = 'ACTS';
+					next = pick(ACTS, animRef.current);
+					setAnim(next);
 				} else {
 					// 20% 尝试移动：tryMove 先检查空间，不够就回退随机动作
 					if (!tryMove()) {
-						setAnim(pick(ACTS, animRef.current));
+						kind = 'ACTS';
+						next = pick(ACTS, animRef.current);
+						setAnim(next);
+					} else {
+						kind = 'MOVES';
+						next = '移动(池内随机)';
 					}
 				}
+				// 【测试用】打印随机数 + 动画种类 + 选中动画，方便核对概率分布；正式版可删除
+				console.log('[dsh-pet] roll=' + roll.toFixed(4) + ' → [' + kind + '] ' + next);
 				setOnce(true);        // 链式模型全部一次性
 				setSeq((s) => s + 1); // 保证即使 anim 没变也重新播放
 			};

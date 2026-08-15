@@ -8,7 +8,7 @@
   <a href="https://github.com/PC2005-cloud/dsh-pet/blob/master/LICENSE"><img alt="license" src="https://img.shields.io/github/license/PC2005-cloud/dsh-pet?color=orange"></a>
   <a href="https://awesome-dsh-plugin.com"><img alt="awesome dsh plugin" src="https://awesome-dsh-plugin.com/badge.svg"></a>
   <img alt="platform" src="https://img.shields.io/badge/platform-DeepSeek%20Harness%20Web-8A2BE2">
-  <img alt="assets" src="https://img.shields.io/badge/assets-28%20animations-ff69b4">
+  <img alt="assets" src="https://img.shields.io/badge/assets-41%20animations-ff69b4">
 </p>
 
 > A floating desktop pet for the [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) Web UI.
@@ -22,14 +22,14 @@
 dsh plugin --profile web add dsh-pet
 ```
 
-重启 `dsh web`，宠物出现在界面右下角——28 个透明动画开箱即用，无需任何生成流程。
+重启 `dsh web`，宠物出现在界面右下角——41 个透明动画开箱即用，无需任何生成流程。
 
 > 💡 想自己造一只专属宠物？克隆 [PC2005-cloud/dsh-pet](https://github.com/PC2005-cloud/dsh-pet) 仓库，用内置素材链（AI 提示词 → 绿幕视频 → 透明动画，素材由豆包生成）从零生成，全流程可复现。
 
 ## ✨ 功能特性
 
 - **纯粹的桌宠**：不掺业务功能——没有天气查询、系统监控、Agent 状态感知，就一件事：陪你。零核心改动、零模型成本（运行时零 LLM/API 调用）
-- **28 个手绘风透明动画**：待机呼吸、打瞌睡、玩魔方、哼歌、炸毛、吐泡泡、玩水枪、小提琴演奏……全部无缝衔接
+- **41 个手绘风透明动画**：待机呼吸、打瞌睡、玩魔方、哼歌、炸毛、吐泡泡、玩水枪、小提琴演奏、蓝鲸现世、吃白饭、照镜子、三支舞、写代码……全部无缝衔接
 - **永不停止的动画链**：每段动画播完立即按概率选下一个（30% 待机 / 10% 转向 / 40% 动作 / 20% 移动）
 - **屏幕漫游**：朝 facing 方向行走，自动检查空间、不走出屏幕
 - **点击 / 拖拽**：点击有随机回应动画（开心 / 害羞 / 傲娇），可拖到任意位置
@@ -76,7 +76,7 @@ dsh plugin --profile web remove dsh-pet
   <img src="https://raw.githubusercontent.com/PC2005-cloud/dsh-pet/main/dsh-pet/assets/preview/%E8%A2%AB%E9%BC%A0%E6%A0%87%E6%8B%96%E6%8B%BD%E6%82%AC%E7%A9%BA%E5%8F%8D%E9%A6%88.gif" width="160" alt="被鼠标拖拽悬空反馈" title="被鼠标拖拽悬空反馈">
 </p>
 
-全部 28 个动画见仓库：`dsh-pet/assets/thumb/`。
+全部 41 个动画见仓库：`dsh-pet/assets/thumb/`。
 
 ## 📚 完整项目（不止是插件）
 

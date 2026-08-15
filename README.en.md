@@ -8,7 +8,7 @@
   <a href="https://github.com/PC2005-cloud/dsh-pet/blob/master/LICENSE"><img alt="license" src="https://img.shields.io/github/license/PC2005-cloud/dsh-pet?color=orange"></a>
   <a href="https://awesome-dsh-plugin.com"><img alt="awesome dsh plugin" src="https://awesome-dsh-plugin.com/badge.svg"></a>
   <img alt="platform" src="https://img.shields.io/badge/platform-DeepSeek%20Harness%20Web-8A2BE2">
-  <img alt="assets" src="https://img.shields.io/badge/assets-28%20animations-ff69b4">
+  <img alt="assets" src="https://img.shields.io/badge/assets-41%20animations-ff69b4">
 </p>
 
 A desktop pet living inside the [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) Web UI: idle breathing, random actions (including dozing off), occasional turns, screen wandering, click reactions, and draggable.
@@ -36,14 +36,14 @@ Restart `dsh web` and the pet appears in the bottom-right corner.
 
 ### ① Prompts → Source Videos
 
-Use an AI video generation tool (e.g., Kling, Runway, Doubao — this project's assets were generated with Doubao) with the recipes in `prompts/桌面宠物 10 秒动作提示词.md` to generate 28 ten-second green-screen videos:
+Use an AI video generation tool (e.g., Kling, Runway, Doubao — this project's assets were generated with Doubao) with the recipes in `prompts/桌面宠物 10 秒动作提示词.md` to generate 41 ten-second green-screen videos:
 
 - Video ratio 16:9 with a pure green background (#00FF00)
 - Fixed character position/size (head top at ~20% height, feet bottom at ~85% height)
 - The action stays fully inside the frame; the first and last frames are standard front-facing standing
 - Each animation is broken down by second (per-stage actions for 0–10s)
 
-Put the results in `video/` (28 mp4 files).
+Put the results in `video/` (41 mp4 files).
 
 ### ② Source Videos → Transparent Animations (Asset Pipeline)
 
@@ -74,14 +74,14 @@ dsh plugin --profile web add file:D:/path/to/dsh-pet
 ## Project Structure
 
 ```
-├── prompts/                 # ① Generation prompts for 28 actions (green-screen spec + per-second breakdown)
+├── prompts/                 # ① Generation prompts for 41 actions (green-screen spec + per-second breakdown)
 ├── scripts/                 # ② Asset pipeline (4 Python scripts)
-├── video/                   # ② Source videos (28 green-screen mp4s)
+├── video/                   # ② Source videos (41 green-screen mp4s)
 ├── tools/                   # Dev tools: preview.html (pipeline stage previews)
 ├── dsh-pet/                 # ③ The plugin (can be published to npm independently)
 │   ├── lib/index.js         #   host half: /pet video route
 │   ├── lib/client.js        #   browser half: animation chain + double-buffered playback
-│   └── assets/thumb/        #   360×360 playback animations (28, ~15MB)
+│   └── assets/thumb/        #   360×360 playback animations (41, ~24MB)
 ├── DESIGN.md                # Design & implementation docs (including pitfalls)
 └── LICENSE                  # MIT
 ```
@@ -107,7 +107,7 @@ What the pet looks like running inside the DSH Web UI:
 
 ## Animation Previews
 
-All 28 animations (360×360, the actual assets the plugin plays) — GitHub renders inline previews only for images inside the repo, so GIFs are used here; the full transparent videos live in `dsh-pet/assets/thumb/`:
+All 41 animations (360×360, the actual assets the plugin plays) — GitHub renders inline previews only for images inside the repo, so GIFs are used here; the full transparent videos live in `dsh-pet/assets/thumb/`:
 
 **Idle / Turning**
 
@@ -146,6 +146,19 @@ All 28 animations (360×360, the actual assets the plugin plays) — GitHub rend
   <img src="dsh-pet/assets/preview/打瞌睡被惊醒.gif" width="160" alt="Woken from a doze" title="Woken from a doze">
   <img src="dsh-pet/assets/preview/玩水枪.gif" width="160" alt="Playing with a water gun" title="Playing with a water gun">
   <img src="dsh-pet/assets/preview/小提琴演奏.gif" width="160" alt="Playing the violin" title="Playing the violin">
+  <img src="dsh-pet/assets/preview/蓝鲸现世.gif" width="160" alt="Whale emerging" title="Whale emerging">
+  <img src="dsh-pet/assets/preview/吃白饭.gif" width="160" alt="Eating rice" title="Eating rice">
+  <img src="dsh-pet/assets/preview/照镜子.gif" width="160" alt="Looking in the mirror" title="Looking in the mirror">
+  <img src="dsh-pet/assets/preview/优雅女仆舞.gif" width="160" alt="Elegant maid dance" title="Elegant maid dance">
+  <img src="dsh-pet/assets/preview/轻快摇摆舞.gif" width="160" alt="Lighthearted sway dance" title="Lighthearted sway dance">
+  <img src="dsh-pet/assets/preview/可爱宅舞.gif" width="160" alt="Cute anime dance" title="Cute anime dance">
+  <img src="dsh-pet/assets/preview/整体换装试色.gif" width="160" alt="Trying on outfits" title="Trying on outfits">
+  <img src="dsh-pet/assets/preview/大口吃零食.gif" width="160" alt="Munching snacks" title="Munching snacks">
+  <img src="dsh-pet/assets/preview/吹气球.gif" width="160" alt="Blowing a balloon" title="Blowing a balloon">
+  <img src="dsh-pet/assets/preview/动物环绕.gif" width="160" alt="Animals circling around" title="Animals circling around">
+  <img src="dsh-pet/assets/preview/深度思考碎碎念.gif" width="160" alt="Deep thinking & muttering" title="Deep thinking & muttering">
+  <img src="dsh-pet/assets/preview/轻快记录.gif" width="160" alt="Taking light notes" title="Taking light notes">
+  <img src="dsh-pet/assets/preview/写代码.gif" width="160" alt="Writing code" title="Writing code">
 </p>
 
 **Click Responses**

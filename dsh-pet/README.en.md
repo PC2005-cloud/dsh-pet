@@ -8,7 +8,7 @@
   <a href="https://github.com/PC2005-cloud/dsh-pet/blob/master/LICENSE"><img alt="license" src="https://img.shields.io/github/license/PC2005-cloud/dsh-pet?color=orange"></a>
   <a href="https://awesome-dsh-plugin.com"><img alt="awesome dsh plugin" src="https://awesome-dsh-plugin.com/badge.svg"></a>
   <img alt="platform" src="https://img.shields.io/badge/platform-DeepSeek%20Harness%20Web-8A2BE2">
-  <img alt="assets" src="https://img.shields.io/badge/assets-28%20animations-ff69b4">
+  <img alt="assets" src="https://img.shields.io/badge/assets-41%20animations-ff69b4">
 </p>
 
 > A floating desktop pet for the [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) Web UI: idle breathing, random actions (including dozing off), occasional turns, screen wandering, click reactions, and draggable.
@@ -21,14 +21,14 @@
 dsh plugin --profile web add dsh-pet
 ```
 
-Restart `dsh web` and the pet appears in the bottom-right corner — 28 transparent animations, ready to use out of the box, no generation pipeline required.
+Restart `dsh web` and the pet appears in the bottom-right corner — 41 transparent animations, ready to use out of the box, no generation pipeline required.
 
 > 💡 Want to craft your own one-of-a-kind pet? Clone [PC2005-cloud/dsh-pet](https://github.com/PC2005-cloud/dsh-pet) and use the bundled asset pipeline (AI prompts → green-screen video → transparent animation, generated with Doubao) to generate one from scratch — fully reproducible.
 
 ## ✨ Features
 
 - **A pure pet, nothing else**: no business features — no weather, no monitoring, no agent-state sensing; just a companion. Zero core changes, zero model cost (no LLM/API calls at runtime)
-- **28 hand-drawn style transparent animations**: idle breathing, dozing off, playing with a Rubik's cube, humming, hair-raising, blowing bubbles, playing with a water gun, playing violin… all seamlessly chained
+- **41 hand-drawn style transparent animations**: idle breathing, dozing off, playing with a Rubik's cube, humming, hair-raising, blowing bubbles, playing with a water gun, playing violin, the whale emerging, eating rice, looking in the mirror, three dances, writing code… all seamlessly chained
 - **Never-ending animation chain**: when each animation finishes, the next one is picked instantly by probability (30% idle / 10% turn / 40% action / 20% move)
 - **Screen wandering**: walks toward its facing direction, checks the space ahead and never walks off screen
 - **Click / drag**: click triggers a random reaction animation (happy / shy / tsundere); drag it anywhere
@@ -75,7 +75,7 @@ What the pet looks like running inside the DSH Web UI:
   <img src="https://raw.githubusercontent.com/PC2005-cloud/dsh-pet/main/dsh-pet/assets/preview/%E8%A2%AB%E9%BC%A0%E6%A0%87%E6%8B%96%E6%8B%BD%E6%82%AC%E7%A9%BA%E5%8F%8D%E9%A6%88.gif" width="160" alt="Dragged by the mouse" title="Dragged by the mouse">
 </p>
 
-All 28 animations live in the repo under `dsh-pet/assets/thumb/`.
+All 41 animations live in the repo under `dsh-pet/assets/thumb/`.
 
 ## 📚 A Complete Project (More Than a Plugin)
 

@@ -131,8 +131,12 @@ def main() -> int:
         return 1
 
     for index, video in enumerate(videos, start=1):
-        color = sample_background_color(video)
         dst = OUT / (video.stem + ".webm")
+        # 断点续跑：输出已存在、非残缺（>50KB）、且不比源旧 → 跳过（支持增量续跑）
+        if dst.exists() and dst.stat().st_size > 50_000 and dst.stat().st_mtime >= video.stat().st_mtime:
+            print(f"[{index}/{len(videos)}] SKIP {video.name} (already chroma'd)", flush=True)
+            continue
+        color = sample_background_color(video)
         print(f"[{index}/{len(videos)}] {video.name} -> {dst.name} ({color})", flush=True)
         convert_video(video, dst, color)
 
