@@ -90,6 +90,11 @@ def main() -> int:
         src_total += src_size
         dst = OUT / video.name
 
+        # 断点续跑：输出已存在、非残缺（>20KB）、且不比源旧 → 跳过（支持被中断后增量续跑）
+        if dst.exists() and dst.stat().st_size > 20_000 and dst.stat().st_mtime >= video.stat().st_mtime:
+            print(f"[{index}/{len(videos)}] SKIP {video.name} (already encoded)", flush=True)
+            continue
+
         convert_video(video, dst)
         out_size = dst.stat().st_size
         out_total += out_size

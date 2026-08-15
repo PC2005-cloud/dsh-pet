@@ -17,7 +17,7 @@
 
 ## ✨ 功能特性
 
-- **25 个手绘风透明动画**：待机呼吸、打瞌睡、玩魔方、哼歌、炸毛、吐泡泡……全部无缝衔接
+- **28 个手绘风透明动画**：待机呼吸、打瞌睡、玩魔方、哼歌、炸毛、吐泡泡、玩水枪、小提琴演奏……全部无缝衔接
 - **永不停止的动画链**：每段动画播完立即按概率选下一个（30% 待机 / 10% 转向 / 40% 动作 / 20% 移动）
 - **屏幕漫游**：朝 facing 方向行走，自动检查空间、不走出屏幕
 - **点击 / 拖拽**：点击有随机回应动画（开心 / 害羞 / 傲娇），可拖到任意位置
@@ -72,7 +72,7 @@ dsh plugin --profile web remove dsh-pet
   <img src="https://raw.githubusercontent.com/PC2005-cloud/dsh-pet/main/dsh-pet/assets/preview/%E8%A2%AB%E9%BC%A0%E6%A0%87%E6%8B%96%E6%8B%BD%E6%82%AC%E7%A9%BA%E5%8F%8D%E9%A6%88.gif" width="160" alt="被鼠标拖拽悬空反馈" title="被鼠标拖拽悬空反馈">
 </p>
 
-全部 25 个动画见仓库：`dsh-pet/assets/thumb/`。
+全部 28 个动画见仓库：`dsh-pet/assets/thumb/`。
 
 ## 📚 完整项目（不止是插件）
 

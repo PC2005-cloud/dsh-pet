@@ -9,7 +9,7 @@
   <a href="https://github.com/PC2005-cloud/dsh-pet"><img alt="repo size" src="https://img.shields.io/github/repo-size/PC2005-cloud/dsh-pet"></a>
   <a href="https://github.com/PC2005-cloud/dsh-pet/issues"><img alt="issues" src="https://img.shields.io/github/issues/PC2005-cloud/dsh-pet"></a>
   <img alt="platform" src="https://img.shields.io/badge/platform-DeepSeek%20Harness%20Web-8A2BE2">
-  <img alt="assets" src="https://img.shields.io/badge/assets-25%20animations-ff69b4">
+  <img alt="assets" src="https://img.shields.io/badge/assets-28%20animations-ff69b4">
 </p>
 
 一只住在 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) Web 界面里的桌面宠物：待机呼吸、随机动作（含打瞌睡）、偶尔转向、屏幕漫游、点击反应、可拖拽。
@@ -37,14 +37,14 @@ dsh plugin --profile web add dsh-pet
 
 ### ① 提示词 → 源视频
 
-用 AI 视频生成工具（如可灵、Runway 等），按 `prompts/桌面宠物 10 秒动作提示词.md` 的配方生成 25 个 10 秒绿幕视频：
+用 AI 视频生成工具（如可灵、Runway 等），按 `prompts/桌面宠物 10 秒动作提示词.md` 的配方生成 28 个 10 秒绿幕视频：
 
 - 视频比例 16:9，背景纯绿幕（#00FF00）
 - 人物位置/大小固定（头顶 ~20% 高度、脚底 ~85% 高度）
 - 动作全程在画幅内，首尾帧为标准正面站立
 - 每段动画按秒分解（0-10s 各阶段动作）
 
-生成结果放入 `video/`（25 个 mp4）。
+生成结果放入 `video/`（28 个 mp4）。
 
 ### ② 源视频 → 透明动画（素材链）
 
@@ -75,14 +75,14 @@ dsh plugin --profile web add file:D:/path/to/dsh-pet
 ## 项目结构
 
 ```
-├── prompts/                 # ① 25 个动作的生成提示词（绿幕规范 + 按秒分解）
+├── prompts/                 # ① 28 个动作的生成提示词（绿幕规范 + 按秒分解）
 ├── scripts/                 # ② 素材生成链（4 个 Python 脚本）
-├── video/                   # ② 源视频（25 个绿幕 mp4）
+├── video/                   # ② 源视频（28 个绿幕 mp4）
 ├── tools/                   # 开发工具：preview.html（素材链各阶段效果预览）
 ├── dsh-pet/                 # ③ 插件（可独立 npm 发布）
 │   ├── lib/index.js         #   host 半侧：/pet 视频路由
 │   ├── lib/client.js        #   浏览器半侧：动画链 + 双缓冲播放
-│   └── assets/thumb/        #   360×360 播放动画（25 个，~10MB）
+│   └── assets/thumb/        #   360×360 播放动画（28 个，~15MB）
 ├── DESIGN.md                # 设计与实现文档（含踩坑记录）
 └── LICENSE                  # MIT
 ```
@@ -107,7 +107,7 @@ dsh plugin --profile web add file:D:/path/to/dsh-pet
 
 ## 效果预览
 
-全部 25 个动画（360×360，插件实际播放用的资源）——GitHub 只对仓库内图片渲染内联预览，故此处用 GIF 演示；完整透明视频见 `dsh-pet/assets/thumb/`：
+全部 28 个动画（360×360，插件实际播放用的资源）——GitHub 只对仓库内图片渲染内联预览，故此处用 GIF 演示；完整透明视频见 `dsh-pet/assets/thumb/`：
 
 **待机 / 转向**
 
@@ -121,6 +121,7 @@ dsh plugin --profile web add file:D:/path/to/dsh-pet
 <p>
   <img src="dsh-pet/assets/preview/螃蟹走路.gif" width="160" alt="螃蟹走路" title="螃蟹走路">
   <img src="dsh-pet/assets/preview/原地漂浮踏步.gif" width="160" alt="原地漂浮踏步" title="原地漂浮踏步">
+  <img src="dsh-pet/assets/preview/原地左转奔跑.gif" width="160" alt="原地左转奔跑" title="原地左转奔跑">
 </p>
 
 **动作**
@@ -143,6 +144,8 @@ dsh plugin --profile web add file:D:/path/to/dsh-pet
   <img src="dsh-pet/assets/preview/玩游戏气急败坏.gif" width="160" alt="玩游戏气急败坏" title="玩游戏气急败坏">
   <img src="dsh-pet/assets/preview/用鲸鱼尾巴拍打地面.gif" width="160" alt="用鲸鱼尾巴拍打地面" title="用鲸鱼尾巴拍打地面">
   <img src="dsh-pet/assets/preview/打瞌睡被惊醒.gif" width="160" alt="打瞌睡被惊醒" title="打瞌睡被惊醒">
+  <img src="dsh-pet/assets/preview/玩水枪.gif" width="160" alt="玩水枪" title="玩水枪">
+  <img src="dsh-pet/assets/preview/小提琴演奏.gif" width="160" alt="小提琴演奏" title="小提琴演奏">
 </p>
 
 **点击回应**

@@ -136,11 +136,26 @@ def main() -> int:
 
     payload = {"canvas": f"{CANVAS_W}x{CANVAS_H}", "target_height": TARGET_HEIGHT, "feet_y": FEET_Y, "videos": []}
     for index, video in enumerate(videos, start=1):
+        dst = OUT / (video.stem + ".webm")
+        # 断点续跑：输出已存在、非残缺（>50KB）、且不比源旧 → 跳过转码（支持被中断后增量续跑）；
+        # 但跳过时仍做轻量测量（仅 bbox 扫描，不转码），保证 params.json 始终包含全部视频条目。
+        if dst.exists() and dst.stat().st_size > 50_000 and dst.stat().st_mtime >= video.stat().st_mtime:
+            standing = measure_standing(video)
+            union = measure_content_union(video)
+            scale = TARGET_HEIGHT / standing["height"]
+            entry = {
+                "file": video.name,
+                "standing": {k: round(v, 1) for k, v in standing.items()},
+                "content_union": {"x1": union[0], "y1": union[1], "x2": union[2], "y2": union[3]},
+                "scale": round(scale, 6),
+            }
+            payload["videos"].append(entry)
+            print(f"[{index}/{len(videos)}] SKIP {video.name} (already normalized)", flush=True)
+            continue
         standing = measure_standing(video)
         union = measure_content_union(video)
         scale = TARGET_HEIGHT / standing["height"]
         filter_complex = build_filter(scale, standing)
-        dst = OUT / (video.stem + ".webm")
         entry = {
             "file": video.name,
             "standing": {k: round(v, 1) for k, v in standing.items()},
