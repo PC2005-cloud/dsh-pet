@@ -63,9 +63,11 @@ window.__ModuleLoader__.load({
 			'.dsh-pet-video.is-front{opacity:1}',
 			// 按住时显示"抓取中"光标
 			'.dsh-pet-video:active{cursor:grabbing}',
-			// 朝向镜像：facing=right 时水平翻转（人物偏右）。镜像只作用 CSS，
-			// 不碰视频文件——这是"所有动画都能朝左/朝右"的实现关键
-			'.dsh-pet-root[data-facing="right"] .dsh-pet-video{transform:scaleX(-1)}',
+			// 朝向镜像说明：不用 CSS 全局规则（data-facing）控制镜像——facing 翻转会
+			// 同步镜像所有 video（含仍在显示的旧视频），造成"旧帧被镜像"的闪烁。
+			// 镜像改为在 switchTo 的 onReady 里按实际朝向给每个 video 设置 inline
+			// transform（见 onReady）：新视频按新朝向显示、旧视频保持自己的 transform
+			// 淡出，两者互不影响，facing 翻转时机因此无关紧要。
 			// 无障碍：用户系统开启"减少动态效果"时关闭过渡动画
 			'@media (prefers-reduced-motion: reduce){.dsh-pet-video{transition:none}}',
 		].join('\n');
@@ -225,6 +227,11 @@ window.__ModuleLoader__.load({
 					if (old.current && old.current !== el) old.current.classList.remove('is-front');
 					frontRef.current = frontRef.current === 0 ? 1 : 0;
 					pendingRef.current = null;
+					// 按实际朝向设置新视频镜像（inline transform，不依赖全局 CSS）：
+					// facing=right 时 scaleX(-1)。onReady 时 facingRef 已是翻转后的值
+					// （setFacing 的渲染先于 switchTo 执行）；旧视频 transform 不动，
+					// 淡出时保持原朝向，不会露出未镜像的原画面。
+					el.style.transform = facingRef.current === 'right' ? 'scaleX(-1)' : '';
 					el.play().catch(() => {}); // 开始播放（捕获自动播放策略异常）
 					// 如果这是"计划中的移动"的动画，现在动画就绪了，
 					// 开始驱动位置移动（见 startMoveDrive）
@@ -399,7 +406,9 @@ window.__ModuleLoader__.load({
 			 */
 			const tryMove = () => {
 				if (moveRef.current !== null || pendingMoveRef.current) return true; // 已在移动/已计划
-				const dir = facingRef.current === 'right' ? 1 : -1; // 朝右=+1，朝左=-1
+				// 方向按"实际朝向"计算：若刚播完东张西望（animRef 仍为 TURN），
+				// facing 即将翻转，方向取反——否则人物"脸朝新方向、却往旧方向走"。
+				const dir = (facingRef.current === 'right') !== (animRef.current === TURN) ? 1 : -1; // 朝右=+1，朝左=-1
 				const W = window.innerWidth;
 				const cx = currentCenterX();
 				const distance = randomBetween(MOVE_MIN_PX, MOVE_MAX_PX);

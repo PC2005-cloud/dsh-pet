@@ -1,6 +1,6 @@
 {
   "name": "dsh-pet",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "A floating desktop pet for the DeepSeek Harness Web UI: idle breathing, occasional direction turns, random actions, and screen wandering.",
   "keywords": [
     "dsh",
