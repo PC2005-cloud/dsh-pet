@@ -49,13 +49,13 @@ Put the results in `video/` (41 mp4 files).
 
 ```sh
 cd scripts
-python crop_step01.py        # crop left/right green-screen edges → step01/
-python chroma_step02.py      # chroma-key the green screen to transparency → step02/
-python normalize_step03.py   # normalize to 1200×1200 unified standing → step03/
-python encode_thumbs.py      # transcode 360×360 playback variants → step04/
+python watermark_step01.py   # fill watermark masks → step01/
+python chroma_step02.py      # chroma-key the green screen to transparency (HSV hue) → step02/
+python normalize_step03.py   # normalize to 2160×1215 unified standing, centered → step03/
+python encode_thumbs.py      # transcode 640×360 playback variants → step04/
 ```
 
-**Dependencies**: Python 3 + ffmpeg (the pipeline has zero third-party pip dependencies; scripts automatically use the ffmpeg under the workspace `.tools/`).
+**Dependencies**: Python 3 + ffmpeg + numpy + scipy (the pipeline scripts automatically use the ffmpeg under the workspace `.tools/`).
 
 ### ③ Animations → Plugin
 
@@ -75,13 +75,13 @@ dsh plugin --profile web add file:D:/path/to/dsh-pet
 
 ```
 ├── prompts/                 # ① Generation prompts for 41 actions (green-screen spec + per-second breakdown)
-├── scripts/                 # ② Asset pipeline (4 Python scripts)
-├── video/                   # ② Source videos (41 green-screen mp4s)
+├── scripts/                 # ② Asset pipeline (7 Python scripts)
+├── video/                   # ② Source videos (41 green-screen mp4s + watermark mask)
 ├── tools/                   # Dev tools: preview.html (pipeline stage previews)
 ├── dsh-pet/                 # ③ The plugin (can be published to npm independently)
 │   ├── lib/index.js         #   host half: /pet video route
 │   ├── lib/client.js        #   browser half: animation chain + double-buffered playback
-│   └── assets/thumb/        #   360×360 playback animations (41, ~24MB)
+│   └── assets/thumb/        #   640×360 playback animations (41, ~28MB)
 ├── DESIGN.md                # Design & implementation docs (including pitfalls)
 └── LICENSE                  # MIT
 ```
@@ -107,7 +107,7 @@ What the pet looks like running inside the DSH Web UI:
 
 ## Animation Previews
 
-All 41 animations (360×360, the actual assets the plugin plays) — GitHub renders inline previews only for images inside the repo, so GIFs are used here; the full transparent videos live in `dsh-pet/assets/thumb/`:
+All 41 animations (640×360, the actual assets the plugin plays) — GitHub renders inline previews only for images inside the repo, so GIFs are used here; the full transparent videos live in `dsh-pet/assets/thumb/`:
 
 **Idle / Turning**
 

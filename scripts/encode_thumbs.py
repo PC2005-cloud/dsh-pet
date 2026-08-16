@@ -24,6 +24,7 @@ step04 是素材处理链的最终产物。发布/安装插件时把 step04 的�
 from __future__ import annotations
 
 import subprocess
+from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -31,9 +32,12 @@ SRC = ROOT / "step03"
 OUT = ROOT / "step04"
 # 统一使用工作区自带的 ffmpeg（素材处理链零第三方依赖）
 FFMPEG = str(ROOT / ".tools" / "ffmpeg-9.0.1-essentials_build" / "bin" / "ffmpeg.exe")
+FFPROBE = str(ROOT / ".tools" / "ffmpeg-9.0.1-essentials_build" / "bin" / "ffprobe.exe")
 
+PARALLEL = 4
 # 转码参数（调这里改画质/分辨率）
-TARGET = 360   # thumb 画布边长（正方形，与 1200 母版同比例）
+TARGET_W = 640    # thumb 宽度（与 2160x1215 母版同 16:9 比例）
+TARGET_H = 360    # thumb 高度
 CRF = 40       # VP9 质量参数（0-63，越小越清晰越大；40 偏轻，透明区域省码）
 FPS = 24       # 帧率（与母版一致，保持动作节奏）
 
@@ -57,7 +61,7 @@ def convert_video(src: Path, dst: Path) -> None:
         "-i",
         str(src),
         "-vf",
-        f"scale={TARGET}:{TARGET},format=yuva420p",
+        f"scale={TARGET_W}:{TARGET_H},format=yuva420p",
         "-c:v",
         "libvpx-vp9",  # VP9 编码（WebM 标准）
         "-crf",
@@ -76,6 +80,27 @@ def convert_video(src: Path, dst: Path) -> None:
         raise RuntimeError(result.stderr.strip())
 
 
+def _is_valid(dst: Path, src: Path, min_size: int = 20_000) -> bool:
+    """断点续跑完整性检查：存在、够大、不比源旧、且能被 ffprobe 读到视频流。"""
+    if not dst.exists() or dst.stat().st_size <= min_size:
+        return False
+    if dst.stat().st_mtime < src.stat().st_mtime:
+        return False
+    r = subprocess.run([FFPROBE, "-v", "error", "-show_entries", "stream=codec_name",
+                        "-of", "csv=p=0", str(dst)], capture_output=True)
+    return bool(r.stdout.strip())
+
+
+def _process_one(video: Path) -> tuple[str, int, int, bool]:
+    """处理单个视频（worker 函数），返回 (名字, 源大小, 输出大小, 是否跳过)。"""
+    src_size = video.stat().st_size
+    dst = OUT / video.name
+    if _is_valid(dst, video):
+        return video.name, src_size, 0, True
+    convert_video(video, dst)
+    return video.name, src_size, dst.stat().st_size, False
+
+
 def main() -> int:
     OUT.mkdir(exist_ok=True)
     videos = sorted(SRC.glob("*.webm"))
@@ -85,23 +110,18 @@ def main() -> int:
 
     src_total = 0
     out_total = 0
-    for index, video in enumerate(videos, start=1):
-        src_size = video.stat().st_size
-        src_total += src_size
-        dst = OUT / video.name
-
-        # 断点续跑：输出已存在、非残缺（>20KB）、且不比源旧 → 跳过（支持被中断后增量续跑）
-        if dst.exists() and dst.stat().st_size > 20_000 and dst.stat().st_mtime >= video.stat().st_mtime:
-            print(f"[{index}/{len(videos)}] SKIP {video.name} (already encoded)", flush=True)
-            continue
-
-        convert_video(video, dst)
-        out_size = dst.stat().st_size
-        out_total += out_size
-        print(f"[{index}/{len(videos)}] {video.name}  {src_size / 1e6:.1f}MB -> {out_size / 1e6:.1f}MB", flush=True)
+    total = len(videos)
+    with ProcessPoolExecutor(max_workers=PARALLEL) as ex:
+        for index, (name, src_size, out_size, skipped) in enumerate(ex.map(_process_one, videos), start=1):
+            src_total += src_size
+            out_total += out_size
+            if skipped:
+                print(f"[{index}/{total}] SKIP {name} (already encoded)", flush=True)
+            else:
+                print(f"[{index}/{total}] {name}  {src_size / 1e6:.1f}MB -> {out_size / 1e6:.1f}MB", flush=True)
 
     print(f"\n=== summary ===")
-    print(f"masters: {len(videos)}")
+    print(f"masters: {total}")
     print(f"source total: {src_total / 1e6:.1f}MB")
     print(f"thumb total: {out_total / 1e6:.1f}MB")
     return 0
