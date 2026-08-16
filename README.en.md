@@ -45,6 +45,12 @@ Use an AI video generation tool (e.g., Kling, Runway, Doubao — this project's 
 
 Put the results in `video/` (51 mp4 files).
 
+> **Getting the source videos**: to keep the repo small, `video/` sources are not committed. To reproduce the pipeline, download the 51 mp4 files (pinyin filenames) from [Releases `assets-videos`](https://github.com/PC2005-cloud/dsh-pet/releases/tag/assets-videos) into `video/`. One-shot bulk download (requires gh CLI):
+>
+> ```sh
+> mkdir -p video && cd video && gh release download assets-videos --repo PC2005-cloud/dsh-pet
+> ```
+
 ### ② Source Videos → Transparent Animations (Asset Pipeline)
 
 ```sh
@@ -107,72 +113,72 @@ What the pet looks like running inside the DSH Web UI:
 
 ## Animation Previews
 
-All 51 animations (640×360, the actual assets the plugin plays) — GitHub renders inline previews only for images inside the repo, so GIFs are used here; the full transparent videos live in `dsh-pet/assets/thumb/`:
+All 51 animations (640×360, the actual assets the plugin plays) — GIF previews live in the repo at `dsh-pet/assets/preview/` (rendered via raw links, pinyin filenames for cross-platform safety); the full transparent videos live in `dsh-pet/assets/thumb/`:
 
 **Idle / Turning**
 
 <p>
-  <img src="dsh-pet/assets/preview/待机呼吸休闲.gif" width="160" alt="Idle breathing & chill" title="Idle breathing & chill">
-  <img src="dsh-pet/assets/preview/东张西望.gif" width="160" alt="Looking around" title="Looking around">
+  <img src="dsh-pet/assets/preview/daiji-huxi-xiuxian.gif" width="160" alt="Idle breathing & chill" title="Idle breathing & chill">
+  <img src="dsh-pet/assets/preview/dongzhangxiwang.gif" width="160" alt="Looking around" title="Looking around">
 </p>
 
 **Movement**
 
 <p>
-  <img src="dsh-pet/assets/preview/螃蟹走路.gif" width="160" alt="Crab walk" title="Crab walk">
-  <img src="dsh-pet/assets/preview/原地漂浮踏步.gif" width="160" alt="Floating in place" title="Floating in place">
-  <img src="dsh-pet/assets/preview/原地左转奔跑.gif" width="160" alt="Sprinting in place" title="Sprinting in place">
+  <img src="dsh-pet/assets/preview/pangxie-zoulu.gif" width="160" alt="Crab walk" title="Crab walk">
+  <img src="dsh-pet/assets/preview/yuandi-piaofu-tabu.gif" width="160" alt="Floating in place" title="Floating in place">
+  <img src="dsh-pet/assets/preview/yuandi-zuozhuan-benpao.gif" width="160" alt="Sprinting in place" title="Sprinting in place">
 </p>
 
 **Actions**
 
 <p>
-  <img src="dsh-pet/assets/preview/悠闲哼歌.gif" width="160" alt="Humming a tune" title="Humming a tune">
-  <img src="dsh-pet/assets/preview/超大伸懒腰.gif" width="160" alt="Big stretch" title="Big stretch">
-  <img src="dsh-pet/assets/preview/原地专心玩魔方.gif" width="160" alt="Playing with a Rubik's cube" title="Playing with a Rubik's cube">
-  <img src="dsh-pet/assets/preview/原地敲击桌面互动.gif" width="160" alt="Tapping the desk" title="Tapping the desk">
-  <img src="dsh-pet/assets/preview/原地重力下蹲压缩.gif" width="160" alt="Gravity squat" title="Gravity squat">
-  <img src="dsh-pet/assets/preview/哈欠连天.gif" width="160" alt="Yawning" title="Yawning">
-  <img src="dsh-pet/assets/preview/原地小憩沉眠.gif" width="160" alt="Napping" title="Napping">
-  <img src="dsh-pet/assets/preview/原地蹲下玩玩具汽车.gif" width="160" alt="Playing with a toy car" title="Playing with a toy car">
-  <img src="dsh-pet/assets/preview/鲸鱼吐泡泡特效.gif" width="160" alt="Whale blowing bubbles" title="Whale blowing bubbles">
-  <img src="dsh-pet/assets/preview/女仆屈膝礼仪.gif" width="160" alt="Maid curtsy" title="Maid curtsy">
-  <img src="dsh-pet/assets/preview/被吓一跳（炸毛）.gif" width="160" alt="Startled (fur standing up)" title="Startled (fur standing up)">
-  <img src="dsh-pet/assets/preview/原地跳跃抓碎头顶物品.gif" width="160" alt="Jumping to smash something overhead" title="Jumping to smash something overhead">
-  <img src="dsh-pet/assets/preview/小幅度原地 360 度旋转展示.gif" width="160" alt="Slow 360° spin" title="Slow 360° spin">
-  <img src="dsh-pet/assets/preview/偷吃零食被抓住.gif" width="160" alt="Caught sneaking snacks" title="Caught sneaking snacks">
-  <img src="dsh-pet/assets/preview/玩游戏气急败坏.gif" width="160" alt="Frustrated at a game" title="Frustrated at a game">
-  <img src="dsh-pet/assets/preview/用鲸鱼尾巴拍打地面.gif" width="160" alt="Slapping the floor with the whale tail" title="Slapping the floor with the whale tail">
-  <img src="dsh-pet/assets/preview/打瞌睡被惊醒.gif" width="160" alt="Woken from a doze" title="Woken from a doze">
-  <img src="dsh-pet/assets/preview/玩水枪.gif" width="160" alt="Playing with a water gun" title="Playing with a water gun">
-  <img src="dsh-pet/assets/preview/小提琴演奏.gif" width="160" alt="Playing the violin" title="Playing the violin">
-  <img src="dsh-pet/assets/preview/蓝鲸现世.gif" width="160" alt="Whale emerging" title="Whale emerging">
-  <img src="dsh-pet/assets/preview/吃白饭.gif" width="160" alt="Eating rice" title="Eating rice">
-  <img src="dsh-pet/assets/preview/照镜子.gif" width="160" alt="Looking in the mirror" title="Looking in the mirror">
-  <img src="dsh-pet/assets/preview/优雅女仆舞.gif" width="160" alt="Elegant maid dance" title="Elegant maid dance">
-  <img src="dsh-pet/assets/preview/轻快摇摆舞.gif" width="160" alt="Lighthearted sway dance" title="Lighthearted sway dance">
-  <img src="dsh-pet/assets/preview/可爱宅舞.gif" width="160" alt="Cute anime dance" title="Cute anime dance">
-  <img src="dsh-pet/assets/preview/整体换装试色.gif" width="160" alt="Trying on outfits" title="Trying on outfits">
-  <img src="dsh-pet/assets/preview/大口吃零食.gif" width="160" alt="Munching snacks" title="Munching snacks">
-  <img src="dsh-pet/assets/preview/吹气球.gif" width="160" alt="Blowing a balloon" title="Blowing a balloon">
-  <img src="dsh-pet/assets/preview/动物环绕.gif" width="160" alt="Animals circling around" title="Animals circling around">
-  <img src="dsh-pet/assets/preview/深度思考碎碎念.gif" width="160" alt="Deep thinking & muttering" title="Deep thinking & muttering">
-  <img src="dsh-pet/assets/preview/轻快记录.gif" width="160" alt="Taking light notes" title="Taking light notes">
-  <img src="dsh-pet/assets/preview/写代码.gif" width="160" alt="Writing code" title="Writing code">
+  <img src="dsh-pet/assets/preview/youxian-hengga.gif" width="160" alt="Humming a tune" title="Humming a tune">
+  <img src="dsh-pet/assets/preview/chaoda-shenlanyao.gif" width="160" alt="Big stretch" title="Big stretch">
+  <img src="dsh-pet/assets/preview/yuandi-zhuanxin-wan-mofang.gif" width="160" alt="Playing with a Rubik's cube" title="Playing with a Rubik's cube">
+  <img src="dsh-pet/assets/preview/yuandi-qiaoji-zhuomian-hudong.gif" width="160" alt="Tapping the desk" title="Tapping the desk">
+  <img src="dsh-pet/assets/preview/yuandi-zhongli-xiadun-yasuo.gif" width="160" alt="Gravity squat" title="Gravity squat">
+  <img src="dsh-pet/assets/preview/haqian-liantian.gif" width="160" alt="Yawning" title="Yawning">
+  <img src="dsh-pet/assets/preview/yuandi-xiaoqi-chenmian.gif" width="160" alt="Napping" title="Napping">
+  <img src="dsh-pet/assets/preview/yuandi-dunxia-wan-wanju-qiche.gif" width="160" alt="Playing with a toy car" title="Playing with a toy car">
+  <img src="dsh-pet/assets/preview/jingyu-tu-paopao-texiao.gif" width="160" alt="Whale blowing bubbles" title="Whale blowing bubbles">
+  <img src="dsh-pet/assets/preview/nvpu-quxi-liyi.gif" width="160" alt="Maid curtsy" title="Maid curtsy">
+  <img src="dsh-pet/assets/preview/beixiayitiao-zhamao.gif" width="160" alt="Startled (fur standing up)" title="Startled (fur standing up)">
+  <img src="dsh-pet/assets/preview/yuandi-tiaoyue-zhuasui-touding-wupin.gif" width="160" alt="Jumping to smash something overhead" title="Jumping to smash something overhead">
+  <img src="dsh-pet/assets/preview/xiaofudu-yuandi-360du-xuanzhuan-zhanshi.gif" width="160" alt="Slow 360° spin" title="Slow 360° spin">
+  <img src="dsh-pet/assets/preview/touchi-lingshi-bei-zhuazhu.gif" width="160" alt="Caught sneaking snacks" title="Caught sneaking snacks">
+  <img src="dsh-pet/assets/preview/wan-youxi-qijibaituai.gif" width="160" alt="Frustrated at a game" title="Frustrated at a game">
+  <img src="dsh-pet/assets/preview/yong-jingyu-weiba-paidadi.gif" width="160" alt="Slapping the floor with the whale tail" title="Slapping the floor with the whale tail">
+  <img src="dsh-pet/assets/preview/da-keshui-bei-jingxing.gif" width="160" alt="Woken from a doze" title="Woken from a doze">
+  <img src="dsh-pet/assets/preview/wan-shuiqiang.gif" width="160" alt="Playing with a water gun" title="Playing with a water gun">
+  <img src="dsh-pet/assets/preview/xiaotiqin-yanzou.gif" width="160" alt="Playing the violin" title="Playing the violin">
+  <img src="dsh-pet/assets/preview/lanjing-xianshi.gif" width="160" alt="Whale emerging" title="Whale emerging">
+  <img src="dsh-pet/assets/preview/chi-baifan.gif" width="160" alt="Eating rice" title="Eating rice">
+  <img src="dsh-pet/assets/preview/zhao-jingzi.gif" width="160" alt="Looking in the mirror" title="Looking in the mirror">
+  <img src="dsh-pet/assets/preview/youya-nvpuwu.gif" width="160" alt="Elegant maid dance" title="Elegant maid dance">
+  <img src="dsh-pet/assets/preview/qingkuai-yaobaiwu.gif" width="160" alt="Lighthearted sway dance" title="Lighthearted sway dance">
+  <img src="dsh-pet/assets/preview/keai-zhaiwu.gif" width="160" alt="Cute anime dance" title="Cute anime dance">
+  <img src="dsh-pet/assets/preview/zhengti-huanzhuang-shise.gif" width="160" alt="Trying on outfits" title="Trying on outfits">
+  <img src="dsh-pet/assets/preview/dakou-chi-lingshi.gif" width="160" alt="Munching snacks" title="Munching snacks">
+  <img src="dsh-pet/assets/preview/chui-qiqiu.gif" width="160" alt="Blowing a balloon" title="Blowing a balloon">
+  <img src="dsh-pet/assets/preview/dongwu-huanrao.gif" width="160" alt="Animals circling around" title="Animals circling around">
+  <img src="dsh-pet/assets/preview/shendu-sikao-suisuinian.gif" width="160" alt="Deep thinking & muttering" title="Deep thinking & muttering">
+  <img src="dsh-pet/assets/preview/qingkuai-jilu.gif" width="160" alt="Taking light notes" title="Taking light notes">
+  <img src="dsh-pet/assets/preview/xie-daima.gif" width="160" alt="Writing code" title="Writing code">
 </p>
 
 **Click Responses**
 
 <p>
-  <img src="dsh-pet/assets/preview/点击回应 - 开心跃动.gif" width="160" alt="Click response - happy bounce" title="Click response - happy bounce">
-  <img src="dsh-pet/assets/preview/点击回应 - 害羞惊讶.gif" width="160" alt="Click response - shy surprise" title="Click response - shy surprise">
-  <img src="dsh-pet/assets/preview/点击回应 - 傲娇生气（侧身展示）.gif" width="160" alt="Click response - tsundere pout" title="Click response - tsundere pout">
+  <img src="dsh-pet/assets/preview/dianji-huiying-kaixin-yuedong.gif" width="160" alt="Click response - happy bounce" title="Click response - happy bounce">
+  <img src="dsh-pet/assets/preview/dianji-huiying-haixiu-jingya.gif" width="160" alt="Click response - shy surprise" title="Click response - shy surprise">
+  <img src="dsh-pet/assets/preview/dianji-huiying-aojiao-shengqi-ceshen-zhanshi.gif" width="160" alt="Click response - tsundere pout" title="Click response - tsundere pout">
 </p>
 
 **Dragging**
 
 <p>
-  <img src="dsh-pet/assets/preview/被鼠标拖拽悬空反馈.gif" width="160" alt="Dragged by the mouse" title="Dragged by the mouse">
+  <img src="dsh-pet/assets/preview/beishubiao-tuozhuai-xuankong-fankui.gif" width="160" alt="Dragged by the mouse" title="Dragged by the mouse">
 </p>
 
 > Note: the animations have transparent backgrounds; in these GIF previews the transparent areas show the page background color, while the actual webm playback is transparent.
