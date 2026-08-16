@@ -47,6 +47,8 @@ dsh plugin --profile web add dsh-pet
 
 生成结果放入 `video/`（51 个 mp4）。
 
+> **源视频获取**：为控制仓库体积，`video/` 源视频不入 git。需要复现素材链时，从 [Releases](https://github.com/PC2005-cloud/dsh-pet/releases)（tag `assets-v1`）下载 `video-src.zip`，解压到 `video/` 即可。
+
 ### ② 源视频 → 透明动画（素材链）
 
 ```sh
@@ -109,72 +111,72 @@ dsh plugin --profile web add file:D:/path/to/dsh-pet
 
 ## 效果预览
 
-全部 51 个动画（640×360，插件实际播放用的资源）——GitHub 只对仓库内图片渲染内联预览，故此处用 GIF 演示；完整透明视频见 `dsh-pet/assets/thumb/`：
+全部 51 个动画（640×360，插件实际播放用的资源）——GIF 预览托管在 [Releases](https://github.com/PC2005-cloud/dsh-pet/releases)（`assets-v1`，文件名采用拼音便于跨平台）；完整透明视频见 `dsh-pet/assets/thumb/`：
 
 **待机 / 转向**
 
 <p>
-  <img src="dsh-pet/assets/preview/待机呼吸休闲.gif" width="160" alt="待机呼吸休闲" title="待机呼吸休闲">
-  <img src="dsh-pet/assets/preview/东张西望.gif" width="160" alt="东张西望" title="东张西望">
+  <img src="https://github.com/PC2005-cloud/dsh-pet/releases/latest/download/daiji-huxi-xiuxian.gif" width="160" alt="待机呼吸休闲" title="待机呼吸休闲">
+  <img src="https://github.com/PC2005-cloud/dsh-pet/releases/latest/download/dongzhangxiwang.gif" width="160" alt="东张西望" title="东张西望">
 </p>
 
 **移动**
 
 <p>
-  <img src="dsh-pet/assets/preview/螃蟹走路.gif" width="160" alt="螃蟹走路" title="螃蟹走路">
-  <img src="dsh-pet/assets/preview/原地漂浮踏步.gif" width="160" alt="原地漂浮踏步" title="原地漂浮踏步">
-  <img src="dsh-pet/assets/preview/原地左转奔跑.gif" width="160" alt="原地左转奔跑" title="原地左转奔跑">
+  <img src="https://github.com/PC2005-cloud/dsh-pet/releases/latest/download/pangxie-zoulu.gif" width="160" alt="螃蟹走路" title="螃蟹走路">
+  <img src="https://github.com/PC2005-cloud/dsh-pet/releases/latest/download/yuandi-piaofu-tabu.gif" width="160" alt="原地漂浮踏步" title="原地漂浮踏步">
+  <img src="https://github.com/PC2005-cloud/dsh-pet/releases/latest/download/yuandi-zuozhuan-benpao.gif" width="160" alt="原地左转奔跑" title="原地左转奔跑">
 </p>
 
 **动作**
 
 <p>
-  <img src="dsh-pet/assets/preview/悠闲哼歌.gif" width="160" alt="悠闲哼歌" title="悠闲哼歌">
-  <img src="dsh-pet/assets/preview/超大伸懒腰.gif" width="160" alt="超大伸懒腰" title="超大伸懒腰">
-  <img src="dsh-pet/assets/preview/原地专心玩魔方.gif" width="160" alt="原地专心玩魔方" title="原地专心玩魔方">
-  <img src="dsh-pet/assets/preview/原地敲击桌面互动.gif" width="160" alt="原地敲击桌面互动" title="原地敲击桌面互动">
-  <img src="dsh-pet/assets/preview/原地重力下蹲压缩.gif" width="160" alt="原地重力下蹲压缩" title="原地重力下蹲压缩">
-  <img src="dsh-pet/assets/preview/哈欠连天.gif" width="160" alt="哈欠连天" title="哈欠连天">
-  <img src="dsh-pet/assets/preview/原地小憩沉眠.gif" width="160" alt="原地小憩沉眠" title="原地小憩沉眠">
-  <img src="dsh-pet/assets/preview/原地蹲下玩玩具汽车.gif" width="160" alt="原地蹲下玩玩具汽车" title="原地蹲下玩玩具汽车">
-  <img src="dsh-pet/assets/preview/鲸鱼吐泡泡特效.gif" width="160" alt="鲸鱼吐泡泡特效" title="鲸鱼吐泡泡特效">
-  <img src="dsh-pet/assets/preview/女仆屈膝礼仪.gif" width="160" alt="女仆屈膝礼仪" title="女仆屈膝礼仪">
-  <img src="dsh-pet/assets/preview/被吓一跳（炸毛）.gif" width="160" alt="被吓一跳（炸毛）" title="被吓一跳（炸毛）">
-  <img src="dsh-pet/assets/preview/原地跳跃抓碎头顶物品.gif" width="160" alt="原地跳跃抓碎头顶物品" title="原地跳跃抓碎头顶物品">
-  <img src="dsh-pet/assets/preview/小幅度原地 360 度旋转展示.gif" width="160" alt="小幅度原地 360 度旋转展示" title="小幅度原地 360 度旋转展示">
-  <img src="dsh-pet/assets/preview/偷吃零食被抓住.gif" width="160" alt="偷吃零食被抓住" title="偷吃零食被抓住">
-  <img src="dsh-pet/assets/preview/玩游戏气急败坏.gif" width="160" alt="玩游戏气急败坏" title="玩游戏气急败坏">
-  <img src="dsh-pet/assets/preview/用鲸鱼尾巴拍打地面.gif" width="160" alt="用鲸鱼尾巴拍打地面" title="用鲸鱼尾巴拍打地面">
-  <img src="dsh-pet/assets/preview/打瞌睡被惊醒.gif" width="160" alt="打瞌睡被惊醒" title="打瞌睡被惊醒">
-  <img src="dsh-pet/assets/preview/玩水枪.gif" width="160" alt="玩水枪" title="玩水枪">
-  <img src="dsh-pet/assets/preview/小提琴演奏.gif" width="160" alt="小提琴演奏" title="小提琴演奏">
-  <img src="dsh-pet/assets/preview/蓝鲸现世.gif" width="160" alt="蓝鲸现世" title="蓝鲸现世">
-  <img src="dsh-pet/assets/preview/吃白饭.gif" width="160" alt="吃白饭" title="吃白饭">
-  <img src="dsh-pet/assets/preview/照镜子.gif" width="160" alt="照镜子" title="照镜子">
-  <img src="dsh-pet/assets/preview/优雅女仆舞.gif" width="160" alt="优雅女仆舞" title="优雅女仆舞">
-  <img src="dsh-pet/assets/preview/轻快摇摆舞.gif" width="160" alt="轻快摇摆舞" title="轻快摇摆舞">
-  <img src="dsh-pet/assets/preview/可爱宅舞.gif" width="160" alt="可爱宅舞" title="可爱宅舞">
-  <img src="dsh-pet/assets/preview/整体换装试色.gif" width="160" alt="整体换装试色" title="整体换装试色">
-  <img src="dsh-pet/assets/preview/大口吃零食.gif" width="160" alt="大口吃零食" title="大口吃零食">
-  <img src="dsh-pet/assets/preview/吹气球.gif" width="160" alt="吹气球" title="吹气球">
-  <img src="dsh-pet/assets/preview/动物环绕.gif" width="160" alt="动物环绕" title="动物环绕">
-  <img src="dsh-pet/assets/preview/深度思考碎碎念.gif" width="160" alt="深度思考碎碎念" title="深度思考碎碎念">
-  <img src="dsh-pet/assets/preview/轻快记录.gif" width="160" alt="轻快记录" title="轻快记录">
-  <img src="dsh-pet/assets/preview/写代码.gif" width="160" alt="写代码" title="写代码">
+  <img src="https://github.com/PC2005-cloud/dsh-pet/releases/latest/download/youxian-hengga.gif" width="160" alt="悠闲哼歌" title="悠闲哼歌">
+  <img src="https://github.com/PC2005-cloud/dsh-pet/releases/latest/download/chaoda-shenlanyao.gif" width="160" alt="超大伸懒腰" title="超大伸懒腰">
+  <img src="https://github.com/PC2005-cloud/dsh-pet/releases/latest/download/yuandi-zhuanxin-wan-mofang.gif" width="160" alt="原地专心玩魔方" title="原地专心玩魔方">
+  <img src="https://github.com/PC2005-cloud/dsh-pet/releases/latest/download/yuandi-qiaoji-zhuomian-hudong.gif" width="160" alt="原地敲击桌面互动" title="原地敲击桌面互动">
+  <img src="https://github.com/PC2005-cloud/dsh-pet/releases/latest/download/yuandi-zhongli-xiadun-yasuo.gif" width="160" alt="原地重力下蹲压缩" title="原地重力下蹲压缩">
+  <img src="https://github.com/PC2005-cloud/dsh-pet/releases/latest/download/haqian-liantian.gif" width="160" alt="哈欠连天" title="哈欠连天">
+  <img src="https://github.com/PC2005-cloud/dsh-pet/releases/latest/download/yuandi-xiaoqi-chenmian.gif" width="160" alt="原地小憩沉眠" title="原地小憩沉眠">
+  <img src="https://github.com/PC2005-cloud/dsh-pet/releases/latest/download/yuandi-dunxia-wan-wanju-qiche.gif" width="160" alt="原地蹲下玩玩具汽车" title="原地蹲下玩玩具汽车">
+  <img src="https://github.com/PC2005-cloud/dsh-pet/releases/latest/download/jingyu-tu-paopao-texiao.gif" width="160" alt="鲸鱼吐泡泡特效" title="鲸鱼吐泡泡特效">
+  <img src="https://github.com/PC2005-cloud/dsh-pet/releases/latest/download/nvpu-quxi-liyi.gif" width="160" alt="女仆屈膝礼仪" title="女仆屈膝礼仪">
+  <img src="https://github.com/PC2005-cloud/dsh-pet/releases/latest/download/beixiayitiao-zhamao.gif" width="160" alt="被吓一跳（炸毛）" title="被吓一跳（炸毛）">
+  <img src="https://github.com/PC2005-cloud/dsh-pet/releases/latest/download/yuandi-tiaoyue-zhuasui-touding-wupin.gif" width="160" alt="原地跳跃抓碎头顶物品" title="原地跳跃抓碎头顶物品">
+  <img src="https://github.com/PC2005-cloud/dsh-pet/releases/latest/download/xiaofudu-yuandi-360du-xuanzhuan-zhanshi.gif" width="160" alt="小幅度原地 360 度旋转展示" title="小幅度原地 360 度旋转展示">
+  <img src="https://github.com/PC2005-cloud/dsh-pet/releases/latest/download/touchi-lingshi-bei-zhuazhu.gif" width="160" alt="偷吃零食被抓住" title="偷吃零食被抓住">
+  <img src="https://github.com/PC2005-cloud/dsh-pet/releases/latest/download/wan-youxi-qijibaituai.gif" width="160" alt="玩游戏气急败坏" title="玩游戏气急败坏">
+  <img src="https://github.com/PC2005-cloud/dsh-pet/releases/latest/download/yong-jingyu-weiba-paidadi.gif" width="160" alt="用鲸鱼尾巴拍打地面" title="用鲸鱼尾巴拍打地面">
+  <img src="https://github.com/PC2005-cloud/dsh-pet/releases/latest/download/da-keshui-bei-jingxing.gif" width="160" alt="打瞌睡被惊醒" title="打瞌睡被惊醒">
+  <img src="https://github.com/PC2005-cloud/dsh-pet/releases/latest/download/wan-shuiqiang.gif" width="160" alt="玩水枪" title="玩水枪">
+  <img src="https://github.com/PC2005-cloud/dsh-pet/releases/latest/download/xiaotiqin-yanzou.gif" width="160" alt="小提琴演奏" title="小提琴演奏">
+  <img src="https://github.com/PC2005-cloud/dsh-pet/releases/latest/download/lanjing-xianshi.gif" width="160" alt="蓝鲸现世" title="蓝鲸现世">
+  <img src="https://github.com/PC2005-cloud/dsh-pet/releases/latest/download/chi-baifan.gif" width="160" alt="吃白饭" title="吃白饭">
+  <img src="https://github.com/PC2005-cloud/dsh-pet/releases/latest/download/zhao-jingzi.gif" width="160" alt="照镜子" title="照镜子">
+  <img src="https://github.com/PC2005-cloud/dsh-pet/releases/latest/download/youya-nvpuwu.gif" width="160" alt="优雅女仆舞" title="优雅女仆舞">
+  <img src="https://github.com/PC2005-cloud/dsh-pet/releases/latest/download/qingkuai-yaobaiwu.gif" width="160" alt="轻快摇摆舞" title="轻快摇摆舞">
+  <img src="https://github.com/PC2005-cloud/dsh-pet/releases/latest/download/keai-zhaiwu.gif" width="160" alt="可爱宅舞" title="可爱宅舞">
+  <img src="https://github.com/PC2005-cloud/dsh-pet/releases/latest/download/zhengti-huanzhuang-shise.gif" width="160" alt="整体换装试色" title="整体换装试色">
+  <img src="https://github.com/PC2005-cloud/dsh-pet/releases/latest/download/dakou-chi-lingshi.gif" width="160" alt="大口吃零食" title="大口吃零食">
+  <img src="https://github.com/PC2005-cloud/dsh-pet/releases/latest/download/chui-qiqiu.gif" width="160" alt="吹气球" title="吹气球">
+  <img src="https://github.com/PC2005-cloud/dsh-pet/releases/latest/download/dongwu-huanrao.gif" width="160" alt="动物环绕" title="动物环绕">
+  <img src="https://github.com/PC2005-cloud/dsh-pet/releases/latest/download/shendu-sikao-suisuinian.gif" width="160" alt="深度思考碎碎念" title="深度思考碎碎念">
+  <img src="https://github.com/PC2005-cloud/dsh-pet/releases/latest/download/qingkuai-jilu.gif" width="160" alt="轻快记录" title="轻快记录">
+  <img src="https://github.com/PC2005-cloud/dsh-pet/releases/latest/download/xie-daima.gif" width="160" alt="写代码" title="写代码">
 </p>
 
 **点击回应**
 
 <p>
-  <img src="dsh-pet/assets/preview/点击回应 - 开心跃动.gif" width="160" alt="点击回应 - 开心跃动" title="点击回应 - 开心跃动">
-  <img src="dsh-pet/assets/preview/点击回应 - 害羞惊讶.gif" width="160" alt="点击回应 - 害羞惊讶" title="点击回应 - 害羞惊讶">
-  <img src="dsh-pet/assets/preview/点击回应 - 傲娇生气（侧身展示）.gif" width="160" alt="点击回应 - 傲娇生气（侧身展示）" title="点击回应 - 傲娇生气（侧身展示）">
+  <img src="https://github.com/PC2005-cloud/dsh-pet/releases/latest/download/dianji-huiying-kaixin-yuedong.gif" width="160" alt="点击回应 - 开心跃动" title="点击回应 - 开心跃动">
+  <img src="https://github.com/PC2005-cloud/dsh-pet/releases/latest/download/dianji-huiying-haixiu-jingya.gif" width="160" alt="点击回应 - 害羞惊讶" title="点击回应 - 害羞惊讶">
+  <img src="https://github.com/PC2005-cloud/dsh-pet/releases/latest/download/dianji-huiying-aojiao-shengqi-ceshen-zhanshi.gif" width="160" alt="点击回应 - 傲娇生气（侧身展示）" title="点击回应 - 傲娇生气（侧身展示）">
 </p>
 
 **拖拽**
 
 <p>
-  <img src="dsh-pet/assets/preview/被鼠标拖拽悬空反馈.gif" width="160" alt="被鼠标拖拽悬空反馈" title="被鼠标拖拽悬空反馈">
+  <img src="https://github.com/PC2005-cloud/dsh-pet/releases/latest/download/beishubiao-tuozhuai-xuankong-fankui.gif" width="160" alt="被鼠标拖拽悬空反馈" title="被鼠标拖拽悬空反馈">
 </p>
 
 > 注：动画为透明背景；GIF 预览中透明部分显示为页面底色，实际 webm 播放为透明。

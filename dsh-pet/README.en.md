@@ -67,12 +67,12 @@ What the pet looks like running inside the DSH Web UI:
 > The animations have transparent backgrounds; in these GIF previews the transparent areas show the page background color, while the actual playback (webm) is transparent.
 
 <p>
-  <img src="https://raw.githubusercontent.com/PC2005-cloud/dsh-pet/main/dsh-pet/assets/preview/%E5%BE%85%E6%9C%BA%E5%91%BC%E5%90%B8%E4%BC%91%E9%97%B2.gif" width="160" alt="Idle breathing & chill" title="Idle breathing & chill">
-  <img src="https://raw.githubusercontent.com/PC2005-cloud/dsh-pet/main/dsh-pet/assets/preview/%E4%B8%9C%E5%BC%A0%E8%A5%BF%E6%9C%9B.gif" width="160" alt="Looking around" title="Looking around">
-  <img src="https://raw.githubusercontent.com/PC2005-cloud/dsh-pet/main/dsh-pet/assets/preview/%E5%8E%9F%E5%9C%B0%E6%BC%82%E6%B5%AE%E8%B8%8F%E6%AD%A5.gif" width="160" alt="Floating in place" title="Floating in place">
-  <img src="https://raw.githubusercontent.com/PC2005-cloud/dsh-pet/main/dsh-pet/assets/preview/%E5%8E%9F%E5%9C%B0%E5%B0%8F%E6%86%A9%E6%B2%89%E7%9C%A0.gif" width="160" alt="Napping" title="Napping">
-  <img src="https://raw.githubusercontent.com/PC2005-cloud/dsh-pet/main/dsh-pet/assets/preview/%E7%82%B9%E5%87%BB%E5%9B%9E%E5%BA%94%20-%20%E5%BC%80%E5%BF%83%E8%B7%83%E5%8A%A8.gif" width="160" alt="Click response - happy bounce" title="Click response - happy bounce">
-  <img src="https://raw.githubusercontent.com/PC2005-cloud/dsh-pet/main/dsh-pet/assets/preview/%E8%A2%AB%E9%BC%A0%E6%A0%87%E6%8B%96%E6%8B%BD%E6%82%AC%E7%A9%BA%E5%8F%8D%E9%A6%88.gif" width="160" alt="Dragged by the mouse" title="Dragged by the mouse">
+  <img src="https://raw.githubusercontent.com/PC2005-cloud/dsh-pet/main/https://github.com/PC2005-cloud/dsh-pet/releases/latest/download/daiji-huxi-xiuxian.gif" width="160" alt="Idle breathing & chill" title="Idle breathing & chill">
+  <img src="https://raw.githubusercontent.com/PC2005-cloud/dsh-pet/main/https://github.com/PC2005-cloud/dsh-pet/releases/latest/download/dongzhangxiwang.gif" width="160" alt="Looking around" title="Looking around">
+  <img src="https://raw.githubusercontent.com/PC2005-cloud/dsh-pet/main/https://github.com/PC2005-cloud/dsh-pet/releases/latest/download/yuandi-piaofu-tabu.gif" width="160" alt="Floating in place" title="Floating in place">
+  <img src="https://raw.githubusercontent.com/PC2005-cloud/dsh-pet/main/https://github.com/PC2005-cloud/dsh-pet/releases/latest/download/yuandi-xiaoqi-chenmian.gif" width="160" alt="Napping" title="Napping">
+  <img src="https://raw.githubusercontent.com/PC2005-cloud/dsh-pet/main/https://github.com/PC2005-cloud/dsh-pet/releases/latest/download/dianji-huiying-kaixin-yuedong.gif" width="160" alt="Click response - happy bounce" title="Click response - happy bounce">
+  <img src="https://raw.githubusercontent.com/PC2005-cloud/dsh-pet/main/https://github.com/PC2005-cloud/dsh-pet/releases/latest/download/beishubiao-tuozhuai-xuankong-fankui.gif" width="160" alt="Dragged by the mouse" title="Dragged by the mouse">
 </p>
 
 All 51 animations live in the repo under `dsh-pet/assets/thumb/`.

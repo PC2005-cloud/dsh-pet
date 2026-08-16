@@ -4,6 +4,10 @@ step02/
 step03/
 step04/
 
+# ── 素材源与预览资源（托管在 GitHub Releases assets-v1，不入仓库） ──
+video/*.mp4
+dsh-pet/assets/preview/
+
 # ── 本地工具（机器相关，不入仓库） ──
 .tools/
 
