@@ -56,14 +56,14 @@ window.__ModuleLoader__.load({
 			'.dsh-pet-root[data-corner="bottom-left"]{left:24px;bottom:0}',
 			// 舞台：16:9（--dsh-pet-size 为宽度，默认 462px=高度260；高度自动 = 宽度×9/16），本身不响应鼠标
 			'.dsh-pet-stage{position:relative;width:var(--dsh-pet-size,462px);height:calc(var(--dsh-pet-size,462px)*9/16);pointer-events:none}',
-			// 视频：铺满舞台、保持比例、可交互（pointer-events:auto 重新开启）。
-			// 光标不在这里设 grab——由 mousemove 按命中矩形动态切换（见 updateCursor），
-			// 非交互区保持默认光标；拖拽中抓取光标由 .dragging 类控制。
-			'.dsh-pet-video{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;pointer-events:auto;cursor:default;opacity:0;transition:opacity .18s ease;transform-origin:center}',
+			// 视频：铺满舞台、保持比例，**pointer-events:none 完全穿透**——
+			// 交互统一由覆盖 HIT_BOX 区域的 .dsh-pet-hit 层负责，透明区域点击直达下层 UI。
+			'.dsh-pet-video{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;pointer-events:none;opacity:0;transition:opacity .18s ease;transform-origin:center}',
 			// 显示中的视频（is-front 类）
 			'.dsh-pet-video.is-front{opacity:1}',
-			// 拖拽中：抓取光标（onPointerDown 命中时加 .dragging 类）
-			'.dsh-pet-video.dragging{cursor:grabbing}',
+			// 命中层：覆盖人物区域（HIT_BOX），是唯一可交互区域；光标跟随 + 拖拽抓取
+			'.dsh-pet-hit{position:absolute;pointer-events:auto;cursor:default;z-index:1}',
+			'.dsh-pet-hit.dragging{cursor:grabbing}',
 			// 朝向镜像说明：不用 CSS 全局规则（data-facing）控制镜像——facing 翻转会
 			// 同步镜像所有 video（含仍在显示的旧视频），造成"旧帧被镜像"的闪烁。
 			// 镜像改为在 switchTo 的 onReady 里按实际朝向给每个 video 设置 inline
@@ -138,6 +138,16 @@ window.__ModuleLoader__.load({
 			'深度思考碎碎念',
 			'轻快记录',
 			'写代码',
+			'吃Token',
+			'吃早餐',
+			'吃午餐',
+			'吃晚餐',
+			'放风筝',
+			'摇扇纳凉',
+			'吃冰淇淋融化',
+			'被落叶淹没',
+			'中秋赏月吃月饼',
+			'堆雪人',
 		];
 		// 点击回应动画池（3 选 1）
 		const CLICKS = ['点击回应 - 开心跃动', '点击回应 - 害羞惊讶', '点击回应 - 傲娇生气（侧身展示）'];
@@ -492,39 +502,12 @@ window.__ModuleLoader__.load({
 			// （播放拖拽动画并跟手）；松手时若没拖过，click 事件正常触发点击回应。
 			const DRAG_THRESHOLD = 5; // 拖拽判定阈值（px）
 
-			// ---- 命中矩形检查：点击/拖拽只响应人物区域，透明空白不响应 ----
-			// 舞台（462px 宽）远大于人物（约 320×300），若整个 video 都可点，
-			// 点透明空白也会触发拖拽/点击回应。把视口坐标换算成 thumb 像素
-			// 坐标（考虑 facing 镜像的水平翻转），落在 HIT_BOX 内才算命中。
-			const isHitInBox = (clientX, clientY) => {
-				const el = (frontRef.current === 0 ? videoARef : videoBRef).current;
-				if (!el) return false;
-				const r = el.getBoundingClientRect();
-				if (r.width <= 0 || r.height <= 0) return false;
-				// 视口坐标 → video 元素内相对坐标
-				let lx = clientX - r.left;
-				const ly = clientY - r.top;
-				// facing=right 时视频被 CSS 镜像（scaleX(-1)），像素坐标水平翻转
-				if (facingRef.current === 'right') lx = r.width - lx;
-				// 相对坐标 → thumb 像素坐标（video 是 640×360，元素等比 contain 铺满）
-				const px = (lx / r.width) * 640;
-				const py = (ly / r.height) * 360;
-				return px >= HIT_BOX.x0 && px <= HIT_BOX.x1 && py >= HIT_BOX.y0 && py <= HIT_BOX.y1;
-			};
-
-			// ---- 光标跟随命中矩形：人物上显示抓取光标，透明区域保持默认 ----
-			// mousemove 时按 isHitInBox 切换当前显示 video 的 cursor。
-			// 注意 e.currentTarget 是触发事件的 video（可能是 A 或 B），直接改它即可
-			// （isHitInBox 内部用 frontRef 判断坐标换算基准，与 target 无关）。
-			const updateCursor = (e) => {
-				const el = e.currentTarget;
-				if (!el || dragRef.current.active) return; // 拖拽中保持 grabbing
-				el.style.cursor = isHitInBox(e.clientX, e.clientY) ? 'grab' : 'default';
-			};
-
+			// ---- 命中层（.dsh-pet-hit）覆盖 HIT_BOX 区域 ----
+			// 交互范围由 CSS 命中层限定：视频 pointer-events:none（完全穿透），
+			// 命中层 pointer-events:auto 只覆盖人物区域。所以这里的事件天然都在
+			// 人物范围内，无需再做坐标命中检查；命中层之外点击直达下层 UI。
 			// 按下：只记录，不立即切动画
 			const handlePointerDown = (e) => {
-				if (!isHitInBox(e.clientX, e.clientY)) return; // 透明空白：不响应
 				e.currentTarget.classList.add('dragging'); // 拖拽中抓取光标
 				stopMove(); // 用户交互打断正在进行的移动
 				e.currentTarget.setPointerCapture(e.pointerId); // 捕获指针（拖出元素也能收到 move）
@@ -601,7 +584,6 @@ window.__ModuleLoader__.load({
 				const d = dragRef.current;
 				if (d.active || d.dragging || justDraggedRef.current) return; // 拖拽中/刚拖完：忽略
 				if (once && animRef.current !== IDLE) return; // 正在播一次性动画：不打断
-				if (!isHitInBox(e.clientX, e.clientY)) return; // 透明空白：不响应
 				stopMove(); // 点击打断移动
 				setOnce(true);
 				setAnim(pick(CLICKS)); // 随机一个点击回应动画
@@ -633,22 +615,35 @@ window.__ModuleLoader__.load({
 				})()
 				: {};
 
-			// 两个 video 共用的 props（事件绑定 + 播放属性）
+			// 两个 video 共用的 props（纯播放属性，交互交给命中层）
 			const commonVideoProps = {
 				muted: true,
 				playsInline: true,
 				autoPlay: true,
+				title: 'dsh-pet',
+			};
+			// 命中层 props：覆盖 HIT_BOX 区域，承载全部交互事件与抓取光标。
+			// 命中层内必然命中人物，光标固定 grab（拖拽中 .dragging 类显示 grabbing）。
+			const hitProps = {
+				className: 'dsh-pet-hit',
+				style: {
+					left: (HIT_BOX.x0 / 640 * 100) + '%',
+					top: (HIT_BOX.y0 / 360 * 100) + '%',
+					width: ((HIT_BOX.x1 - HIT_BOX.x0) / 640 * 100) + '%',
+					height: ((HIT_BOX.y1 - HIT_BOX.y0) / 360 * 100) + '%',
+				},
+				onMouseEnter: (e) => { if (!dragRef.current.active) e.currentTarget.style.cursor = 'grab'; },
+				onMouseLeave: (e) => { if (!dragRef.current.active) e.currentTarget.style.cursor = 'default'; },
 				onClick: handleClick,
 				onPointerDown: handlePointerDown,
 				onPointerMove: handlePointerMove,
 				onPointerUp: handlePointerUp,
 				onPointerCancel: handlePointerUp,
-				onMouseMove: updateCursor, // 光标跟随命中矩形
 				title: 'dsh-pet',
 			};
 
-			// 渲染树：root > stage > [video A, video B]
-			// A 初始带 is-front（显示），B 隐藏待命
+			// 渲染树：root > stage > [video A, video B, 命中层]
+			// A 初始带 is-front（显示），B 隐藏待命；命中层在最上层承载交互
 			return h('div', {
 				ref: rootRef,
 				className: 'dsh-pet-root',
@@ -662,6 +657,7 @@ window.__ModuleLoader__.load({
 					children: [
 						h('video', Object.assign({}, commonVideoProps, { ref: videoARef, className: 'dsh-pet-video is-front' })),
 						h('video', Object.assign({}, commonVideoProps, { ref: videoBRef, className: 'dsh-pet-video' })),
+						h('div', hitProps),
 					],
 				}),
 			});
