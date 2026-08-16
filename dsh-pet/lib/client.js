@@ -54,15 +54,16 @@ window.__ModuleLoader__.load({
 			'.dsh-pet-root[data-corner="bottom-right"]{right:24px;bottom:0}',
 			// 左下角位置
 			'.dsh-pet-root[data-corner="bottom-left"]{left:24px;bottom:0}',
-			// 舞台：正方形（尺寸由 --dsh-pet-size 控制，默认 260px），本身不响应鼠标
-			'.dsh-pet-stage{position:relative;width:var(--dsh-pet-size,260px);height:var(--dsh-pet-size,260px);pointer-events:none}',
-			// 视频：铺满舞台、保持比例、可交互（pointer-events:auto 重新开启）、抓取光标
-			// opacity:0 初始隐藏，transition 做 180ms 淡入淡出
-			'.dsh-pet-video{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;pointer-events:auto;cursor:grab;opacity:0;transition:opacity .18s ease;transform-origin:center}',
+			// 舞台：16:9（--dsh-pet-size 为宽度，默认 462px=高度260；高度自动 = 宽度×9/16），本身不响应鼠标
+			'.dsh-pet-stage{position:relative;width:var(--dsh-pet-size,462px);height:calc(var(--dsh-pet-size,462px)*9/16);pointer-events:none}',
+			// 视频：铺满舞台、保持比例、可交互（pointer-events:auto 重新开启）。
+			// 光标不在这里设 grab——由 mousemove 按命中矩形动态切换（见 updateCursor），
+			// 非交互区保持默认光标；拖拽中抓取光标由 .dragging 类控制。
+			'.dsh-pet-video{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;pointer-events:auto;cursor:default;opacity:0;transition:opacity .18s ease;transform-origin:center}',
 			// 显示中的视频（is-front 类）
 			'.dsh-pet-video.is-front{opacity:1}',
-			// 按住时显示"抓取中"光标
-			'.dsh-pet-video:active{cursor:grabbing}',
+			// 拖拽中：抓取光标（onPointerDown 命中时加 .dragging 类）
+			'.dsh-pet-video.dragging{cursor:grabbing}',
 			// 朝向镜像说明：不用 CSS 全局规则（data-facing）控制镜像——facing 翻转会
 			// 同步镜像所有 video（含仍在显示的旧视频），造成"旧帧被镜像"的闪烁。
 			// 镜像改为在 switchTo 的 onReady 里按实际朝向给每个 video 设置 inline
@@ -84,11 +85,18 @@ window.__ModuleLoader__.load({
 		// ============================================================================
 		// 动画目录（animation catalog）—— 所有动画名和参数的"事实来源"
 		// ============================================================================
-		// 对齐说明：thumb 视频是 360×360 画布，人物的"脚底"在 y=330 处。
-		// (360-330)/360 = 30/360 = 0.0833，与 1200 母版 (1200-1100)/1200 比例一致，
+		// 对齐说明：thumb 视频是 640×360（16:9）画布，人物的"脚底"在 y=330 处。
+		// (360-330)/360 = 30/360 = 0.0833，与 2160x1215 母版 (1215-1115)/1215 比例一致，
 		// 所以用这个比例做落地对齐，缩放后依然准确。
 		const CANVAS_H = 360; // thumb 画布高度
 		const FEET_Y = 330;   // thumb 画布上"脚底"的 y 坐标（人物站在 y=330 线上）
+
+		// ---- 点击/拖拽命中矩形（thumb 640×360 像素坐标）----
+		// normalize 已把全部动画的人物统一缩放居中。41 个动画站立帧 bbox 并集
+		// 为 x:138~461, y:42~339，但并集被少数伸左手的动画撑宽，视觉上左边
+		// 多出很多、右边多 ~25px。多数动画实际约 x:214~425（中心≈320），
+		// 取对称整数范围 x:200~440（中心 320），y:50~335 贴近头顶/脚底。
+		const HIT_BOX = { x0: 200, y0: 50, x1: 440, y1: 335 };
 
 		// 主体待机动画（唯一常驻、循环播放）
 		const IDLE = '待机呼吸休闲';
@@ -166,8 +174,11 @@ window.__ModuleLoader__.load({
 		 */
 		function Pet({ config }) {
 			// ---- 从 config 读取参数（当前走默认值） ----
-			const size = (config && config.size) || 260;             // 显示尺寸（px）
+			const size = (config && config.size) || 462;            // 显示尺寸（px，宽度；默认=高度260）
 			const corner = (config && config.position) || 'bottom-right'; // 默认角落
+			// 舞台 16:9：宽=size、高=size×9/16；中心偏移（定位/拖拽共用）
+			const halfW = size / 2;
+			const halfH = size * 9 / 16 / 2;
 
 			// ---- React 状态 ----
 			const [anim, setAnim] = useState(IDLE);   // 当前动画名
@@ -355,16 +366,16 @@ window.__ModuleLoader__.load({
 				const cp = customPosRef.current;
 				if (cp) return cp.rx * window.innerWidth;
 				const rootEl = rootRef.current;
-				if (rootEl) return rootEl.getBoundingClientRect().left + size / 2;
-				return window.innerWidth - 24 - size / 2;
+				if (rootEl) return rootEl.getBoundingClientRect().left + halfW;
+				return window.innerWidth - 24 - halfW;
 			};
 			// 当前宠物中心 y（视口坐标）
 			const currentCenterY = () => {
 				const cp = customPosRef.current;
 				if (cp) return cp.ry * window.innerHeight;
 				const rootEl = rootRef.current;
-				if (rootEl) return rootEl.getBoundingClientRect().top + size / 2;
-				return window.innerHeight - 20 - size / 2;
+				if (rootEl) return rootEl.getBoundingClientRect().top + halfH;
+				return window.innerHeight - 20 - halfH;
 			};
 
 			/**
@@ -409,8 +420,8 @@ window.__ModuleLoader__.load({
 						const px = ratioX * W;
 						const py = startYRatio * H;
 						// 直接改 DOM style（不触发 React 重渲染，保证 60fps 平滑）
-						rootEl.style.left = (px - size / 2) + 'px';
-						rootEl.style.top = (py - size / 2) + 'px';
+						rootEl.style.left = (px - halfW) + 'px';
+						rootEl.style.top = (py - halfH) + 'px';
 						rootEl.style.right = 'auto';
 						rootEl.style.bottom = 'auto';
 					}
@@ -442,8 +453,8 @@ window.__ModuleLoader__.load({
 				const distance = randomBetween(MOVE_MIN_PX, MOVE_MAX_PX);
 				const target = cx + dir * distance;
 				// 【播放前检查一次距离】目标点必须在屏幕安全边距内，否则不移动
-				const leftBound = MOVE_MARGIN + size / 2;
-				const rightBound = W - MOVE_MARGIN - size / 2;
+				const leftBound = MOVE_MARGIN + halfW;
+				const rightBound = W - MOVE_MARGIN - halfW;
 				if (target < leftBound || target > rightBound) return false; // 空间不够
 				// 记录计划（存"比例"而非绝对坐标，resize 后仍正确）：
 				// 起点比例、目标比例、Y 比例、方向、总距离比例
@@ -481,11 +492,52 @@ window.__ModuleLoader__.load({
 			// （播放拖拽动画并跟手）；松手时若没拖过，click 事件正常触发点击回应。
 			const DRAG_THRESHOLD = 5; // 拖拽判定阈值（px）
 
+			// ---- 命中矩形检查：点击/拖拽只响应人物区域，透明空白不响应 ----
+			// 舞台（462px 宽）远大于人物（约 320×300），若整个 video 都可点，
+			// 点透明空白也会触发拖拽/点击回应。把视口坐标换算成 thumb 像素
+			// 坐标（考虑 facing 镜像的水平翻转），落在 HIT_BOX 内才算命中。
+			const isHitInBox = (clientX, clientY) => {
+				const el = (frontRef.current === 0 ? videoARef : videoBRef).current;
+				if (!el) return false;
+				const r = el.getBoundingClientRect();
+				if (r.width <= 0 || r.height <= 0) return false;
+				// 视口坐标 → video 元素内相对坐标
+				let lx = clientX - r.left;
+				const ly = clientY - r.top;
+				// facing=right 时视频被 CSS 镜像（scaleX(-1)），像素坐标水平翻转
+				if (facingRef.current === 'right') lx = r.width - lx;
+				// 相对坐标 → thumb 像素坐标（video 是 640×360，元素等比 contain 铺满）
+				const px = (lx / r.width) * 640;
+				const py = (ly / r.height) * 360;
+				return px >= HIT_BOX.x0 && px <= HIT_BOX.x1 && py >= HIT_BOX.y0 && py <= HIT_BOX.y1;
+			};
+
+			// ---- 光标跟随命中矩形：人物上显示抓取光标，透明区域保持默认 ----
+			// mousemove 时按 isHitInBox 切换当前显示 video 的 cursor。
+			// 注意 e.currentTarget 是触发事件的 video（可能是 A 或 B），直接改它即可
+			// （isHitInBox 内部用 frontRef 判断坐标换算基准，与 target 无关）。
+			const updateCursor = (e) => {
+				const el = e.currentTarget;
+				if (!el || dragRef.current.active) return; // 拖拽中保持 grabbing
+				el.style.cursor = isHitInBox(e.clientX, e.clientY) ? 'grab' : 'default';
+			};
+
 			// 按下：只记录，不立即切动画
 			const handlePointerDown = (e) => {
+				if (!isHitInBox(e.clientX, e.clientY)) return; // 透明空白：不响应
+				e.currentTarget.classList.add('dragging'); // 拖拽中抓取光标
 				stopMove(); // 用户交互打断正在进行的移动
 				e.currentTarget.setPointerCapture(e.pointerId); // 捕获指针（拖出元素也能收到 move）
-				dragRef.current = { active: true, dragging: false, sx: e.clientX, sy: e.clientY };
+				// 记录"鼠标点相对舞台中心的偏移"（舞台宽 size、高 size×9/16）：
+				// 拖动时保持该偏移，从人物任意位置抓起都不会瞬移到鼠标下。
+				const rootEl = rootRef.current;
+				let offX = 0, offY = 0;
+				if (rootEl) {
+					const rr = rootEl.getBoundingClientRect();
+					offX = e.clientX - (rr.left + rr.width / 2);
+					offY = e.clientY - (rr.top + rr.height / 2);
+				}
+				dragRef.current = { active: true, dragging: false, sx: e.clientX, sy: e.clientY, offX, offY };
 			};
 			// 移动：超过阈值才进入拖拽模式
 			const handlePointerMove = (e) => {
@@ -503,10 +555,14 @@ window.__ModuleLoader__.load({
 					setAnim(DRAG);
 				}
 				// 跟手：直接改 root 的 style（不触发 React 重渲染 → 60fps 平滑）
+				// 舞台中心 = 鼠标点 - 按下时记录的偏移；left/top 是 root 左上角，
+				// 舞台宽 size、高 size×9/16，所以中心再减一半尺寸。
 				const rootEl = rootRef.current;
 				if (rootEl) {
-					rootEl.style.left = (e.clientX - size / 2) + 'px';
-					rootEl.style.top = (e.clientY - size / 2) + 'px';
+					const halfW = size / 2;
+					const halfH = size * 9 / 16 / 2;
+					rootEl.style.left = (e.clientX - d.offX - halfW) + 'px';
+					rootEl.style.top = (e.clientY - d.offY - halfH) + 'px';
 					rootEl.style.right = 'auto';
 					rootEl.style.bottom = 'auto';
 				}
@@ -519,15 +575,18 @@ window.__ModuleLoader__.load({
 				const wasDragging = d.dragging;
 				d.active = false;
 				d.dragging = false;
+				e.currentTarget.classList.remove('dragging'); // 结束抓取光标
 				if (wasDragging) {
 					// 抑制拖拽结束后的"幽灵点击"（浏览器在拖完也会发 click）
 					justDraggedRef.current = true;
 					setTimeout(() => { justDraggedRef.current = false; }, 100);
 					setDragging(false);
-					// 停在松手处（存相对窗口比例，窗口变化时位置跟随）
+					// 停在松手处（以舞台中心为基准，而非鼠标点——从角落抓起时
+					// 松手也保持偏移，宠物不会跳回鼠标位置）；存相对窗口比例，
+					// 窗口变化时位置跟随。
 					setCustomPos({
-						rx: e.clientX / window.innerWidth,
-						ry: e.clientY / window.innerHeight,
+						rx: (e.clientX - d.offX) / window.innerWidth,
+						ry: (e.clientY - d.offY) / window.innerHeight,
 					});
 					const stageEl = stageRef.current;
 					if (stageEl) stageEl.style.transform = 'translateY(' + bottomPad + 'px)'; // 恢复落地对齐
@@ -538,10 +597,11 @@ window.__ModuleLoader__.load({
 			};
 
 			// ---- 点击回应（仅真点击触发，拖拽后的 click 被忽略） ----
-			const handleClick = () => {
+			const handleClick = (e) => {
 				const d = dragRef.current;
 				if (d.active || d.dragging || justDraggedRef.current) return; // 拖拽中/刚拖完：忽略
 				if (once && animRef.current !== IDLE) return; // 正在播一次性动画：不打断
+				if (!isHitInBox(e.clientX, e.clientY)) return; // 透明空白：不响应
 				stopMove(); // 点击打断移动
 				setOnce(true);
 				setAnim(pick(CLICKS)); // 随机一个点击回应动画
@@ -550,10 +610,10 @@ window.__ModuleLoader__.load({
 			// ============================================================================
 			// 渲染
 			// ============================================================================
-			// 落地对齐：视频是 360 画布、脚在 y=330，脚底距画布底 30px。
-			// bottomPad = size × (360-330)/360，把舞台向下平移这么多，
-			// 让"脚"正好落在视口底线上（宠物看起来站在地上而不是悬空）。
-			const bottomPad = (size * (CANVAS_H - FEET_Y)) / CANVAS_H;
+			// 落地对齐：视频是 640×360 画布、脚在 y=330，脚底距画布底 30px（8.33%）。
+			// 舞台是 16:9（高 = size×9/16），脚底距舞台底 = 舞台高 × 8.33%；
+			// bottomPad 就是把这个距离下移，让"脚"正好落在视口底线上。
+			const bottomPad = (size * 9 / 16 * (CANVAS_H - FEET_Y)) / CANVAS_H;
 			// 舞台样式：拖拽中无偏移；平时 translateY(bottomPad) 落地
 			const stageStyle = dragging
 				? { transform: 'none' }
@@ -565,11 +625,10 @@ window.__ModuleLoader__.load({
 			// 同时钳制到窗口内，防止窗口缩小到宠物放不下时跑出屏幕。
 			const rootStyle = customPos
 				? (() => {
-					const half = size / 2;
 					const rx = customPos.rx;
 					const ry = customPos.ry;
-					const left = Math.min(Math.max(rx * window.innerWidth - half, 0), window.innerWidth - size);
-					const top = Math.min(Math.max(ry * window.innerHeight - half, 0), window.innerHeight - size);
+					const left = Math.min(Math.max(rx * window.innerWidth - halfW, 0), window.innerWidth - size);
+					const top = Math.min(Math.max(ry * window.innerHeight - halfH, 0), window.innerHeight - size * 9 / 16);
 					return { left: left + 'px', top: top + 'px', right: 'auto', bottom: 'auto' };
 				})()
 				: {};
@@ -584,6 +643,7 @@ window.__ModuleLoader__.load({
 				onPointerMove: handlePointerMove,
 				onPointerUp: handlePointerUp,
 				onPointerCancel: handlePointerUp,
+				onMouseMove: updateCursor, // 光标跟随命中矩形
 				title: 'dsh-pet',
 			};
 

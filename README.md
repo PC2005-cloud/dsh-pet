@@ -51,13 +51,13 @@ dsh plugin --profile web add dsh-pet
 
 ```sh
 cd scripts
-python crop_step01.py        # 裁掉左右绿幕边缘 → step01/
-python chroma_step02.py      # 绿幕抠像转透明 → step02/
-python normalize_step03.py   # 归一化 1200×1200 统一站立 → step03/
-python encode_thumbs.py      # 转码 360×360 播放变体 → step04/
+python watermark_step01.py   # 水印遮罩填充 → step01/
+python chroma_step02.py      # 绿幕抠像转透明（HSV 色相）→ step02/
+python normalize_step03.py   # 归一化 2160×1215 统一站立居中 → step03/
+python encode_thumbs.py      # 转码 640×360 播放变体 → step04/
 ```
 
-**依赖**：Python 3 + ffmpeg（素材链零第三方 pip 依赖，脚本自动用工作区 `.tools/` 下的 ffmpeg）。
+**依赖**：Python 3 + ffmpeg + numpy + scipy（素材链脚本自动用工作区 `.tools/` 下的 ffmpeg）。
 
 ### ③ 动画 → 插件
 
@@ -77,13 +77,13 @@ dsh plugin --profile web add file:D:/path/to/dsh-pet
 
 ```
 ├── prompts/                 # ① 41 个动作的生成提示词（绿幕规范 + 按秒分解）
-├── scripts/                 # ② 素材生成链（4 个 Python 脚本）
-├── video/                   # ② 源视频（41 个绿幕 mp4）
+├── scripts/                 # ② 素材生成链（7 个 Python 脚本）
+├── video/                   # ② 源视频（41 个绿幕 mp4 + 水印 mask）
 ├── tools/                   # 开发工具：preview.html（素材链各阶段效果预览）
 ├── dsh-pet/                 # ③ 插件（可独立 npm 发布）
 │   ├── lib/index.js         #   host 半侧：/pet 视频路由
 │   ├── lib/client.js        #   浏览器半侧：动画链 + 双缓冲播放
-│   └── assets/thumb/        #   360×360 播放动画（41 个，~24MB）
+│   └── assets/thumb/        #   640×360 播放动画（41 个，~28MB）
 ├── DESIGN.md                # 设计与实现文档（含踩坑记录）
 └── LICENSE                  # MIT
 ```
@@ -109,7 +109,7 @@ dsh plugin --profile web add file:D:/path/to/dsh-pet
 
 ## 效果预览
 
-全部 41 个动画（360×360，插件实际播放用的资源）——GitHub 只对仓库内图片渲染内联预览，故此处用 GIF 演示；完整透明视频见 `dsh-pet/assets/thumb/`：
+全部 41 个动画（640×360，插件实际播放用的资源）——GitHub 只对仓库内图片渲染内联预览，故此处用 GIF 演示；完整透明视频见 `dsh-pet/assets/thumb/`：
 
 **待机 / 转向**
 

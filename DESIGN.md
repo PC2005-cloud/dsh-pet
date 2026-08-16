@@ -18,22 +18,24 @@
 
 ## 2. 素材处理链（Python + ffmpeg）
 
-素材链在工作区 `scripts/` 目录，4 个脚本构成流水线：
+素材链在工作区 `scripts/` 目录，7 个脚本构成流水线：
 
 ```
-video/（41 个原始绿幕 mp4）
-  → crop_step01.py     裁掉左右绿幕边缘        → step01/（810×720 mp4）
-  → chroma_step02.py   绿幕抠像转透明          → step02/（透明 webm）
-  → normalize_step03.py 归一化到 1200×1200 统一站立 → step03/（母版）
-  → encode_thumbs.py   转码 360×360 播放变体    → step04/（thumb）
+video/（41 个原始绿幕 mp4 + 水印 mask）
+  → watermark_step01.py  水印遮罩填充          → step01/（mp4）
+  → chroma_step02.py     HSV 色相绿幕抠像转透明  → step02/（透明 webm）
+  → normalize_step03.py  归一化 2160×1215 统一站立居中 → step03/（母版）
+  → encode_thumbs.py     转码 640×360 播放变体   → step04/（thumb）
 ```
 
-- 运行方式：`cd scripts && python crop_step01.py`（依次 4 步）
-- 零第三方依赖：只用 Python 标准库 + 工作区自带 ffmpeg（`.tools/`）
+- 运行方式：`cd scripts && python watermark_step01.py`（依次 4 步；`make_mask_black.py` 生成水印 mask，`fill_nn.py` 被 watermark_step01 调用）
+- 依赖：Python 标准库 + numpy + scipy + 工作区自带 ffmpeg（`.tools/`）
 - 关键点（踩过的坑）：
   - `chromakey` + `format=yuva420p` 保留 alpha 透明
   - `-c:v libvpx-vp9` 必须放在 `-i` 前（libvpx 解码才能保留 VP9 alpha，否则黑底）
   - Windows 下 `subprocess.run(text=True)` 需 `encoding="utf-8", errors="replace"`
+  - 绿幕抠像最终采用 **HSV 色相方案**（非 chromakey/RGB 差值）：仅绿相 70~170° 且饱和度/明度 ≥0.15 才抠掉，人物保留 97~98%、绿幕清除 99.6%+，不误伤亮绿残边/白衣/蓝衣
+  - 水平居中用**非透明像素 x 中位数**（非 bbox 中点）：手/零食等扩展物会把 bbox 中心带偏 200px，中位数全片稳定
 - step04 产物同步到 `dsh-pet/assets/thumb/`（npm 包自包含播放资源）
 
 ## 3. 插件架构（dsh-pet/）
@@ -44,7 +46,7 @@ video/（41 个原始绿幕 mp4）
 dsh-pet/
 ├── package.json            # "dsh": {"bundle"} + exports["./client"] + "dsh":{"client"}
 ├── cordis.patch.yml        # insert pet 行
-├── assets/thumb/*.webm     # 41 个 360×360 播放变体（~24MB）
+├── assets/thumb/*.webm     # 41 个 640×360 播放变体（~28MB）
 ├── lib/
 │   ├── index.js            # host 半侧（服务器端，/pet 视频路由）
 │   ├── client.js           # 浏览器半侧（手写官方 CJS bundle）
@@ -118,11 +120,11 @@ pickNext() 按概率选下一个 ──────────────┐
 
 | 参数 | 默认 | 位置 |
 |---|---|---|
-| size / position | 260 / bottom-right | client.js |
+| size / position | 462（宽度，≈260px 高）/ bottom-right | client.js |
 | 动画链概率 | 30/10/40/20 | client.js `pickNext` |
 | 移动距离/边距 | 60-240px / 20px | client.js 常量 |
 | 移动准备/收尾 | 2s / 2s | client.js 常量 |
-| 转码分辨率/质量 | 360×360 / CRF 40 | scripts/encode_thumbs.py |
+| 转码分辨率/质量 | 640×360 / CRF 40 | scripts/encode_thumbs.py |
 
 ## 6. 构建与发布
 
