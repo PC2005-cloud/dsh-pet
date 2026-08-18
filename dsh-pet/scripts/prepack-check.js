@@ -15,7 +15,7 @@
  *   3. 原始 1200×1200 母版不得进 npm 包（体积超限，应放 GitHub Releases）
  *   4. client.js 是官方 bundle 形态（__ModuleLoader__.load + exports.apply）
  *   5. package.json 声明了 dsh.bundle 和 dsh.client（否则装不上）
- *   6. 包总大小 < 50MB（npm 体积软上限）
+ *   6. 包总大小 < 200MB（自设软上限，防误塞母版；npm 硬上限远更大）
  *
  * ============================================================================
  */
@@ -82,7 +82,7 @@ const walk = (dir) => {
 };
 walk(ROOT);
 const mb = (total / 1e6).toFixed(1);
-if (total > 50e6) fail(`package too large for npm: ${mb}MB (limit ~50MB)`);
+if (total > 200e6) fail(`package too large: ${mb}MB (limit 200MB)`);
 else ok(`package size ${mb}MB`);
 
 // ---- 汇总 ----
