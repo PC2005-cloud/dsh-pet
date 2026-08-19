@@ -191,10 +191,10 @@ window.__ModuleLoader__.load({
 		 * 2. 状态机：待机 →（定时器随机）→ 转向/移动/动作；点击/拖拽可打断
 		 * 3. 朝向（facing）渲染：right 时 CSS 镜像
 		 *
-		 * 参数 config：来自 patch 配置。当前 DSH 客户端配置管线尚未打通，
-		 * 实际收到的是空对象，所以下面全部用 || 默认值兜底。
+		 * 所有可配置项（尺寸/位置/动作）均从 /pet/config.jsonc 读取；
+		 * 组件不再接收使用 patch 配置参数。
 		 */
-		function Pet({ config }) {
+		function Pet() {
 			// ---- 桌宠尺寸（默认 462px 宽；可由 /pet/config.jsonc 的 size 覆盖）----
 			const [size, setSize] = useState(462); // 显示尺寸（px，宽度；高度=size×9/16）
 			// 舞台 16:9：宽=size、高=size×9/16；中心偏移（定位/拖拽共用）
@@ -594,8 +594,7 @@ window.__ModuleLoader__.load({
 				// 舞台宽 size、高 size×9/16，所以中心再减一半尺寸。
 				const rootEl = rootRef.current;
 				if (rootEl) {
-					const halfW = size / 2;
-					const halfH = size * 9 / 16 / 2;
+					// 用外层 halfW/halfH（= size/2、size×9/16/2，已在组件作用域声明）
 					rootEl.style.left = (e.clientX - d.offX - halfW) + 'px';
 					rootEl.style.top = (e.clientY - d.offY - halfH) + 'px';
 					rootEl.style.right = 'auto';

@@ -45,16 +45,20 @@
       "types": "./lib/types/client/index.d.ts",
       "default": "./lib/client.js"
     },
+    "./src/*": "./src/*",
     "./cordis.patch.yml": "./cordis.patch.yml",
     "./package.json": "./package.json"
   },
   "files": [
     "lib",
+    "src",
     "assets/thumb",
     "assets/config.jsonc",
     "cordis.patch.yml"
   ],
   "scripts": {
+    "bundle": "tsdown",
+    "watch": "tsdown --watch",
     "prepack": "node scripts/prepack-check.js"
   },
   "license": "MIT",
@@ -76,5 +80,11 @@
     "@deepseek-ai/dsh-client-runtime": "^0.1.0-rc.6",
     "@deepseek-ai/dsh-client-ui-slots": "^0.1.0-rc.6",
     "react": "^18.2.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.0",
+    "tsdown": "^0.8.0",
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0"
   }
 }
