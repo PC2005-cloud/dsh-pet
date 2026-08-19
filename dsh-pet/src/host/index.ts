@@ -1,3 +1,119 @@
-// host 半侧入口（src）：由 tsdown 构建为 lib/index.js
-// TODO(迁移)：把当前 lib/index.js 的 cordis 插件逻辑迁到 src/ 下的模块。
-export {};
+/**
+ * dsh-pet 宿主半侧（host half）—— 宠物插件的"后端"部分
+ *
+ * 职责：在 DSH Web 服务器上注册 `/pet/` 前缀路由，把宠物动画 WebM / 配置 JSONC
+ * 流式返回给浏览器。源文件（src/host/index.ts）由 tsdown 构建为 lib/index.js。
+ *
+ * 路由：
+ *   /pet/thumb/<动画名>.webm  → 插件包内 assets/thumb/
+ *   /pet/full/<动画名>.webm   → $DSH_HOME/pet-assets/（原始母版，需手动下载）
+ *   /pet/config.jsonc         → 插件包内 assets/config.jsonc
+ *
+ * 安全性：resolveAsset 做"防穿越"校验，保证路径仍在 assets 根目录内。
+ *
+ * TODO(类型)：peer 依赖类型包本地暂不可解析，ctx/config/req/res 暂用 any；
+ *             依赖可解析后替换为 DSH 官方类型。
+ */
+import { createReadStream, existsSync } from 'node:fs';
+import { stat } from 'node:fs/promises';
+import { join, normalize, resolve, sep } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { resolveDshHome } from '@deepseek-ai/dsh-home-paths';
+
+/** 插件行 id（与 cordis.patch.yml 一致） */
+export const name = 'pet';
+/** 需要注入的服务：webServer（Web 服务器路由注册表） */
+export const inject = ['webServer'];
+
+/** 本包目录：宿主构建产物位于 lib/，其上一级即包根。 */
+const PACKAGE_ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)));
+
+/** 路由前缀 */
+const ROUTE_PREFIX = '/pet';
+
+/** 不同扩展名对应的 Content-Type 映射 */
+const MIME: Record<string, string> = {
+  '.webm': 'video/webm',
+  '.mp4': 'video/mp4',
+  '.png': 'image/png',
+  '.json': 'application/json; charset=utf-8',
+  '.jsonc': 'application/json; charset=utf-8',
+};
+
+/**
+ * 规范化并校验请求路径，确保它在 assets 根目录内（防路径穿越）。
+ * @returns 规范化后的绝对文件路径；非法（穿越）时返回 undefined
+ */
+function resolveAsset(root: string, rel: string): string | undefined {
+  if (rel.length === 0) return undefined;
+  const candidate = normalize(join(root, rel));
+  const rootWithSep = root.endsWith(sep) ? root : root + sep;
+  if (candidate !== root && !candidate.startsWith(rootWithSep)) return undefined;
+  return candidate;
+}
+
+/** 流式返回一个文件（带 Content-Type / 长度 / 缓存头）。 */
+async function sendFile(res: any, file: string, contentType: string): Promise<void> {
+  const { size } = await stat(file);
+  res.writeHead(200, {
+    'content-type': contentType,
+    'content-length': size,
+    'cache-control': 'public, max-age=3600',
+  });
+  const stream = createReadStream(file);
+  stream.on('error', () => res.destroy());
+  stream.pipe(res);
+}
+
+/** 宿主插件主体：注册 `/pet` 前缀路由。 */
+export function apply(ctx: any, config: any): void {
+  const thumbRoot = join(PACKAGE_ROOT, 'assets', 'thumb');
+  const fullRoot: string = config.fullRoot ?? join(resolveDshHome(), 'pet-assets');
+
+  ctx.effect(() => ctx.webServer.register({
+    kind: 'prefix',
+    path: ROUTE_PREFIX,
+    handler: async (req: any, res: any) => {
+      const url = new URL(req.url ?? '/', 'http://localhost');
+      const rest = decodeURIComponent(url.pathname.slice(ROUTE_PREFIX.length + 1));
+
+      // 配置文件（JSONC）：/pet/config.jsonc → 包内 assets/config.jsonc
+      if (rest === 'config.jsonc') {
+        const cfgFile = join(PACKAGE_ROOT, 'assets', 'config.jsonc');
+        if (!existsSync(cfgFile)) {
+          res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
+          res.end('dsh-pet: config.jsonc not found');
+          return;
+        }
+        await sendFile(res, cfgFile, MIME['.jsonc'] ?? 'application/octet-stream');
+        return;
+      }
+
+      // 第一段是 scope：thumb 或 full
+      const [scope, ...nameParts] = rest.split('/');
+      if (scope !== 'thumb' && scope !== 'full') {
+        res.writeHead(400, { 'content-type': 'text/plain; charset=utf-8' });
+        res.end('dsh-pet: expected /pet/{thumb|full}/<file>');
+        return;
+      }
+
+      const fileName = nameParts.join('/');
+      const root = scope === 'thumb' ? thumbRoot : fullRoot;
+      const file = resolveAsset(root, fileName);
+      if (file === undefined) {
+        res.writeHead(400, { 'content-type': 'text/plain; charset=utf-8' });
+        res.end('dsh-pet: invalid path');
+        return;
+      }
+      if (!existsSync(file)) {
+        res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
+        res.end(scope === 'full'
+          ? `dsh-pet: original asset not downloaded yet — run the fetch-assets script to populate ${fullRoot}`
+          : 'dsh-pet: asset not found');
+        return;
+      }
+      const ext = file.slice(file.lastIndexOf('.')).toLowerCase();
+      await sendFile(res, file, MIME[ext] ?? 'application/octet-stream');
+    },
+  }), 'dsh-pet: /pet asset route');
+}

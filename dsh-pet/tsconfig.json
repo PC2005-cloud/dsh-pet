@@ -13,8 +13,7 @@
     "isolatedModules": true,
     "verbatimModuleSyntax": true,
     "noUnusedLocals": true,
-    "noUnusedParameters": true,
-    "types": ["react/jsx-runtime"]
+    "noUnusedParameters": true
   },
   "include": ["src"]
 }
