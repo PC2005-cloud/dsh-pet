@@ -102,67 +102,86 @@ window.__ModuleLoader__.load({
 		const IDLE = '待机呼吸休闲';
 		// 转向动画（东张西望本身内容就是"从偏左看到偏右"，播完翻转 facing）
 		const TURN = '东张西望';
-		// 随机动作池：纯字符串数组，全部等概率抽取。
-		// 含"打瞌睡被惊醒"（原独立闲置动画，已统一纳入）。
+		// 随机动作池：拆分为四个独立分类池，由 pickNext() 先按类别权重选类、再在类内抽动作。
 		// 注意：原地漂浮踏步不在这里，它是移动动画（在 MOVES 里）。
-		const ACTS = [
+		// ---- 小动作/日常 ----
+		const SMALL_ACTS = [
 			'悠闲哼歌',
 			'超大伸懒腰',
-			'原地专心玩魔方',
 			'原地敲击桌面互动',
 			'原地重力下蹲压缩',
 			'哈欠连天',
 			'原地小憩沉眠',
-			'原地蹲下玩玩具汽车',
-			'鲸鱼吐泡泡特效',
 			'女仆屈膝礼仪',
 			'被吓一跳（炸毛）',
-			'原地跳跃抓碎头顶物品',
 			'小幅度原地 360 度旋转展示',
 			'偷吃零食被抓住',
-			'玩游戏气急败坏',
 			'用鲸鱼尾巴拍打地面',
 			'打瞌睡被惊醒', // 原独立闲置动画，已并入
-			'玩水枪',
-			'小提琴演奏',
-			'蓝鲸现世',
-			'吃白饭',
 			'照镜子',
-			'优雅女仆舞',
-			'轻快摇摆舞',
-			'可爱宅舞',
 			'整体换装试色',
-			'大口吃零食',
-			'吹气球',
-			'动物环绕',
 			'深度思考碎碎念',
 			'轻快记录',
 			'写代码',
+			'摇扇纳凉',
+			'晨间刷牙',
+		];
+		// ---- 玩耍/才艺 ----
+		const PLAY_ACTS = [
+			'原地专心玩魔方',
+			'原地蹲下玩玩具汽车',
+			'鲸鱼吐泡泡特效',
+			'原地跳跃抓碎头顶物品',
+			'玩游戏气急败坏',
+			'玩水枪',
+			'小提琴演奏',
+			'蓝鲸现世',
+			'优雅女仆舞',
+			'轻快摇摆舞',
+			'可爱宅舞',
+			'吹气球',
+			'动物环绕',
+			'放风筝',
+			'拆礼物',
+			'变鸽子',
+			'扑克魔术',
+			'抽陀螺',
+			'吹笛子',
+			'蝴蝶蜜蜂环绕头顶开花',
+			'撸猫',
+			'凭空生花',
+			'骑木马',
+			'三球抛接',
+			'踢毽子',
+		];
+		// ---- 吃什么 ----
+		const EAT_ACTS = [
+			'吃白饭',
+			'大口吃零食',
 			'吃Token',
 			'吃早餐',
 			'吃午餐',
 			'吃晚餐',
-			'放风筝',
-			'摇扇纳凉',
 			'吃冰淇淋融化',
+			'吃大闸蟹',
+			'吃糖葫芦',
+			'吃长寿面',
+			'吃西瓜',
+			'涮火锅',
+			'是啊，吃什么',
+		];
+		// ---- 时节/节日 ----
+		const FESTIVE_ACTS = [
 			'被落叶淹没',
 			'中秋赏月吃月饼',
 			'堆雪人',
-			// ---- 第二批新增（8/19）----
-			'拆礼物',
 			'放烟花',
 			'吃粽子',
-			'吃大闸蟹',
 			'吃年糕',
 			'吃青团',
 			'吃腊八粥',
-			'吃糖葫芦',
-			'吃长寿面',
 			'吃重阳糕',
-			'吃西瓜',
-			'涮火锅',
 			'收红包',
-			'是啊，吃什么',
 			'写福字',
 			'穿针乞巧',
 			'舞狮头',
@@ -171,20 +190,10 @@ window.__ModuleLoader__.load({
 			'放河灯',
 			'萌化小幽灵',
 			'装点圣诞树',
-			// ---- 第三批新增 ----
-			'变鸽子',
-			'扑克魔术',
-			'晨间刷牙',
-			'抽陀螺',
-			'吹笛子',
 			'放孔明灯',
-			'蝴蝶蜜蜂环绕头顶开花',
-			'撸猫',
-			'凭空生花',
-			'骑木马',
-			'三球抛接',
-			'踢毽子',
 		];
+		// 分类池汇总：用于“随机选一个分类”/移动失败回退
+		const ACT_GROUPS = [SMALL_ACTS, PLAY_ACTS, EAT_ACTS, FESTIVE_ACTS];
 		// 点击回应动画池（3 选 1）
 		const CLICKS = ['点击回应 - 开心跃动', '点击回应 - 害羞惊讶', '点击回应 - 傲娇生气（侧身展示）'];
 		// 拖拽动画（按住时播放）
@@ -204,6 +213,11 @@ window.__ModuleLoader__.load({
 		const pick = (pool, exclude) => {
 			const entries = exclude ? pool.filter((n) => n !== exclude) : pool;
 			return entries[Math.floor(Math.random() * entries.length)];
+		};
+		// 随机选一个分类，再在该分类内抽一个动作（用于移动失败回退等）
+		const pickCategoryAction = (exclude) => {
+			const group = ACT_GROUPS[Math.floor(Math.random() * ACT_GROUPS.length)];
+			return pick(group, exclude);
 		};
 
 		// ============================================================================
@@ -339,37 +353,45 @@ window.__ModuleLoader__.load({
 			// ============================================================================
 			// 链式模型（无常驻待机、无定时器）：
 			//   每个动画（含待机呼吸休闲）都是一次性播放，播完 handleEnded 触发，
-			//   按概率选下一个：30% 待机 / 10% 转向 / 40% 动作 / 20% 移动。
+			//   按概率选下一个：待机10% / 转向5% / 移动5% / 小动作20% / 玩耍20% / 吃什么20% / 时节20%。
 			//   点击/拖拽打断的动画播完后先回待机（作为缓冲），待机播完再进随机链。
 			const pickNext = () => {
 				const roll = Math.random();
 				let kind = '';
 				let next = '';
-				if (roll < 0.3) {
-					// 30% 待机：待机呼吸休闲（也是一次性，播完再选）
+				if (roll < 0.10) { // 10% 待机：待机呼吸休闲（也是一次性，播完再选）
 					kind = 'IDLE';
 					next = IDLE;
 					setAnim(IDLE);
-				} else if (roll < 0.4) {
-					// 10% 转向：东张西望，播完 handleEnded 里翻转 facing
+				} else if (roll < 0.15) { // 5% 转向：东张西望，播完 handleEnded 里翻转 facing
 					kind = 'TURN';
 					next = TURN;
 					setAnim(TURN);
-				} else if (roll < 0.8) {
-					// 40% 随机动作（等概率 + 去重）
-					kind = 'ACTS';
-					next = pick(ACTS, animRef.current);
-					setAnim(next);
-				} else {
-					// 20% 尝试移动：tryMove 先检查空间，不够就回退随机动作
+				} else if (roll < 0.20) { // 5% 尝试移动：tryMove 先检查空间，不够就回退随机分类动作
 					if (!tryMove()) {
 						kind = 'ACTS';
-						next = pick(ACTS, animRef.current);
+						next = pickCategoryAction(animRef.current);
 						setAnim(next);
 					} else {
 						kind = 'MOVES';
 						next = '移动(池内随机)';
 					}
+				} else if (roll < 0.40) { // 20% 小动作/日常
+					kind = 'SMALL_ACTS';
+					next = pick(SMALL_ACTS, animRef.current);
+					setAnim(next);
+				} else if (roll < 0.60) { // 20% 玩耍/才艺
+					kind = 'PLAY_ACTS';
+					next = pick(PLAY_ACTS, animRef.current);
+					setAnim(next);
+				} else if (roll < 0.80) { // 20% 吃什么
+					kind = 'EAT_ACTS';
+					next = pick(EAT_ACTS, animRef.current);
+					setAnim(next);
+				} else { // 20% 时节/节日
+					kind = 'FESTIVE_ACTS';
+					next = pick(FESTIVE_ACTS, animRef.current);
+					setAnim(next);
 				}
 				// 【测试用】打印随机数 + 动画种类 + 选中动画，方便核对概率分布；正式版可删除
 				console.log('[dsh-pet] roll=' + roll.toFixed(4) + ' → [' + kind + '] ' + next);
