@@ -100,114 +100,59 @@ window.__ModuleLoader__.load({
 		// 取对称整数范围 x:200~440（中心 320），y:50~335 贴近头顶/脚底。
 		const HIT_BOX = { x0: 200, y0: 50, x1: 440, y1: 335 };
 
-		// 主体待机动画（唯一常驻、循环播放）
-		const IDLE = '待机呼吸休闲';
-		// 转向动画（东张西望本身内容就是"从偏左看到偏右"，播完翻转 facing）
-		const TURN = '东张西望';
-		// 随机动作池：拆分为四个独立分类池，由 pickNext() 先按类别权重选类、再在类内抽动作。
-		// 注意：原地漂浮踏步不在这里，它是移动动画（在 MOVES 里）。
-		// ---- 小动作/日常 ----
-		const SMALL_ACTS = [
-			'悠闲哼歌',
-			'超大伸懒腰',
-			'原地敲击桌面互动',
-			'原地重力下蹲压缩',
-			'哈欠连天',
-			'原地小憩沉眠',
-			'女仆屈膝礼仪',
-			'被吓一跳（炸毛）',
-			'小幅度原地 360 度旋转展示',
-			'偷吃零食被抓住',
-			'用鲸鱼尾巴拍打地面',
-			'打瞌睡被惊醒', // 原独立闲置动画，已并入
-			'照镜子',
-			'整体换装试色',
-			'深度思考碎碎念',
-			'轻快记录',
-			'写代码',
-			'摇扇纳凉',
-			'晨间刷牙',
-		];
-		// ---- 玩耍/才艺 ----
-		const PLAY_ACTS = [
-			'原地专心玩魔方',
-			'原地蹲下玩玩具汽车',
-			'鲸鱼吐泡泡特效',
-			'原地跳跃抓碎头顶物品',
-			'玩游戏气急败坏',
-			'玩水枪',
-			'小提琴演奏',
-			'蓝鲸现世',
-			'优雅女仆舞',
-			'轻快摇摆舞',
-			'可爱宅舞',
-			'吹气球',
-			'动物环绕',
-			'放风筝',
-			'拆礼物',
-			'变鸽子',
-			'扑克魔术',
-			'抽陀螺',
-			'吹笛子',
-			'蝴蝶蜜蜂环绕头顶开花',
-			'撸猫',
-			'凭空生花',
-			'骑木马',
-			'三球抛接',
-			'踢毽子',
-		];
-		// ---- 吃什么 ----
-		const EAT_ACTS = [
-			'吃白饭',
-			'大口吃零食',
-			'吃Token',
-			'吃早餐',
-			'吃午餐',
-			'吃晚餐',
-			'吃冰淇淋融化',
-			'吃大闸蟹',
-			'吃糖葫芦',
-			'吃长寿面',
-			'吃西瓜',
-			'涮火锅',
-			'是啊，吃什么',
-		];
-		// ---- 时节/节日 ----
-		const FESTIVE_ACTS = [
-			'被落叶淹没',
-			'中秋赏月吃月饼',
-			'堆雪人',
-			'放烟花',
-			'吃粽子',
-			'吃年糕',
-			'吃青团',
-			'吃腊八粥',
-			'吃重阳糕',
-			'收红包',
-			'写福字',
-			'穿针乞巧',
-			'舞狮头',
-			'讨糖南瓜灯',
-			'插茱萸赏菊',
-			'放河灯',
-			'萌化小幽灵',
-			'装点圣诞树',
-			'放孔明灯',
-		];
-		// 分类池汇总：用于“随机选一个分类”/移动失败回退
-		const ACT_GROUPS = [SMALL_ACTS, PLAY_ACTS, EAT_ACTS, FESTIVE_ACTS];
-		// 点击回应动画池（3 选 1）
-		const CLICKS = ['点击回应 - 开心跃动', '点击回应 - 害羞惊讶', '点击回应 - 傲娇生气（侧身展示）'];
-		// 拖拽动画（按住时播放）
-		const DRAG = '被鼠标拖拽悬空反馈';
-		// 移动动画池：动画只提供"走路姿态"，实际位置移动由代码（rAF）驱动
-		const MOVES = ['螃蟹走路', '原地漂浮踏步', '原地左转奔跑'];
-		// 移动参数：
-		const MOVE_MIN_PX = 60;  // 每次移动的最短距离（px）
-		const MOVE_MAX_PX = 240; // 每次移动的最长距离（px）
-		const MOVE_MARGIN = 20;  // 屏幕边缘安全边距（px），防止宠物贴边/出屏
-		const MOVE_LEAD_SEC = 2; // 动画开头 2s 是"准备动作"，位置不动
-		const MOVE_TAIL_SEC = 2; // 动画结尾 2s 是"收尾动作"，位置不动
+		// ==== 动作配置：唯一事实来源 = config.jsonc 的 animations/animationWeights ====
+		// 保留一个"安全兜底待机名"，用于初始渲染 / 配置缺失时宠物不至于空白。
+		const FALLBACK_IDLE = '待机呼吸休闲';
+		let ANIM = {
+			idle: [FALLBACK_IDLE],
+			turn: [],
+			drag: [],
+			clicks: [],
+			moves: { default: { minDist: 60, maxDist: 240, margin: 20, leadSec: 2, tailSec: 2 }, actions: [] },
+			categories: [],
+			weights: { idle: 100, turn: 0, move: 0 },
+		};
+		// 从 config.jsonc 构建 ANIM（缺字段/写错尽量安全兜底；目录以配置为准）
+		const applyAnimConfig = (obj) => {
+			const a = obj && obj.animations;
+			if (!a || typeof a !== 'object') return;
+			const w = (obj && obj.animationWeights) || {};
+			const strArr = (x) => (Array.isArray(x) ? x.map(String).filter(Boolean) : []);
+			const idle = strArr(a.idle);
+			if (!idle.length) idle.push(FALLBACK_IDLE); // 至少一个待机，避免空白
+			const turn = strArr(a.turn);
+			const drag = strArr(a.drag);
+			const clicks = strArr(a.clicks);
+			let mdef = { minDist: 60, maxDist: 240, margin: 20, leadSec: 2, tailSec: 2 };
+			let mActs = [];
+			if (a.moves && typeof a.moves === 'object') {
+				if (a.moves.default && typeof a.moves.default === 'object') mdef = Object.assign({}, mdef, a.moves.default);
+				if (Array.isArray(a.moves.actions)) {
+					const list = a.moves.actions.filter((x) => x && x.name).map((x) => ({
+						name: String(x.name),
+						params: x.params && typeof x.params === 'object' ? Object.assign({}, x.params) : undefined,
+					}));
+					if (list.length) mActs = list;
+				}
+			}
+			let cats = [];
+			if (Array.isArray(a.categories)) {
+				const list = a.categories
+					.filter((c) => c && c.id && Array.isArray(c.actions) && c.actions.length)
+					.map((c) => ({ id: String(c.id), weight: Number(c.weight), noMirror: !!c.noMirror, actions: c.actions.map(String) }));
+				if (list.length) cats = list;
+			}
+			ANIM = {
+				idle, turn, drag, clicks,
+				moves: { default: mdef, actions: mActs },
+				categories: cats,
+				weights: {
+					idle: Number(w.idle) >= 0 ? Number(w.idle) : 10,
+					turn: Number(w.turn) >= 0 ? Number(w.turn) : 5,
+					move: Number(w.move) >= 0 ? Number(w.move) : 5,
+				},
+			};
+		};
 
 		// 生成 [min, max) 区间内的随机整数
 		const randomBetween = (min, max) => Math.floor(min + Math.random() * (max - min));
@@ -216,10 +161,19 @@ window.__ModuleLoader__.load({
 			const entries = exclude ? pool.filter((n) => n !== exclude) : pool;
 			return entries[Math.floor(Math.random() * entries.length)];
 		};
-		// 随机选一个分类，再在该分类内抽一个动作（用于移动失败回退等）
-		const pickCategoryAction = (exclude) => {
-			const group = ACT_GROUPS[Math.floor(Math.random() * ACT_GROUPS.length)];
-			return pick(group, exclude);
+		// 按权重在分类池中选一个分类；noMirror 分类在镜像(facing=right)时被排除，剩余权重自动归一化
+		const pickWeightedCategory = (facing) => {
+			const cats = ANIM.categories.filter((c) => c.actions.length > 0);
+			if (!cats.length) return null;
+			const filtered = cats.filter((c) => !(c.noMirror && facing === 'right'));
+			const eligible = filtered.length ? filtered : cats;
+			const totalW = eligible.reduce((s, c) => s + c.weight, 0) || 1;
+			let t = Math.random() * totalW;
+			for (const c of eligible) {
+				t -= c.weight;
+				if (t <= 0) return c;
+			}
+			return eligible[eligible.length - 1];
 		};
 		// 剥除 JSONC 注释（// 与 /* */），得纯 JSON 字符串。仅用于插件自带配置（无含 // 的 URL 值）
 		const stripJsonc = (src) =>
@@ -248,7 +202,7 @@ window.__ModuleLoader__.load({
 			const halfH = size * 9 / 16 / 2;
 
 			// ---- React 状态 ----
-			const [anim, setAnim] = useState(IDLE);   // 当前动画名
+			const [anim, setAnim] = useState(FALLBACK_IDLE);   // 当前动画名（配置加载后由 config 待机接管）
 			const [once, setOnce] = useState(true);   // 是否一次性播放——链式模型全部一次性
 			const [facing, setFacing] = useState('left'); // 朝向：left | right
 			const [dragging, setDragging] = useState(false); // 是否正在拖拽
@@ -273,6 +227,13 @@ window.__ModuleLoader__.load({
 							if (!Number.isNaN(mx)) setMargin((m) => ({ ...m, x: mx }));
 							if (!Number.isNaN(my)) setMargin((m) => ({ ...m, y: my }));
 						}
+						// 应用动作配置（idle/turn/drag/clicks/moves/categories/weights）
+						applyAnimConfig(obj);
+						// 配置就绪后用待机动画启动（不依赖任何代码默认数据）
+						if (ANIM && ANIM.idle && ANIM.idle.length) {
+							setAnim(ANIM.idle[0]);
+							setSeq((s) => s + 1);
+						}
 					})
 					.catch(() => {});
 			}, []);
@@ -291,7 +252,7 @@ window.__ModuleLoader__.load({
 			// ---- 交互相关 ref ----
 			const dragRef = useRef({ active: false, dragging: false, sx: 0, sy: 0 }); // 拖拽状态
 			const justDraggedRef = useRef(false); // 刚拖拽完（用于抑制拖拽后的误点击）
-			const animRef = useRef(IDLE); // 动画名镜像（供异步回调读当前值）
+			const animRef = useRef(FALLBACK_IDLE); // 动画名镜像（供异步回调读当前值）
 			animRef.current = anim;
 
 			// ============================================================================
@@ -309,6 +270,7 @@ window.__ModuleLoader__.load({
 			// 执行时检查自己是否还是最新代——不是就放弃（避免两个 video 都被
 			// 移除 is-front 而全部透明、宠物消失）。
 			const switchTo = (next, nextOnce) => {
+				if (!next) return; // 配置未加载（动画名为空）时不播放
 				// 如果目标动画已经在加载中，直接跳过（避免重复加载）
 				const pending = pendingRef.current;
 				if (pending && pending.anim === next && pending.once === nextOnce) return;
@@ -381,45 +343,41 @@ window.__ModuleLoader__.load({
 			// 动画链：每次动画播完 → 按概率选下一个
 			// ============================================================================
 			// 链式模型（无常驻待机、无定时器）：
-			//   每个动画（含待机呼吸休闲）都是一次性播放，播完 handleEnded 触发，
+			//   每个动画（含待机动画）都是一次性播放，播完 handleEnded 触发，
 			//   按概率选下一个：待机10% / 转向5% / 移动5% / 小动作20% / 玩耍20% / 吃什么20% / 时节20%。
 			//   点击/拖拽打断的动画播完后先回待机（作为缓冲），待机播完再进随机链。
 			const pickNext = () => {
+				if (!ANIM) return; // 配置未加载：不进入动画链
 				const roll = Math.random();
+				// 顶层权重（百分比）：idle / turn / move，其余归给分类池
+				const wI = ANIM.weights.idle;
+				const wT = ANIM.weights.turn;
+				const wM = ANIM.weights.move;
+				const topEnd = (wI + wT + wM) / 100;
 				let kind = '';
 				let next = '';
-				if (roll < 0.10) { // 10% 待机：待机呼吸休闲（也是一次性，播完再选）
+				if (roll < wI / 100) { // 待机（idle 池内随机，一次性播放）
 					kind = 'IDLE';
-					next = IDLE;
-					setAnim(IDLE);
-				} else if (roll < 0.15) { // 5% 转向：东张西望，播完 handleEnded 里翻转 facing
+					next = pick(ANIM.idle, animRef.current);
+					setAnim(next);
+				} else if (roll < (wI + wT) / 100) { // 转向（turn 池；播完 handleEnded 里翻转 facing）
 					kind = 'TURN';
-					next = TURN;
-					setAnim(TURN);
-				} else if (roll < 0.20) { // 5% 尝试移动：tryMove 先检查空间，不够就回退随机分类动作
+					next = pick(ANIM.turn, animRef.current);
+					setAnim(next);
+				} else if (roll < topEnd) { // 移动：tryMove 先检查空间，不够则回退按权重随机分类
 					if (!tryMove()) {
-						kind = 'ACTS';
-						next = pickCategoryAction(animRef.current);
+						const cat = pickWeightedCategory(facingRef.current);
+						kind = cat ? cat.id : 'FALLBACK';
+						next = cat ? pick(cat.actions, animRef.current) : pick(ANIM.idle, animRef.current);
 						setAnim(next);
 					} else {
 						kind = 'MOVES';
 						next = '移动(池内随机)';
 					}
-				} else if (roll < 0.40) { // 20% 小动作/日常
-					kind = 'SMALL_ACTS';
-					next = pick(SMALL_ACTS, animRef.current);
-					setAnim(next);
-				} else if (roll < 0.60) { // 20% 玩耍/才艺
-					kind = 'PLAY_ACTS';
-					next = pick(PLAY_ACTS, animRef.current);
-					setAnim(next);
-				} else if (roll < 0.80) { // 20% 吃什么
-					kind = 'EAT_ACTS';
-					next = pick(EAT_ACTS, animRef.current);
-					setAnim(next);
-				} else { // 20% 时节/节日
-					kind = 'FESTIVE_ACTS';
-					next = pick(FESTIVE_ACTS, animRef.current);
+				} else { // 其余：按权重选随机分类（镜像时跳过 noMirror 分类，如“文字”）
+					const cat = pickWeightedCategory(facingRef.current);
+					kind = cat ? cat.id : 'FALLBACK';
+					next = cat ? pick(cat.actions, animRef.current) : pick(ANIM.idle, animRef.current);
 					setAnim(next);
 				}
 				// 【测试用】打印随机数 + 动画种类 + 选中动画，方便核对概率分布；正式版可删除
@@ -432,13 +390,14 @@ window.__ModuleLoader__.load({
 			// 拖拽中途不响应（让拖拽动画继续）。
 			const handleEnded = () => {
 				if (dragRef.current.active) return; // 拖拽中：不打断
-				if (animRef.current === TURN) {
-					// 东张西望播完 → 翻转朝向
+				if (!ANIM) return; // 配置未加载
+				if (ANIM.turn.includes(animRef.current)) {
+					// 转向动画播完 → 翻转朝向
 					setFacing((f) => (f === 'left' ? 'right' : 'left'));
 				}
 				// 点击回应/拖拽动画（用户打断触发的）播完 → 先回待机缓冲
-				if (animRef.current === DRAG || CLICKS.includes(animRef.current)) {
-					setAnim(IDLE);
+				if (ANIM.drag.includes(animRef.current) || ANIM.clicks.includes(animRef.current)) {
+					if (ANIM.idle.length) setAnim(pick(ANIM.idle, animRef.current));
 					setOnce(true);
 					setSeq((s) => s + 1);
 					return;
@@ -489,12 +448,12 @@ window.__ModuleLoader__.load({
 				const pm = pendingMoveRef.current;
 				if (!pm || moveRef.current !== null) return; // 没有计划或已在移动
 				pendingMoveRef.current = null;
-				const { startRatio, startYRatio, targetRatio, dir, totalRatio } = pm;
+				const { startRatio, startYRatio, targetRatio, dir, totalRatio, leadSec, tailSec } = pm;
 				// 动画时长驱动节奏（10.09s），取不到时兜底
 				const duration = Number.isFinite(el.duration) && el.duration > 0 ? el.duration : 10.09;
-				// 真正移动的窗口 = 总时长 - 前后 2s（至少 0.1s 防除零）
+				// 真正移动的窗口 = 总时长 - 前后 leadSec/tailSec（至少 0.1s 防除零）
 				// 命名注意：不能叫 window——会遮蔽全局 window，导致 window.innerWidth 变 undefined（历史 bug）
-				const travelWindow = Math.max(0.1, duration - MOVE_LEAD_SEC - MOVE_TAIL_SEC);
+				const travelWindow = Math.max(0.1, duration - leadSec - tailSec);
 				const token = ++moveTokenRef.current;
 				const step = () => {
 					if (moveTokenRef.current !== token) return;
@@ -505,13 +464,13 @@ window.__ModuleLoader__.load({
 						const W = window.innerWidth;
 						const H = window.innerHeight;
 						let ratioX;
-						if (t <= MOVE_LEAD_SEC) {
+						if (t <= leadSec) {
 							ratioX = startRatio; // 准备动作：原地
-						} else if (t >= duration - MOVE_TAIL_SEC) {
+						} else if (t >= duration - tailSec) {
 							ratioX = targetRatio; // 收尾动作：已到终点
 						} else {
 							// 移动窗口：按进度插值（比例制）
-							const progress = (t - MOVE_LEAD_SEC) / travelWindow;
+							const progress = (t - leadSec) / travelWindow;
 							ratioX = startRatio + dir * totalRatio * progress;
 						}
 						const px = ratioX * W;
@@ -522,7 +481,7 @@ window.__ModuleLoader__.load({
 						rootEl.style.right = 'auto';
 						rootEl.style.bottom = 'auto';
 					}
-					if (t < duration - MOVE_TAIL_SEC) {
+					if (t < duration - tailSec) {
 						moveRef.current = requestAnimationFrame(step); // 继续下一帧
 					} else {
 						// 到位：提交终点位置（存相对窗口比例），让动画自然播完最后 2s 收尾——
@@ -541,30 +500,36 @@ window.__ModuleLoader__.load({
 			 * @returns {boolean} true=移动已计划；false=空间不够（调用方回退随机动作）
 			 */
 			const tryMove = () => {
+				if (!ANIM) return false; // 配置未加载
 				if (moveRef.current !== null || pendingMoveRef.current) return true; // 已在移动/已计划
-				// 方向按"实际朝向"计算：若刚播完东张西望（animRef 仍为 TURN），
-				// facing 即将翻转，方向取反——否则人物"脸朝新方向、却往旧方向走"。
-				const dir = (facingRef.current === 'right') !== (animRef.current === TURN) ? 1 : -1; // 朝右=+1，朝左=-1
+				const actions = ANIM.moves.actions;
+				if (!actions.length) return false;
+				const chosen = actions[Math.floor(Math.random() * actions.length)];
+				// 该动作合并参数：全局默认 + 该动作覆盖
+				const mp = Object.assign({}, ANIM.moves.default, chosen.params || {});
+				// 方向按"实际朝向"计算：若刚播完转向动画，facing 即将翻转，方向取反
+				const dir = (facingRef.current === 'right') !== ANIM.turn.includes(animRef.current) ? 1 : -1;
 				const W = window.innerWidth;
 				const cx = currentCenterX();
-				const distance = randomBetween(MOVE_MIN_PX, MOVE_MAX_PX);
+				const distance = randomBetween(mp.minDist, mp.maxDist);
 				const target = cx + dir * distance;
 				// 【播放前检查一次距离】目标点必须在屏幕安全边距内，否则不移动
-				const leftBound = MOVE_MARGIN + halfW;
-				const rightBound = W - MOVE_MARGIN - halfW;
+				const leftBound = mp.margin + halfW;
+				const rightBound = W - mp.margin - halfW;
 				if (target < leftBound || target > rightBound) return false; // 空间不够
-				// 记录计划（存"比例"而非绝对坐标，resize 后仍正确）：
-				// 起点比例、目标比例、Y 比例、方向、总距离比例
+				// 记录计划（存"比例"，含该动作的 leadSec/tailSec 供 startMoveDrive 使用）
 				pendingMoveRef.current = {
 					startRatio: cx / W,
 					startYRatio: currentCenterY() / window.innerHeight,
 					targetRatio: target / W,
 					dir,
 					totalRatio: Math.abs(target - cx) / W,
+					leadSec: mp.leadSec,
+					tailSec: mp.tailSec,
 				};
 				// 移动动画一次性播放（10s），播完 ended 触发 handleEnded → 进入动画链
 				setOnce(true);
-				setAnim(pick(MOVES));
+				setAnim(chosen.name);
 				return true;
 			};
 			// 停止移动（点击/拖拽打断时调用）：取消计划 + 使 rAF 失效 + 取消帧
@@ -622,7 +587,7 @@ window.__ModuleLoader__.load({
 					d.dragging = true;
 					setDragging(true);
 					setOnce(true);
-					setAnim(DRAG);
+					if (ANIM.drag.length) setAnim(pick(ANIM.drag));
 				}
 				// 跟手：直接改 root 的 style（不触发 React 重渲染 → 60fps 平滑）
 				// 舞台中心 = 鼠标点 - 按下时记录的偏移；left/top 是 root 左上角，
@@ -660,7 +625,7 @@ window.__ModuleLoader__.load({
 					});
 					const stageEl = stageRef.current;
 					if (stageEl) stageEl.style.transform = 'translateY(' + bottomPad + 'px)'; // 恢复落地对齐
-					setAnim(IDLE);
+					if (ANIM.idle.length) setAnim(pick(ANIM.idle, animRef.current));
 					setOnce(false);
 				}
 				// 没拖过：交给 handleClick
@@ -668,12 +633,13 @@ window.__ModuleLoader__.load({
 
 			// ---- 点击回应（仅真点击触发，拖拽后的 click 被忽略） ----
 			const handleClick = (e) => {
+				if (!ANIM) return; // 配置未加载
 				const d = dragRef.current;
 				if (d.active || d.dragging || justDraggedRef.current) return; // 拖拽中/刚拖完：忽略
-				if (once && animRef.current !== IDLE) return; // 正在播一次性动画：不打断
+				if (once && !ANIM.idle.includes(animRef.current)) return; // 正在播一次性动画：不打断
 				stopMove(); // 点击打断移动
 				setOnce(true);
-				setAnim(pick(CLICKS)); // 随机一个点击回应动画
+				if (ANIM.clicks.length) setAnim(pick(ANIM.clicks)); // 随机一个点击回应动画
 			};
 
 			// ============================================================================
