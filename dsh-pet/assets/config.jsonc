@@ -2,6 +2,8 @@
 // 说明：浏览器端启动时通过 /pet/config.jsonc 拉取；任何字段缺失/写错都会
 //       回退到 client.js 的代码默认值，不会导致插件崩溃。
 {
+  // 桌宠尺寸（宽度 px；高度自动 = size × 9/16）
+  "size": 1462,
   // 桌宠初始位置
   // corner: top-left | top-right | bottom-left | bottom-right（默认 bottom-right）
   // marginX / marginY: 距所属角落对应边缘的偏移（px，相对角落方向）

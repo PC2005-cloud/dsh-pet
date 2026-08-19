@@ -241,8 +241,8 @@ window.__ModuleLoader__.load({
 		 * 实际收到的是空对象，所以下面全部用 || 默认值兜底。
 		 */
 		function Pet({ config }) {
-			// ---- 从 config 读取参数（当前走默认值） ----
-			const size = (config && config.size) || 462;            // 显示尺寸（px，宽度；默认=高度260）
+			// ---- 桌宠尺寸（默认 462px 宽；可由 /pet/config.jsonc 的 size 覆盖）----
+			const [size, setSize] = useState(462); // 显示尺寸（px，宽度；高度=size×9/16）
 			// 舞台 16:9：宽=size、高=size×9/16；中心偏移（定位/拖拽共用）
 			const halfW = size / 2;
 			const halfH = size * 9 / 16 / 2;
@@ -263,6 +263,8 @@ window.__ModuleLoader__.load({
 					.then((r) => { if (!r.ok) throw new Error('config'); return r.text(); })
 					.then((src) => {
 						const obj = JSON.parse(stripJsonc(src));
+						const sz = Number(obj && obj.size);
+						if (Number.isFinite(sz) && sz > 0) setSize(sz);
 						const p = obj && obj.position;
 						if (p) {
 							if (['top-left', 'top-right', 'bottom-left', 'bottom-right'].indexOf(p.corner) !== -1) setCorner(p.corner);
