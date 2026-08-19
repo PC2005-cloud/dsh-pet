@@ -47,6 +47,7 @@ const MIME = {
   '.mp4': 'video/mp4',
   '.png': 'image/png',
   '.json': 'application/json; charset=utf-8',
+  '.jsonc': 'application/json; charset=utf-8',
 };
 
 /**
@@ -86,6 +87,27 @@ function apply(ctx, config) {
       const url = new URL(req.url ?? '/', 'http://localhost');
       // 去掉 /pet/ 前缀并 URL 解码（中文文件名是编码后的）
       const rest = decodeURIComponent(url.pathname.slice(ROUTE_PREFIX.length + 1));
+      // 配置文件（JSONC）：/pet/config.jsonc → 包内 assets/config.jsonc
+      if (rest === 'config.jsonc') {
+        const cfgFile = join(PACKAGE_ROOT, 'assets', 'config.jsonc');
+        if (!existsSync(cfgFile)) {
+          res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
+          res.end('dsh-pet: config.jsonc not found');
+          return;
+        }
+        const ext = '.jsonc';
+        const contentType = MIME[ext] ?? 'application/octet-stream';
+        const { size } = await stat(cfgFile);
+        res.writeHead(200, {
+          'content-type': contentType,
+          'content-length': size,
+          'cache-control': 'public, max-age=3600',
+        });
+        const stream = createReadStream(cfgFile);
+        stream.on('error', () => res.destroy());
+        stream.pipe(res);
+        return;
+      }
       // 第一段是 scope：thumb 或 full
       const [scope, ...nameParts] = rest.split('/');
       if (scope !== 'thumb' && scope !== 'full') {

@@ -51,6 +51,7 @@
   "files": [
     "lib",
     "assets/thumb",
+    "assets/config.jsonc",
     "cordis.patch.yml"
   ],
   "scripts": {

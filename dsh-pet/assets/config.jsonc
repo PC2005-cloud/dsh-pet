@@ -1,0 +1,14 @@
+// dsh-pet 配置（JSONC：允许 // 和 /* */ 注释）
+// 说明：浏览器端启动时通过 /pet/config.jsonc 拉取；任何字段缺失/写错都会
+//       回退到 client.js 的代码默认值，不会导致插件崩溃。
+{
+  // 桌宠初始位置
+  // corner: top-left | top-right | bottom-left | bottom-right（默认 bottom-right）
+  // marginX / marginY: 距所属角落对应边缘的偏移（px，相对角落方向）
+  //   例：bottom-right + marginX:24 marginY:0 → 距右缘24px、贴底
+  "position": {
+    "corner": "top-right",
+    "marginX": 24,
+    "marginY": 100
+  }
+}

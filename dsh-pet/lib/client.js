@@ -50,10 +50,12 @@ window.__ModuleLoader__.load({
 		const css = [
 			// 根容器：fixed 固定定位、层级 40（在界面之上）、整体点击穿透（不挡界面操作）、禁止选中
 			'.dsh-pet-root{position:fixed;z-index:40;pointer-events:none;user-select:none}',
-			// 右下角默认位置（right:24px 距右缘、bottom:0 贴底）
-			'.dsh-pet-root[data-corner="bottom-right"]{right:24px;bottom:0}',
-			// 左下角位置
-			'.dsh-pet-root[data-corner="bottom-left"]{left:24px;bottom:0}',
+			// 四角定位：边距由 CSS 变量 --dsh-pet-mx/--dsh-pet-my 控制（默认右下 right24/bottom0）。
+			// 角落仅在"没有自定义位置"（未拖拽/未移动）时生效——即"初始位置"。
+			'.dsh-pet-root[data-corner="bottom-right"]{right:var(--dsh-pet-mx,24px);bottom:var(--dsh-pet-my,0)}',
+			'.dsh-pet-root[data-corner="bottom-left"]{left:var(--dsh-pet-mx,24px);bottom:var(--dsh-pet-my,0)}',
+			'.dsh-pet-root[data-corner="top-right"]{right:var(--dsh-pet-mx,24px);top:var(--dsh-pet-my,0)}',
+			'.dsh-pet-root[data-corner="top-left"]{left:var(--dsh-pet-mx,24px);top:var(--dsh-pet-my,0)}',
 			// 舞台：16:9（--dsh-pet-size 为宽度，默认 462px=高度260；高度自动 = 宽度×9/16），本身不响应鼠标
 			'.dsh-pet-stage{position:relative;width:var(--dsh-pet-size,462px);height:calc(var(--dsh-pet-size,462px)*9/16);pointer-events:none}',
 			// 视频：铺满舞台、保持比例，**pointer-events:none 完全穿透**——
@@ -219,6 +221,12 @@ window.__ModuleLoader__.load({
 			const group = ACT_GROUPS[Math.floor(Math.random() * ACT_GROUPS.length)];
 			return pick(group, exclude);
 		};
+		// 剥除 JSONC 注释（// 与 /* */），得纯 JSON 字符串。仅用于插件自带配置（无含 // 的 URL 值）
+		const stripJsonc = (src) =>
+			src
+				.replace(/\/\*[\s\S]*?\*\//g, '')
+				.replace(/(^|[^\\:])\/\/.*$/gm, '$1')
+				.trim();
 
 		// ============================================================================
 		// Pet 组件 —— 宠物本体
@@ -235,7 +243,6 @@ window.__ModuleLoader__.load({
 		function Pet({ config }) {
 			// ---- 从 config 读取参数（当前走默认值） ----
 			const size = (config && config.size) || 462;            // 显示尺寸（px，宽度；默认=高度260）
-			const corner = (config && config.position) || 'bottom-right'; // 默认角落
 			// 舞台 16:9：宽=size、高=size×9/16；中心偏移（定位/拖拽共用）
 			const halfW = size / 2;
 			const halfH = size * 9 / 16 / 2;
@@ -247,6 +254,26 @@ window.__ModuleLoader__.load({
 			const [dragging, setDragging] = useState(false); // 是否正在拖拽
 			// 自定义位置（拖拽/移动后宠物停留的视口坐标）；null = 回到默认角落
 			const [customPos, setCustomPos] = useState(null);
+			// 初始角落与边距（默认右下 right24/bottom0；可被 /pet/config.jsonc 覆盖）
+			const [corner, setCorner] = useState('bottom-right');
+			const [margin, setMargin] = useState({ x: 24, y: 0 });
+			// 拉取 /pet/config.jsonc 应用位置配置；失败/缺失/写错均静默沿用代码默认
+			useEffect(() => {
+				fetch('/pet/config.jsonc')
+					.then((r) => { if (!r.ok) throw new Error('config'); return r.text(); })
+					.then((src) => {
+						const obj = JSON.parse(stripJsonc(src));
+						const p = obj && obj.position;
+						if (p) {
+							if (['top-left', 'top-right', 'bottom-left', 'bottom-right'].indexOf(p.corner) !== -1) setCorner(p.corner);
+							const mx = Number(p.marginX);
+							const my = Number(p.marginY);
+							if (!Number.isNaN(mx)) setMargin((m) => ({ ...m, x: mx }));
+							if (!Number.isNaN(my)) setMargin((m) => ({ ...m, y: my }));
+						}
+					})
+					.catch(() => {});
+			}, []);
 			// 播放序号：每次切换 +1。即使连续选中同一个动画（如待机播完又选待机），
 			// seq 变化也能保证 switchTo 重新执行、视频重新播放（否则 anim 没变 React 不重渲染）。
 			const [seq, setSeq] = useState(0);
@@ -707,7 +734,7 @@ window.__ModuleLoader__.load({
 				className: 'dsh-pet-root',
 				'data-corner': corner,   // CSS 决定默认角落
 				'data-facing': facing,   // CSS 决定是否镜像
-				style: Object.assign({ '--dsh-pet-size': size + 'px' }, rootStyle),
+				style: Object.assign({ '--dsh-pet-size': size + 'px', '--dsh-pet-mx': margin.x + 'px', '--dsh-pet-my': margin.y + 'px' }, rootStyle),
 				children: h('div', {
 					ref: stageRef,
 					className: 'dsh-pet-stage',
