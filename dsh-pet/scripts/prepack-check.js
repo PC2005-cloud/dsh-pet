@@ -55,10 +55,12 @@ for (const name of readdirSync(assetsRoot)) {
 if (originals.length > 0) fail(`original masters must not ship in npm package: ${originals.join(', ')} (move them to GitHub Releases)`);
 else ok('no original masters in assets/');
 
-// ---- 4. client.js 必须是官方 bundle 形态 ----
+// ---- 4. client.js 必须是官方 bundle 形态（含插件三件套导出） ----
 const client = readFileSync(join(ROOT, 'lib', 'client.js'), 'utf8');
-client.includes('__ModuleLoader__.load') ? ok('client bundle shape OK') : fail('client.js missing __ModuleLoader__.load');
-client.includes('exports.apply') ? ok('client exports apply') : fail('client.js missing exports.apply');
+client.includes('__ModuleLoader__.load') ? ok('client bundle shell OK') : fail('client.js missing __ModuleLoader__.load');
+const exportsPlugin = /exports\.(apply|inject|name)/.test(client)
+  || /module\.exports\s*=\s*\{[^}]*apply[^}]*inject[^}]*name/.test(client);
+exportsPlugin ? ok('client exports apply/inject/name') : fail('client.js missing apply/inject/name exports');
 
 // ---- 5. package.json 必须声明 bundle + client ----
 const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));

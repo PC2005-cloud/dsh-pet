@@ -11,6 +11,7 @@ import { defineConfig } from "tsdown";
 
 export default defineConfig({
   entry: {
+    "client": "src/client/index.ts",
     "index": "src/host/index.ts",
   },
   format: ["esm"],

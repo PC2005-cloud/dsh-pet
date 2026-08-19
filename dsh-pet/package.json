@@ -59,7 +59,8 @@
   "scripts": {
     "bundle": "tsdown",
     "watch": "tsdown --watch",
-    "prepack": "node scripts/prepack-check.js"
+    "prepare": "npm run bundle",
+    "prepack": "npm run bundle && node scripts/prepack-check.js"
   },
   "license": "MIT",
   "dsh": {
