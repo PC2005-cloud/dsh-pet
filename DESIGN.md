@@ -10,7 +10,7 @@
 在 DeepSeek Harness Web 界面（`dsh web`）显示一只**常驻动画宠物**：待机呼吸、随机动作（含打瞌睡）、偶尔转向、屏幕漫游、点击反应、可拖拽。
 
 **三件套成果**：
-1. **提示词**（`prompts/`）——51 个动作的生成配方（绿幕规范 + 按秒分解）
+1. **提示词**（`prompts/`）——各动作的生成配方（绿幕规范 + 按秒分解）
 2. **素材生成链**（`scripts/` + `video/`）——源视频 → 透明动画的完整处理管线
 3. **插件**（`dsh-pet/`）——运行在 DSH 里的成品
 
@@ -20,10 +20,10 @@
 
 素材链在工作区 `scripts/` 目录，7 个脚本构成流水线：
 
-> 注：`video/` 源 mp4 不入 git，托管在 GitHub Releases `assets-videos`（51 个拼音名 mp4，`gh release download assets-videos` 批量拉取）。`dsh-pet/assets/preview/` GIF 在仓库内（README 用 raw 直链渲染——GitHub 不支持仓库内 webm 在 README 内联播放，GIF 是唯一可靠的仓库内渲染方案；Release 附件以 `application/octet-stream` 返回也无法渲染，故 GIF 必须留在仓库）。
+> 注：`video/` 源 mp4 不入 git，托管在 GitHub Releases `assets-videos`（拼音名 mp4，`gh release download assets-videos` 批量拉取）。`dsh-pet/assets/preview/` GIF 在仓库内（README 用 raw 直链渲染——GitHub 不支持仓库内 webm 在 README 内联播放，GIF 是唯一可靠的仓库内渲染方案；Release 附件以 `application/octet-stream` 返回也无法渲染，故 GIF 必须留在仓库）。
 
 ```
-video/（51 个原始绿幕 mp4 + 水印 mask；源视频从 Releases assets-videos 下载）
+video/（原始绿幕 mp4 + 水印 mask；源视频从 Releases assets-videos 下载）
   → watermark_step01.py  水印遮罩填充          → step01/（mp4）
   → chroma_step02.py     HSV 色相绿幕抠像转透明  → step02/（透明 webm）
   → normalize_step03.py  归一化 2160×1215 统一站立居中 → step03/（母版）
@@ -48,7 +48,7 @@ video/（51 个原始绿幕 mp4 + 水印 mask；源视频从 Releases assets-vid
 dsh-pet/
 ├── package.json            # "dsh": {"bundle"} + exports["./client"] + "dsh":{"client"}
 ├── cordis.patch.yml        # insert pet 行
-├── assets/thumb/*.webm     # 51 个 640×360 播放变体（~28MB）
+├── assets/thumb/*.webm     # 640×360 播放变体
 ├── lib/
 │   ├── index.js            # host 半侧（服务器端，/pet 视频路由）
 │   ├── client.js           # 浏览器半侧（手写官方 CJS bundle）
@@ -83,15 +83,15 @@ dsh-pet/
 
 **核心设计：没有常驻待机、没有定时器**。每个动画（含待机呼吸休闲）都是一次性播放，播完立即按概率选下一个——首尾相接、永不停止。
 
-### 4.1 动画分类（51 段）
+### 4.1 动画分类
 
 | 组 | 动画 | 用途 |
 |---|---|---|
 | 待机 | 待机呼吸休闲 | 链中一环（30% 概率），播 10s 后切走 |
 | 转向 | 东张西望 | 播完翻转 facing |
 | 移动 | 螃蟹走路、原地漂浮踏步、原地左转奔跑 | 漫游姿态（位置由代码驱动） |
-| 动作池 | 其余 32 个（含打瞌睡被惊醒） | 等概率随机抽 1 段 |
-| 点击回应 | 点击回应 ×3 | 仅点击触发 |
+| 动作池 | 其余全部（含打瞌睡被惊醒） | 等概率随机抽 1 段 |
+| 点击回应 | 点击回应（多项） | 仅点击触发 |
 | 拖拽 | 被鼠标拖拽悬空反馈 | 仅拖拽触发 |
 
 ### 4.2 动画链
@@ -114,7 +114,7 @@ pickNext() 按概率选下一个 ──────────────┐
 - **`pickNext()`**：`roll = Math.random()`，`<0.3` 待机 / `<0.4` 转向 / `<0.8` 动作 / `>=0.8` 移动（空间不够回退动作）
 - **`seq` 序号**：每次切换 +1，连续选中同一动画也强制重播
 - **移动系统**：动画是"皮"（姿态）、rAF 是"骨架"（位移），位置随 `video.currentTime` 同步；前后各 2s 准备/收尾位置不动，中间 6s 走完全程；播放前检查屏幕空间
-- **交互**：点击 3 回应随机、拖拽超 5px 判定 + 跟手、松手停在拖拽处
+- **交互**：点击回应随机、拖拽超 5px 判定 + 跟手、松手停在拖拽处
 
 ## 5. 配置项
 
@@ -145,7 +145,7 @@ pickNext() 按概率选下一个 ──────────────┐
 |---|---|
 | M1 骨架（host 路由 + overlay 挂载） | ✅ |
 | M2 交互（点击/拖拽/转向/双缓冲/竞态防护） | ✅ |
-| M3 素材链（转码管线 + 51 动画 + 对齐） | ✅ |
+| M3 素材链（转码管线 + 全部动画 + 对齐） | ✅ |
 | M4 动画链模型（无常驻待机） | ✅ |
 | M5 开源（README/LICENSE/仓库） | ✅ 仓库已建，待推送 |
 | M6 发布（npm + Releases） | ⏳ |

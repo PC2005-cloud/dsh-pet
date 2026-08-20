@@ -8,7 +8,7 @@
   <a href="https://github.com/PC2005-cloud/dsh-pet/blob/master/LICENSE"><img alt="license" src="https://img.shields.io/github/license/PC2005-cloud/dsh-pet?color=orange"></a>
   <a href="https://awesome-dsh-plugin.com"><img alt="awesome dsh plugin" src="https://awesome-dsh-plugin.com/badge.svg"></a>
   <img alt="platform" src="https://img.shields.io/badge/platform-DeepSeek%20Harness%20Web-8A2BE2">
-  <img alt="assets" src="https://img.shields.io/badge/assets-51%20animations-ff69b4">
+  <img alt="assets" src="https://img.shields.io/badge/assets-dynamic%20animations-ff69b4">
 </p>
 
 A desktop pet living inside the [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) Web UI: idle breathing, random actions (including dozing off), occasional turns, screen wandering, click reactions, and draggable.
@@ -36,16 +36,16 @@ Restart `dsh web` and the pet appears in the bottom-right corner.
 
 ### ① Prompts → Source Videos
 
-Use an AI video generation tool (e.g., Kling, Runway, Doubao — this project's assets were generated with Doubao) with the recipes in `prompts/桌面宠物 10 秒动作提示词.md` to generate 51 ten-second green-screen videos:
+Use an AI video generation tool (e.g., Kling, Runway, Doubao — this project's assets were generated with Doubao) with the recipes in `prompts/桌面宠物 10 秒动作提示词.md` to generate one ten-second green-screen video per action:
 
 - Video ratio 16:9 with a pure green background (#00FF00)
 - Fixed character position/size (head top at ~20% height, feet bottom at ~85% height)
 - The action stays fully inside the frame; the first and last frames are standard front-facing standing
 - Each animation is broken down by second (per-stage actions for 0–10s)
 
-Put the results in `video/` (51 mp4 files).
+Put the results into `video/` (one mp4 per action).
 
-> **Getting the source videos**: to keep the repo small, `video/` sources are not committed. To reproduce the pipeline, download the 51 mp4 files (pinyin filenames) from [Releases `assets-videos`](https://github.com/PC2005-cloud/dsh-pet/releases/tag/assets-videos) into `video/`. One-shot bulk download (requires gh CLI):
+> **Getting the source videos**: to keep the repo small, `video/` sources are not committed. To reproduce the pipeline, download the mp4 files (pinyin filenames) from [Releases `assets-videos`](https://github.com/PC2005-cloud/dsh-pet/releases/tag/assets-videos) into `video/`. One-shot bulk download (requires gh CLI):
 >
 > ```sh
 > mkdir -p video && cd video && gh release download assets-videos --repo PC2005-cloud/dsh-pet
@@ -80,14 +80,14 @@ dsh plugin --profile web add file:D:/path/to/dsh-pet
 ## Project Structure
 
 ```
-├── prompts/                 # ① Generation prompts for 51 actions (green-screen spec + per-second breakdown)
+├── prompts/                 # ① Generation prompts for the actions (green-screen spec + per-second breakdown)
 ├── scripts/                 # ② Asset pipeline (7 Python scripts)
-├── video/                   # ② Source videos (51 green-screen mp4s + watermark mask)
+├── video/                   # ② Source videos (green-screen mp4s, one per action + watermark mask)
 ├── tools/                   # Dev tools: preview.html (pipeline stage previews)
 ├── dsh-pet/                 # ③ The plugin (can be published to npm independently)
 │   ├── lib/index.js         #   host half: /pet video route
 │   ├── lib/client.js        #   browser half: animation chain + double-buffered playback
-│   └── assets/thumb/        #   640×360 playback animations (51, ~36MB)
+│   └── assets/thumb/        #   640×360 playback animations
 ├── DESIGN.md                # Design & implementation docs (including pitfalls)
 └── LICENSE                  # MIT
 ```
@@ -113,7 +113,7 @@ What the pet looks like running inside the DSH Web UI:
 
 ## Animation Previews
 
-All 51 animations (640×360, the actual assets the plugin plays) — GIF previews live in the repo at `dsh-pet/assets/preview/` (rendered via raw links, pinyin filenames for cross-platform safety); the full transparent videos live in `dsh-pet/assets/thumb/`:
+All animations (640×360, the actual assets the plugin plays) — GIF previews live in the repo at `dsh-pet/assets/preview/` (rendered via raw links, pinyin filenames for cross-platform safety); the full transparent videos live in `dsh-pet/assets/thumb/`:
 
 **Idle / Turning**
 
