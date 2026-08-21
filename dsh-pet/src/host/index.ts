@@ -7,7 +7,9 @@
  * 路由：
  *   /pet/thumb/<动画名>.webm  → 插件包内 assets/thumb/
  *   /pet/full/<动画名>.webm   → $DSH_HOME/pet-assets/（原始母版，需手动下载）
- *   /pet/config.jsonc         → 插件包内 assets/config.jsonc
+ *   /pet/config.jsonc        → 插件包内 assets/config.jsonc（默认值，只读）
+ *   /pet/config              → 用户覆盖配置（大小/位置，JSON）
+ *                                GET 读取、PUT 保存、DELETE 恢复默认（删除用户层）
  *
  * 安全性：resolveAsset 做"防穿越"校验，保证路径仍在 assets 根目录内。
  *
@@ -15,7 +17,7 @@
  *             依赖可解析后替换为 DSH 官方类型。
  */
 import { createReadStream, existsSync } from 'node:fs';
-import { stat } from 'node:fs/promises';
+import { readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { join, normalize, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths';
@@ -65,10 +67,46 @@ async function sendFile(res: any, file: string, contentType: string): Promise<vo
   stream.pipe(res);
 }
 
+/** 支持的角落白名单（与 client 端一致） */
+const CORNERS = ['top-left', 'top-right', 'bottom-left', 'bottom-right'];
+
+/** 发送 JSON 响应 */
+function sendJson(res: any, status: number, obj: unknown): void {
+  const body = JSON.stringify(obj);
+  res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'content-length': Buffer.byteLength(body) });
+  res.end(body);
+}
+
+/** 收集请求体（文本） */
+function readBody(req: any): Promise<string> {
+  return new Promise((resolve2, reject) => {
+    const chunks: Buffer[] = [];
+    req.on('data', (c: Buffer) => chunks.push(c));
+    req.on('end', () => resolve2(Buffer.concat(chunks).toString('utf8')));
+    req.on('error', reject);
+  });
+}
+
+/** 校验并归一化用户配置：只接受 size / position 两个字段，其余忽略 */
+function sanitizeUserConfig(raw: unknown): { size: number; position: { corner: string; marginX: number; marginY: number } } | null {
+  const o = raw && typeof raw === 'object' ? raw as Record<string, any> : {};
+  const size = Number(o.size);
+  if (!Number.isFinite(size) || size <= 0) return null;
+  const pos = o.position && typeof o.position === 'object' ? o.position : {};
+  const corner = String(pos.corner ?? '');
+  if (!CORNERS.includes(corner)) return null;
+  const marginX = Number(pos.marginX);
+  const marginY = Number(pos.marginY);
+  if (!Number.isFinite(marginX) || !Number.isFinite(marginY)) return null;
+  return { size, position: { corner, marginX, marginY } };
+}
+
 /** 宿主插件主体：注册 `/pet` 前缀路由。 */
 export function apply(ctx: any, config: any): void {
   const thumbRoot = join(PACKAGE_ROOT, 'assets', 'thumb');
   const fullRoot: string = config.fullRoot ?? join(resolveDshHome(), 'pet-assets');
+  // 用户覆盖层：设置页保存的大小/位置（与包内 config.jsonc 默认值合并，覆盖层优先）
+  const userConfigPath = join(resolveDshHome(), 'pet-config.json');
 
   ctx.effect(() => ctx.webServer.register({
     kind: 'prefix',
@@ -76,6 +114,44 @@ export function apply(ctx: any, config: any): void {
     handler: async (req: any, res: any) => {
       const url = new URL(req.url ?? '/', 'http://localhost');
       const rest = decodeURIComponent(url.pathname.slice(ROUTE_PREFIX.length + 1));
+
+      // 用户覆盖配置：/pet/config（GET / PUT / DELETE）
+      if (rest === 'config') {
+        if (req.method === 'GET') {
+          try {
+            const raw = await readFile(userConfigPath, 'utf8');
+            sendJson(res, 200, JSON.parse(raw));
+          } catch {
+            sendJson(res, 200, {}); // 无覆盖配置 → 空对象，client 回落默认
+          }
+          return;
+        }
+        if (req.method === 'PUT') {
+          try {
+            const body = await readBody(req);
+            const parsed = JSON.parse(body);
+            const clean = sanitizeUserConfig(parsed);
+            if (!clean) {
+              sendJson(res, 400, { error: 'invalid pet config: expected { size:number>0, position:{corner,marginX,marginY} }' });
+              return;
+            }
+            await writeFile(userConfigPath, JSON.stringify(clean, null, 2), 'utf8');
+            sendJson(res, 200, { ok: true });
+          } catch {
+            sendJson(res, 400, { error: 'invalid JSON body' });
+          }
+          return;
+        }
+        if (req.method === 'DELETE') {
+          try {
+            await rm(userConfigPath, { force: true });
+          } catch { /* 不存在也视为成功 */ }
+          sendJson(res, 200, { ok: true });
+          return;
+        }
+        sendJson(res, 405, { error: 'method not allowed' });
+        return;
+      }
 
       // 配置文件（JSONC）：/pet/config.jsonc → 包内 assets/config.jsonc
       if (rest === 'config.jsonc') {

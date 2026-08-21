@@ -5,6 +5,8 @@
 import { pick, randomBetween, pickWeightedCategory } from './pickers';
 import { stripJsonc, buildAnim, buildMinimalAnim } from './config';
 import { CANVAS_H, FEET_Y, HIT_BOX, DRAG_THRESHOLD } from './constants';
+import { petBridge, makePetConfigSection, DEFAULT_UI, NS, zh, en } from './settings';
+import type { PetConfigUI } from './settings';
 import type { AnimConfig, Corner } from './types';
 import type * as ReactNS from 'react';
 
@@ -71,33 +73,60 @@ export function makeFactory(): (require: (mod: string) => any) => any {
       // 初始角落与边距（默认右下 right24/bottom0；可被 config.jsonc 覆盖）
       const [corner, setCorner] = useState<Corner>('bottom-right');
       const [margin, setMargin] = useState({ x: 24, y: 0 });
-      // 拉取 config.jsonc 应用尺寸/位置/动作配置；失败/缺失/写错均静默沿用默认/兜底
+      // ---- 尺寸/位置 统一应用入口（默认配置 / 用户覆盖 / 设置页保存 共用）----
+      const applyUi = (c: PetConfigUI) => {
+        setSize(c.size);
+        setCorner(c.corner);
+        setMargin({ x: c.marginX, y: c.marginY });
+        petBridge.current = c;
+      };
+
+      // 桥接设置页：保存后即时生效（同一 bundle 单例）
       useEffect(() => {
-        fetch('/pet/config.jsonc')
-          .then((r) => {
-            if (!r.ok) throw new Error('config');
-            return r.text();
-          })
-          .then((src) => {
-            const obj = JSON.parse(stripJsonc(src));
-            const sz = Number(obj && obj.size);
-            if (Number.isFinite(sz) && sz > 0) setSize(sz);
+        petBridge.apply = applyUi;
+        return () => { petBridge.apply = null; };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+      }, []);
+
+      // 拉取配置：包内 config.jsonc 默认值 → 用户覆盖层 /pet/config，最终整体应用
+      useEffect(() => {
+        (async () => {
+          try {
+            const r = await fetch('/pet/config.jsonc');
+            if (!r.ok) return;
+            const obj: any = JSON.parse(stripJsonc(await r.text()));
             ANIM = buildAnim(obj);
             const p = obj && obj.position;
-            if (p) {
-              if (CORNERS.indexOf(p.corner) !== -1) setCorner(p.corner as Corner);
-              const mx = Number(p.marginX);
-              const my = Number(p.marginY);
-              if (!Number.isNaN(mx)) setMargin((m) => ({ ...m, x: mx }));
-              if (!Number.isNaN(my)) setMargin((m) => ({ ...m, y: my }));
-            }
+            const merged: PetConfigUI = {
+              size: obj && Number(obj.size) > 0 ? Number(obj.size) : DEFAULT_UI.size,
+              corner: p && CORNERS.indexOf(p.corner) !== -1 ? (p.corner as Corner) : DEFAULT_UI.corner,
+              marginX: p && Number.isFinite(Number(p.marginX)) ? Number(p.marginX) : DEFAULT_UI.marginX,
+              marginY: p && Number.isFinite(Number(p.marginY)) ? Number(p.marginY) : DEFAULT_UI.marginY,
+            };
+            // 用户覆盖层优先（设置页保存的大小/位置）
+            try {
+              const r2 = await fetch('/pet/config');
+              if (r2.ok && r2.status !== 204) {
+                const u: any = await r2.json().catch(() => ({}));
+                if (u && typeof u === 'object') {
+                  if (Number.isFinite(Number(u.size)) && Number(u.size) > 0) merged.size = Number(u.size);
+                  const up = u.position;
+                  if (up && typeof up === 'object') {
+                    if (CORNERS.indexOf(up.corner) !== -1) merged.corner = up.corner as Corner;
+                    if (Number.isFinite(Number(up.marginX))) merged.marginX = Number(up.marginX);
+                    if (Number.isFinite(Number(up.marginY))) merged.marginY = Number(up.marginY);
+                  }
+                }
+              }
+            } catch { /* 无用户层时忽略 */ }
+            applyUi(merged);
             // 配置就绪后用待机动画启动（ANIM 由 buildAnim 兜底，必有 idle）
             if (ANIM.idle && ANIM.idle.length) {
               setAnim(ANIM.idle[0]);
               setSeq((s) => s + 1);
             }
-          })
-          .catch(() => {});
+          } catch { /* 失败/缺失/写错均静默沿用默认/兜底 */ }
+        })();
         // eslint-disable-next-line react-hooks/exhaustive-deps
       }, []);
       const [seq, setSeq] = useState(0);
@@ -436,12 +465,26 @@ export function makeFactory(): (require: (mod: string) => any) => any {
     // 插件主体（Cordis 插件三件套）
     // ============================================================================
     const name = 'pet';
-    const inject = ['slots'];
+    const inject = ['slots', 'locale'];
     function apply(ctx: any, _config: any) {
+      // 本地化字典（设置页文案）
+      ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'dsh-pet: dictionaries');
+      const t = ctx.locale.bind(NS);
+
+      // 宠物 overlay
       ctx.slots.inject('shell.overlay', function* () {
         yield ctx.slots.register(
           { name: 'shell.overlay', id: 'pet', order: 1000 },
           () => h(Pet, {}),
+        );
+      });
+
+      // 设置页：「桌宠配置」（大小/位置，保存即时生效）
+      const PetConfigSection = makePetConfigSection({ h, useState, t });
+      ctx.slots.inject('settings.section', function* () {
+        yield ctx.slots.register(
+          { name: 'settings.section', id: 'pet-config', order: 30, label: () => t('nav'), inject: () => ({ t }) },
+          PetConfigSection,
         );
       });
     }
