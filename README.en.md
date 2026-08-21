@@ -246,4 +246,4 @@ All animations (640×360, the actual assets the plugin plays) — GIF previews l
 ## License
 
 - Code: MIT
-- Assets (animations/prompts): see the repository notes
+- Assets (animations/prompts/source videos): open-source use permitted, **no commercial use**

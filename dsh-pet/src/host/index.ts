@@ -18,6 +18,7 @@
  */
 import { createReadStream, existsSync } from 'node:fs';
 import { readFile, rm, stat, writeFile } from 'node:fs/promises';
+import type { IncomingMessage, ServerResponse } from 'node:http';
 import { join, normalize, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths';
@@ -55,7 +56,7 @@ function resolveAsset(root: string, rel: string): string | undefined {
 }
 
 /** 流式返回一个文件（带 Content-Type / 长度 / 缓存头）。 */
-async function sendFile(res: any, file: string, contentType: string): Promise<void> {
+async function sendFile(res: ServerResponse, file: string, contentType: string): Promise<void> {
   const { size } = await stat(file);
   res.writeHead(200, {
     'content-type': contentType,
@@ -71,14 +72,17 @@ async function sendFile(res: any, file: string, contentType: string): Promise<vo
 const CORNERS = ['top-left', 'top-right', 'bottom-left', 'bottom-right'];
 
 /** 发送 JSON 响应 */
-function sendJson(res: any, status: number, obj: unknown): void {
+function sendJson(res: ServerResponse, status: number, obj: unknown): void {
   const body = JSON.stringify(obj);
-  res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'content-length': Buffer.byteLength(body) });
+  res.writeHead(status, {
+    'content-type': 'application/json; charset=utf-8',
+    'content-length': Buffer.byteLength(body),
+  });
   res.end(body);
 }
 
 /** 收集请求体（文本） */
-function readBody(req: any): Promise<string> {
+function readBody(req: IncomingMessage): Promise<string> {
   return new Promise((resolve2, reject) => {
     const chunks: Buffer[] = [];
     req.on('data', (c: Buffer) => chunks.push(c));
@@ -89,17 +93,20 @@ function readBody(req: any): Promise<string> {
 
 /** 校验并归一化用户配置：只接受 { pets: [{ id, size, position }] } */
 function sanitizeUserConfig(raw: unknown): { pets: unknown[] } | null {
-  const o = raw && typeof raw === 'object' ? raw as Record<string, any> : {};
+  const o = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
   const arr = Array.isArray(o.pets) ? o.pets : null;
   if (!arr || !arr.length) return null;
   const out: unknown[] = [];
   for (const p of arr) {
     if (!p || typeof p !== 'object') return null;
-    const id = String((p as any).id ?? '');
+    const pp = p as Record<string, unknown>;
+    const id = String(pp.id ?? '');
+    // 有意过滤文件名非法字符（Windows 保留符 + 控制字符），防止配置值逃逸 pet-config.json 路径
+    // eslint-disable-next-line no-control-regex
     if (!id || id.length > 64 || /[\\/:\x00-\x1f]/.test(id)) return null;
-    const size = Number((p as any).size);
+    const size = Number(pp.size);
     if (!Number.isFinite(size) || size <= 0) return null;
-    const pos = (p as any).position && typeof (p as any).position === 'object' ? (p as any).position : {};
+    const pos = pp.position && typeof pp.position === 'object' ? (pp.position as Record<string, unknown>) : {};
     const corner = String(pos.corner ?? '');
     if (!CORNERS.includes(corner)) return null;
     const marginX = Number(pos.marginX);
@@ -111,94 +118,106 @@ function sanitizeUserConfig(raw: unknown): { pets: unknown[] } | null {
 }
 
 /** 宿主插件主体：注册 `/pet` 前缀路由。 */
-export function apply(ctx: any, config: any): void {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- DSH 注入的 ctx（webServer/locale 等 service 无静态类型）
+export function apply(ctx: any): void {
   const thumbRoot = join(PACKAGE_ROOT, 'assets', 'thumb');
-  const fullRoot: string = config.fullRoot ?? join(resolveDshHome(), 'pet-assets');
+  // 原始母版目录固定为 $DSH_HOME/pet-assets（不再从 patch config 读取，config 无用途）
+  const fullRoot = join(resolveDshHome(), 'pet-assets');
   // 用户覆盖层：设置页保存的大小/位置（与包内 config.jsonc 默认值合并，覆盖层优先）
   const userConfigPath = join(resolveDshHome(), 'pet-config.json');
 
-  ctx.effect(() => ctx.webServer.register({
-    kind: 'prefix',
-    path: ROUTE_PREFIX,
-    handler: async (req: any, res: any) => {
-      const url = new URL(req.url ?? '/', 'http://localhost');
-      const rest = decodeURIComponent(url.pathname.slice(ROUTE_PREFIX.length + 1));
+  ctx.effect(
+    () =>
+      ctx.webServer.register({
+        kind: 'prefix',
+        path: ROUTE_PREFIX,
+        handler: async (req: IncomingMessage, res: ServerResponse) => {
+          const url = new URL(req.url ?? '/', 'http://localhost');
+          const rest = decodeURIComponent(url.pathname.slice(ROUTE_PREFIX.length + 1));
 
-      // 用户覆盖配置：/pet/config（GET / PUT / DELETE）
-      if (rest === 'config') {
-        if (req.method === 'GET') {
-          try {
-            const raw = await readFile(userConfigPath, 'utf8');
-            sendJson(res, 200, JSON.parse(raw));
-          } catch {
-            sendJson(res, 200, {}); // 无覆盖配置 → 空对象，client 回落默认
-          }
-          return;
-        }
-        if (req.method === 'PUT') {
-          try {
-            const body = await readBody(req);
-            const parsed = JSON.parse(body);
-            const clean = sanitizeUserConfig(parsed);
-            if (!clean) {
-              sendJson(res, 400, { error: 'invalid pet config: expected { pets:[{id,size,position:{corner,marginX,marginY}}] }' });
+          // 用户覆盖配置：/pet/config（GET / PUT / DELETE）
+          if (rest === 'config') {
+            if (req.method === 'GET') {
+              try {
+                const raw = await readFile(userConfigPath, 'utf8');
+                sendJson(res, 200, JSON.parse(raw));
+              } catch {
+                sendJson(res, 200, {}); // 无覆盖配置 → 空对象，client 回落默认
+              }
               return;
             }
-            await writeFile(userConfigPath, JSON.stringify(clean, null, 2), 'utf8');
-            sendJson(res, 200, { ok: true });
-          } catch {
-            sendJson(res, 400, { error: 'invalid JSON body' });
+            if (req.method === 'PUT') {
+              try {
+                const body = await readBody(req);
+                const parsed = JSON.parse(body);
+                const clean = sanitizeUserConfig(parsed);
+                if (!clean) {
+                  sendJson(res, 400, {
+                    error: 'invalid pet config: expected { pets:[{id,size,position:{corner,marginX,marginY}}] }',
+                  });
+                  return;
+                }
+                await writeFile(userConfigPath, JSON.stringify(clean, null, 2), 'utf8');
+                sendJson(res, 200, { ok: true });
+              } catch {
+                sendJson(res, 400, { error: 'invalid JSON body' });
+              }
+              return;
+            }
+            if (req.method === 'DELETE') {
+              try {
+                await rm(userConfigPath, { force: true });
+              } catch {
+                /* 不存在也视为成功 */
+              }
+              sendJson(res, 200, { ok: true });
+              return;
+            }
+            sendJson(res, 405, { error: 'method not allowed' });
+            return;
           }
-          return;
-        }
-        if (req.method === 'DELETE') {
-          try {
-            await rm(userConfigPath, { force: true });
-          } catch { /* 不存在也视为成功 */ }
-          sendJson(res, 200, { ok: true });
-          return;
-        }
-        sendJson(res, 405, { error: 'method not allowed' });
-        return;
-      }
 
-      // 配置文件（JSONC）：/pet/config.jsonc → 包内 assets/config.jsonc
-      if (rest === 'config.jsonc') {
-        const cfgFile = join(PACKAGE_ROOT, 'assets', 'config.jsonc');
-        if (!existsSync(cfgFile)) {
-          res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
-          res.end('dsh-pet: config.jsonc not found');
-          return;
-        }
-        await sendFile(res, cfgFile, MIME['.jsonc'] ?? 'application/octet-stream');
-        return;
-      }
+          // 配置文件（JSONC）：/pet/config.jsonc → 包内 assets/config.jsonc
+          if (rest === 'config.jsonc') {
+            const cfgFile = join(PACKAGE_ROOT, 'assets', 'config.jsonc');
+            if (!existsSync(cfgFile)) {
+              res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
+              res.end('dsh-pet: config.jsonc not found');
+              return;
+            }
+            await sendFile(res, cfgFile, MIME['.jsonc'] ?? 'application/octet-stream');
+            return;
+          }
 
-      // 第一段是 scope：thumb 或 full
-      const [scope, ...nameParts] = rest.split('/');
-      if (scope !== 'thumb' && scope !== 'full') {
-        res.writeHead(400, { 'content-type': 'text/plain; charset=utf-8' });
-        res.end('dsh-pet: expected /pet/{thumb|full}/<file>');
-        return;
-      }
+          // 第一段是 scope：thumb 或 full
+          const [scope, ...nameParts] = rest.split('/');
+          if (scope !== 'thumb' && scope !== 'full') {
+            res.writeHead(400, { 'content-type': 'text/plain; charset=utf-8' });
+            res.end('dsh-pet: expected /pet/{thumb|full}/<file>');
+            return;
+          }
 
-      const fileName = nameParts.join('/');
-      const root = scope === 'thumb' ? thumbRoot : fullRoot;
-      const file = resolveAsset(root, fileName);
-      if (file === undefined) {
-        res.writeHead(400, { 'content-type': 'text/plain; charset=utf-8' });
-        res.end('dsh-pet: invalid path');
-        return;
-      }
-      if (!existsSync(file)) {
-        res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
-        res.end(scope === 'full'
-          ? `dsh-pet: original asset not downloaded yet — run the fetch-assets script to populate ${fullRoot}`
-          : 'dsh-pet: asset not found');
-        return;
-      }
-      const ext = file.slice(file.lastIndexOf('.')).toLowerCase();
-      await sendFile(res, file, MIME[ext] ?? 'application/octet-stream');
-    },
-  }), 'dsh-pet: /pet asset route');
+          const fileName = nameParts.join('/');
+          const root = scope === 'thumb' ? thumbRoot : fullRoot;
+          const file = resolveAsset(root, fileName);
+          if (file === undefined) {
+            res.writeHead(400, { 'content-type': 'text/plain; charset=utf-8' });
+            res.end('dsh-pet: invalid path');
+            return;
+          }
+          if (!existsSync(file)) {
+            res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
+            res.end(
+              scope === 'full'
+                ? `dsh-pet: original asset not downloaded yet — run the fetch-assets script to populate ${fullRoot}`
+                : 'dsh-pet: asset not found',
+            );
+            return;
+          }
+          const ext = file.slice(file.lastIndexOf('.')).toLowerCase();
+          await sendFile(res, file, MIME[ext] ?? 'application/octet-stream');
+        },
+      }),
+    'dsh-pet: /pet asset route',
+  );
 }

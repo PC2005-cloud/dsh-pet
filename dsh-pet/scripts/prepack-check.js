@@ -26,16 +26,19 @@ import { fileURLToPath } from 'node:url';
 // 包根目录（scripts/ 的上一级）
 const ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)));
 // 失败/通过 的输出辅助
-const fail = (msg) => { console.error(`[prepack-check] FAIL: ${msg}`); process.exitCode = 1; };
+const fail = (msg) => {
+  console.error(`[prepack-check] FAIL: ${msg}`);
+  process.exitCode = 1;
+};
 const ok = (msg) => console.log(`[prepack-check] ok: ${msg}`);
 
 // ---- 1. 必需文件存在性 ----
 const required = [
-  'lib/index.js',              // 宿主半侧
-  'lib/client.js',             // 浏览器半侧
-  'lib/types/index.d.ts',      // 宿主类型声明
+  'lib/index.js', // 宿主半侧
+  'lib/client.js', // 浏览器半侧
+  'lib/types/index.d.ts', // 宿主类型声明
   'lib/types/client/index.d.ts', // 客户端类型声明
-  'cordis.patch.yml',          // bundle patch（挂载声明）
+  'cordis.patch.yml', // bundle patch（挂载声明）
 ];
 for (const f of required) {
   existsSync(join(ROOT, f)) ? ok(`exists ${f}`) : fail(`missing ${f}`);
@@ -52,14 +55,17 @@ const assetsRoot = join(ROOT, 'assets');
 for (const name of readdirSync(assetsRoot)) {
   if (name.endsWith('.webm')) originals.push(name);
 }
-if (originals.length > 0) fail(`original masters must not ship in npm package: ${originals.join(', ')} (move them to GitHub Releases)`);
+if (originals.length > 0)
+  fail(`original masters must not ship in npm package: ${originals.join(', ')} (move them to GitHub Releases)`);
 else ok('no original masters in assets/');
 
 // ---- 4. client.js 必须是官方 bundle 形态（含插件三件套导出） ----
 const client = readFileSync(join(ROOT, 'lib', 'client.js'), 'utf8');
-client.includes('__ModuleLoader__.load') ? ok('client bundle shell OK') : fail('client.js missing __ModuleLoader__.load');
-const exportsPlugin = /exports\.(apply|inject|name)/.test(client)
-  || /module\.exports\s*=\s*\{[^}]*apply[^}]*inject[^}]*name/.test(client);
+client.includes('__ModuleLoader__.load')
+  ? ok('client bundle shell OK')
+  : fail('client.js missing __ModuleLoader__.load');
+const exportsPlugin =
+  /exports\.(apply|inject|name)/.test(client) || /module\.exports\s*=\s*\{[^}]*apply[^}]*inject[^}]*name/.test(client);
 exportsPlugin ? ok('client exports apply/inject/name') : fail('client.js missing apply/inject/name exports');
 
 // ---- 5. package.json 必须声明 bundle + client ----

@@ -60,7 +60,11 @@
     "bundle": "tsdown",
     "watch": "tsdown --watch",
     "prepare": "npm run bundle",
-    "prepack": "npm run bundle && node scripts/prepack-check.js"
+    "prepack": "npm run typecheck && npm run lint && npm run format:check && npm run bundle && node scripts/prepack-check.js",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
   },
   "license": "MIT",
   "dsh": {
@@ -83,11 +87,16 @@
     "react": "^18.2.0"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/node": "^26.2.0",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
+    "eslint": "^10.9.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "prettier": "^3.9.6",
     "rolldown": "^1.0.0-beta.7",
     "tsdown": "^0.8.0",
-    "typescript": "^5.5.0"
+    "typescript": "^5.5.0",
+    "typescript-eslint": "^8.67.0"
   }
 }

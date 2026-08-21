@@ -8,30 +8,23 @@
  *
  * 样式对齐官方设置页：max-width 720px、全走 --dsw-alias-* 语义 token（主题跟随）。
  */
-import type { Corner } from './types';
-
-/** 单个宠物配置 */
-export interface PetConfigUI {
-  id: string;
-  size: number;
-  corner: Corner;
-  marginX: number;
-  marginY: number;
-}
-
-/** 兜底默认（与 config.jsonc 的 pets[0]（main）一致） */
-export const DEFAULT_PETS: PetConfigUI[] = [
-  { id: 'main', size: 462, corner: 'top-right', marginX: 24, marginY: 100 },
-];
+import { assertClientConfig, stripJsonc } from './config';
+import type { Corner, Pet } from './types';
+import type { ChangeEvent, CSSProperties, Dispatch, FunctionComponent, SetStateAction } from 'react';
+import type { jsx } from 'react/jsx-runtime';
 
 /** 容器与设置页共享的桥（同一 bundle 单例）：
- * current=最新完整宠物列表；sync=容器注册的重渲染回调（保存/恢复默认时调用）；
+ * current=最新完整宠物列表（默认空）；sync=容器注册的重渲染回调（未注册时为无操作函数）；
  * template=config.jsonc 默认宠物模板（pets[0]），「添加宠物」用它作为默认配置 */
 export const petBridge: {
-  current: PetConfigUI[] | null;
-  sync: null | ((pets: PetConfigUI[]) => void);
-  template: PetConfigUI | null;
-} = { current: null, sync: null, template: null };
+  current: Pet[];
+  sync: (pets: Pet[]) => void;
+  template: Pet | undefined;
+} = {
+  current: [],
+  sync: () => {},
+  template: undefined,
+};
 
 /** 字典命名空间 */
 export const NS = 'pet.config';
@@ -86,12 +79,28 @@ export const en = {
   busy: 'Saving…',
 };
 
-/** 设置页组件工厂：h / hooks / t 由 factory 的 require 与 locale 注入（不顶层 import react） */
+/**
+ * 制造「桌宠配置」设置页组件（工厂函数）。
+ *
+ * 为什么是工厂而非直接定义组件：client 半侧是 __ModuleLoader__ 单文件形态，
+ * react 能力不能顶层 import，只能由 DSH 的 require('react') 在运行时注入，
+ * 因此把组件依赖作为参数传入，在工厂内制造出可用的组件后再注册进设置页插槽。
+ *
+ * @param rt        运行时注入的依赖集合
+ * @param rt.h      react/jsx-runtime 的 jsx 函数（即 factory 里的 `h`）——
+ *                  用于手写 React 元素，如 `h('button', { onClick, children: '保存' })`
+ * @param rt.useState react 的 useState hook——管理页面内可变状态
+ *                  （宠物列表 / 选中项 / 忙碌 / 保存消息），值变化时自动重渲染
+ * @param rt.t      locale 绑定到本插件的翻译函数（ctx.locale.bind(NS)）——
+ *                  取中英文文案，如 `t('nav')` → '桌宠配置' / 'Pet Config'
+ * @returns PetConfigSection 组件：即整个「桌宠配置」设置页
+ *          （props 仅有 close，由设置页外壳提供，本页当前未使用）
+ */
 export function makePetConfigSection(rt: {
-  h: any;
-  useState: <T>(init: T) => [T, (v: T) => void];
+  h: typeof jsx;
+  useState: <T>(init: T) => [T, Dispatch<SetStateAction<T>>];
   t: (key: string) => string;
-}): (props: { close?: () => void }) => any {
+}): FunctionComponent<{ close?: () => void }> {
   const { h, useState, t } = rt;
 
   const CORNERS: Corner[] = ['top-left', 'top-right', 'bottom-left', 'bottom-right'];
@@ -107,75 +116,66 @@ export function makePetConfigSection(rt: {
     fontSize: '13px',
     minHeight: '28px',
     outline: 'none',
-  } as any;
-
-  const stripJsonc = (src: string): string =>
-    src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^\\:])\/\/.*$/gm, '$1').trim();
+  } as CSSProperties;
 
   /** 生成一个未占用的宠物 id（pet-2、pet-3…） */
-  const nextId = (list: PetConfigUI[]): string => {
+  const nextId = (list: Pet[]): string => {
     let n = 2;
-    for (;; n++) {
+    for (; ; n++) {
       const id = 'pet-' + n;
       if (!list.some((p) => p.id === id)) return id;
     }
   };
 
-  const normalizePet = (p: any): PetConfigUI => {
-    const pos = p && p.position && typeof p.position === 'object' ? p.position : {};
-    return {
-      id: String(p && p.id ? p.id : 'main'),
-      size: Number(p && p.size) > 0 ? Number(p.size) : DEFAULT_PETS[0].size,
-      corner: (CORNERS as string[]).includes(pos.corner) ? (pos.corner as Corner) : DEFAULT_PETS[0].corner,
-      marginX: Number.isFinite(Number(pos.marginX)) ? Number(pos.marginX) : DEFAULT_PETS[0].marginX,
-      marginY: Number.isFinite(Number(pos.marginY)) ? Number(pos.marginY) : DEFAULT_PETS[0].marginY,
-    };
-  };
-
-  /** 从 config.jsonc 对象提取默认宠物列表：必须为 pets 数组；缺失/为空回落代码兜底 DEFAULT_PETS */
-  const defaultsFrom = (obj: any): PetConfigUI[] => {
-    const arr = obj && Array.isArray(obj.pets) ? obj.pets.filter((p: any) => p && p.id).map(normalizePet) : [];
-    return arr.length ? arr : DEFAULT_PETS.map((p) => ({ ...p }));
-  };
-
   return function PetConfigSection() {
-    const initPets = petBridge.current ?? DEFAULT_PETS;
-    const [pets, setPets] = useState<PetConfigUI[]>(initPets.map((p) => ({ ...p })));
+    const initPets = petBridge.current;
+    const [pets, setPets] = useState<Pet[]>(initPets.map((p) => ({ ...p, position: { ...p.position } })));
     const [selId, setSelId] = useState<string>(initPets[0]?.id ?? '');
     const [busy, setBusy] = useState(false);
     const [msg, setMsg] = useState<{ kind: 'ok' | 'err' | ''; text: string }>({ kind: '', text: '' });
 
-    const sel = pets.find((p) => p.id === selId) ?? pets[0] ?? null;
+    // 当前选中的宠物对象（表单数据源）；selId 由 add/remove/reset 同步维护，列表非空时恒有效
+    const cur = pets.find((p) => p.id === selId) ?? null;
 
-    const updateSel = (patch: Partial<PetConfigUI>) =>
-      setPets((list) => list.map((p) => (p.id === (sel?.id ?? '') ? { ...p, ...patch } : p)));
+    // 更新选中的宠物：size 走顶层；position 子字段整体替换
+    const updateSel = (patch: Partial<Omit<Pet, 'position'>> & { position?: Partial<Pet['position']> }) =>
+      setPets((list) =>
+        list.map((p) => {
+          if (p.id !== selId) return p;
+          const { position: posPatch, ...rest } = patch;
+          return { ...p, ...rest, position: posPatch ? { ...p.position, ...posPatch } : p.position };
+        }),
+      );
 
-    const validated = (): PetConfigUI[] | null => {
+    const validated = (): boolean => {
       for (const p of pets) {
-        if (!Number.isFinite(p.size) || p.size <= 0 || !Number.isFinite(p.marginX) || !Number.isFinite(p.marginY)) {
+        if (
+          !Number.isFinite(p.size) ||
+          p.size <= 0 ||
+          !Number.isFinite(p.position.marginX) ||
+          !Number.isFinite(p.position.marginY)
+        ) {
           setMsg({ kind: 'err', text: t('invalid') });
-          return null;
+          return false;
         }
       }
-      return pets;
+      return true;
     };
 
     const save = async () => {
-      const list = validated();
-      if (!list) return;
+      const isOk = validated();
+      if (!isOk) return;
       setBusy(true);
       setMsg({ kind: '', text: '' });
       try {
         const res = await fetch('/pet/config', {
           method: 'PUT',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({
-            pets: list.map((p) => ({ id: p.id, size: p.size, position: { corner: p.corner, marginX: p.marginX, marginY: p.marginY } })),
-          }),
+          body: JSON.stringify({ pets: pets }),
         });
         if (!res.ok) throw new Error('HTTP ' + res.status);
-        petBridge.current = list;
-        petBridge.sync?.(list);
+        petBridge.current = pets;
+        petBridge.sync(pets);
         setMsg({ kind: 'ok', text: t('saved') });
       } catch {
         setMsg({ kind: 'err', text: t('loadError') });
@@ -190,12 +190,11 @@ export function makePetConfigSection(rt: {
       try {
         await fetch('/pet/config', { method: 'DELETE' });
         const defRes = await fetch('/pet/config.jsonc');
-        const obj = JSON.parse(stripJsonc(await defRes.text()));
-        const defs = defaultsFrom(obj);
-        setPets(defs.map((p) => ({ ...p })));
+        const defs = assertClientConfig(JSON.parse(stripJsonc(await defRes.text()))).pets;
+        setPets(defs.map((p) => ({ ...p, position: { ...p.position } })));
         setSelId(defs[0]?.id ?? '');
         petBridge.current = defs;
-        petBridge.sync?.(defs);
+        petBridge.sync(defs);
         setMsg({ kind: 'ok', text: t('saved') });
       } catch {
         setMsg({ kind: 'err', text: t('loadError') });
@@ -205,11 +204,10 @@ export function makePetConfigSection(rt: {
     };
 
     const addPet = () => {
+      const tpl = petBridge.template;
+      if (!tpl) return;
       const id = nextId(pets);
-      // 默认模板 = config.jsonc 的 pets[0]（main）→ 兜底 DEFAULT_PETS[0]
-      const tpl = petBridge.template ?? DEFAULT_PETS[0];
-      const np: PetConfigUI = { id, size: tpl.size, corner: tpl.corner, marginX: tpl.marginX, marginY: tpl.marginY };
-      setPets((list) => [...list, np]);
+      setPets((list) => [...list, { id, size: tpl.size, position: { ...tpl.position } }]);
       setSelId(id);
     };
 
@@ -218,7 +216,7 @@ export function makePetConfigSection(rt: {
         setMsg({ kind: 'err', text: t('atLeastOne') });
         return;
       }
-      const list = pets.filter((p) => p.id !== (sel?.id ?? ''));
+      const list = pets.filter((p) => p.id !== selId);
       setPets(list);
       setSelId(list[0].id);
     };
@@ -229,30 +227,52 @@ export function makePetConfigSection(rt: {
         step: key === 'size' ? '10' : '1',
         min: key === 'size' ? '120' : '',
         value: String(value),
-        disabled: busy || !sel,
-        onChange: (e: any) => setter(Number(e.target.value)),
+        disabled: busy,
+        onChange: (e: ChangeEvent<HTMLInputElement>) => setter(Number(e.target.value)),
         style: { width, ...inputStyle },
       });
 
-    return h(
-      'section',
-      {
-        style: { maxWidth: '720px', color: 'var(--dsw-alias-label-primary)', display: 'flex', flexDirection: 'column', gap: '6px' },
-        children: [
-          h('h2', { style: { margin: 0, fontSize: '16px', fontWeight: 500, lineHeight: '24px' }, children: t('nav') }),
-          h('p', { style: { margin: 0, fontSize: '14px', color: 'var(--dsw-alias-label-tertiary)', lineHeight: '22px' }, children: t('intro') }),
+    return h('section', {
+      style: {
+        maxWidth: '720px',
+        color: 'var(--dsw-alias-label-primary)',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '6px',
+      },
+      children: [
+        h('h2', {
+          style: { margin: 0, fontSize: '16px', fontWeight: 500, lineHeight: '24px' },
+          children: t('nav'),
+        }),
+        h('p', {
+          style: {
+            margin: 0,
+            fontSize: '14px',
+            color: 'var(--dsw-alias-label-tertiary)',
+            lineHeight: '22px',
+          },
+          children: t('intro'),
+        }),
 
-          // 宠物列表 + 添加
-          h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center', marginTop: '4px' }, children: [
-            h('span', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-secondary)' }, children: t('petsLabel') }),
+        // 宠物列表 + 添加
+        h('div', {
+          style: { display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center', marginTop: '4px' },
+          children: [
+            h('span', {
+              style: { fontSize: '12px', color: 'var(--dsw-alias-label-secondary)' },
+              children: t('petsLabel'),
+            }),
             ...pets.map((p) =>
               h('button', {
                 key: p.id,
                 type: 'button',
                 onClick: () => setSelId(p.id),
                 style: {
-                  border: '1px solid ' + (p.id === (sel?.id ?? '') ? 'var(--dsw-alias-state-business-primary)' : 'var(--dsw-alias-border-l2)'),
-                  background: p.id === (sel?.id ?? '') ? 'var(--dsw-alias-interactive-bg-active)' : 'transparent',
+                  border:
+                    '1px solid ' +
+                    (p.id === selId ? 'var(--dsw-alias-state-business-primary)' : 'var(--dsw-alias-border-l2)'),
+                  background: p.id === selId ? 'var(--dsw-alias-interactive-bg-active)' : 'transparent',
                   color: 'var(--dsw-alias-label-primary)',
                   borderRadius: '8px',
                   padding: '4px 12px',
@@ -263,63 +283,179 @@ export function makePetConfigSection(rt: {
               }),
             ),
             h('button', {
-              type: 'button', onClick: addPet, disabled: busy,
-              style: { border: '1px dashed var(--dsw-alias-border-l2)', background: 'transparent', color: 'var(--dsw-alias-label-secondary)', borderRadius: '8px', padding: '4px 12px', fontSize: '13px', cursor: 'pointer' },
+              type: 'button',
+              onClick: addPet,
+              disabled: busy,
+              style: {
+                border: '1px dashed var(--dsw-alias-border-l2)',
+                background: 'transparent',
+                color: 'var(--dsw-alias-label-secondary)',
+                borderRadius: '8px',
+                padding: '4px 12px',
+                fontSize: '13px',
+                cursor: 'pointer',
+              },
               children: '+ ' + t('add'),
             }),
-          ] }),
+          ],
+        }),
 
-          // 选中宠物表单
-          sel
-            ? h('div', { style: { display: 'flex', gap: '16px', flexWrap: 'wrap', marginTop: '8px', padding: '12px 14px', border: '1px solid var(--dsw-alias-border-l2)', borderRadius: '12px' }, children: [
-                h('label', { style: { display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '12px', color: 'var(--dsw-alias-label-secondary)' }, children: [
-                  t('sizeLabel'),
-                  field('size', sel.size, (v) => updateSel({ size: v }), '150px'),
-                  h('span', { style: { fontSize: '11px', color: 'var(--dsw-alias-label-tertiary)' }, children: t('sizeHint') }),
-                ] }),
-                h('label', { style: { display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '12px', color: 'var(--dsw-alias-label-secondary)' }, children: [
-                  t('cornerLabel'),
-                  h('select', {
-                    value: sel.corner,
-                    disabled: busy,
-                    onChange: (e: any) => updateSel({ corner: e.target.value as Corner }),
-                    style: { width: '160px', ...inputStyle },
-                    children: CORNERS.map((c) => h('option', { key: c, value: c, children: cornerLabel(c) })),
-                  }),
-                ] }),
-                h('label', { style: { display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '12px', color: 'var(--dsw-alias-label-secondary)' }, children: [
-                  t('marginX'),
-                  field('marginX', sel.marginX, (v) => updateSel({ marginX: v }), '120px'),
-                ] }),
-                h('label', { style: { display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '12px', color: 'var(--dsw-alias-label-secondary)' }, children: [
-                  t('marginY'),
-                  field('marginY', sel.marginY, (v) => updateSel({ marginY: v }), '120px'),
-                ] }),
+        // 选中宠物表单
+        cur
+          ? h('div', {
+              style: {
+                display: 'flex',
+                gap: '16px',
+                flexWrap: 'wrap',
+                marginTop: '8px',
+                padding: '12px 14px',
+                border: '1px solid var(--dsw-alias-border-l2)',
+                borderRadius: '12px',
+              },
+              children: [
+                h('label', {
+                  style: {
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '4px',
+                    fontSize: '12px',
+                    color: 'var(--dsw-alias-label-secondary)',
+                  },
+                  children: [
+                    t('sizeLabel'),
+                    field('size', cur.size, (v) => updateSel({ size: v }), '150px'),
+                    h('span', {
+                      style: { fontSize: '11px', color: 'var(--dsw-alias-label-tertiary)' },
+                      children: t('sizeHint'),
+                    }),
+                  ],
+                }),
+                h('label', {
+                  style: {
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '4px',
+                    fontSize: '12px',
+                    color: 'var(--dsw-alias-label-secondary)',
+                  },
+                  children: [
+                    t('cornerLabel'),
+                    h('select', {
+                      value: cur.position.corner,
+                      disabled: busy,
+                      onChange: (e: ChangeEvent<HTMLSelectElement>) =>
+                        updateSel({ position: { corner: e.target.value as Corner } }),
+                      style: { width: '160px', ...inputStyle },
+                      children: CORNERS.map((c) =>
+                        h('option', {
+                          key: c,
+                          value: c,
+                          children: cornerLabel(c),
+                        }),
+                      ),
+                    }),
+                  ],
+                }),
+                h('label', {
+                  style: {
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '4px',
+                    fontSize: '12px',
+                    color: 'var(--dsw-alias-label-secondary)',
+                  },
+                  children: [
+                    t('marginX'),
+                    field('marginX', cur.position.marginX, (v) => updateSel({ position: { marginX: v } }), '120px'),
+                  ],
+                }),
+                h('label', {
+                  style: {
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '4px',
+                    fontSize: '12px',
+                    color: 'var(--dsw-alias-label-secondary)',
+                  },
+                  children: [
+                    t('marginY'),
+                    field('marginY', cur.position.marginY, (v) => updateSel({ position: { marginY: v } }), '120px'),
+                  ],
+                }),
                 h('button', {
-                  type: 'button', onClick: removeSel, disabled: busy,
+                  type: 'button',
+                  onClick: removeSel,
+                  disabled: busy,
                   title: t('remove'),
-                  style: { alignSelf: 'flex-end', border: '1px solid var(--dsw-alias-state-error-secondary)', background: 'transparent', color: 'var(--dsw-alias-state-error-primary)', borderRadius: '8px', padding: '4px 12px', fontSize: '12px', cursor: 'pointer' },
+                  style: {
+                    alignSelf: 'flex-end',
+                    border: '1px solid var(--dsw-alias-state-error-secondary)',
+                    background: 'transparent',
+                    color: 'var(--dsw-alias-state-error-primary)',
+                    borderRadius: '8px',
+                    padding: '4px 12px',
+                    fontSize: '12px',
+                    cursor: 'pointer',
+                  },
                   children: t('remove'),
                 }),
-              ] })
-            : h('p', { style: { margin: 0, fontSize: '13px', color: 'var(--dsw-alias-label-tertiary)' }, children: t('emptyPets') }),
+              ],
+            })
+          : h('p', {
+              style: { margin: 0, fontSize: '13px', color: 'var(--dsw-alias-label-tertiary)' },
+              children: t('emptyPets'),
+            }),
 
-          // 操作区
-          h('div', { style: { display: 'flex', gap: '8px', alignItems: 'center', marginTop: '4px' }, children: [
+        // 操作区
+        h('div', {
+          style: { display: 'flex', gap: '8px', alignItems: 'center', marginTop: '4px' },
+          children: [
             h('button', {
-              type: 'button', disabled: busy, onClick: save,
-              style: { border: '1px solid var(--dsw-alias-button-info-fill)', background: 'var(--dsw-alias-button-info-fill)', color: '#fff', borderRadius: '8px', padding: '4px 14px', fontSize: '12px', cursor: 'pointer', opacity: busy ? 0.5 : 1 },
+              type: 'button',
+              disabled: busy,
+              onClick: save,
+              style: {
+                border: '1px solid var(--dsw-alias-button-info-fill)',
+                background: 'var(--dsw-alias-button-info-fill)',
+                color: '#fff',
+                borderRadius: '8px',
+                padding: '4px 14px',
+                fontSize: '12px',
+                cursor: 'pointer',
+                opacity: busy ? 0.5 : 1,
+              },
               children: t('save'),
             }),
             h('button', {
-              type: 'button', disabled: busy, onClick: reset,
-              style: { border: '1px solid var(--dsw-alias-border-l2)', background: 'transparent', color: 'var(--dsw-alias-label-primary)', borderRadius: '8px', padding: '4px 14px', fontSize: '12px', cursor: 'pointer', opacity: busy ? 0.5 : 1 },
+              type: 'button',
+              disabled: busy,
+              onClick: reset,
+              style: {
+                border: '1px solid var(--dsw-alias-border-l2)',
+                background: 'transparent',
+                color: 'var(--dsw-alias-label-primary)',
+                borderRadius: '8px',
+                padding: '4px 14px',
+                fontSize: '12px',
+                cursor: 'pointer',
+                opacity: busy ? 0.5 : 1,
+              },
               children: t('reset'),
             }),
-            msg.text ? h('span', { style: { fontSize: '12px', color: msg.kind === 'err' ? 'var(--dsw-alias-state-error-primary)' : 'var(--dsw-alias-state-ok-primary)', marginLeft: '4px' }, children: msg.text }) : null,
-          ] }),
-        ],
-      },
-    );
+            msg.text
+              ? h('span', {
+                  style: {
+                    fontSize: '12px',
+                    color:
+                      msg.kind === 'err' ? 'var(--dsw-alias-state-error-primary)' : 'var(--dsw-alias-state-ok-primary)',
+                    marginLeft: '4px',
+                  },
+                  children: msg.text,
+                })
+              : null,
+          ],
+        }),
+      ],
+    });
   };
 }

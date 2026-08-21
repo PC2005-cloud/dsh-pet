@@ -39,11 +39,11 @@ Restart `dsh web` and the pet appears in the bottom-right corner — all transpa
 
 ## ⚙️ Configuration
 
-| Key | Description | Current status |
-|---|---|---|
-| `size` | Stage width (px); pet height ≈ width×9/16×74% | Default 462 (≈260px tall), **not yet delivered to the browser** (DSH client config pipeline limitation; falls back to code default) |
-| `position` | Default corner position | Defaults to bottom-right, same as above (not yet delivered) |
-| `fullRoot` | Original 2160×1215 master asset directory | Defaults to `$DSH_HOME/pet-assets`; takes effect after manually downloading the master assets |
+| Key        | Description                                   | Current status                                                                                                                      |
+| ---------- | --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `size`     | Stage width (px); pet height ≈ width×9/16×74% | Default 462 (≈260px tall), **not yet delivered to the browser** (DSH client config pipeline limitation; falls back to code default) |
+| `position` | Default corner position                       | Defaults to bottom-right, same as above (not yet delivered)                                                                         |
+| `fullRoot` | Original 2160×1215 master asset directory     | Defaults to `$DSH_HOME/pet-assets`; takes effect after manually downloading the master assets                                       |
 
 > Note: the plugin works out of the box; all config above is optional. Browser-side configuration of `size`/`position` is planned.
 
@@ -97,4 +97,4 @@ AI animation prompts        source video → transparent       the pet running i
 ## 📄 License
 
 - Code: MIT
-- Assets (animations/prompts): see the repository notes
+- Assets (animations/prompts/source videos): open-source use permitted, **no commercial use**

@@ -5,6 +5,7 @@ import { makeFactory } from './app';
 
 declare const window: {
   __ModuleLoader__: {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- DSH 全局注入的模块系统契约（f(require) => module）
     load(info: { id: string; factory: (require: (m: string) => any) => any }): void;
   };
 };

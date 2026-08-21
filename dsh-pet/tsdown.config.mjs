@@ -2,23 +2,18 @@
 // 说明：DSH 浏览器插件生产出的 lib/client.js 必须是
 //       window.__ModuleLoader__.load({ id, factory }) 单文件形态；
 //       react / react/jsx-runtime / @deepseek-ai/* 保持外部 require（不打包）。
-//
-// 迁移进度：
-//   - 现在只构建 host 半侧（src/host/index.ts → lib/index.js，纯 ESM，可验证）。
-//   - client 半侧（src/client/* → lib/client.js 的 __ModuleLoader__ 外壳）待客户端
-//     组件层迁移完成后，再把 "client" 加进 entry，避免不完整产物覆盖手写可用版。
-import { defineConfig } from "tsdown";
+import { defineConfig } from 'tsdown';
 
 export default defineConfig({
   entry: {
-    "client": "src/client/index.ts",
-    "index": "src/host/index.ts",
+    client: 'src/client/index.ts',
+    index: 'src/host/index.ts',
   },
-  format: ["esm"],
-  platform: "node",
-  target: "es2020",
+  format: ['esm'],
+  platform: 'node',
+  target: 'es2020',
   external: [/^@deepseek-ai\//, /^node:/],
   dts: false,
-  outDir: "lib",
+  outDir: 'lib',
   clean: false,
 });

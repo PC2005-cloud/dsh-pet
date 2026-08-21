@@ -57,7 +57,7 @@ dsh-pet/
 ├── cordis.patch.yml        # insert pet 行
 ├── tsconfig.json / tsdown.config.mjs   # TS + tsdown 构建配置（双入口 client/host）
 ├── assets/
-│   ├── config.jsonc        # 动画配置单一来源（动画池/分类权重/尺寸位置）
+│   ├── config.jsonc        # 配置单一来源（pets 默认宠物 + 动画池/分类权重）
 │   ├── thumb/*.webm        # 640×360 播放变体
 │   └── preview/*.gif       # README 预览（拼音命名）
 ├── src/
@@ -77,13 +77,16 @@ dsh-pet/
 - 注册 `/pet/` 前缀路由（`ctx.webServer.register`）：
   - `/pet/thumb/<name>.webm` → 读 `assets/thumb/`（播放资源）
   - `/pet/full/<name>.webm` → 读 `$DSH_HOME/pet-assets/`（原始母版，需手动下载）
-  - `/pet/config.jsonc` → 读 `assets/config.jsonc`（动画配置，单一来源）
+  - `/pet/config.jsonc` → 读 `assets/config.jsonc`（包内默认配置，单一来源）
+  - `/pet/config` → 用户覆盖层 `$DSH_HOME/pet-config.json` 的 GET / PUT / DELETE（设置页保存/恢复默认）
 - 防路径穿越（`resolveAsset`）+ 流式返回 + 缓存 1 小时
 
 ### 3.3 浏览器半侧（src/client → lib/client.js）
 
-- 启动时经 `/pet/config.jsonc` 拉取配置（`stripJsonc` 去注释后解析，失败走兜底）
+- 启动时经 `/pet/config.jsonc` + `/pet/config` 拉取配置（默认 pets + 用户覆盖合并，`stripJsonc` 去注释后解析，失败走兜底）
 - 注册到官方 `shell.overlay` 列表槽（全应用浮动层，点击穿透）
+- **多开**：`PetMulti` 容器按 `pets` 列表渲染多个 `PetCard` 实例，每只独立大小/位置/播放/漫游/拖拽；动画池共享（`ANIM` 只读）
+- **设置页**：`settings.section` 插槽注入「桌宠配置」（id: pet-config）——大小/位置/边距编辑、增删宠物，保存即时生效（`petBridge.sync`）
 - **双缓冲播放**：两个 `<video>` 层叠交叉淡入，切换永无空白帧
 - **竞态防护**：`genRef` 代数守卫 + `old !== el`，快速连点不导致宠物消失
 - **朝向系统**：`facing`（left/right），right 时 CSS `scaleX(-1)` 镜像（素材全对称、不穿帮）
@@ -137,11 +140,14 @@ pickNext() 按权重选下一个 ───────────────�
 
 ## 5. 配置项
 
-配置以 `dsh-pet/assets/config.jsonc` 为**单一来源**（JSONC：允许注释），host 半侧经 `/pet/config.jsonc` 下发，client 半侧启动时拉取解析（`stripJsonc` 去注释 + `buildAnim` 归一化）。任何字段缺失/写错都会回退代码兜底（如 `FALLBACK_IDLE`=待机呼吸休闲），宠物不消失。
+配置分两层，**单一来源为 `dsh-pet/assets/config.jsonc`**（JSONC 允许注释；host 经 `/pet/config.jsonc` 下发）：
+- `pets` 数组定义默认宠物列表（每只：`id` / `size` / `position:{corner,marginX,marginY}`），首只同时是设置页「添加宠物」的默认模板
+- 用户经设置页保存的覆盖写入 `$DSH_HOME/pet-config.json`（`{ pets: 完整列表 }`，**全量替换**默认；"恢复默认"即删除该用户层回落 jsonc）
+- 任何字段缺失/写错都会回退代码兜底（如 `DEFAULT_PETS`、`FALLBACK_IDLE`=待机呼吸休闲），宠物不消失
 
 | 配置 | 说明 |
 |---|---|
-| `size` / `position` | 舞台宽度（px）/ 角落位置（corner + 边距） |
+| `pets[]` | 默认宠物：`id`（标识）/ `size`（宽度 px）/ `position`（corner 四角 + marginX/Y 边距）；多只即多开 |
 | `animations.idle/turn/drag/clicks` | 待机 / 转向 / 拖拽 / 点击回应 动画池（数组） |
 | `animations.moves` | 移动池：`default` 公共参数 + 每动作 `params` 覆盖（minDist/maxDist/margin/leadSec/tailSec，默认 60-240px/20px/2s/2s） |
 | `animations.categories` | 动作分类池（小动作/玩耍/吃什么/时节/文字），含 `weight` 与 `noMirror` |
@@ -156,10 +162,10 @@ pickNext() 按权重选下一个 ───────────────�
 3. prepack-check.js          npm publish 前健康检查
 4. npm pack                  检查 tarball（~10MB）
 5. npm publish               之后 dsh plugin add dsh-pet 一条命令安装
-6. GitHub Releases           打包上传 assets-videos.zip（源视频）与 pr-project.zip（PR 工程）
+6. GitHub Releases           仅作源视频存储：`assets-videos` release 放 `assets-videos.zip`，视频内容变化时替换该资产（不随插件版本发布）
 ```
 
 ## 7. 许可
 
 - 代码：MIT（仓库根 + dsh-pet/LICENSE）
-- 素材（动画/提示词/源视频）：MIT，可自由使用（含商用、修改、再分发）
+- 素材（动画/提示词/源视频）：允许开源使用，**禁止商用**
