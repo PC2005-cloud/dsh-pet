@@ -4,7 +4,9 @@ import type { Category } from './types';
 /** 从字符串池里等概率随机抽一个；exclude 排除某个名字（避免连续重复） */
 export const pick = <T,>(pool: T[], exclude?: T): T => {
   const entries = exclude ? pool.filter((n) => n !== exclude) : pool;
-  return entries[Math.floor(Math.random() * entries.length)];
+  // 排除后池空（单元素池 + 排除自己）：退回原池抽——宁可重复，也不要返回 undefined
+  const src = entries.length ? entries : pool;
+  return src[Math.floor(Math.random() * src.length)];
 };
 
 /** 生成 [min, max) 区间内的随机整数 */
