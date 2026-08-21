@@ -126,12 +126,37 @@ dsh plugin --profile web add file:D:/path/to/dsh-pet
 ## Plugin Features
 
 - **A pure pet, nothing else**: no business features bolted on — no weather lookups, no system monitoring, no agent-state sensing; it just keeps you company. Zero core changes (never touches the DSH kernel) and zero model cost (no LLM/API calls at runtime)
-- **Animation chain**: each animation (idle included) is immediately followed by a probability-picked next one — 30% idle / 10% turn / 40% action / 20% move, endless and seamless
+- **Animation chain**: each animation (idle included) is immediately followed by a weight-based pick (weights live in `config.jsonc`; default idle 10 / turn 5 / move 5 + per-category weights), endless and seamless
+- **Multi-pet**: configure multiple pets at once, each with its own size and position (add/remove in the "Pet Config" settings page)
 - **Screen wandering**: walks toward its facing direction, checks the space ahead, never walks off screen
 - **Click/drag**: click for a reaction animation; drag anywhere
 - **Left/right facing**: all animations can be mirrored; the character can face left or right
 - **Ground alignment**: animations share a unified foot line, the pet always stands on the ground
 - **Smooth switching**: double-buffered cross-fade, no blank frames between transitions
+
+## ⚙️ Configuration (Size / Position / Multi-pet)
+
+The pet's size, position and multi-pet setup can be configured in two ways:
+
+### Via the settings page (recommended)
+DSH Settings → **Pet Config**:
+
+- **Size**: width in px (height is automatic = width × 9/16)
+- **Position**: one of four corners (corner) plus horizontal/vertical margins (marginX / marginY)
+- **Multi-pet**: add/remove pets; each pet has its own id, size and position
+- **Save** applies **instantly** (no page refresh needed); **Reset to default** restores the `config.jsonc` defaults
+
+### Via config.jsonc (single source of truth)
+The `pets` array in `dsh-pet/assets/config.jsonc` defines the **default pets**:
+
+```jsonc
+"pets": [
+  { "id": "main", "size": 462, "position": { "corner": "top-right", "marginX": 24, "marginY": 100 } }
+]
+```
+
+- Each pet: `id` (identifier) / `size` (width px) / `position` (corner + marginX/marginY)
+- Changes made in the settings page are saved to the user layer `$DSH_HOME/pet-config.json` (a **full pet list** that overrides the package defaults); "Reset to default" removes it and falls back to `config.jsonc`
 
 ## Running Screenshots
 

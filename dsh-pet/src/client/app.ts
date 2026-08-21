@@ -3,15 +3,12 @@
 //       react 通过 factory 的 require 取得（不走 ESM 顶部 import），
 //       以匹配 DSH 的 window.__ModuleLoader__.load({ id, factory }) 加载方式。
 import { pick, randomBetween, pickWeightedCategory } from './pickers';
-import { stripJsonc, buildAnim, buildMinimalAnim } from './config';
+import { stripJsonc, buildAnim, buildMinimalAnim, extractDefaultPets, resolvePets } from './config';
 import { CANVAS_H, FEET_Y, HIT_BOX, DRAG_THRESHOLD } from './constants';
-import { petBridge, makePetConfigSection, DEFAULT_UI, NS, zh, en } from './settings';
+import { petBridge, makePetConfigSection, NS, zh, en } from './settings';
 import type { PetConfigUI } from './settings';
 import type { AnimConfig, Corner } from './types';
 import type * as ReactNS from 'react';
-
-/** 支持的角落白名单 */
-const CORNERS: Corner[] = ['top-left', 'top-right', 'bottom-left', 'bottom-right'];
 
 /**
  * 返回 DSH 插件 factory：`(require) => module`。
@@ -56,11 +53,11 @@ export function makeFactory(): (require: (mod: string) => any) => any {
     let ANIM: AnimConfig = buildMinimalAnim();
 
     // ============================================================================
-    // Pet 组件 —— 宠物本体
+    // PetCard 组件 —— 单个宠物实例（配置由容器 PetMulti 传入）
     // ============================================================================
-    function Pet() {
-      // ---- 尺寸（默认 462px 宽；可由 config.jsonc 的 size 覆盖）----
-      const [size, setSize] = useState(462);
+    function PetCard({ cfg }: { cfg: PetConfigUI }) {
+      // ---- 尺寸（由配置传入；容器/设置页更新后即时跟随）----
+      const [size, setSize] = useState(cfg.size);
       const halfW = size / 2;
       const halfH = (size * 9) / 16 / 2;
 
@@ -70,65 +67,17 @@ export function makeFactory(): (require: (mod: string) => any) => any {
       const [facing, setFacing] = useState('left' as 'left' | 'right');
       const [dragging, setDragging] = useState(false);
       const [customPos, setCustomPos] = useState<null | { rx: number; ry: number }>(null);
-      // 初始角落与边距（默认右下 right24/bottom0；可被 config.jsonc 覆盖）
-      const [corner, setCorner] = useState<Corner>('bottom-right');
-      const [margin, setMargin] = useState({ x: 24, y: 0 });
-      // ---- 尺寸/位置 统一应用入口（默认配置 / 用户覆盖 / 设置页保存 共用）----
-      const applyUi = (c: PetConfigUI) => {
-        setSize(c.size);
-        setCorner(c.corner);
-        setMargin({ x: c.marginX, y: c.marginY });
-        petBridge.current = c;
-      };
+      // 初始角落与边距（来自配置；可被容器更新覆盖）
+      const [corner, setCorner] = useState<Corner>(cfg.corner);
+      const [margin, setMargin] = useState({ x: cfg.marginX, y: cfg.marginY });
 
-      // 桥接设置页：保存后即时生效（同一 bundle 单例）
+      // 配置变化即时跟随（容器重新合并 / 设置页保存后通过 petBridge.sync 触发）
       useEffect(() => {
-        petBridge.apply = applyUi;
-        return () => { petBridge.apply = null; };
+        setSize(cfg.size);
+        setCorner(cfg.corner);
+        setMargin({ x: cfg.marginX, y: cfg.marginY });
         // eslint-disable-next-line react-hooks/exhaustive-deps
-      }, []);
-
-      // 拉取配置：包内 config.jsonc 默认值 → 用户覆盖层 /pet/config，最终整体应用
-      useEffect(() => {
-        (async () => {
-          try {
-            const r = await fetch('/pet/config.jsonc');
-            if (!r.ok) return;
-            const obj: any = JSON.parse(stripJsonc(await r.text()));
-            ANIM = buildAnim(obj);
-            const p = obj && obj.position;
-            const merged: PetConfigUI = {
-              size: obj && Number(obj.size) > 0 ? Number(obj.size) : DEFAULT_UI.size,
-              corner: p && CORNERS.indexOf(p.corner) !== -1 ? (p.corner as Corner) : DEFAULT_UI.corner,
-              marginX: p && Number.isFinite(Number(p.marginX)) ? Number(p.marginX) : DEFAULT_UI.marginX,
-              marginY: p && Number.isFinite(Number(p.marginY)) ? Number(p.marginY) : DEFAULT_UI.marginY,
-            };
-            // 用户覆盖层优先（设置页保存的大小/位置）
-            try {
-              const r2 = await fetch('/pet/config');
-              if (r2.ok && r2.status !== 204) {
-                const u: any = await r2.json().catch(() => ({}));
-                if (u && typeof u === 'object') {
-                  if (Number.isFinite(Number(u.size)) && Number(u.size) > 0) merged.size = Number(u.size);
-                  const up = u.position;
-                  if (up && typeof up === 'object') {
-                    if (CORNERS.indexOf(up.corner) !== -1) merged.corner = up.corner as Corner;
-                    if (Number.isFinite(Number(up.marginX))) merged.marginX = Number(up.marginX);
-                    if (Number.isFinite(Number(up.marginY))) merged.marginY = Number(up.marginY);
-                  }
-                }
-              }
-            } catch { /* 无用户层时忽略 */ }
-            applyUi(merged);
-            // 配置就绪后用待机动画启动（ANIM 由 buildAnim 兜底，必有 idle）
-            if (ANIM.idle && ANIM.idle.length) {
-              setAnim(ANIM.idle[0]);
-              setSeq((s) => s + 1);
-            }
-          } catch { /* 失败/缺失/写错均静默沿用默认/兜底 */ }
-        })();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-      }, []);
+      }, [cfg.size, cfg.corner, cfg.marginX, cfg.marginY]);
       const [seq, setSeq] = useState(0);
 
       // ---- DOM / 状态 refs ----
@@ -462,6 +411,50 @@ export function makeFactory(): (require: (mod: string) => any) => any {
     }
 
     // ============================================================================
+    // PetMulti 容器 —— 多开：拉取配置 → 合并默认+用户层 pets → 渲染多个 PetCard
+    // ============================================================================
+    function PetMulti() {
+      const [pets, setPets] = useState<PetConfigUI[]>([]);
+      const [ready, setReady] = useState(false);
+
+      useEffect(() => {
+        let alive = true;
+        (async () => {
+          try {
+            const r1 = await fetch('/pet/config.jsonc');
+            if (!r1.ok) return;
+            const obj: any = JSON.parse(stripJsonc(await r1.text()));
+            ANIM = buildAnim(obj);
+            const defaults = extractDefaultPets(obj);
+            // 用户覆盖层（设置页保存的完整宠物列表）
+            let user: any = {};
+            try {
+              const r2 = await fetch('/pet/config');
+              if (r2.ok && r2.status !== 204) user = await r2.json().catch(() => ({}));
+            } catch { /* 无用户层时忽略 */ }
+            const merged = resolvePets(defaults, user);
+            if (!alive) return;
+            petBridge.current = merged;
+            petBridge.template = defaults.length ? defaults[0] : null;
+            petBridge.sync = (list: PetConfigUI[]) => {
+              setPets(list);
+              petBridge.current = list;
+            };
+            setPets(merged);
+            setReady(true);
+          } catch { /* 失败静默：保持不渲染（或兜底） */ }
+        })();
+        return () => {
+          alive = false;
+          petBridge.sync = null;
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+      }, []);
+
+      return ready ? pets.map((p) => h(PetCard, { key: p.id, cfg: p })) : null;
+    }
+
+    // ============================================================================
     // 插件主体（Cordis 插件三件套）
     // ============================================================================
     const name = 'pet';
@@ -471,11 +464,11 @@ export function makeFactory(): (require: (mod: string) => any) => any {
       ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'dsh-pet: dictionaries');
       const t = ctx.locale.bind(NS);
 
-      // 宠物 overlay
+      // 宠物 overlay（多开：容器渲染多个 PetCard）
       ctx.slots.inject('shell.overlay', function* () {
         yield ctx.slots.register(
           { name: 'shell.overlay', id: 'pet', order: 1000 },
-          () => h(Pet, {}),
+          () => h(PetMulti, {}),
         );
       });
 

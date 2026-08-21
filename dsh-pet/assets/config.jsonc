@@ -2,16 +2,21 @@
 // 说明：浏览器端启动时通过 /pet/config.jsonc 拉取；任何字段缺失/写错都会
 //       回退到 client.js 的代码默认值，不会导致插件崩溃。
 {
-  // 桌宠尺寸（宽度 px；高度自动 = size × 9/16）
-  "size": 462,
-  // 桌宠初始位置
-  // corner: top-left | top-right | bottom-left | bottom-right（默认 bottom-right）
-  // marginX / marginY: 距所属角落对应边缘的偏移（px，相对角落方向）
-  "position": {
-    "corner": "top-right",
-    "marginX": 24,
-    "marginY": 100
-  },
+  // ===================== 默认宠物列表（多开） =====================
+  // pets 数组定义默认宠物；「设置页 → 添加宠物」的默认模板取 pets[0]（main）。
+  // 每个宠物独立：id（标识）、size（宽度 px，高度自动 = size × 9/16）、
+  // position（corner: 四角之一；marginX/marginY: 距所属角落偏移 px）
+  "pets": [
+    {
+      "id": "main",
+      "size": 462,
+      "position": {
+        "corner": "top-right",
+        "marginX": 24,
+        "marginY": 100
+      }
+    }
+  ],
 
   // ===================== 动作动画池配置 =====================
   "animations": {

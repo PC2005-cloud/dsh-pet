@@ -87,18 +87,27 @@ function readBody(req: any): Promise<string> {
   });
 }
 
-/** 校验并归一化用户配置：只接受 size / position 两个字段，其余忽略 */
-function sanitizeUserConfig(raw: unknown): { size: number; position: { corner: string; marginX: number; marginY: number } } | null {
+/** 校验并归一化用户配置：只接受 { pets: [{ id, size, position }] } */
+function sanitizeUserConfig(raw: unknown): { pets: unknown[] } | null {
   const o = raw && typeof raw === 'object' ? raw as Record<string, any> : {};
-  const size = Number(o.size);
-  if (!Number.isFinite(size) || size <= 0) return null;
-  const pos = o.position && typeof o.position === 'object' ? o.position : {};
-  const corner = String(pos.corner ?? '');
-  if (!CORNERS.includes(corner)) return null;
-  const marginX = Number(pos.marginX);
-  const marginY = Number(pos.marginY);
-  if (!Number.isFinite(marginX) || !Number.isFinite(marginY)) return null;
-  return { size, position: { corner, marginX, marginY } };
+  const arr = Array.isArray(o.pets) ? o.pets : null;
+  if (!arr || !arr.length) return null;
+  const out: unknown[] = [];
+  for (const p of arr) {
+    if (!p || typeof p !== 'object') return null;
+    const id = String((p as any).id ?? '');
+    if (!id || id.length > 64 || /[\\/:\x00-\x1f]/.test(id)) return null;
+    const size = Number((p as any).size);
+    if (!Number.isFinite(size) || size <= 0) return null;
+    const pos = (p as any).position && typeof (p as any).position === 'object' ? (p as any).position : {};
+    const corner = String(pos.corner ?? '');
+    if (!CORNERS.includes(corner)) return null;
+    const marginX = Number(pos.marginX);
+    const marginY = Number(pos.marginY);
+    if (!Number.isFinite(marginX) || !Number.isFinite(marginY)) return null;
+    out.push({ id, size, position: { corner, marginX, marginY } });
+  }
+  return { pets: out };
 }
 
 /** 宿主插件主体：注册 `/pet` 前缀路由。 */
@@ -132,7 +141,7 @@ export function apply(ctx: any, config: any): void {
             const parsed = JSON.parse(body);
             const clean = sanitizeUserConfig(parsed);
             if (!clean) {
-              sendJson(res, 400, { error: 'invalid pet config: expected { size:number>0, position:{corner,marginX,marginY} }' });
+              sendJson(res, 400, { error: 'invalid pet config: expected { pets:[{id,size,position:{corner,marginX,marginY}}] }' });
               return;
             }
             await writeFile(userConfigPath, JSON.stringify(clean, null, 2), 'utf8');

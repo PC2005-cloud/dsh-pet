@@ -1,5 +1,7 @@
 // 配置层：拉取 / 解析 config.jsonc，构建运行时动作配置（唯一事实来源）。
-import type { AnimConfig } from './types';
+import { DEFAULT_PETS } from './settings';
+import type { PetConfigUI } from './settings';
+import type { AnimConfig, Corner } from './types';
 
 /** 安全兜底待机名：用于初始渲染 / 配置缺失时宠物不至于空白 */
 export const FALLBACK_IDLE = '待机呼吸休闲';
@@ -75,3 +77,46 @@ export const buildAnim = (obj: unknown): AnimConfig => {
     },
   };
 };
+
+// ============================================================================
+// 多开宠物配置解析（纯函数，不依赖 React）
+// ============================================================================
+/** 支持的角落白名单 */
+export const CORNERS: Corner[] = ['top-left', 'top-right', 'bottom-left', 'bottom-right'];
+
+/** 归一化一个宠物条目（缺字段回落默认） */
+export function normalizePet(p: any): PetConfigUI {
+  const pos = p && p.position && typeof p.position === 'object' ? p.position : {};
+  return {
+    id: String(p && p.id ? p.id : 'main'),
+    size: Number(p && p.size) > 0 ? Number(p.size) : DEFAULT_PETS[0].size,
+    corner: CORNERS.indexOf(pos.corner) !== -1 ? (pos.corner as Corner) : DEFAULT_PETS[0].corner,
+    marginX: Number.isFinite(Number(pos.marginX)) ? Number(pos.marginX) : DEFAULT_PETS[0].marginX,
+    marginY: Number.isFinite(Number(pos.marginY)) ? Number(pos.marginY) : DEFAULT_PETS[0].marginY,
+  };
+}
+
+/** 从 config.jsonc 对象提取默认宠物列表：必须为 pets 数组；缺失/为空回落代码兜底 DEFAULT_PETS */
+export function extractDefaultPets(obj: any): PetConfigUI[] {
+  const arr = obj && Array.isArray(obj.pets) ? obj.pets.filter((p: any) => p && p.id) : [];
+  if (!arr.length) return DEFAULT_PETS.map((p) => ({ ...p }));
+  const seen = new Set<string>();
+  const out: PetConfigUI[] = [];
+  for (const p of arr) {
+    const id = String(p.id);
+    if (!seen.has(id)) {
+      seen.add(id);
+      out.push(normalizePet(p));
+    }
+  }
+  return out.length ? out : DEFAULT_PETS.map((p) => ({ ...p }));
+}
+
+/** 合并最终宠物列表：用户层（{ pets: 完整列表 }）全量替换默认；无用户层回落默认 */
+export function resolvePets(defaults: PetConfigUI[], user: any): PetConfigUI[] {
+  if (user && Array.isArray(user.pets)) {
+    const list = user.pets.filter((p: any) => p && p.id).map(normalizePet);
+    return list.length ? list : defaults; // 用户层空数组视为无覆盖
+  }
+  return defaults;
+}
