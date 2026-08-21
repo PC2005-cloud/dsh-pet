@@ -28,11 +28,23 @@ AI 生成动画的配方     源视频 → 透明动画的管线    运行在 DS
 
 ## 快速开始（安装插件）
 
+> 以下命令都在你的**命令行终端**（PowerShell / CMD 等）中运行。前提是 DSH 环境已就绪：
+
 ```sh
+# ① 前置要求：确认 Node.js 已安装
+node -v
+
+# ② 安装 DSH 启动器与 pnpm（已装可跳过；装完请重新打开终端）
+npm install -g @deepseek-ai/dsh pnpm
+dsh --version   # 验证 dsh 命令可用
+
+# ③ 安装本插件
 dsh plugin --profile web add dsh-pet
 ```
 
 重启 `dsh web`，宠物出现在右下角。
+
+> **兼容性**：本插件在 dsh **`0.1.1-rc.1`** 下开发并测试（`dsh --version` 可查看你的版本）。建议使用相同版本；其他版本如遇问题欢迎反馈。
 
 ## 从零生成你自己的宠物（完整流程）
 
@@ -47,23 +59,36 @@ dsh plugin --profile web add dsh-pet
 
 生成结果按动作各存一个 mp4，放入 `video/`。
 
-> **源视频获取**：为控制仓库体积，`video/` 源视频不入 git。需要复现素材链时，从 [Releases `assets-videos`](https://github.com/PC2005-cloud/dsh-pet/releases/tag/assets-videos) 下载全部 mp4（拼音文件名），放入 `video/` 即可。一键批量下载（需 gh CLI）：
+> **源视频获取**：为控制仓库体积，`video/` 源视频不入 git。Releases 提供**打包压缩包**，浏览器直接下载即可：
 >
-> ```sh
-> mkdir -p video && cd video && gh release download assets-videos --repo PC2005-cloud/dsh-pet
-> ```
+> - `assets-videos.zip` —— 全部源视频压缩包（中文名 mp4，解压后放入 `video/`）
+> - `pr-project.zip` —— PR 手工抠像工程（`.prproj` + 遮罩缓存，可选，供参考路线 B 的手工抠像做法）
+>
+> 解压：`Expand-Archive assets-videos.zip`（Windows）或 `unzip assets-videos.zip`，把 mp4 放回 `video/` 即可运行素材链。
 
 ### ② 源视频 → 透明动画（素材链）
 
+step02（透明视频）有**两条路线，按需二选一**（默认自动、人人可复现；效果不佳可用 PR 手工抠像覆盖）：
+
 ```sh
 cd scripts
+# 路线 A（默认）：自动绿幕抠像（HSV 色相，无需人工）
 python watermark_step01.py   # 水印遮罩填充 → step01/
-python chroma_step02.py      # 绿幕抠像转透明（HSV 色相）→ step02/
+python chroma_step02.py      # 绿幕抠像转透明 → step02/
+
+# 路线 B（可选）：PR 手工抠像覆盖（针对含第三方物品/自动抠像效果不佳的动作）
+#   1. 在 PR 里手工抠像，导出带 alpha 的透明 .mov（如 ProRes 4444 with Alpha）
+#   2. 放入 pr/，文件名与动作名一致（如 吃白饭.mov）
+python pr_import_step02.py   # pr/*.mov → step02/（透明 webm，覆盖该动作自动抠像结果）
+
+# 后续步骤两条路线共用：
 python normalize_step03.py   # 归一化 2160×1215 统一站立居中 → step03/
 python encode_thumbs.py      # 转码 640×360 播放变体 → step04/
 ```
 
 **依赖**：Python 3 + ffmpeg + numpy + scipy（素材链脚本自动用工作区 `.tools/` 下的 ffmpeg）。
+
+> **本项目全部采用路线 B**（91 个动作均为 PR 手工抠像）：对"含第三方物品/透明边缘复杂"的动作，自动 HSV 抠像易残边或误抠，PR 手动遮罩更精细。两条路线产出同一级 `step02/`，后续步骤完全一致；`chroma_step02.py` 保留为自动化兜底，任何动作仍可一键自动生成。
 
 ### ③ 动画 → 插件
 
@@ -83,14 +108,18 @@ dsh plugin --profile web add file:D:/path/to/dsh-pet
 
 ```
 ├── prompts/                 # ① 各动作的生成提示词（绿幕规范 + 按秒分解）
-├── scripts/                 # ② 素材生成链（7 个 Python 脚本）
-├── video/                   # ② 源视频（绿幕 mp4 + 水印 mask，一动作一文件）
+├── scripts/                 # ② 素材生成链（Python：水印/抠像/归一化/转码，含 PR 导入）
+├── video/                   # ② 源视频（绿幕 mp4 + 水印 mask，一动作一文件；不入库，Releases 有压缩包）
+├── pr/                      # ② 路线 B 输入：PR 导出的透明 .mov（本地工作数据，不入库）
+├── prproj/                  # ② PR 工程目录（.prproj + 遮罩缓存 + 自动保存，本地不入库）
 ├── tools/                   # 开发工具：preview.html（素材链各阶段效果预览）
 ├── dsh-pet/                 # ③ 插件（可独立 npm 发布）
-│   ├── lib/index.js         #   host 半侧：/pet 视频路由
-│   ├── lib/client.js        #   浏览器半侧：动画链 + 双缓冲播放
-│   └── assets/thumb/        #   640×360 播放动画
-├── DESIGN.md                # 设计与实现文档（含踩坑记录）
+│   ├── src/                 #   TS 源码（host 半侧 /pet 路由 + client 半侧动画链）
+│   ├── lib/                 #   tsdown 构建产物（prepare 自动构建，lib/*.js 不入库）
+│   ├── assets/thumb/        #   640×360 透明播放动画
+│   ├── assets/preview/      #   GIF 预览（README 展示用，拼音命名）
+│   └── scripts/prepack-check.js  # 发布前健康检查
+├── DESIGN.md                # 设计与实现文档
 └── LICENSE                  # MIT
 ```
 
@@ -256,7 +285,7 @@ dsh plugin --profile web add file:D:/path/to/dsh-pet
 > 注：动画为透明背景；GIF 预览中透明部分显示为页面底色，实际 webm 播放为透明。
 ## 文档
 
-- [设计与实现](DESIGN.md) —— 架构、动画链模型、素材链、踩坑记录
+- [设计与实现](DESIGN.md) —— 架构、动画链模型、素材链
 
 ## 许可
 

@@ -18,19 +18,26 @@
 
 ## 2. 素材处理链（Python + ffmpeg）
 
-素材链在工作区 `scripts/` 目录，7 个脚本构成流水线：
+素材链在工作区 `scripts/` 目录，Python + ffmpeg 构成流水线：
 
-> 注：`video/` 源 mp4 不入 git，托管在 GitHub Releases `assets-videos`（拼音名 mp4，`gh release download assets-videos` 批量拉取）。`dsh-pet/assets/preview/` GIF 在仓库内（README 用 raw 直链渲染——GitHub 不支持仓库内 webm 在 README 内联播放，GIF 是唯一可靠的仓库内渲染方案；Release 附件以 `application/octet-stream` 返回也无法渲染，故 GIF 必须留在仓库）。
+> 注：`video/` 源 mp4 不入 git，托管在 GitHub Releases 的 `assets-videos.zip`（全部源视频打包，浏览器直接下载）；PR 工程以 `pr-project.zip`（.prproj + 遮罩缓存）同 Release 存档。`dsh-pet/assets/preview/` GIF 在仓库内（README 用 raw 直链渲染——GitHub 不支持仓库内 webm 在 README 内联播放，GIF 是唯一可靠的仓库内渲染方案；Release 附件以 `application/octet-stream` 返回也无法渲染，故 GIF 必须留在仓库）。
 
 ```
 video/（原始绿幕 mp4 + 水印 mask；源视频从 Releases assets-videos 下载）
-  → watermark_step01.py  水印遮罩填充          → step01/（mp4）
-  → chroma_step02.py     HSV 色相绿幕抠像转透明  → step02/（透明 webm）
+  → watermark_step01.py  水印遮罩填充                → step01/（mp4）
+  → step02（透明 webm）双轨：
+      路线 A  chroma_step02.py   HSV 色相自动绿幕抠像  （默认，人人可复现）
+      路线 B  pr_import_step02.py PR 手工抠像透明 .mov 导入（可选，质量覆盖，本项目全量采用）
   → normalize_step03.py  归一化 2160×1215 统一站立居中 → step03/（母版）
-  → encode_thumbs.py     转码 640×360 播放变体   → step04/（thumb）
+  → encode_thumbs.py     转码 640×360 播放变体        → step04/（thumb）
 ```
 
-- 运行方式：`cd scripts && python watermark_step01.py`（依次 4 步；`make_mask_black.py` 生成水印 mask，`fill_nn.py` 被 watermark_step01 调用）
+**step02 双轨说明**：两条路线产出同一级 `step02/`（透明 webm），后续步骤完全一致。
+- 路线 A 全自动：HSV 色相绿幕抠像，适合无第三方物品、绿幕干净的场景，任何用户 clone 即可一键复现。
+- 路线 B 手工覆盖：针对"含第三方物品/透明边缘复杂"的动作，自动抠像易残边（绿色溢出）或误抠（道具与绿幕交界），PR 手动遮罩质量更高。操作：在 PR 工程（`prproj/`，含 .prproj + 遮罩缓存）里抠像后导出带 alpha 的透明 mov（ProRes 4444 with Alpha）放入 `pr/`（文件名与动作名一致），跑 `pr_import_step02.py` 覆盖对应 step02。`pr/` 与 `prproj/` 均为本地工作数据，不入 git。
+- 本项目 91 个动作**全量采用路线 B**；`chroma_step02.py` 保留作自动化兜底。
+
+- 运行方式：`cd scripts && python watermark_step01.py`（依次 4 步；`make_mask_black.py` 生成水印 mask，`fill_nn.py` 被 watermark_step01 调用；路线 B 在第 2 步改跑 `python pr_import_step02.py`）
 - 依赖：Python 标准库 + numpy + scipy + 工作区自带 ffmpeg（`.tools/`）
 - 关键点（踩过的坑）：
   - `chromakey` + `format=yuva420p` 保留 alpha 透明
@@ -48,25 +55,34 @@ video/（原始绿幕 mp4 + 水印 mask；源视频从 Releases assets-videos �
 dsh-pet/
 ├── package.json            # "dsh": {"bundle"} + exports["./client"] + "dsh":{"client"}
 ├── cordis.patch.yml        # insert pet 行
-├── assets/thumb/*.webm     # 640×360 播放变体
-├── lib/
-│   ├── index.js            # host 半侧（服务器端，/pet 视频路由）
-│   ├── client.js           # 浏览器半侧（手写官方 CJS bundle）
+├── tsconfig.json / tsdown.config.mjs   # TS + tsdown 构建配置（双入口 client/host）
+├── assets/
+│   ├── config.jsonc        # 动画配置单一来源（动画池/分类权重/尺寸位置）
+│   ├── thumb/*.webm        # 640×360 播放变体
+│   └── preview/*.gif       # README 预览（拼音命名）
+├── src/
+│   ├── host/index.ts       # host 半侧源码（/pet 路由）
+│   └── client/*.ts         # 浏览器半侧源码（动画链 + 双缓冲 + 配置解析）
+├── lib/                    # tsdown 构建产物（gitignored，prepare 自动构建）
+│   ├── index.js            # host 半侧（构建产物）
+│   ├── client.js           # 浏览器半侧（构建产物，__ModuleLoader__ 形态）
 │   └── types/              # TypeScript 声明
 ├── scripts/prepack-check.js # npm 发布前健康检查
 ├── README.md               # 极简（指向仓库）
 └── LICENSE                 # MIT
 ```
 
-### 3.2 host 半侧（lib/index.js）
+### 3.2 host 半侧（src/host → lib/index.js）
 
 - 注册 `/pet/` 前缀路由（`ctx.webServer.register`）：
   - `/pet/thumb/<name>.webm` → 读 `assets/thumb/`（播放资源）
   - `/pet/full/<name>.webm` → 读 `$DSH_HOME/pet-assets/`（原始母版，需手动下载）
+  - `/pet/config.jsonc` → 读 `assets/config.jsonc`（动画配置，单一来源）
 - 防路径穿越（`resolveAsset`）+ 流式返回 + 缓存 1 小时
 
-### 3.3 浏览器半侧（lib/client.js）
+### 3.3 浏览器半侧（src/client → lib/client.js）
 
+- 启动时经 `/pet/config.jsonc` 拉取配置（`stripJsonc` 去注释后解析，失败走兜底）
 - 注册到官方 `shell.overlay` 列表槽（全应用浮动层，点击穿透）
 - **双缓冲播放**：两个 `<video>` 层叠交叉淡入，切换永无空白帧
 - **竞态防护**：`genRef` 代数守卫 + `old !== el`，快速连点不导致宠物消失
@@ -75,9 +91,10 @@ dsh-pet/
 
 ### 3.4 构建形态
 
-- `lib/client.js` 手写官方 `__ModuleLoader__.load({ id, factory })` 形态
-- React 从 DSH 外壳平台模块表 require（不自己打包）
-- 零构建链、零依赖、可读可改
+- TypeScript 源码在 `src/`（host 半侧 `src/host/`、浏览器半侧 `src/client/`），`tsdown` 按 `tsdown.config.mjs` 双入口构建为单文件 `lib/index.js` / `lib/client.js`
+- `lib/*.js` 为构建产物：**gitignored 不入库**，`npm install` 时经 `prepare` 脚本自动构建；发布走 `prepack`（bundle + prepack-check）
+- 运行形态不变：client 半侧为官方 `__ModuleLoader__.load({ id, factory })`，React 从 DSH 外壳平台模块表 require（不自己打包）
+- 构建命令：`npm run bundle`（tsdown）
 
 ## 4. 动画流程（链式模型）
 
@@ -100,9 +117,10 @@ dsh-pet/
 开始（初始待机呼吸休闲）
   │ 播完（10s）
   ▼
-pickNext() 按概率选下一个 ──────────────┐
-  30% 待机 / 10% 转向 / 40% 动作 / 20% 移动 │
-  └──────────────────────────────────────┘
+pickNext() 按权重选下一个 ────────────────────────┐
+  idle/turn/move 权重 + 分类权重全部配置于 config.jsonc │
+  （默认 idle10 / turn5 / move5，分类合计 80）        │
+  └──────────────────────────────────────────────┘
         ▲ 播完
         └── 循环（永不停止）
 
@@ -111,55 +129,37 @@ pickNext() 按概率选下一个 ──────────────┐
 
 ### 4.3 关键机制
 
-- **`pickNext()`**：`roll = Math.random()`，`<0.3` 待机 / `<0.4` 转向 / `<0.8` 动作 / `>=0.8` 移动（空间不够回退动作）
+- **`pickNext()`**：权重制。`roll = Math.random()`，按 `animationWeights`（默认 idle10/turn5/move5）归一化切分：`roll < wI/100` 待机、`< (wI+wT)/100` 转向、`< (wI+wT+wM)/100` 尝试移动（空间不足回退分类抽）、其余走 `pickWeightedCategory` 抽动作分类（分类自带 weight：小动作20/玩耍20/吃什么16/时节14/文字10）
+- **`noMirror`**：文字类分类 `noMirror: true`——宠物面向右（CSS 镜像）时剔除该类，其余分类权重归一化重算，避免镜像后文字颠倒穿帮
 - **`seq` 序号**：每次切换 +1，连续选中同一动画也强制重播
 - **移动系统**：动画是"皮"（姿态）、rAF 是"骨架"（位移），位置随 `video.currentTime` 同步；前后各 2s 准备/收尾位置不动，中间 6s 走完全程；播放前检查屏幕空间
 - **交互**：点击回应随机、拖拽超 5px 判定 + 跟手、松手停在拖拽处
 
 ## 5. 配置项
 
-当前 client 端 `apply(ctx, config)` 收到空对象（DSH 客户端配置管线限制），参数走代码内默认值：
+配置以 `dsh-pet/assets/config.jsonc` 为**单一来源**（JSONC：允许注释），host 半侧经 `/pet/config.jsonc` 下发，client 半侧启动时拉取解析（`stripJsonc` 去注释 + `buildAnim` 归一化）。任何字段缺失/写错都会回退代码兜底（如 `FALLBACK_IDLE`=待机呼吸休闲），宠物不消失。
 
-| 参数 | 默认 | 位置 |
-|---|---|---|
-| size / position | 462（宽度，≈260px 高）/ bottom-right | client.js |
-| 动画链概率 | 30/10/40/20 | client.js `pickNext` |
-| 移动距离/边距 | 60-240px / 20px | client.js 常量 |
-| 移动准备/收尾 | 2s / 2s | client.js 常量 |
-| 转码分辨率/质量 | 640×360 / CRF 40 | scripts/encode_thumbs.py |
+| 配置 | 说明 |
+|---|---|
+| `size` / `position` | 舞台宽度（px）/ 角落位置（corner + 边距） |
+| `animations.idle/turn/drag/clicks` | 待机 / 转向 / 拖拽 / 点击回应 动画池（数组） |
+| `animations.moves` | 移动池：`default` 公共参数 + 每动作 `params` 覆盖（minDist/maxDist/margin/leadSec/tailSec，默认 60-240px/20px/2s/2s） |
+| `animations.categories` | 动作分类池（小动作/玩耍/吃什么/时节/文字），含 `weight` 与 `noMirror` |
+| `animationWeights` | 动画链顶层权重 idle/turn/move（默认 10/5/5，与分类权重合计 100） |
+| `scripts/encode_thumbs.py` | 转码分辨率/质量（640×360 / CRF 40），脚本侧常量 |
 
 ## 6. 构建与发布
 
 ```
-1. scripts/*.py（素材链）    video/ → step01-04
+1. scripts/*.py（素材链）    video/ → step01 → step02（自动或 PR 导入）→ step03 → step04
 2. step04 → dsh-pet/assets/thumb/（同步）
 3. prepack-check.js          npm publish 前健康检查
 4. npm pack                  检查 tarball（~10MB）
 5. npm publish               之后 dsh plugin add dsh-pet 一条命令安装
-6. GitHub Releases           上传原始母版（step03/，172MB 存档）
+6. GitHub Releases           打包上传 assets-videos.zip（源视频）与 pr-project.zip（PR 工程）
 ```
 
-## 7. 里程碑
-
-| 阶段 | 状态 |
-|---|---|
-| M1 骨架（host 路由 + overlay 挂载） | ✅ |
-| M2 交互（点击/拖拽/转向/双缓冲/竞态防护） | ✅ |
-| M3 素材链（转码管线 + 全部动画 + 对齐） | ✅ |
-| M4 动画链模型（无常驻待机） | ✅ |
-| M5 开源（README/LICENSE/仓库） | ✅ 仓库已建，待推送 |
-| M6 发布（npm + Releases） | ⏳ |
-
-## 8. 许可
+## 7. 许可
 
 - 代码：MIT（仓库根 + dsh-pet/LICENSE）
-- 素材（动画/提示词）：与代码同协议或单独声明（待定）
-
-## 9. 踩坑记录
-
-1. **jsx 第三参数是 key 不是 children**——children 必须放 props
-2. **双缓冲竞态**——genRef 代数守卫防两个 video 同时透明
-3. **VP9 alpha 丢失**——`-c:v libvpx-vp9` 必须在 `-i` 前（解码端）
-4. **Windows 编码**——subprocess text=True 需 utf-8 + errors=replace
-5. **thumbRoot 路径**——`assets/thumb/` 子目录 vs `assets/` 根
-6. **pnpm file: 依赖是复制**——改源码后必须 remove+add 重新安装
+- 素材（动画/提示词/源视频）：MIT，可自由使用（含商用、修改、再分发）

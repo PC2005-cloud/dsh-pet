@@ -7,6 +7,12 @@ step04/
 # ── 素材源（托管在 GitHub Releases assets-videos，不入仓库） ──
 video/*.mp4
 
+# ── PR 手工抠像工作数据（本地工作数据，同 step 中间产物，不入库） ──
+#   pr/      PR 导出的透明 .mov（路线 B 的输入）
+#   prproj/  PR 工程目录（.prproj + 遮罩缓存 + 自动保存，约 2GB）
+pr/
+prproj/
+
 # ── 本地工具（机器相关，不入仓库） ──
 .tools/
 

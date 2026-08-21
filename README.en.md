@@ -26,11 +26,23 @@ Anyone who clones this repository can **generate their own desktop pet from scra
 
 ## Quick Start (Install the Plugin)
 
+> All commands below run in your **terminal** (PowerShell, CMD, etc.). First make sure the DSH environment is ready:
+
 ```sh
+# ① Prerequisites: confirm Node.js is installed
+node -v
+
+# ② Install the DSH launcher and pnpm (skip if already installed; reopen your terminal afterwards)
+npm install -g @deepseek-ai/dsh pnpm
+dsh --version   # verify the dsh command works
+
+# ③ Install this plugin
 dsh plugin --profile web add dsh-pet
 ```
 
 Restart `dsh web` and the pet appears in the bottom-right corner.
+
+> **Compatibility**: this plugin is developed and tested with dsh **`0.1.1-rc.1`** (check yours with `dsh --version`). Using the same version is recommended; please report any issues on other versions.
 
 ## Generate Your Own Pet from Scratch (Full Pipeline)
 
@@ -45,23 +57,38 @@ Use an AI video generation tool (e.g., Kling, Runway, Doubao — this project's 
 
 Put the results into `video/` (one mp4 per action).
 
-> **Getting the source videos**: to keep the repo small, `video/` sources are not committed. To reproduce the pipeline, download the mp4 files (pinyin filenames) from [Releases `assets-videos`](https://github.com/PC2005-cloud/dsh-pet/releases/tag/assets-videos) into `video/`. One-shot bulk download (requires gh CLI):
+> **Getting the source videos**: to keep the repo small, `video/` sources are not committed. Releases provide **zipped bundles** you can download directly in the browser:
 >
-> ```sh
-> mkdir -p video && cd video && gh release download assets-videos --repo PC2005-cloud/dsh-pet
-> ```
+> - `assets-videos.zip` — all source videos (Chinese-named mp4s; extract and put them into `video/`)
+> - `pr-project.zip` — the PR hand-keying project (`.prproj` + mask cache, optional; reference for Track B keying)
+>
+> Extract with `Expand-Archive assets-videos.zip` (Windows) or `unzip assets-videos.zip`, then put the mp4s back into `video/` — the pipeline is ready to run.
 
 ### ② Source Videos → Transparent Animations (Asset Pipeline)
 
+step02 (transparent video) has **two tracks, pick one per action** (automatic by default and reproducible by anyone; PR hand-keying as a quality override):
+
 ```sh
 cd scripts
+# Track A (default): automatic green-screen keying (HSV hue, no manual work)
 python watermark_step01.py   # fill watermark masks → step01/
-python chroma_step02.py      # chroma-key the green screen to transparency (HSV hue) → step02/
+python chroma_step02.py      # chroma-key the green screen to transparency → step02/
+
+# Track B (optional): PR hand-keying override (for actions with 3rd-party props
+#                     or where auto keying looks bad)
+#   1. Hand-key in Premiere Pro, export a transparent .mov with alpha
+#      (e.g. ProRes 4444 with Alpha)
+#   2. Put it in pr/ with the action's name (e.g. 吃白饭.mov)
+python pr_import_step02.py   # pr/*.mov → step02/ (transparent webm, overrides the auto result)
+
+# The rest of the pipeline is shared by both tracks:
 python normalize_step03.py   # normalize to 2160×1215 unified standing, centered → step03/
 python encode_thumbs.py      # transcode 640×360 playback variants → step04/
 ```
 
 **Dependencies**: Python 3 + ffmpeg + numpy + scipy (the pipeline scripts automatically use the ffmpeg under the workspace `.tools/`).
+
+> **This project uses Track B for all 91 actions** (every action is PR hand-keyed): for actions with 3rd-party props or complex transparent edges, automatic HSV keying tends to leave fringes or mis-key pixels, while manual masks in PR are far cleaner. Both tracks produce the same `step02/` level, so everything downstream is identical; `chroma_step02.py` is kept as the automatic fallback so any action can still be generated with one command.
 
 ### ③ Animations → Plugin
 
@@ -81,14 +108,18 @@ dsh plugin --profile web add file:D:/path/to/dsh-pet
 
 ```
 ├── prompts/                 # ① Generation prompts for the actions (green-screen spec + per-second breakdown)
-├── scripts/                 # ② Asset pipeline (7 Python scripts)
-├── video/                   # ② Source videos (green-screen mp4s, one per action + watermark mask)
+├── scripts/                 # ② Asset pipeline (Python: watermark/keying/normalize/transcode, incl. PR import)
+├── video/                   # ② Source videos (green-screen mp4s, one per action + watermark mask; not committed, zipped on Releases)
+├── pr/                      # ② Track B input: PR-exported transparent .mov (local working data, not committed)
+├── prproj/                  # ② PR project directory (.prproj + mask cache + auto-saves, local, not committed)
 ├── tools/                   # Dev tools: preview.html (pipeline stage previews)
 ├── dsh-pet/                 # ③ The plugin (can be published to npm independently)
-│   ├── lib/index.js         #   host half: /pet video route
-│   ├── lib/client.js        #   browser half: animation chain + double-buffered playback
-│   └── assets/thumb/        #   640×360 playback animations
-├── DESIGN.md                # Design & implementation docs (including pitfalls)
+│   ├── src/                 #   TS sources (host half: /pet routes; client half: animation chain)
+│   ├── lib/                 #   tsdown build output (auto-built on install; lib/*.js not committed)
+│   ├── assets/thumb/        #   640×360 transparent playback animations
+│   ├── assets/preview/      #   GIF previews (for README display, pinyin filenames)
+│   └── scripts/prepack-check.js  # pre-publish health check
+├── DESIGN.md                # Design & implementation docs
 └── LICENSE                  # MIT
 ```
 
@@ -185,7 +216,7 @@ All animations (640×360, the actual assets the plugin plays) — GIF previews l
 
 ## Documentation
 
-- [Design & Implementation](DESIGN.md) — architecture, animation-chain model, asset pipeline, pitfalls
+- [Design & Implementation](DESIGN.md) — architecture, animation-chain model, asset pipeline
 
 ## License
 
