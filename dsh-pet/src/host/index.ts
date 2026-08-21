@@ -177,6 +177,15 @@ export function apply(ctx: any): void {
             return;
           }
 
+          // 配置文件路径（设置页「高级配置」展示用）
+          if (rest === 'config/meta') {
+            sendJson(res, 200, {
+              user: userConfigPath,
+              default: join(PACKAGE_ROOT, 'assets', 'config.jsonc'),
+            });
+            return;
+          }
+
           // 配置文件（JSONC）：/pet/config.jsonc → 包内 assets/config.jsonc
           if (rest === 'config.jsonc') {
             const cfgFile = join(PACKAGE_ROOT, 'assets', 'config.jsonc');

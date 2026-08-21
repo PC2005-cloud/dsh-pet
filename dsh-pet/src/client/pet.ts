@@ -4,7 +4,7 @@
 // 动作配置在本模块持有：PetMulti 加载后赋值，PetCard 只读（单一事实来源 = config.jsonc）。
 import { pick, rollKind, pickCategoryAction } from './pickers';
 import { planMove } from './motion';
-import { assertClientConfig, EMPTY_CONF, resolvePets, stripJsonc } from './config';
+import { assertClientConfig, EMPTY_CONF, applyUserOverrides, stripJsonc, type UserOverrides } from './config';
 import { CANVAS_H, FEET_Y, HIT_BOX, DRAG_THRESHOLD } from './constants';
 import { petBridge } from './settings';
 import type { ClientConfig, Corner, Pet } from './types';
@@ -113,7 +113,9 @@ export function makePetUI(rt: {
         if (pendingRef.current?.gen !== gen) return;
         const old = frontRef.current === 0 ? videoARef : videoBRef;
         el.classList.add('is-front');
-        if (old.current && old.current !== el) old.current.classList.remove('is-front');
+        if (old.current && old.current !== el) {
+          old.current.classList.remove('is-front');
+        }
         frontRef.current = frontRef.current === 0 ? 1 : 0;
         pendingRef.current = null;
         el.style.transform = facingRef.current === 'right' ? 'scaleX(-1)' : '';
@@ -153,7 +155,7 @@ export function makePetUI(rt: {
         setAnim(next);
       } else if (k === 'move') {
         if (!tryMove()) {
-          const act = pickCategoryAction(animations.categories, animations.idle, animRef.current);
+          const act = pickCategoryAction(animations.categories, animations.idle, facingRef.current, animRef.current);
           kind = act.id;
           next = act.name;
           setAnim(next);
@@ -162,12 +164,25 @@ export function makePetUI(rt: {
           next = '移动(池内随机)';
         }
       } else {
-        const act = pickCategoryAction(animations.categories, animations.idle, animRef.current);
+        const act = pickCategoryAction(animations.categories, animations.idle, facingRef.current, animRef.current);
         kind = act.id;
         next = act.name;
         setAnim(next);
       }
-      console.log('[dsh-pet] roll=' + roll.toFixed(4) + ' -> [' + kind + '] ' + next);
+      console.log(
+        '[dsh-pet] ' +
+          new Date().toTimeString().slice(0, 8) +
+          ' pet=' +
+          cfg.id +
+          ' facing=' +
+          facingRef.current +
+          ' roll=' +
+          roll.toFixed(4) +
+          ' -> [' +
+          kind +
+          '] ' +
+          next,
+      );
       setOnce(true);
       setSeq((s) => s + 1);
     };
@@ -176,7 +191,9 @@ export function makePetUI(rt: {
       const { animations } = config;
       if (dragRef.current.active) return;
       if (animations.turn.includes(animRef.current)) {
-        setFacing((f) => (f === 'left' ? 'right' : 'left'));
+        const next = facing === 'left' ? 'right' : 'left';
+        setFacing(next);
+        facingRef.current = next; // 立即同步：翻转后的 pickNext 用新朝向过滤 noMirror（右侧不选文字类）
       }
       if (animations.drag.includes(animRef.current) || animations.clicks.includes(animRef.current)) {
         if (animations.idle.length) setAnim(pick(animations.idle, animRef.current));
@@ -429,15 +446,16 @@ export function makePetUI(rt: {
           if (!r1.ok) throw new Error('config.jsonc HTTP ' + r1.status);
           config = assertClientConfig(JSON.parse(stripJsonc(await r1.text())));
           const defaults = config.pets;
-          // 用户覆盖层（设置页保存的完整宠物列表，与 jsonc 同构）
-          let user: { pets?: Pet[] } = {};
+          // 用户覆盖层（覆盖片段：pets / animations / animationWeights，缺省回落默认）
+          let user: UserOverrides = {};
           try {
             const r2 = await fetch('/pet/config');
             if (r2.ok && r2.status !== 204) user = await r2.json().catch(() => ({}));
           } catch {
             /* 无用户层时忽略 */
           }
-          const merged = resolvePets(defaults, user);
+          config = applyUserOverrides(config, user);
+          const merged = config.pets;
           if (!alive) return;
           petBridge.current = merged;
           petBridge.template = defaults.length ? defaults[0] : undefined;

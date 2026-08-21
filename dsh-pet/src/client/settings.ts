@@ -10,7 +10,8 @@
  */
 import { assertClientConfig, stripJsonc } from './config';
 import type { Corner, Pet } from './types';
-import type { ChangeEvent, CSSProperties, Dispatch, FunctionComponent, SetStateAction } from 'react';
+import type { ChangeEvent, CSSProperties, Dispatch, FunctionComponent, SetStateAction, useEffect } from 'react';
+import type * as ReactNS from 'react';
 import type { jsx } from 'react/jsx-runtime';
 
 /** 容器与设置页共享的桥（同一 bundle 单例）：
@@ -35,6 +36,9 @@ export const zh = {
   petsLabel: '宠物列表',
   add: '添加宠物',
   remove: '删除',
+  confirmRemove: '确定删除宠物「{id}」吗？',
+  confirmTitle: '确认操作',
+  cancel: '取消',
   atLeastOne: '至少保留一个宠物。',
   emptyPets: '暂无宠物，点击「添加宠物」创建。',
   sizeLabel: '大小（宽度 px）',
@@ -48,6 +52,12 @@ export const zh = {
   marginY: '垂直偏移',
   save: '保存',
   reset: '恢复默认',
+  confirmReset: '确定恢复默认吗？将删除整个用户配置（含自定义的动画池与播放权重）。',
+  resetHint: '「重置」会删除整个用户配置（含自定义的动画池与播放权重），不只是宠物列表。',
+  configMeta: '高级配置（文件）',
+  configMetaHint: '用户配置可覆盖宠物列表 / 动画池 / 播放权重，修改后刷新或重启生效；默认配置为完整参考。',
+  defaultConfig: '默认配置（只读，完整参考）',
+  userConfig: '用户配置（自定义覆盖）',
   saved: '已保存，桌宠即时生效。',
   loadError: '加载配置失败',
   invalid: '请检查输入：大小需为正数，边距可为任意数字。',
@@ -60,6 +70,9 @@ export const en = {
   petsLabel: 'Pets',
   add: 'Add pet',
   remove: 'Remove',
+  confirmRemove: 'Delete pet "{id}"?',
+  confirmTitle: 'Confirm action',
+  cancel: 'Cancel',
   atLeastOne: 'Keep at least one pet.',
   emptyPets: 'No pets yet — click "Add pet" to create one.',
   sizeLabel: 'Size (width px)',
@@ -73,6 +86,14 @@ export const en = {
   marginY: 'Vertical offset',
   save: 'Save',
   reset: 'Reset to default',
+  confirmReset: 'Reset to default? This deletes the whole user config (including custom animation pools & weights).',
+  resetHint:
+    '"Reset" deletes the whole user config (including custom animation pools & weights), not just the pet list.',
+  configMeta: 'Advanced (files)',
+  configMetaHint:
+    'User config may override pets / animation pools / weights — refresh or restart to apply. The default config is the complete reference.',
+  defaultConfig: 'Default config (read-only, complete reference)',
+  userConfig: 'User config (custom overrides)',
   saved: 'Saved — the pets updated instantly.',
   loadError: 'Failed to load config',
   invalid: 'Check your input: size must be positive; margins can be any number.',
@@ -99,9 +120,10 @@ export const en = {
 export function makePetConfigSection(rt: {
   h: typeof jsx;
   useState: <T>(init: T) => [T, Dispatch<SetStateAction<T>>];
+  useEffect: typeof useEffect;
   t: (key: string) => string;
 }): FunctionComponent<{ close?: () => void }> {
-  const { h, useState, t } = rt;
+  const { h, useState, useEffect, t } = rt;
 
   const CORNERS: Corner[] = ['top-left', 'top-right', 'bottom-left', 'bottom-right'];
   const cornerLabel = (c: Corner): string => t('corner.' + c);
@@ -133,6 +155,16 @@ export function makePetConfigSection(rt: {
     const [selId, setSelId] = useState<string>(initPets[0]?.id ?? '');
     const [busy, setBusy] = useState(false);
     const [msg, setMsg] = useState<{ kind: 'ok' | 'err' | ''; text: string }>({ kind: '', text: '' });
+    // 确认弹窗（仿官方弹窗：遮罩 + 居中卡片 + 双按钮）
+    const [confirm, setConfirm] = useState<null | 'remove' | 'reset'>(null);
+    // 配置文件地址（「高级配置」区块；读取失败仅缺省不显示，不影响表单）
+    const [paths, setPaths] = useState<null | { user: string; default: string }>(null);
+    useEffect(() => {
+      fetch('/pet/config/meta')
+        .then((r) => (r.ok ? r.json() : null))
+        .then((p) => setPaths(p))
+        .catch(() => console.warn('[dsh-pet] 读取配置文件路径失败'));
+    }, []);
 
     // 当前选中的宠物对象（表单数据源）；selId 由 add/remove/reset 同步维护，列表非空时恒有效
     const cur = pets.find((p) => p.id === selId) ?? null;
@@ -184,7 +216,9 @@ export function makePetConfigSection(rt: {
       }
     };
 
-    const reset = async () => {
+    const reset = () => setConfirm('reset');
+
+    const doReset = async () => {
       setBusy(true);
       setMsg({ kind: '', text: '' });
       try {
@@ -216,6 +250,10 @@ export function makePetConfigSection(rt: {
         setMsg({ kind: 'err', text: t('atLeastOne') });
         return;
       }
+      setConfirm('remove');
+    };
+
+    const doRemove = () => {
       const list = pets.filter((p) => p.id !== selId);
       setPets(list);
       setSelId(list[0].id);
@@ -455,6 +493,134 @@ export function makePetConfigSection(rt: {
               : null,
           ],
         }),
+
+        // 重置的副作用提示（DELETE 会清掉整个用户配置，含高级自定义）
+        h('p', {
+          style: { margin: 0, fontSize: '11px', color: 'var(--dsw-alias-label-tertiary)', lineHeight: '16px' },
+          children: t('resetHint'),
+        }),
+
+        // 高级配置（文件地址）：供高级用户直接编辑配置文件自定义
+        paths
+          ? h('div', {
+              style: {
+                marginTop: '12px',
+                padding: '10px 14px',
+                border: '1px solid var(--dsw-alias-border-l2)',
+                borderRadius: '12px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '6px',
+                fontSize: '12px',
+                color: 'var(--dsw-alias-label-secondary)',
+              },
+              children: [
+                h('div', {
+                  style: { fontSize: '12px', color: 'var(--dsw-alias-label-primary)', fontWeight: 500 },
+                  children: t('configMeta'),
+                }),
+                h('div', { style: { fontSize: '12px', lineHeight: '20px' }, children: t('configMetaHint') }),
+                h('div', {
+                  style: { fontSize: '12px', lineHeight: '18px', wordBreak: 'break-all' },
+                  children: t('defaultConfig') + '：' + paths.default,
+                }),
+                h('div', {
+                  style: { fontSize: '12px', lineHeight: '18px', wordBreak: 'break-all' },
+                  children: t('userConfig') + '：' + paths.user,
+                }),
+              ],
+            })
+          : null,
+
+        // 确认弹窗（仿官方弹窗视觉：遮罩 + 居中卡片 + 双按钮）
+        confirm
+          ? h('div', {
+              style: {
+                position: 'fixed',
+                inset: 0,
+                zIndex: 2147483647,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                background: 'rgba(0, 0, 0, 0.45)',
+              },
+              onClick: () => setConfirm(null),
+              children: h('div', {
+                style: {
+                  width: '340px',
+                  maxWidth: 'calc(100vw - 40px)',
+                  background: 'var(--dsw-alias-bg-layer-1)',
+                  border: '1px solid var(--dsw-alias-border-l2)',
+                  borderRadius: '12px',
+                  padding: '16px 18px',
+                  boxShadow: '0 8px 30px rgba(0, 0, 0, 0.35)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '12px',
+                },
+                onClick: (e: ReactNS.MouseEvent<HTMLDivElement>) => e.stopPropagation(),
+                children: [
+                  h('div', {
+                    style: { fontSize: '14px', fontWeight: 500, color: 'var(--dsw-alias-label-primary)' },
+                    children: t('confirmTitle'),
+                  }),
+                  h('div', {
+                    style: { fontSize: '13px', lineHeight: '20px', color: 'var(--dsw-alias-label-secondary)' },
+                    children: confirm === 'remove' ? t('confirmRemove').replace('{id}', selId) : t('confirmReset'),
+                  }),
+                  h('div', {
+                    style: { display: 'flex', gap: '8px', justifyContent: 'flex-end' },
+                    children: [
+                      h('button', {
+                        type: 'button',
+                        onClick: () => setConfirm(null),
+                        style: {
+                          border: '1px solid var(--dsw-alias-border-l2)',
+                          background: 'transparent',
+                          color: 'var(--dsw-alias-label-primary)',
+                          borderRadius: '8px',
+                          padding: '4px 14px',
+                          fontSize: '12px',
+                          cursor: 'pointer',
+                        },
+                        children: t('cancel'),
+                      }),
+                      h('button', {
+                        type: 'button',
+                        onClick: () => {
+                          const k = confirm;
+                          setConfirm(null);
+                          if (k === 'remove') doRemove();
+                          else void doReset();
+                        },
+                        style:
+                          confirm === 'remove'
+                            ? {
+                                border: '1px solid var(--dsw-alias-state-error-secondary)',
+                                background: 'transparent',
+                                color: 'var(--dsw-alias-state-error-primary)',
+                                borderRadius: '8px',
+                                padding: '4px 14px',
+                                fontSize: '12px',
+                                cursor: 'pointer',
+                              }
+                            : {
+                                border: '1px solid var(--dsw-alias-button-info-fill)',
+                                background: 'var(--dsw-alias-button-info-fill)',
+                                color: '#fff',
+                                borderRadius: '8px',
+                                padding: '4px 14px',
+                                fontSize: '12px',
+                                cursor: 'pointer',
+                              },
+                        children: confirm === 'remove' ? t('remove') : t('reset'),
+                      }),
+                    ],
+                  }),
+                ],
+              }),
+            })
+          : null,
       ],
     });
   };

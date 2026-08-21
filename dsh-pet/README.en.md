@@ -39,13 +39,27 @@ Restart `dsh web` and the pet appears in the bottom-right corner — all transpa
 
 ## ⚙️ Configuration
 
-| Key        | Description                                   | Current status                                                                                                                      |
-| ---------- | --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| `size`     | Stage width (px); pet height ≈ width×9/16×74% | Default 462 (≈260px tall), **not yet delivered to the browser** (DSH client config pipeline limitation; falls back to code default) |
-| `position` | Default corner position                       | Defaults to bottom-right, same as above (not yet delivered)                                                                         |
-| `fullRoot` | Original 2160×1215 master asset directory     | Defaults to `$DSH_HOME/pet-assets`; takes effect after manually downloading the master assets                                       |
+| Key        | Description                                   | Current status                                                                          |
+| ---------- | --------------------------------------------- | --------------------------------------------------------------------------------------- |
+| `size`     | Stage width (px); pet height ≈ width×9/16×74% | Default 462 (≈260px tall); editable per pet via the settings page (applies instantly)   |
+| `position` | Default corner position                       | Defaults to bottom-right; editable per pet via the settings page (applies instantly)    |
+| `fullRoot` | Original 2160×1215 master asset directory     | Defaults to `$DSH_HOME/pet-assets`; takes effect after manually downloading the masters |
 
-> Note: the plugin works out of the box; all config above is optional. Browser-side configuration of `size`/`position` is planned.
+> Note: the plugin works out of the box; all config above is optional. Settings-page edits are saved to `$DSH_HOME/pet-config.json` (user layer, takes precedence over the packaged defaults).
+
+### 📄 Advanced customization (edit config files directly)
+
+The plugin uses two config layers:
+
+| Layer                      | File                                 | Purpose                                                                                                                 |
+| -------------------------- | ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------- |
+| Default config (read-only) | `assets/config.jsonc` in the package | Complete reference: pet list / animation pools (idle/turn/drag/clicks/moves/categories) / playback weights              |
+| User config                | `$DSH_HOME/pet-config.json`          | Override fragment: optionally override `pets` / `animations` / `animationWeights`; missing fields fall back to defaults |
+
+- The settings page shows the actual paths of both files at the bottom
+- After editing the user config, **refresh the page** to apply (no DSH restart needed)
+- ⚠️ "Reset to default" in the settings page deletes the **whole user config** (including custom animation pools & weights), not just the pet list
+- User config depends on assets shipped in the package — fill animation names by referring to the default config to avoid referencing missing animations
 
 ## 🗑️ Uninstall
 

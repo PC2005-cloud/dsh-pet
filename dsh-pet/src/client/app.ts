@@ -35,7 +35,7 @@ export function makeFactory(): (require: (mod: string) => any) => any {
       });
 
       // 设置页：「桌宠配置」（大小/位置，保存即时生效）
-      const PetConfigSection = makePetConfigSection({ h, useState, t });
+      const PetConfigSection = makePetConfigSection({ h, useState, useEffect, t });
       ctx.slots.inject('settings.section', function* () {
         yield ctx.slots.register(
           { name: 'settings.section', id: 'pet-config', order: 30, label: () => t('nav'), inject: () => ({ t }) },

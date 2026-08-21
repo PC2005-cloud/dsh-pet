@@ -45,13 +45,15 @@ export const rollKind = (roll: number, w: Weights): RollKind => {
   return 'action';
 };
 
-/** 从分类池选一个动作；无可用分类时回退 idle 池（返回 {id, name}，纯函数） */
+/** 从分类池选一个动作；无可用分类时回退 idle 池（返回 {id, name}，纯函数）。
+ * facing 用于 noMirror 镜像过滤；current 用于避免连续重复（pick 的 exclude）。 */
 export const pickCategoryAction = (
   categories: Category[],
   idlePool: string[],
+  facing: string,
   current: string,
 ): { id: string; name: string } => {
-  const cat = pickWeightedCategory(categories, current);
+  const cat = pickWeightedCategory(categories, facing);
   if (!cat) return { id: 'FALLBACK', name: pick(idlePool, current) };
   return { id: cat.id, name: pick(cat.actions, current) };
 };

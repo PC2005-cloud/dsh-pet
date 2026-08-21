@@ -1,6 +1,6 @@
 // 配置层：剥注释、校验 config.jsonc。运行时（ANIM）直接使用与 jsonc 同构的 ClientConfig，
 // 不做字段转换；缺失/非法一律视为配置错误（throw，由加载层显式报错）。
-import type { ClientConfig, Corner, Pet } from './types';
+import type { Animations, ClientConfig, Corner, Pet, Weights } from './types';
 
 /** 剥除 JSONC 注释（行注释 // 与块注释），得到纯 JSON 字符串 */
 export const stripJsonc = (src: string): string =>
@@ -80,4 +80,19 @@ export function assertClientConfig(raw: unknown): ClientConfig {
 export function resolvePets(defaults: Pet[], user: { pets?: Pet[] }): Pet[] {
   if (user && Array.isArray(user.pets)) return user.pets.length ? user.pets : defaults;
   return defaults;
+}
+
+/** 用户覆盖片段（与 jsonc 同构；高级用户直接编辑 pet-config.json，缺省字段回落默认） */
+export interface UserOverrides {
+  pets?: Pet[];
+  animations?: Animations;
+  animationWeights?: Weights;
+}
+
+/** 合并用户覆盖片段到完全体配置：pets / animations / animationWeights 有则整体替换，缺省回落默认 */
+export function applyUserOverrides(base: ClientConfig, user: UserOverrides): ClientConfig {
+  const next: ClientConfig = { ...base, pets: resolvePets(base.pets, user) };
+  if (user.animations) next.animations = user.animations;
+  if (user.animationWeights) next.animationWeights = user.animationWeights;
+  return next;
 }
