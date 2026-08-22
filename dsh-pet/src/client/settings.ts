@@ -58,6 +58,7 @@ export const zh = {
   configMetaHint: '用户配置可覆盖宠物列表 / 动画池 / 播放权重，修改后刷新或重启生效；默认配置为完整参考。',
   defaultConfig: '默认配置（只读，完整参考）',
   userConfig: '用户配置（自定义覆盖）',
+  animationDir: '动画素材目录（可自定义/扩充动画）',
   saved: '已保存，桌宠即时生效。',
   loadError: '加载配置失败',
   invalid: '请检查输入：大小需为正数，边距可为任意数字。',
@@ -94,6 +95,7 @@ export const en = {
     'User config may override pets / animation pools / weights — refresh or restart to apply. The default config is the complete reference.',
   defaultConfig: 'Default config (read-only, complete reference)',
   userConfig: 'User config (custom overrides)',
+  animationDir: 'Animation assets dir (add/customize animations here)',
   saved: 'Saved — the pets updated instantly.',
   loadError: 'Failed to load config',
   invalid: 'Check your input: size must be positive; margins can be any number.',
@@ -158,7 +160,7 @@ export function makePetConfigSection(rt: {
     // 确认弹窗（仿官方弹窗：遮罩 + 居中卡片 + 双按钮）
     const [confirm, setConfirm] = useState<null | 'remove' | 'reset'>(null);
     // 配置文件地址（「高级配置」区块；读取失败仅缺省不显示，不影响表单）
-    const [paths, setPaths] = useState<null | { user: string; default: string }>(null);
+    const [paths, setPaths] = useState<null | { user: string; default: string; animations: string }>(null);
     useEffect(() => {
       fetch('/pet/config/meta')
         .then((r) => (r.ok ? r.json() : null))
@@ -527,6 +529,10 @@ export function makePetConfigSection(rt: {
                 h('div', {
                   style: { fontSize: '12px', lineHeight: '18px', wordBreak: 'break-all' },
                   children: t('userConfig') + '：' + paths.user,
+                }),
+                h('div', {
+                  style: { fontSize: '12px', lineHeight: '18px', wordBreak: 'break-all' },
+                  children: t('animationDir') + '：' + paths.animations,
                 }),
               ],
             })

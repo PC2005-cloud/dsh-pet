@@ -21,20 +21,10 @@ export declare const name = 'pet';
 /** 需要注入的服务列表（webServer），与 lib/index.js 的 inject 一致 */
 export declare const inject: string[];
 
-/** 插件配置：/pet 路由的资源根目录 */
-export interface Config {
-    /**
-     * "full"（原始 1200×1200）资源的根目录，当部署方下载了原始母版时使用。
-     * 默认 `$DSH_HOME/pet-assets`。
-     */
-    fullRoot?: string;
-}
-
 /**
  * 宿主插件主体：注册 /pet 前缀路由。
- * @param ctx    - 插件上下文；ctx.webServer 是 Web 服务器服务
- * @param config - 本行配置（来自 patch 树）
+ * @param ctx - 插件上下文；ctx.webServer 是 Web 服务器服务
  */
-export declare function apply(ctx: Context, config: Config): void;
+export declare function apply(ctx: Context): void;
 
 export type { WebRoute };

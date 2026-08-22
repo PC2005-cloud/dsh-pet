@@ -5,19 +5,19 @@
  * 流式返回给浏览器。源文件（src/host/index.ts）由 tsdown 构建为 lib/index.js。
  *
  * 路由：
- *   /pet/thumb/<动画名>.webm  → 插件包内 assets/thumb/
- *   /pet/full/<动画名>.webm   → $DSH_HOME/pet-assets/（原始母版，需手动下载）
+ *   /pet/thumb/<动画名>.webm  → $DSH_HOME/dsh-pet/main-animation/（用户目录，优先）→ 插件包内 assets/thumb/
  *   /pet/config.jsonc        → 插件包内 assets/config.jsonc（默认值，只读）
- *   /pet/config              → 用户覆盖配置（大小/位置，JSON）
+ *   /pet/config              → 用户覆盖配置（pets / animations / animationWeights，JSON）
  *                                GET 读取、PUT 保存、DELETE 恢复默认（删除用户层）
+ *   /pet/config/meta         → 配置文件与素材目录路径（设置页展示用）
  *
- * 安全性：resolveAsset 做"防穿越"校验，保证路径仍在 assets 根目录内。
+ * 安全性：resolveAsset 做"防穿越"校验，保证路径仍在对应根目录内。
  *
- * TODO(类型)：peer 依赖类型包本地暂不可解析，ctx/config/req/res 暂用 any；
+ * TODO(类型)：peer 依赖类型包本地暂不可解析，ctx/req/res 暂用 any；
  *             依赖可解析后替换为 DSH 官方类型。
  */
 import { createReadStream, existsSync } from 'node:fs';
-import { readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { readFile, mkdir, rm, stat, writeFile } from 'node:fs/promises';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { join, normalize, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -53,6 +53,12 @@ function resolveAsset(root: string, rel: string): string | undefined {
   const rootWithSep = root.endsWith(sep) ? root : root + sep;
   if (candidate !== root && !candidate.startsWith(rootWithSep)) return undefined;
   return candidate;
+}
+
+/** 在 root 下解析并确认实体存在；非法（穿越）或不存在时返回 undefined */
+function resolveExisting(root: string, rel: string): string | undefined {
+  const candidate = resolveAsset(root, rel);
+  return candidate && existsSync(candidate) ? candidate : undefined;
 }
 
 /** 流式返回一个文件（带 Content-Type / 长度 / 缓存头）。 */
@@ -101,7 +107,7 @@ function sanitizeUserConfig(raw: unknown): { pets: unknown[] } | null {
     if (!p || typeof p !== 'object') return null;
     const pp = p as Record<string, unknown>;
     const id = String(pp.id ?? '');
-    // 有意过滤文件名非法字符（Windows 保留符 + 控制字符），防止配置值逃逸 pet-config.json 路径
+    // 有意过滤文件名非法字符（Windows 保留符 + 控制字符），防止配置值逃逸 main-config.json 路径
     // eslint-disable-next-line no-control-regex
     if (!id || id.length > 64 || /[\\/:\x00-\x1f]/.test(id)) return null;
     const size = Number(pp.size);
@@ -121,10 +127,12 @@ function sanitizeUserConfig(raw: unknown): { pets: unknown[] } | null {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- DSH 注入的 ctx（webServer/locale 等 service 无静态类型）
 export function apply(ctx: any): void {
   const thumbRoot = join(PACKAGE_ROOT, 'assets', 'thumb');
-  // 原始母版目录固定为 $DSH_HOME/pet-assets（不再从 patch config 读取，config 无用途）
-  const fullRoot = join(resolveDshHome(), 'pet-assets');
-  // 用户覆盖层：设置页保存的大小/位置（与包内 config.jsonc 默认值合并，覆盖层优先）
-  const userConfigPath = join(resolveDshHome(), 'pet-config.json');
+  // 用户数据根：配置与用户素材统一收敛于此（扩展包按 <插件id> 各自建目录）
+  const userRoot = join(resolveDshHome(), 'dsh-pet');
+  // 用户覆盖配置（pets / animations / animationWeights 覆盖片段）
+  const userConfigPath = join(userRoot, 'main-config.json');
+  // 用户动画目录（thumb 播放时优先于包内 assets/thumb）
+  const thumbUserRoot = join(userRoot, 'main-animation');
 
   ctx.effect(
     () =>
@@ -157,6 +165,7 @@ export function apply(ctx: any): void {
                   });
                   return;
                 }
+                await mkdir(userRoot, { recursive: true });
                 await writeFile(userConfigPath, JSON.stringify(clean, null, 2), 'utf8');
                 sendJson(res, 200, { ok: true });
               } catch {
@@ -182,6 +191,7 @@ export function apply(ctx: any): void {
             sendJson(res, 200, {
               user: userConfigPath,
               default: join(PACKAGE_ROOT, 'assets', 'config.jsonc'),
+              animations: thumbUserRoot,
             });
             return;
           }
@@ -198,29 +208,18 @@ export function apply(ctx: any): void {
             return;
           }
 
-          // 第一段是 scope：thumb 或 full
+          // 动画文件：/pet/thumb/<file>，查找顺序 = 用户动画目录 → 包内 assets/thumb
           const [scope, ...nameParts] = rest.split('/');
-          if (scope !== 'thumb' && scope !== 'full') {
+          if (scope !== 'thumb') {
             res.writeHead(400, { 'content-type': 'text/plain; charset=utf-8' });
-            res.end('dsh-pet: expected /pet/{thumb|full}/<file>');
+            res.end('dsh-pet: expected /pet/thumb/<file>');
             return;
           }
-
           const fileName = nameParts.join('/');
-          const root = scope === 'thumb' ? thumbRoot : fullRoot;
-          const file = resolveAsset(root, fileName);
+          const file = resolveExisting(thumbUserRoot, fileName) ?? resolveExisting(thumbRoot, fileName);
           if (file === undefined) {
-            res.writeHead(400, { 'content-type': 'text/plain; charset=utf-8' });
-            res.end('dsh-pet: invalid path');
-            return;
-          }
-          if (!existsSync(file)) {
             res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
-            res.end(
-              scope === 'full'
-                ? `dsh-pet: original asset not downloaded yet — run the fetch-assets script to populate ${fullRoot}`
-                : 'dsh-pet: asset not found',
-            );
+            res.end('dsh-pet: asset not found');
             return;
           }
           const ext = file.slice(file.lastIndexOf('.')).toLowerCase();
