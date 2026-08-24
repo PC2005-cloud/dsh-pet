@@ -24,6 +24,8 @@ dsh plugin --profile web add dsh-pet
 
 重启 `dsh web`，宠物出现在界面右下角——全部透明动画开箱即用，无需任何生成流程。
 
+> 浏览器会自动选择透明视频格式：Chrome / Chromium / Firefox 使用 VP9-alpha WebM，Safari / WKWebView 使用 HEVC-alpha MOV。
+
 > 💡 想自己造一只专属宠物？克隆 [PC2005-cloud/dsh-pet](https://github.com/PC2005-cloud/dsh-pet) 仓库，用内置素材链（AI 提示词 → 绿幕视频 → 透明动画，素材由豆包生成）从零生成，全流程可复现。
 
 ## ✨ 功能特性
@@ -55,11 +57,11 @@ dsh plugin --profile web add dsh-pet
 | ---------------- | ------------------------------------ | ----------------------------------------------------------------------------------- |
 | 默认配置（只读） | 包内 `assets/config.jsonc`           | 完整结构参考：宠物列表 / 动画池（idle/turn/drag/clicks/moves/categories）/ 播放权重 |
 | 用户配置         | `$DSH_HOME/dsh-pet/main-config.json` | 覆盖片段：可整体覆盖 `pets` / `animations` / `animationWeights`，缺省字段回落默认   |
-| 用户动画（可选） | `$DSH_HOME/dsh-pet/main-animation/`  | 放入 `.webm` 即可作为动画播放，**优先于包内素材**                                   |
+| 用户动画（可选） | `$DSH_HOME/dsh-pet/main-animation/`  | 放入同名 `.webm` / `.mov` 作为动画播放，**优先于包内素材**                          |
 
 - 设置页底部会显示这些路径
-- 自定义动画：把 `xxx.webm` 放进 `main-animation/`，在动画池/分类里写 `"xxx"`，**刷新页面**即可（无需重启 DSH）
-- 格式：仅 `.webm`；**透明动画需 VP9 Alpha 编码**（与包内素材同规范，普通 webm 会有黑底）
+- 自定义动画：把 `xxx.webm` 放进 `main-animation/`；需要兼容 Safari / WKWebView 时再放入同名 `xxx.mov`，在动画池/分类里写 `"xxx"`，**刷新页面**即可（无需重启 DSH）
+- 格式：Chrome / Chromium / Firefox 使用 VP9-alpha `.webm`，Safari / WKWebView 使用 HEVC-alpha `.mov`
 - 修改用户配置后同样**刷新页面**生效
 - 动画名请对照默认配置填写，避免引用不存在的动画
 

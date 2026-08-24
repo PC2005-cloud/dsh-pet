@@ -1,11 +1,11 @@
 /**
  * dsh-pet 宿主半侧（host half）—— 宠物插件的"后端"部分
  *
- * 职责：在 DSH Web 服务器上注册 `/pet/` 前缀路由，把宠物动画 WebM / 配置 JSONC
+ * 职责：在 DSH Web 服务器上注册 `/pet/` 前缀路由，把宠物动画视频 / 配置 JSONC
  * 流式返回给浏览器。源文件（src/host/index.ts）由 tsdown 构建为 lib/index.js。
  *
  * 路由：
- *   /pet/thumb/<动画名>.webm  → $DSH_HOME/dsh-pet/main-animation/（用户目录，优先）→ 插件包内 assets/thumb/
+ *   /pet/thumb/<动画名>.<webm|mov> → $DSH_HOME/dsh-pet/main-animation/（用户目录，优先）→ 插件包内 assets/thumb/
  *   /pet/config.jsonc        → 插件包内 assets/config.jsonc（默认值，只读）
  *   /pet/config              → 用户覆盖配置（pets / animations / animationWeights，JSON）
  *                                GET 读取、PUT 保存、DELETE 恢复默认（删除用户层）
@@ -37,6 +37,7 @@ const ROUTE_PREFIX = '/pet';
 /** 不同扩展名对应的 Content-Type 映射 */
 const MIME: Record<string, string> = {
   '.webm': 'video/webm',
+  '.mov': 'video/quicktime',
   '.mp4': 'video/mp4',
   '.png': 'image/png',
   '.json': 'application/json; charset=utf-8',

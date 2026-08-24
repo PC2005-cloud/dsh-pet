@@ -11,7 +11,7 @@
  *
  * 【检查项】
  *   1. 必需文件是否存在（lib、类型声明、patch、对齐参数）
- *   2. 至少有待机动画的 thumb
+ *   2. thumb 同时包含 WebM / MOV，且文件名一一对应
  *   3. 原始 1200×1200 母版不得进 npm 包（体积超限，应放 GitHub Releases）
  *   4. client.js 是官方 bundle 形态（__ModuleLoader__.load + exports.apply）
  *   5. package.json 声明了 dsh.bundle 和 dsh.client（否则装不上）
@@ -44,9 +44,17 @@ for (const f of required) {
   existsSync(join(ROOT, f)) ? ok(`exists ${f}`) : fail(`missing ${f}`);
 }
 
-// ---- 2. 至少有待机动画 thumb（播放必需） ----
-const idle = join(ROOT, 'assets', 'thumb', '待机呼吸休闲.webm');
-existsSync(idle) ? ok('idle thumb present') : fail('missing 待机呼吸休闲.webm thumb');
+// ---- 2. WebM / MOV 播放资源必须一一对应（Chromium / Apple WebKit） ----
+const thumbRoot = join(ROOT, 'assets', 'thumb');
+const thumbFiles = readdirSync(thumbRoot);
+const webmNames = new Set(thumbFiles.filter((name) => name.endsWith('.webm')).map((name) => name.slice(0, -5)));
+const movNames = new Set(thumbFiles.filter((name) => name.endsWith('.mov')).map((name) => name.slice(0, -4)));
+const missingMov = [...webmNames].filter((name) => !movNames.has(name));
+const missingWebm = [...movNames].filter((name) => !webmNames.has(name));
+if (missingMov.length > 0) fail(`missing HEVC-alpha MOV thumbs: ${missingMov.join(', ')}`);
+if (missingWebm.length > 0) fail(`missing VP9-alpha WebM thumbs: ${missingWebm.join(', ')}`);
+if (webmNames.size === movNames.size && missingMov.length === 0 && missingWebm.length === 0)
+  ok(`${webmNames.size} WebM/MOV thumb pairs present`);
 
 // ---- 3. 原始母版不得进 npm 包 ----
 // assets/ 根下若有 .webm 就是原始 1200×1200 母版（thumb 在 assets/thumb/ 子目录）

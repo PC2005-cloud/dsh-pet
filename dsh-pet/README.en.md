@@ -23,6 +23,8 @@ dsh plugin --profile web add dsh-pet
 
 Restart `dsh web` and the pet appears in the bottom-right corner — all transparent animations, ready to use out of the box, no generation pipeline required.
 
+> The browser selects the transparent video format automatically: Chrome / Chromium / Firefox use VP9-alpha WebM, while Safari / WKWebView use HEVC-alpha MOV.
+
 > 💡 Want to craft your own one-of-a-kind pet? Clone [PC2005-cloud/dsh-pet](https://github.com/PC2005-cloud/dsh-pet) and use the bundled asset pipeline (AI prompts → green-screen video → transparent animation, generated with Doubao) to generate one from scratch — fully reproducible.
 
 ## ✨ Features
@@ -55,11 +57,11 @@ All user data lives under `$DSH_HOME/dsh-pet/` (one directory per plugin; future
 | -------------------------- | ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------- |
 | Default config (read-only) | `assets/config.jsonc` in the package | Complete reference: pet list / animation pools (idle/turn/drag/clicks/moves/categories) / playback weights              |
 | User config                | `$DSH_HOME/dsh-pet/main-config.json` | Override fragment: optionally override `pets` / `animations` / `animationWeights`; missing fields fall back to defaults |
-| User animations (optional) | `$DSH_HOME/dsh-pet/main-animation/`  | Drop `.webm` files here to make them playable — **takes precedence over the packaged assets**                           |
+| User animations (optional) | `$DSH_HOME/dsh-pet/main-animation/`  | Drop matching `.webm` / `.mov` files here — **takes precedence over the packaged assets**                               |
 
 - The settings page shows these paths at the bottom
-- Custom animations: put `xxx.webm` into `main-animation/`, name it in an animation pool/category as `"xxx"`, then **refresh the page** (no DSH restart needed)
-- Format: `.webm` only; **transparent animations require VP9 Alpha encoding** (same spec as the packaged assets — plain webm will show a black background)
+- Custom animations: put `xxx.webm` into `main-animation/`; add a matching `xxx.mov` for Safari / WKWebView, name it in an animation pool/category as `"xxx"`, then **refresh the page** (no DSH restart needed)
+- Formats: Chrome / Chromium / Firefox use VP9-alpha `.webm`; Safari / WKWebView use HEVC-alpha `.mov`
 - After editing the user config, **refresh the page** to apply
 - Fill animation names by referring to the default config to avoid referencing missing animations
 

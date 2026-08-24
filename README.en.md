@@ -42,7 +42,7 @@ dsh plugin --profile web add dsh-pet
 
 Restart `dsh web` and the pet appears in the bottom-right corner.
 
-> **Compatibility**: this plugin is developed and tested with dsh **`0.1.1-rc.1`** (check yours with `dsh --version`). Using the same version is recommended; please report any issues on other versions.
+> **Compatibility**: this plugin is developed and tested with dsh **`0.1.1-rc.1`** (check yours with `dsh --version`). Transparent animation formats are selected by engine: Chrome / Chromium / Firefox use VP9-alpha WebM, while Safari / WKWebView use HEVC-alpha MOV.
 
 ## Generate Your Own Pet from Scratch (Full Pipeline)
 
@@ -96,6 +96,10 @@ python encode_thumbs.py      # transcode 640×360 playback variants → step04/
 # Sync the step04 playback variants into the plugin package
 cp step04/*.webm dsh-pet/assets/thumb/
 
+# macOS 10.15+: generate HEVC-alpha MOV files for Safari / WKWebView
+# Requires ffmpeg; set FFMPEG_BIN=/absolute/path/to/ffmpeg when it is not on PATH
+./scripts/encode_hevc_alpha.sh
+
 # Install the plugin locally
 dsh plugin --profile web add file:D:/path/to/dsh-pet
 ```
@@ -116,7 +120,7 @@ dsh plugin --profile web add file:D:/path/to/dsh-pet
 ├── dsh-pet/                 # ③ The plugin (can be published to npm independently)
 │   ├── src/                 #   TS sources (host half: /pet routes; client half: animation chain)
 │   ├── lib/                 #   tsdown build output (auto-built on install; lib/*.js not committed)
-│   ├── assets/thumb/        #   640×360 transparent playback animations
+│   ├── assets/thumb/        #   640×360 transparent playback animations (VP9-alpha WebM + HEVC-alpha MOV)
 │   ├── assets/preview/      #   GIF previews (for README display, pinyin filenames)
 │   └── scripts/prepack-check.js  # pre-publish health check
 ├── DESIGN.md                # Design & implementation docs
@@ -139,6 +143,7 @@ dsh plugin --profile web add file:D:/path/to/dsh-pet
 The pet's size, position and multi-pet setup can be configured in two ways:
 
 ### Via the settings page (recommended)
+
 DSH Settings → **Pet Config**:
 
 - **Size**: width in px (height is automatic = width × 9/16)
@@ -147,6 +152,7 @@ DSH Settings → **Pet Config**:
 - **Save** applies **instantly** (no page refresh needed); **Reset to default** restores the `config.jsonc` defaults
 
 ### Via config.jsonc (single source of truth)
+
 The `pets` array in `dsh-pet/assets/config.jsonc` defines the **default pets**:
 
 ```jsonc

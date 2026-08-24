@@ -15,6 +15,14 @@ import type { jsx } from 'react/jsx-runtime';
 /** 运行时配置（PetMulti 加载后赋值；PetCard 只读） */
 let config: ClientConfig = EMPTY_CONF;
 
+/** Apple WebKit 使用 HEVC-alpha；Chromium / Firefox 继续使用 VP9-alpha WebM。 */
+function videoExtension(userAgent: string): '.mov' | '.webm' {
+  const isAppleWebKit = /AppleWebKit/i.test(userAgent) && !/(Chrome|Chromium|Edg\/|OPR\/)/i.test(userAgent);
+  return isAppleWebKit ? '.mov' : '.webm';
+}
+
+const VIDEO_EXTENSION = videoExtension(typeof navigator === 'undefined' ? '' : navigator.userAgent);
+
 /** 内联 CSS —— 注入一次（官方插件标准做法） */
 const css = [
   '.dsh-pet-root{position:fixed;z-index:40;pointer-events:none;user-select:none}',
@@ -101,7 +109,7 @@ export function makePetUI(rt: {
       const target = frontRef.current === 0 ? videoBRef : videoARef;
       const el = target.current;
       if (!el) return;
-      el.src = '/pet/thumb/' + encodeURIComponent(next) + '.webm';
+      el.src = '/pet/thumb/' + encodeURIComponent(next) + VIDEO_EXTENSION;
       el.loop = !nextOnce;
       el.muted = true;
       el.autoplay = true;

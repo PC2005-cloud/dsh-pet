@@ -44,7 +44,7 @@ dsh plugin --profile web add dsh-pet
 
 重启 `dsh web`，宠物出现在右下角。
 
-> **兼容性**：本插件在 dsh **`0.1.1-rc.1`** 下开发并测试（`dsh --version` 可查看你的版本）。建议使用相同版本；其他版本如遇问题欢迎反馈。
+> **兼容性**：本插件在 dsh **`0.1.1-rc.1`** 下开发并测试（`dsh --version` 可查看你的版本）。透明动画会按 Web 引擎自动选择格式：Chrome / Chromium / Firefox 使用 VP9-alpha WebM，Safari / WKWebView 使用 HEVC-alpha MOV。
 
 ## 从零生成你自己的宠物（完整流程）
 
@@ -96,6 +96,10 @@ python encode_thumbs.py      # 转码 640×360 播放变体 → step04/
 # 把 step04 的播放变体同步进插件包
 cp step04/*.webm dsh-pet/assets/thumb/
 
+# macOS 10.15+：由 WebM 生成 Safari / WKWebView 使用的 HEVC-alpha MOV
+# 需要 ffmpeg；找不到时可通过 FFMPEG_BIN=/absolute/path/to/ffmpeg 指定
+./scripts/encode_hevc_alpha.sh
+
 # 本地安装插件
 dsh plugin --profile web add file:D:/path/to/dsh-pet
 ```
@@ -116,7 +120,7 @@ dsh plugin --profile web add file:D:/path/to/dsh-pet
 ├── dsh-pet/                 # ③ 插件（可独立 npm 发布）
 │   ├── src/                 #   TS 源码（host 半侧 /pet 路由 + client 半侧动画链）
 │   ├── lib/                 #   tsdown 构建产物（prepare 自动构建，lib/*.js 不入库）
-│   ├── assets/thumb/        #   640×360 透明播放动画
+│   ├── assets/thumb/        #   640×360 透明播放动画（VP9-alpha WebM + HEVC-alpha MOV）
 │   ├── assets/preview/      #   GIF 预览（README 展示用，拼音命名）
 │   └── scripts/prepack-check.js  # 发布前健康检查
 ├── DESIGN.md                # 设计与实现文档
@@ -139,6 +143,7 @@ dsh plugin --profile web add file:D:/path/to/dsh-pet
 桌宠的大小、位置、多开均可配置，两条途径：
 
 ### 方式一：设置页（推荐）
+
 DSH 设置 → 「桌宠配置」：
 
 - **大小**：宽度 px（高度自动 = 宽度 × 9/16）
@@ -147,6 +152,7 @@ DSH 设置 → 「桌宠配置」：
 - 点「保存」**即时生效**（无需刷新）；「恢复默认」回到 config.jsonc 默认
 
 ### 方式二：config.jsonc（单一来源）
+
 插件包内 `dsh-pet/assets/config.jsonc` 的 `pets` 数组定义**默认宠物**：
 
 ```jsonc
@@ -308,6 +314,7 @@ DSH 设置 → 「桌宠配置」：
 </p>
 
 > 注：动画为透明背景；GIF 预览中透明部分显示为页面底色，实际 webm 播放为透明。
+
 ## 文档
 
 - [设计与实现](DESIGN.md) —— 架构、动画链模型、素材链
