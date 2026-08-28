@@ -50,7 +50,7 @@
       "actions": [
         { "name": "螃蟹走路" },
         { "name": "原地漂浮踏步", "params": { "minDist": 40, "maxDist": 120 } },
-        { "name": "原地左转奔跑", "params": { "minDist": 120, "maxDist": 320 } }
+        { "name": "原地左转奔跑", "params": { "minDist": 120, "maxDist": 320, "leadSec": 1.75, "tailSec": 4.8 } }
       ]
     },
     // 随机动作：分类池。weight 为该分类出现权重；noMirror: true 表示“带文字、镜像会颠倒，
