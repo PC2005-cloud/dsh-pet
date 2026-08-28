@@ -55,12 +55,13 @@ export type BalanceState = BalanceView | BalanceUnavailable;
 const TIMEOUT_MS = 20000;
 const RETRIES = 2;
 
-/** 带超时 + 重试的 GET（host 已内置重试，这里再兜底网络抖动） */
+/** 带超时 + 重试的 GET（host 已内置重试，这里再兜底网络抖动）；
+ *  强制 no-store：余额必须实时，禁止浏览器/代理缓存层介入 */
 async function getWithRetry(url: string): Promise<Response> {
   let last: unknown;
   for (let i = 0; i <= RETRIES; i++) {
     try {
-      const res = await fetch(url, { signal: AbortSignal.timeout(TIMEOUT_MS) });
+      const res = await fetch(url, { signal: AbortSignal.timeout(TIMEOUT_MS), cache: 'no-store' });
       if (res.ok) return res;
       last = new Error('HTTP ' + res.status);
     } catch (e) {

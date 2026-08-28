@@ -33,10 +33,30 @@ const bubbleCss = [
   '.dsh-pet-bubble .pet-bub-err{color:#d94f3d;font-size:calc(var(--dsh-pet-size)*0.035)}',
   '.dsh-pet-bubble .pet-bub-tag{margin-left:calc(var(--dsh-pet-size)*0.013);font-size:calc(var(--dsh-pet-size)*0.022);color:rgba(43,43,43,.55);border:1px solid rgba(43,43,43,.25);' +
     'border-radius:calc(var(--dsh-pet-size)*0.013);padding:0 calc(var(--dsh-pet-size)*0.009);vertical-align:1px}',
-  // 峰/谷计价档位标注：峰红、谷绿
+  // 峰/谷计价档位标注：高峰红、空闲绿（颜色不变，文案为梁文峰/梁文谷）
   '.dsh-pet-bubble .pet-bub-tier{font-weight:700}',
   '.dsh-pet-bubble .pet-bub-tier-peak{color:#e53935}',
   '.dsh-pet-bubble .pet-bub-tier-idle{color:#2e9e4f}',
+  // 余额数字：蓝色字体（用户需求）
+  '.dsh-pet-bubble .pet-bub-balance{color:#1d6fe8;font-weight:700;font-variant-numeric:tabular-nums}',
+  // ===== 每轮对话消耗气泡（独立新样式）：深色圆润泡 + 强调色金额 + 尾巴 =====
+  '.dsh-pet-spend{position:absolute;left:50%;transform:translateX(-50%);' +
+    'bottom:calc(100% - var(--dsh-pet-size)*0.108);' +
+    'min-width:calc(var(--dsh-pet-size)*0.30);max-width:calc(var(--dsh-pet-size)*0.52);' +
+    'padding:calc(var(--dsh-pet-size)*0.024) calc(var(--dsh-pet-size)*0.034);' +
+    'border-radius:calc(var(--dsh-pet-size)*0.04);' +
+    'background:linear-gradient(135deg,rgba(42,52,74,.96),rgba(23,27,40,.96));' +
+    'color:#fff;font-family:"ShangshouSoftCandy","Yuanti SC","YouYuan","幼圆","Comic Sans MS","PingFang SC","Microsoft YaHei",sans-serif;' +
+    'font-size:calc(var(--dsh-pet-size)*0.042);line-height:1.6;z-index:3;pointer-events:none;' +
+    'box-shadow:0 calc(var(--dsh-pet-size)*0.009) calc(var(--dsh-pet-size)*0.035) rgba(0,0,0,.28),0 1px 3px rgba(0,0,0,.18);' +
+    'border:1px solid rgba(255,255,255,.14);' +
+    'opacity:0;transition:opacity .25s ease;white-space:nowrap}',
+  '.dsh-pet-spend::after{content:"";position:absolute;left:50%;bottom:calc(var(--dsh-pet-size)*-0.017);' +
+    'transform:translateX(-50%);border:calc(var(--dsh-pet-size)*0.017) solid transparent;' +
+    'border-top-color:rgba(42,52,74,.96);border-bottom:none}',
+  '.dsh-pet-spend.is-on{opacity:1}',
+  '.dsh-pet-spend .pet-spend-label{font-size:calc(var(--dsh-pet-size)*0.035);color:rgba(255,255,255,.7);margin-bottom:calc(var(--dsh-pet-size)*0.004)}',
+  '.dsh-pet-spend .pet-spend-amount{font-variant-numeric:tabular-nums;font-weight:750;color:#ffb74d}',
 ].join('\n');
 
 /** 只注入一次 */
@@ -54,7 +74,9 @@ function injectBubbleCss(): void {
  * 制造余额气泡（工厂）。
  * 工厂内注入样式一次（与 pet.ts 的 injectCss 同模式）；组件为哑组件，props = { state, on }。
  */
-export function makeBalanceBubble(rt: { h: typeof jsx }): (props: { state: BalanceState; on: boolean }) => ReactNode {
+export function makeBalanceBubble(rt: {
+  h: typeof jsx;
+}): (props: { state: BalanceState; on: boolean }) => ReactNode {
   const { h } = rt;
   injectBubbleCss();
 
@@ -74,19 +96,32 @@ export function makeBalanceBubble(rt: { h: typeof jsx }): (props: { state: Balan
           rows.push(h('div', { className: 'pet-bub-row', children: '额度数据不可用' }));
         }
       } else {
-        // DeepSeek：单行「余额（峰/谷）¥x.xx」——按北京时间峰谷价档上色（峰红/谷绿）
+        // DeepSeek：余额（蓝色字体）+ 梁文峰/梁文谷时段（梁文峰红 / 梁文谷绿）——按北京时间峰谷价档上色
         const tier = deepseekPricingTier();
         rows.push(
           h('div', {
             className: 'pet-bub-row',
             children: h('span', {
               children: [
-                '余额（',
+                '余额 ',
+                h('span', {
+                  className: 'pet-bub-balance',
+                  children: (state.currency ? state.currency : '¥') + (state.total ?? '-'),
+                }),
+              ],
+            }),
+          }),
+        );
+        rows.push(
+          h('div', {
+            className: 'pet-bub-row pet-bub-sub',
+            children: h('span', {
+              children: [
+                '当前时段：',
                 h('span', {
                   className: 'pet-bub-tier pet-bub-tier-' + tier,
-                  children: tier === 'peak' ? '峰' : '谷',
+                  children: tier === 'peak' ? '梁文峰' : '梁文谷',
                 }),
-                '）¥' + (state.total ?? '-'),
               ],
             }),
           }),
@@ -106,6 +141,33 @@ export function makeBalanceBubble(rt: { h: typeof jsx }): (props: { state: Balan
     return h('div', {
       className: 'dsh-pet-bubble' + (on ? ' is-on' : ''),
       children: rows,
+    });
+  };
+}
+
+/**
+ * 制造「每轮对话消耗」气泡（独立新样式，深色泡 + 橙色金额）。
+ * 哑组件：props = { amount, currency, on }；由 PetCard 在 turn-spend 结算时显示，
+ * 持续 SPEND_DURATION_MS（5s）或鼠标移动到桌宠上时收起。
+ */
+export function makeSpendBubble(rt: {
+  h: typeof jsx;
+}): (props: { amount: number; currency: string; on: boolean }) => ReactNode {
+  const { h } = rt;
+  injectBubbleCss();
+
+  return function SpendBubble({ amount, currency, on }: { amount: number; currency: string; on: boolean }) {
+    const label = '本轮消耗';
+    // 金额显示：>= 0.01 保留 2 位；< 0.01 保留 4 位（单轮消耗常为万分位小数，避免显示 0.00）
+    const text =
+      amount >= 0.01 ? amount.toFixed(2) : amount >= 0.0001 ? amount.toFixed(4) : '<0.0001';
+    const value = (currency ? currency : 'CNY') + ' ' + text;
+    return h('div', {
+      className: 'dsh-pet-spend' + (on ? ' is-on' : ''),
+      children: [
+        h('div', { className: 'pet-spend-label', children: label }),
+        h('div', { className: 'pet-spend-amount', children: value }),
+      ],
     });
   };
 }

@@ -6,7 +6,7 @@ import { pick, rollKind, pickCategoryAction } from './pickers';
 import { planMove } from './motion';
 import { assertClientConfig, EMPTY_CONF, applyUserOverrides, stripJsonc, type UserOverrides } from './config';
 import { balanceEventIndex, balancePercent, fetchBalanceState, type BalanceState } from './balance';
-import { makeBalanceBubble } from './bubble';
+import { makeBalanceBubble, makeSpendBubble } from './bubble';
 import { CANVAS_H, FEET_Y, HIT_BOX, DRAG_THRESHOLD, PET_REF_WIDTH } from './constants';
 import { petBridge } from './settings';
 import type { ClientConfig, Corner, Pet } from './types';
@@ -24,6 +24,12 @@ const THUMB_EXT: string = '__PET_EXT__';
 
 /** 余额气泡展示时长（ms）：定时自动消失，与动画生命周期解耦 */
 const BUBBLE_DURATION_MS = 10 * 1000;
+
+/** 每轮对话消耗气泡展示时长（ms）：结算后自动消失；鼠标移动到桌宠上时也会提前收起 */
+const SPEND_DURATION_MS = 5 * 1000;
+
+/** 每轮对话消耗轮询间隔（ms）：轻量 no-cache 轮询，检测 host 端新结算的 turn-spend */
+const SPEND_POLL_MS = 2000;
 
 /** 内联 CSS —— 注入一次（官方插件标准做法） */
 const css = [
@@ -66,9 +72,32 @@ export function makePetUI(rt: {
 
   /** 余额气泡（哑组件：数据与显隐由 PetCard 传入） */
   const BalanceBubble = makeBalanceBubble({ h });
+  /** 每轮对话消耗气泡（独立新样式：深色泡 + 橙色金额） */
+  const SpendBubble = makeSpendBubble({ h });
+
+  /** 每轮对话消耗（最近一次结算；PetMulti 轮询到新值后传入） */
+  interface TurnSpend {
+    amount: number;
+    currency: string;
+    at: number;
+  }
 
   /** 单个宠物实例（配置由容器 PetMulti 传入） */
-  function PetCard({ cfg, balance, balanceTick }: { cfg: Pet; balance: BalanceState | null; balanceTick: number }) {
+  function PetCard({
+    cfg,
+    balance,
+    balanceTick,
+    spend,
+    spendTick,
+    onRefreshBalance,
+  }: {
+    cfg: Pet;
+    balance: BalanceState | null;
+    balanceTick: number;
+    spend: TurnSpend | null;
+    spendTick: number;
+    onRefreshBalance: () => void;
+  }) {
     // ---- 尺寸（由配置传入；容器/设置页更新后即时跟随）----
     const [size, setSize] = useState(cfg.size);
     const halfW = size / 2;
@@ -83,9 +112,13 @@ export function makePetUI(rt: {
     // 初始角落与边距（来自配置；可被容器更新覆盖）
     const [corner, setCorner] = useState<Corner>(cfg.position.corner);
     const [margin, setMargin] = useState({ x: cfg.position.marginX, y: cfg.position.marginY });
-    // 余额气泡显隐（事件触发时显示，10s 后定时自动消失）
+    // 余额气泡显隐：事件触发（余额动画）时显示 10s 自动消失；悬停（hover）时持续显示、移开即隐
     const [bubbleOn, setBubbleOn] = useState(false);
+    const [hoverOn, setHoverOn] = useState(false);
     const bubbleTimerRef = useRef<number | null>(null);
+    // 每轮对话消耗气泡（turn-spend 结算后显示 10s）
+    const [spendOn, setSpendOn] = useState(false);
+    const spendTimerRef = useRef<number | null>(null);
 
     // 配置变化即时跟随（容器重新合并 / 设置页保存后通过 petBridge.sync 触发）
     useEffect(() => {
@@ -155,13 +188,40 @@ export function makePetUI(rt: {
     useEffect(
       () => () => {
         if (bubbleTimerRef.current !== null) window.clearTimeout(bubbleTimerRef.current);
+        if (spendTimerRef.current !== null) window.clearTimeout(spendTimerRef.current);
       },
       [],
     );
+    // 每轮对话消耗（turn-spend）：容器轮询到新结算 → 弹出独立消耗气泡，
+    // 持续 SPEND_DURATION_MS（5s）自动消失；鼠标移动到桌宠上时也会提前收起（见 hover 处理）
+    const prevSpendTickRef = useRef(0);
+    useEffect(() => {
+      if (!cfg.balanceEnabled) return;
+      if (spendTick === 0 || spendTick === prevSpendTickRef.current) return;
+      prevSpendTickRef.current = spendTick;
+      if (!spend || spend.amount <= 0) return;
+      console.log(
+        '[dsh-pet] ' +
+          new Date().toTimeString().slice(0, 8) +
+          ' turn-spend pet=' +
+          cfg.id +
+          ' amount=' +
+          spend.amount.toFixed(2) +
+          ' ' +
+          spend.currency,
+      );
+      setSpendOn(true);
+      if (spendTimerRef.current !== null) window.clearTimeout(spendTimerRef.current);
+      spendTimerRef.current = window.setTimeout(() => setSpendOn(false), SPEND_DURATION_MS);
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [spendTick]);
     // 余额事件：容器拉取成功后递增 balanceTick → 按档位播放事件动画 + 弹气泡
     // （仅启用余额功能的宠物触发：未启用则该宠物完全不播余额动画、不显示气泡；
     //   无效/不支持按设计不触发动画，错误由容器侧显式上报）
+    // 高频刷新（4s）下避免动画轰炸：仅在「档位变化」时才触发动画+气泡，
+    // 数据本身每次刷新都更新（悬停气泡即时显示最新余额）。
     const prevTickRef = useRef(0);
+    const prevIdxRef = useRef(-1);
     useEffect(() => {
       if (!cfg.balanceEnabled) return; // 未启用余额功能 -> 该宠物对余额事件完全免疫
       if (balanceTick === 0 || balanceTick === prevTickRef.current) return;
@@ -175,6 +235,8 @@ export function makePetUI(rt: {
         return;
       }
       const idx = balanceEventIndex(p);
+      if (idx === prevIdxRef.current) return; // 档位未变化：只更新数据，不播动画不弹气泡
+      prevIdxRef.current = idx;
       const name = pool[idx];
       if (!name) {
         console.error('[dsh-pet] balance 档位索引越界：p=' + p + ' idx=' + idx);
@@ -463,6 +525,8 @@ export function makePetUI(rt: {
       if (d.active || d.dragging || justDraggedRef.current) return;
       stopMove();
       setOnce(true);
+      // 点击桌宠：同时触发一次余额即时刷新（用户需求——悬停气泡立刻显示最新余额）
+      if (cfg.balanceEnabled) onRefreshBalance();
       if (!config.animations.clicks.length) return;
       const name = pick(config.animations.clicks);
       console.log('[dsh-pet] ' + new Date().toTimeString().slice(0, 8) + ' pet=' + cfg.id + ' -> [CLICK] ' + name);
@@ -482,6 +546,15 @@ export function makePetUI(rt: {
         })()
       : {};
     const commonVideoProps = { muted: true, playsInline: true, autoPlay: true, title: 'dsh-pet' };
+    // 悬停：显示余额气泡（余额蓝色 + 梁文峰/梁文谷），移开即隐；拖拽中不触发悬停气泡；
+    // 每轮消耗气泡按需求「鼠标移动到桌宠上后消失」——悬停时同时收起消耗气泡
+    const showBubbleOnHover = () => {
+      if (dragRef.current.active) return;
+      setHoverOn(true);
+      if (spendTimerRef.current !== null) window.clearTimeout(spendTimerRef.current);
+      setSpendOn(false);
+    };
+    const hideBubbleOnHover = () => setHoverOn(false);
     const hitProps = {
       className: 'dsh-pet-hit',
       style: {
@@ -495,6 +568,8 @@ export function makePetUI(rt: {
       onPointerMove: handlePointerMove,
       onPointerUp: handlePointerUp,
       onPointerCancel: handlePointerUp,
+      onPointerEnter: showBubbleOnHover,
+      onPointerLeave: hideBubbleOnHover,
       title: 'dsh-pet',
     };
     return h('div', {
@@ -507,8 +582,12 @@ export function makePetUI(rt: {
         rootStyle,
       ),
       children: [
-        // 余额气泡（仅启用余额功能的宠物渲染；显示与否由 bubbleOn 控制）
-        balance && balance.ok && cfg.balanceEnabled ? h(BalanceBubble, { state: balance, on: bubbleOn }) : null,
+        // 余额气泡（仅启用余额功能的宠物渲染）：事件触发（bubbleOn）或悬停（hoverOn）时显示
+        balance && balance.ok && cfg.balanceEnabled
+          ? h(BalanceBubble, { state: balance, on: bubbleOn || hoverOn })
+          : null,
+        // 每轮对话消耗气泡（独立新样式）：turn-spend 结算后弹出，5s 或鼠标移到桌宠上时收起
+        cfg.balanceEnabled && spendOn && spend ? h(SpendBubble, { amount: spend.amount, currency: spend.currency, on: true }) : null,
         h('div', {
           ref: stageRef,
           className: 'dsh-pet-stage',
@@ -573,31 +652,71 @@ export function makePetUI(rt: {
     // 是否存在启用余额功能的宠物：全禁用时跳过余额轮询（不拉取 /dsh-pet-7340/balance，避免无意义的周期请求）
     const anyBalanceEnabled = pets.some((p) => p.balanceEnabled);
 
-    // 余额轮询：配置就绪（ready）且至少一只宠物启用余额后启动拉取一次，之后按 eventsRefreshSec.balance（秒）周期刷新；
-    // 成功递增 balanceTick 触发事件动画；失败/不支持均不触发动画（错误显式 console.error，绝不显示伪造余额）
+    // 余额即时刷新（周期轮询 + 点击桌宠共用）：拉取最新余额 → 更新 state；
+    // 成功递增 balanceTick（档位变化才触发动画，见 PetCard 逻辑）；失败显式报错不伪造数字。
+    // 用 useRef 持有最新实现，避免定时器/回调捕获过期闭包
+    const refreshBalanceRef = useRef(async () => {});
+    refreshBalanceRef.current = async () => {
+      try {
+        const state = await fetchBalanceState();
+        setBalance(state);
+        if (state.ok) setBalanceTick((t) => t + 1);
+        else if (state.reason === 'unsupported') {
+          /* 无匹配服务商：按设计不显示、不播动画 */
+        } else {
+          console.error('[dsh-pet] 余额查询失败 reason=' + state.reason + (state.message ? ' ' + state.message : ''));
+        }
+      } catch (e) {
+        console.error('[dsh-pet] 余额拉取异常', e);
+      }
+    };
+    const onRefreshBalance = () => void refreshBalanceRef.current();
+
+    // 每轮对话消耗（turn-spend）：2s 轻量轮询 host 端点（no-cache），新结算 → 递增 spendTick
+    // （spend 数据由 host 侧 session/event 统计，页面刷新后从当前 count 继续，不重放历史）
+    const [spend, setSpend] = useState<TurnSpend | null>(null);
+    const [spendTick, setSpendTick] = useState(0);
     useEffect(() => {
-      if (!ready || !anyBalanceEnabled) return; // 未就绪 / 全宠物未启用余额：不启动轮询
+      if (!ready || !anyBalanceEnabled) return;
       let alive = true;
-      const refresh = async () => {
+      let prev = -1;
+      const poll = async () => {
         try {
-          const state = await fetchBalanceState();
-          if (!alive) return;
-          setBalance(state);
-          if (state.ok) setBalanceTick((t) => t + 1);
-          else if (state.reason === 'unsupported') {
-            /* 无匹配服务商：按设计不显示、不播动画 */
-          } else {
-            console.error('[dsh-pet] 余额查询失败 reason=' + state.reason + (state.message ? ' ' + state.message : ''));
+          const r = await fetch('/dsh-pet-7340/turn-spend', { cache: 'no-store' });
+          if (!alive || !r.ok) return;
+          const data = await r.json().catch(() => null);
+          const count = data && typeof data.count === 'number' ? data.count : -1;
+          if (count < 0) return;
+          if (prev === -1) {
+            prev = count; // 首次仅记基线：避免页面加载时重放历史结算
+            return;
           }
-        } catch (e) {
-          if (alive) console.error('[dsh-pet] 余额拉取异常', e);
+          if (count === prev) return;
+          prev = count;
+          if (data && typeof data.amount === 'number' && data.amount > 0) {
+            setSpend({ amount: data.amount, currency: String(data.currency || '¥'), at: Number(data.at) || 0 });
+            setSpendTick((t) => t + 1);
+          }
+        } catch {
+          /* 轻量轮询失败静默：下一周期再试 */
         }
       };
-      void refresh();
-      const intervalMs = Math.max(1000, (config.eventsRefreshSec?.balance ?? 1800) * 1000);
-      const timer = window.setInterval(() => void refresh(), intervalMs);
+      void poll();
+      const timer = window.setInterval(() => void poll(), SPEND_POLL_MS);
       return () => {
         alive = false;
+        window.clearInterval(timer);
+      };
+    }, [ready, anyBalanceEnabled]);
+
+    // 余额轮询：配置就绪（ready）且至少一只宠物启用余额后启动拉取一次，之后按 eventsRefreshSec.balance（秒）周期刷新；
+    // 与点击刷新共用 refreshBalanceRef（同一刷新路径，不会重复叠加）
+    useEffect(() => {
+      if (!ready || !anyBalanceEnabled) return; // 未就绪 / 全宠物未启用余额：不启动轮询
+      void refreshBalanceRef.current();
+      const intervalMs = Math.max(1000, (config.eventsRefreshSec?.balance ?? 1800) * 1000);
+      const timer = window.setInterval(() => void refreshBalanceRef.current(), intervalMs);
+      return () => {
         window.clearInterval(timer);
       };
     }, [ready, anyBalanceEnabled]);
@@ -642,7 +761,11 @@ export function makePetUI(rt: {
       };
     }, [ready, anyBalanceEnabled]);
 
-    return ready ? pets.map((p) => h(PetCard, { key: p.id, cfg: p, balance, balanceTick })) : null;
+    return ready
+      ? pets.map((p) =>
+          h(PetCard, { key: p.id, cfg: p, balance, balanceTick, spend, spendTick, onRefreshBalance }),
+        )
+      : null;
   }
 
   return PetMulti;
