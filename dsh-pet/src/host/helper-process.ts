@@ -17,11 +17,16 @@ import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve, sep } from 'node:path';
 import { Readable, Transform } from 'node:stream';
-import { pipeline } from 'node:stream/promises';
+import { pipeline as pipelineCallback } from 'node:stream';
+import { promisify } from 'node:util';
 import { tmpdir } from 'node:os';
 import { symlinkSync, writeFileSync } from 'node:fs';
 
 const require = createRequire(import.meta.url);
+/** stream 的回调版 pipeline + promisify：与 stream/promises 同实现，但类型只认 Node 流，
+ *  避开 @types/node 26.x 里 stream/promises.pipeline 与 DOM lib 的 ReadableStream 定义冲突。 */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- 重载歧义无法用具体类型表达，见下方调用处注释
+const nodePipeline = promisify(pipelineCallback) as unknown as (...streams: any[]) => Promise<void>;
 const here = dirname(fileURLToPath(import.meta.url));
 export const packageRoot = resolve(here, '..');
 export const defaultHelperMain = resolve(packageRoot, 'runtime', 'electron-helper', 'main.js');
@@ -463,7 +468,11 @@ export async function ensureElectronDownload(options: EnsureElectronOptions = {}
           callback(null, chunk);
         },
       });
-      await pipeline(
+      // @types/node 26.x + tsconfig lib 含 DOM 时，stream/promises 的 pipeline
+      // 存在重载歧义：三参数链条的末位会被当成 PipelineOptions（报 TS2345/TS2769）。
+      // 运行时行为完全正确（下载链路已端到端实测），这里改用 node:stream 的回调版
+      // pipeline + promisify，绕开重载选择问题。
+      await nodePipeline(
         Readable.fromWeb(response.body as import('node:stream/web').ReadableStream),
         progress,
         createWriteStream(zipPath),
