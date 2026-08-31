@@ -15,10 +15,11 @@ import { spawn } from 'node:child_process';
 import { createWriteStream, existsSync, mkdirSync, rmSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join, resolve, sep } from 'node:path';
 import { Readable, Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { tmpdir } from 'node:os';
+import { symlinkSync, writeFileSync } from 'node:fs';
 
 const require = createRequire(import.meta.url);
 const here = dirname(fileURLToPath(import.meta.url));
@@ -195,21 +196,203 @@ function runProcess(command: string, args: string[]): Promise<number> {
   });
 }
 
-async function extractZip(zipPath: string, targetDir: string): Promise<void> {
-  mkdirSync(targetDir, { recursive: true });
-  // Windows 自带 tar（bsdtar）可以直接解压 zip；失败时退回 PowerShell Expand-Archive。
-  const tar = await runProcess('tar', ['-xf', zipPath, '-C', targetDir]);
-  if (tar !== 0) {
-    const ps = await runProcess('powershell', [
-      '-NoProfile',
-      '-Command',
-      `Expand-Archive -LiteralPath '${zipPath}' -DestinationPath '${targetDir}' -Force`,
-    ]);
-    if (ps !== 0) {
-      throw new Error('failed to extract Electron zip');
+/**
+ * 一次解压尝试：命令 + 参数。按平台有序排列，逐个尝试直到成功。
+ *
+ * 【为什么必须按平台选命令】Electron 发布包是 **zip**（不是 tar），
+ * 而 `tar -xf` 能否读 zip 完全取决于 tar 的实现：
+ *   - win32：系统自带 tar 实为 bsdtar/libarchive，可透明识别 zip；
+ *   - darwin：macOS 自带 tar 同为 bsdtar（/usr/bin/tar 是 libarchive 前端），同样支持 zip；
+ *   - linux：绝大多数发行版是 **GNU tar**，只读 tar 格式，遇到 zip 直接报
+ *     `This does not look like a tar archive` 并以 2 退出（实测 GNU tar 1.30/1.34/1.35 均如此）。
+ * 因此非 Windows 平台不能把 tar 当主力：GNU tar 会稳定失败，白白跑完一遍再 fallback。
+ *
+ * 【为什么 darwin 优先 unzip 而不是 tar】macOS 的 bsdtar 虽然能解 zip，
+ * 但对 zip 内 **符号链接** 的处理与原生 unzip 不一致（bsdtar 会把外链目标
+ * 当普通文件写出或改写路径），而 Electron.app 内部结构强依赖 symlink：
+ * 实测 v43.3.0 的 darwin 包 585 个条目里有 14 个 symlink，全在
+ * `Electron.app/Contents/Frameworks/*.framework/` 下（如
+ * `Electron Framework.framework/Versions/Current`）。symlink 被破坏后
+ * REQUIRED_FILES 校验即使通过，Electron 启动时也会因框架结构损坏而失败。
+ * 故 darwin/linux 一律优先 `unzip`（原生处理 symlink）。
+ *
+ * 【最后的纯 Node 兜底】unzip 并非所有环境预装（最小化容器 / Windows Server Core 等）。
+ * 此时用 Node 的 zlib 自己解：zlib 是运行时内置的，零外部依赖、零新增 npm 包，
+ * 且能精确还原 symlink（按 zip 条目的 external attributes 判断 S_IFLNK）。
+ */
+export interface ExtractAttempt {
+  command: string;
+  args: (zipPath: string, targetDir: string) => string[];
+}
+
+export function extractAttempts(platform: NodeJS.Platform = process.platform): ExtractAttempt[] {
+  if (platform === 'win32') {
+    return [
+      { command: 'tar', args: (zipPath, targetDir) => ['-xf', zipPath, '-C', targetDir] },
+      {
+        command: 'powershell',
+        args: (zipPath, targetDir) => [
+          '-NoProfile',
+          '-Command',
+          `Expand-Archive -LiteralPath '${zipPath}' -DestinationPath '${targetDir}' -Force`,
+        ],
+      },
+    ];
+  }
+  // darwin / linux（以及其它类 unix 平台）：unzip 优先，tar 兜底（部分环境 tar 是 bsdtar 也能解 zip）
+  return [
+    { command: 'unzip', args: (zipPath, targetDir) => ['-q', '-o', zipPath, '-d', targetDir] },
+    { command: 'tar', args: (zipPath, targetDir) => ['-xf', zipPath, '-C', targetDir] },
+  ];
+}
+
+/**
+ * 纯 Node 解压兜底：不依赖任何外部命令（unzip/tar/powershell）。
+ *
+ * 只在外部解压器全部失败时调用。相比 spawn 子进程，这里自己解析 zip 中央目录：
+ *   - 零外部依赖（zlib 是 Node 运行时内置，不新增 npm 包）；
+ *   - 能精确还原 **符号链接**（按 external attributes 的 S_IFLNK 位判断），
+ *     这是 darwin 的 Electron.app/Contents/Frameworks/*.framework 结构所必需的；
+ *   - 做路径穿越防护（拒绝 `..` 与绝对路径条目），避免恶意/损坏 zip 写到目标目录之外。
+ *
+ * @returns 错误信息；成功返回 undefined
+ */
+export async function extractZipWithNode(zipPath: string, targetDir: string): Promise<string | undefined> {
+  const { inflateRaw } = await import('node:zlib');
+  const inflate = (payload: Buffer): Promise<Buffer> =>
+    new Promise((done, fail) => {
+      inflateRaw(payload, (error: Error | null, result: Buffer) => (error ? fail(error) : done(result)));
+    });
+  const { readFile } = await import('node:fs/promises');
+  const buf = await readFile(zipPath);
+
+  // 从尾部定位 End Of Central Directory（EOCD）记录；注释最长 64KB。
+  let eocd = -1;
+  const scan = Math.min(buf.length, 22 + 0xffff);
+  for (let i = buf.length - 22; i >= buf.length - scan; i -= 1) {
+    if (buf.readUInt32LE(i) === 0x06054b50) {
+      eocd = i;
+      break;
     }
   }
-  // 校验关键文件是否完整；不完整说明下载/解压失败，清理后重试。
+  if (eocd < 0) return 'not a zip archive (EOCD not found)';
+
+  let count = buf.readUInt16LE(eocd + 10);
+  let cdOffset = buf.readUInt32LE(eocd + 16);
+  // zip64：计数/偏移为 0xffff/0xffffffff 哨兵时，改读 zip64 EOCD。
+  if (count === 0xffff || cdOffset === 0xffffffff) {
+    const zip64Eocd = buf.readUInt32LE(eocd - 20) === 0x07064b50 ? eocd - 20 : -1;
+    if (zip64Eocd < 0) return 'zip64 archive not supported by node fallback';
+    count = Number(buf.readBigUInt64LE(zip64Eocd + 32));
+    cdOffset = Number(buf.readBigUInt64LE(zip64Eocd + 48));
+  }
+
+  let pos = cdOffset;
+  const entries: Array<{ name: string; offset: number; mode: number; method: number; size: number }> = [];
+  for (let i = 0; i < count; i += 1) {
+    if (buf.readUInt32LE(pos) !== 0x02014b50) return `corrupt central directory at entry ${i}`;
+    const method = buf.readUInt16LE(pos + 10);
+    const compressedSize = buf.readUInt32LE(pos + 20);
+    const externalAttrs = buf.readUInt32LE(pos + 38);
+    const localOffset = buf.readUInt32LE(pos + 42);
+    const nameLen = buf.readUInt16LE(pos + 28);
+    const extraLen = buf.readUInt16LE(pos + 30);
+    const commentLen = buf.readUInt16LE(pos + 32);
+    const nameRaw = buf.subarray(pos + 46, pos + 46 + nameLen);
+    // 条目名编码：通用位标记第 11 位为 1 表示 UTF-8，否则按 CP437（此处退化为 latin1）。
+    const flags = buf.readUInt16LE(pos + 8);
+    const name = nameRaw.toString((flags & 0x800) !== 0 ? 'utf8' : 'latin1');
+    entries.push({
+      name,
+      offset: localOffset,
+      mode: externalAttrs >>> 16,
+      method,
+      size: compressedSize,
+    });
+    pos += 46 + nameLen + extraLen + commentLen;
+  }
+
+  for (const entry of entries) {
+    // 路径穿越防护：拒绝 .. 段与绝对路径。
+    const target = resolve(targetDir, entry.name);
+    if (target !== targetDir && !target.startsWith(targetDir + sep)) {
+      return `unsafe entry path rejected: ${entry.name}`;
+    }
+    const isSymlink = (entry.mode & 0o170000) === 0o120000;
+    const isDir = entry.name.endsWith('/');
+
+    if (entry.method === 0 && !isSymlink && !isDir) {
+      // stored（未压缩）：数据紧跟本地文件头。
+      const nameLen = buf.readUInt16LE(entry.offset + 26);
+      const extraLen = buf.readUInt16LE(entry.offset + 28);
+      const start = entry.offset + 30 + nameLen + extraLen;
+      mkdirSync(dirname(target), { recursive: true });
+      writeFileSync(target, buf.subarray(start, start + entry.size));
+      continue;
+    }
+
+    // 本地文件头（用于拿真实的名字/扩展字段长度；中央目录的副本可能与本地不一致）。
+    if (buf.readUInt32LE(entry.offset) !== 0x04034b50) return `corrupt local header for ${entry.name}`;
+    const lNameLen = buf.readUInt16LE(entry.offset + 26);
+    const lExtraLen = buf.readUInt16LE(entry.offset + 28);
+    const dataStart = entry.offset + 30 + lNameLen + lExtraLen;
+
+    if (isDir) {
+      mkdirSync(target, { recursive: true });
+      continue;
+    }
+    mkdirSync(dirname(target), { recursive: true });
+    const payload = buf.subarray(dataStart, dataStart + entry.size);
+    if (entry.method === 8) {
+      const raw = await inflate(payload);
+      if (isSymlink) {
+        const linkTarget = raw.toString('utf8');
+        rmSync(target, { force: true });
+        symlinkSync(linkTarget, target);
+        continue;
+      }
+      writeFileSync(target, raw);
+      continue;
+    }
+    if (entry.method === 0) {
+      if (isSymlink) {
+        const linkTarget = payload.toString('utf8');
+        rmSync(target, { force: true });
+        symlinkSync(linkTarget, target);
+        continue;
+      }
+      writeFileSync(target, payload);
+      continue;
+    }
+    return `unsupported compression method ${entry.method} for ${entry.name}`;
+  }
+  return undefined;
+}
+
+async function extractZip(zipPath: string, targetDir: string): Promise<void> {
+  mkdirSync(targetDir, { recursive: true });
+  const attempts = extractAttempts();
+  let lastError = 'no extractor attempted';
+  for (const attempt of attempts) {
+    const code = await runProcess(attempt.command, attempt.args(zipPath, targetDir));
+    if (code === 0) {
+      // 校验关键文件是否完整；不完整说明下载/解压失败，清理后重试。
+      const missing = REQUIRED_FILES.filter((name) => !existsSync(join(targetDir, name)));
+      if (missing.length === 0) return;
+      rmSync(targetDir, { recursive: true, force: true });
+      mkdirSync(targetDir, { recursive: true });
+      lastError = `Electron zip incomplete, missing: ${missing.join(', ')}`;
+      continue;
+    }
+    lastError = `${attempt.command} exited with ${code}`;
+  }
+  // 所有外部解压器都不可用（如最小化容器无 unzip 且 tar 是 GNU tar）：
+  // 用 Node 内置 zlib 自己解，零外部依赖，且能正确还原 symlink。
+  const fallbackError = await extractZipWithNode(zipPath, targetDir);
+  if (fallbackError) {
+    rmSync(targetDir, { recursive: true, force: true });
+    throw new Error(`failed to extract Electron zip (${lastError}; node fallback: ${fallbackError})`);
+  }
   const missing = REQUIRED_FILES.filter((name) => !existsSync(join(targetDir, name)));
   if (missing.length > 0) {
     rmSync(targetDir, { recursive: true, force: true });

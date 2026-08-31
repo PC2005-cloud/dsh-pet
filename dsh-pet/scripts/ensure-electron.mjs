@@ -66,26 +66,54 @@ async function download(url, dest) {
   await pipeline(response.body, createWriteStream(dest));
 }
 
+/**
+ * 解压命令候选（按平台有序，逐个尝试直到成功）。
+ *
+ * Electron 发布包是 **zip** 而非 tar，`tar -xf` 能否读 zip 取决于 tar 的实现：
+ *   - win32 / darwin：系统 tar 实为 bsdtar（libarchive），可透明识别 zip；
+ *   - linux：绝大多数是 **GNU tar**，只读 tar 格式，遇 zip 报
+ *     `This does not look like a tar archive` 并以 2 退出。
+ * 故非 Windows 平台不把 tar 当主力。darwin 同样优先 `unzip`：macOS 的 bsdtar 对 zip 内
+ * **符号链接** 的处理与原生 unzip 不一致，而 Electron.app 的
+ * Contents/Frameworks/*.framework 结构强依赖 symlink（实测 v43.3.0 darwin 包
+ * 585 条目中 14 个为 symlink），symlink 被破坏会导致框架结构损坏、Electron 起不来。
+ */
+function extractAttempts() {
+  if (PLAT === 'win32') {
+    return [
+      (zipPath, targetDir) => ['tar', ['-xf', zipPath, '-C', targetDir]],
+      (zipPath, targetDir) => [
+        'powershell',
+        ['-NoProfile', '-Command', `Expand-Archive -LiteralPath '${zipPath}' -DestinationPath '${targetDir}' -Force`],
+      ],
+    ];
+  }
+  return [
+    (zipPath, targetDir) => ['unzip', ['-q', '-o', zipPath, '-d', targetDir]],
+    (zipPath, targetDir) => ['tar', ['-xf', zipPath, '-C', targetDir]],
+  ];
+}
+
 function extractZip(zipPath, targetDir) {
   mkdirSync(targetDir, { recursive: true });
-  // Windows 自带 tar（bsdtar）可以直接解压 zip；失败时退回 PowerShell Expand-Archive。
-  const tar = spawnSync('tar', ['-xf', zipPath, '-C', targetDir], { stdio: 'inherit' });
-  if (tar.status !== 0) {
-    const ps = spawnSync(
-      'powershell',
-      ['-NoProfile', '-Command', `Expand-Archive -LiteralPath '${zipPath}' -DestinationPath '${targetDir}' -Force`],
-      { stdio: 'inherit' },
-    );
-    if (ps.status !== 0) {
-      throw new Error('failed to extract Electron zip');
+  let lastError = 'no extractor attempted';
+  for (const buildArgs of extractAttempts()) {
+    const [command, args] = buildArgs(zipPath, targetDir);
+    const result = spawnSync(command, args, { stdio: 'inherit' });
+    // 命令不存在时 spawnSync 的 status 为 null（error 为 ENOENT），按失败处理继续下一个候选。
+    if (result.status === 0) {
+      // 校验关键文件是否完整；不完整说明下载/解压失败，清理后重试下一个候选。
+      const missing = REQUIRED_FILES.filter((name) => !existsSync(join(targetDir, name)));
+      if (missing.length === 0) return;
+      rmSync(targetDir, { recursive: true, force: true });
+      mkdirSync(targetDir, { recursive: true });
+      lastError = `Electron zip incomplete, missing: ${missing.join(', ')}`;
+      continue;
     }
+    lastError = `${command} exited with ${result.status ?? 'ENOENT'}`;
   }
-  // 校验关键文件是否完整；不完整说明下载/解压失败，清理后重试。
-  const missing = REQUIRED_FILES.filter((name) => !existsSync(join(targetDir, name)));
-  if (missing.length > 0) {
-    rmSync(targetDir, { recursive: true, force: true });
-    throw new Error(`Electron zip incomplete, missing: ${missing.join(', ')}`);
-  }
+  rmSync(targetDir, { recursive: true, force: true });
+  throw new Error(`failed to extract Electron zip (${lastError})`);
 }
 
 async function main() {
