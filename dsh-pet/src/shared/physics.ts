@@ -50,7 +50,12 @@ export const DEFAULT_PHYSICS: PhysicsParams = {
   gravity: GRAVITY,
   restitution: RESTITUTION,
   groundFriction: GROUND_FRICTION,
+  ceilingBounce: true,
+  throwPower: 1,
 };
+
+/** 总力度默认量（throwPower=1 即现状） */
+export const DEFAULT_THROW_POWER = 1;
 /** 落地时 |vy| 小于它直接停竖直 */
 export const REST_VY = 40;
 /** 地面上 |vx| 小于它认为已静止 */
@@ -134,9 +139,15 @@ export const trimTrail = (trail: DragSample[], now: number): DragSample[] => {
   return i === 0 ? trail : trail.slice(i);
 };
 
-/** 过阻尼弹簧单轴速度步进：调用方随后 x += v*dt */
-export const springStep = (v: number, x: number, target: number, dt: number): number =>
-  v + ((target - x) * SPRING_K - v * SPRING_C) * dt;
+/** 过阻尼弹簧单轴速度步进：调用方随后 x += v*dt。
+ *  power = 总力度（K/C 同乘：系统形态不变，收敛速度快 p 倍 = 跟手更贴/更松）。 */
+export const springStep = (
+  v: number,
+  x: number,
+  target: number,
+  dt: number,
+  power: number = DEFAULT_THROW_POWER,
+): number => v + ((target - x) * SPRING_K - v * SPRING_C) * power * dt;
 
 const softClampSpeed = (speed: number): number => {
   if (speed <= 0) return 0;
@@ -147,9 +158,15 @@ const softClampSpeed = (speed: number): number => {
  * 由拖拽轨迹估算松手初速 (vx, vy)，px/s。
  * 方向：窗口首末端点位移方向（抗抖）。大小：端点平均与峰值按 PEAK_WEIGHT 加权，
  * 末段仍在加速时按 ACCEL_REF 比例增益（最多 ACCEL_GAIN_MAX），软钳速封顶。
+ * 总力度：软钳速**之后**整体 ×physics.throwPower —— 初速、软上限（3600×p）、
+ * 死区判定（相对力度）三者一体线性缩放（p=1 即现状）。
  * 返回 null = 温柔放下（轨迹为空 / 停留过久 / 窗口太短 / 峰值速度低于死区），调用方不抛。
  */
-export const estimateReleaseVelocity = (trail: DragSample[], now: number): { vx: number; vy: number } | null => {
+export const estimateReleaseVelocity = (
+  trail: DragSample[],
+  now: number,
+  physics: PhysicsParams = DEFAULT_PHYSICS,
+): { vx: number; vy: number } | null => {
   if (trail.length === 0) return null;
   const last = trail[trail.length - 1];
   if (now - last.t > RELEASE_STALE_MS) return null;
@@ -192,7 +209,7 @@ export const estimateReleaseVelocity = (trail: DragSample[], now: number): { vx:
   const speedBeforeClamp =
     ((1 - PEAK_WEIGHT) * baseSpeed + PEAK_WEIGHT * peakSpeed) *
     (1 + Math.min(Math.max(accel, 0) / ACCEL_REF, 1) * ACCEL_GAIN_MAX);
-  const speed = softClampSpeed(speedBeforeClamp);
+  const speed = softClampSpeed(speedBeforeClamp) * physics.throwPower;
   if (speed < DEAD_ZONE_SPEED) return null;
   return { vx: (baseVx / baseSpeed) * speed, vy: (baseVy / baseSpeed) * speed };
 };
@@ -200,7 +217,7 @@ export const estimateReleaseVelocity = (trail: DragSample[], now: number): { vx:
 /**
  * 抛体单步积分 + 边界反弹。返回更新后的状态与两个标志：
  * bounced = 本步是否碰边/落地；atRest = 贴地且低速（或碰边后整体低速），调用方应停止循环。
- * physics = 配置成品的抛掷物理参数（重力/弹性/地面摩擦）；缺失时用默认值兜底。
+ * physics = 配置成品的抛掷物理参数（重力/弹性/地面摩擦/顶部反弹）；缺失时用默认值兜底。
  */
 export const throwStep = (
   s: ThrowState,
@@ -224,9 +241,12 @@ export const throwStep = (
     bounced = true;
   }
   if (y < b.minY) {
-    y = b.minY;
-    vy = Math.abs(vy) * physics.restitution;
-    bounced = true;
+    // ceilingBounce=false：顶部无边界，不夹不弹——宠物飞出屏幕顶部，靠重力落回（y 保持越界状态）
+    if (physics.ceilingBounce) {
+      y = b.minY;
+      vy = Math.abs(vy) * physics.restitution;
+      bounced = true;
+    }
   } else if (y >= b.maxY) {
     y = b.maxY;
     vx *= Math.max(0, 1 - physics.groundFriction * dt);

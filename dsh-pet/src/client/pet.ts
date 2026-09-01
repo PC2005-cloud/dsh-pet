@@ -665,8 +665,8 @@ export function makePetUI(rt: {
         const vel = dragVelRef.current;
         let x = boxPxRef.current?.x ?? 0;
         let y = boxPxRef.current?.y ?? 0;
-        vel.vx = springStep(vel.vx, x, target.x, dt);
-        vel.vy = springStep(vel.vy, y, target.y, dt);
+        vel.vx = springStep(vel.vx, x, target.x, dt, cfg.physics.throwPower);
+        vel.vy = springStep(vel.vy, y, target.y, dt, cfg.physics.throwPower);
         x += vel.vx * dt;
         y += vel.vy * dt;
         boxPxRef.current = { x, y };
@@ -830,7 +830,7 @@ export function makePetUI(rt: {
         const px = bx ? bx.x : e.clientX - d.offX - halfW;
         const py = bx ? bx.y : e.clientY - d.offY - halfH;
         // 初速估算：够快就抛掷（重力+边缘反弹+落地摩擦），否则原地放下
-        const vel = estimateReleaseVelocity(dragTrailRef.current, performance.now());
+        const vel = estimateReleaseVelocity(dragTrailRef.current, performance.now(), cfg.physics);
         dragTrailRef.current = [];
         if (vel) {
           // 抛掷：飞行期间由 startThrow 的 rAF 直接写 left/top，落定后才提交 customPos

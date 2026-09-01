@@ -141,14 +141,27 @@ function weightsValid(w: unknown): boolean {
   return true;
 }
 
-/** physics 段校验：gravity > 0、restitution ∈ [0,1]、groundFriction ≥ 0（均为有限数字） */
+/** physics 段校验：gravity > 0、restitution ∈ [0,1]、groundFriction ≥ 0（均为有限数字）、
+ *  ceilingBounce 为布尔、throwPower > 0（有限数字） */
 function physicsValid(value: unknown): boolean {
   if (!value || typeof value !== 'object') return false;
   const p = value as Record<string, unknown>;
   const g = Number(p.gravity);
   const r = Number(p.restitution);
   const f = Number(p.groundFriction);
-  return Number.isFinite(g) && g > 0 && Number.isFinite(r) && r >= 0 && r <= 1 && Number.isFinite(f) && f >= 0;
+  const tp = Number(p.throwPower);
+  return (
+    Number.isFinite(g) &&
+    g > 0 &&
+    Number.isFinite(r) &&
+    r >= 0 &&
+    r <= 1 &&
+    Number.isFinite(f) &&
+    f >= 0 &&
+    typeof p.ceilingBounce === 'boolean' &&
+    Number.isFinite(tp) &&
+    tp > 0
+  );
 }
 
 /** 顶层标量字段的合法性（非法与缺失同处理：取默认值 + 告警） */

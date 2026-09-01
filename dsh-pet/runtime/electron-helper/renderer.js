@@ -545,8 +545,8 @@ class PetSprite {
       const vel = this.dragVel;
       let x = this.pos.x;
       let y = this.pos.y;
-      vel.vx = S.springStep(vel.vx, x, target.x, dt);
-      vel.vy = S.springStep(vel.vy, y, target.y, dt);
+      vel.vx = S.springStep(vel.vx, x, target.x, dt, this.physics.throwPower);
+      vel.vy = S.springStep(vel.vy, y, target.y, dt, this.physics.throwPower);
       x += vel.vx * dt;
       y += vel.vy * dt;
       this.sendBounds(x, y); // 移动的是窗口（this.pos 实时更新）；sprite 在本窗口内不动
@@ -725,7 +725,7 @@ class PetSprite {
       const px = this.pos.x;
       const py = this.pos.y;
       // 初速估算：够快就抛掷（重力+边缘反弹+落地摩擦），否则原地放下
-      const vel = S.estimateReleaseVelocity(this.dragTrail, performance.now());
+      const vel = S.estimateReleaseVelocity(this.dragTrail, performance.now(), this.physics);
       this.dragTrail = [];
       if (vel) {
         this.startThrow(px, py, vel.vx, vel.vy);
