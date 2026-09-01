@@ -9,13 +9,13 @@
  * 用 Node 内置 test runner（node:test），不引入任何 npm 依赖：
  *   node --experimental-strip-types --test src/host/helper-process.test.ts
  */
-import { test, describe } from 'node:test';
+import { test, describe, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
-import { dshHomeDir, defaultElectronExe, resolveElectronPath } from './helper-process.ts';
+import { dshHomeDir, defaultElectronExe, hasGraphicalDisplay, resolveElectronPath } from './helper-process.ts';
 
 /** 建一个隔离的临时目录,并归还原 DSH_HOME / DSH_PET_ELECTRON_PATH 环境变量 */
 function withIsolatedHome(fn: (dir: string) => void): void {
@@ -131,5 +131,37 @@ describe('resolveElectronPath —— 候选优先级', () => {
       writeFileSync(landed, '');
       assert.equal(resolveElectronPath([]), landed);
     });
+  });
+});
+
+describe('hasGraphicalDisplay —— 无图形环境时不拉起 Electron', () => {
+  const saved = { ...process.env };
+  afterEach(() => {
+    for (const key of ['DISPLAY', 'WAYLAND_DISPLAY', 'DSH_PET_DESKTOP_FORCE']) delete process.env[key];
+    Object.assign(process.env, saved);
+  });
+
+  test('linux 无 DISPLAY / WAYLAND_DISPLAY：判为无图形环境（避免拉起即崩刷满 core dump）', () => {
+    delete process.env.DISPLAY;
+    delete process.env.WAYLAND_DISPLAY;
+    // 非 linux（win32/darwin）桌面系统恒放行，故按平台断言
+    assert.equal(hasGraphicalDisplay(), process.platform !== 'linux');
+  });
+
+  test('有 DISPLAY 时放行', () => {
+    process.env.DISPLAY = ':0';
+    assert.equal(hasGraphicalDisplay(), true);
+  });
+
+  test('有 WAYLAND_DISPLAY 时放行', () => {
+    process.env.WAYLAND_DISPLAY = 'wayland-0';
+    assert.equal(hasGraphicalDisplay(), true);
+  });
+
+  test('DSH_PET_DESKTOP_FORCE=1 为逃生口（Xvfb / 远程桌面场景）', () => {
+    delete process.env.DISPLAY;
+    delete process.env.WAYLAND_DISPLAY;
+    process.env.DSH_PET_DESKTOP_FORCE = '1';
+    assert.equal(hasGraphicalDisplay(), true);
   });
 });
