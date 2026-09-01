@@ -141,6 +141,16 @@ function weightsValid(w: unknown): boolean {
   return true;
 }
 
+/** physics 段校验：gravity > 0、restitution ∈ [0,1]、groundFriction ≥ 0（均为有限数字） */
+function physicsValid(value: unknown): boolean {
+  if (!value || typeof value !== 'object') return false;
+  const p = value as Record<string, unknown>;
+  const g = Number(p.gravity);
+  const r = Number(p.restitution);
+  const f = Number(p.groundFriction);
+  return Number.isFinite(g) && g > 0 && Number.isFinite(r) && r >= 0 && r <= 1 && Number.isFinite(f) && f >= 0;
+}
+
 /** 顶层标量字段的合法性（非法与缺失同处理：取默认值 + 告警） */
 function topFieldValid(key: string, value: unknown): boolean {
   switch (key) {
@@ -156,6 +166,8 @@ function topFieldValid(key: string, value: unknown): boolean {
       return animationsValid(value);
     case 'animationWeights':
       return weightsValid(value);
+    case 'physics':
+      return physicsValid(value);
     default:
       return true;
   }

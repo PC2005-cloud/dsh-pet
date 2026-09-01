@@ -5,6 +5,11 @@
 // 初速估算的轨迹样本用**指针**绝对坐标（浏览器 clientX/Y、桌面 screenX/Y）——
 // 去掉两端的常数偏移后速度一致，物理步进完全共用。
 // 参数与取值依据移植自 dsh-pet-indesktop 的 physics.py（纯函数、可单测）。
+//
+// 可调参数：重力 / 弹性 / 地面摩擦来自配置顶层 physics 段（host 合并成品，全局共用）；
+// 本文件的常量只是**默认值来源**（= assets/config.jsonc 的 physics 段），
+// 运行时 throwStep 必须接收调用方传入的 PhysicsParams（浏览器/桌面都从配置成品读）。
+import type { PhysicsParams } from './types';
 
 /** 拖拽弹簧刚度：越大跟手越紧 */
 export const SPRING_K = 200;
@@ -32,12 +37,20 @@ export const ACCEL_REF = 8000;
 /** 加速度增益上限：仍在加速的甩动最多放大 60% */
 export const ACCEL_GAIN_MAX = 0.6;
 
+// ---- 抛掷物理默认值（= assets/config.jsonc 的 physics 段；运行时以配置成品为准） ----
 /** 抛掷重力（px/s²） */
 export const GRAVITY = 1400;
 /** 碰边恢复系数：每次反弹保留约 78% 速度 */
 export const RESTITUTION = 0.78;
 /** 地面水平摩擦（/s） */
 export const GROUND_FRICTION = 2.5;
+
+/** 抛掷物理的默认参数（与内置配置一致；仅作配置缺失时的兜底） */
+export const DEFAULT_PHYSICS: PhysicsParams = {
+  gravity: GRAVITY,
+  restitution: RESTITUTION,
+  groundFriction: GROUND_FRICTION,
+};
 /** 落地时 |vy| 小于它直接停竖直 */
 export const REST_VY = 40;
 /** 地面上 |vx| 小于它认为已静止 */
@@ -187,36 +200,38 @@ export const estimateReleaseVelocity = (trail: DragSample[], now: number): { vx:
 /**
  * 抛体单步积分 + 边界反弹。返回更新后的状态与两个标志：
  * bounced = 本步是否碰边/落地；atRest = 贴地且低速（或碰边后整体低速），调用方应停止循环。
+ * physics = 配置成品的抛掷物理参数（重力/弹性/地面摩擦）；缺失时用默认值兜底。
  */
 export const throwStep = (
   s: ThrowState,
   dtRaw: number,
   b: ThrowBounds,
+  physics: PhysicsParams = DEFAULT_PHYSICS,
 ): ThrowState & { bounced: boolean; atRest: boolean } => {
   const dt = Math.min(Math.max(dtRaw, 0), MAX_STEP_DT);
   let { x, y, vx, vy } = s;
-  vy += GRAVITY * dt;
+  vy += physics.gravity * dt;
   x += vx * dt;
   y += vy * dt;
   let bounced = false;
   if (x < b.minX) {
     x = b.minX;
-    vx = Math.abs(vx) * RESTITUTION;
+    vx = Math.abs(vx) * physics.restitution;
     bounced = true;
   } else if (x > b.maxX) {
     x = b.maxX;
-    vx = -Math.abs(vx) * RESTITUTION;
+    vx = -Math.abs(vx) * physics.restitution;
     bounced = true;
   }
   if (y < b.minY) {
     y = b.minY;
-    vy = Math.abs(vy) * RESTITUTION;
+    vy = Math.abs(vy) * physics.restitution;
     bounced = true;
   } else if (y >= b.maxY) {
     y = b.maxY;
-    vx *= Math.max(0, 1 - GROUND_FRICTION * dt);
+    vx *= Math.max(0, 1 - physics.groundFriction * dt);
     if (Math.abs(vy) < REST_VY) vy = 0;
-    else vy = -Math.abs(vy) * RESTITUTION;
+    else vy = -Math.abs(vy) * physics.restitution;
     bounced = true;
   }
   const speed = Math.hypot(vx, vy);

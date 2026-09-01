@@ -37,16 +37,17 @@ import {
   type DragSample,
   type ThrowState,
 } from '../shared/physics';
-import type { Animations, Corner, Pet, Weights } from '../shared/types';
+import type { Animations, Corner, Pet, PhysicsParams, Weights } from '../shared/types';
 import type * as ReactNS from 'react';
 import type { Dispatch, ReactNode, SetStateAction } from 'react';
 import type { jsx } from 'react/jsx-runtime';
 
-/** 运行期宠物：拍平后的成品实例——条目级字段（动画池/权重/刷新周期）已吹入，必填 */
+/** 运行期宠物：拍平后的成品实例——条目级字段（动画池/权重/刷新周期/物理参数）已吹入，必填 */
 export type RuntimePet = Pet & {
   animations: Animations;
   animationWeights: Weights;
   eventsRefreshSec: Record<string, number>;
+  physics: PhysicsParams;
 };
 
 /** 播放动画扩展名：唯一播放/发布格式 webm（VP9-alpha），源码写死、不做运行时判断。
@@ -693,7 +694,7 @@ export function makePetUI(rt: {
         const dt = (now - last) / 1000;
         last = now;
         const fallingVy = state.vy; // 本帧积分前的竖直速度（正=下落）：即落地冲击速度
-        const res = throwStep(state, dt, bounds);
+        const res = throwStep(state, dt, bounds, cfg.physics);
         state = { x: res.x, y: res.y, vx: res.vx, vy: res.vy };
         if (rootEl) {
           rootEl.style.left = res.x + 'px';

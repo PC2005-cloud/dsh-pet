@@ -59,9 +59,9 @@ export interface Animations {
 }
 
 /** 一只宠物（与 jsonc pets[i] 同形，position 嵌套）。
- *  可选段（animations / animationWeights / extra / assetRoot / eventsRefreshSec）为渲染期派生或
+ *  可选段（animations / animationWeights / extra / assetRoot / eventsRefreshSec / physics）为渲染期派生或
  *  「文件定义宠物」专用：
- *  - animations / animationWeights / eventsRefreshSec：所属条目的条目级字段，由配置合并
+ *  - animations / animationWeights / eventsRefreshSec / physics：所属条目的条目级字段，由配置合并
  *    （host readAllConfig / 客户端 flattenConfigPets）在拍平时吹进每只实例——多实例共享；
  *  - extra: true 标记该宠物由 pet/ 目录文件定义：设置页不可编辑、保存时排除，
  *    由拍平逻辑统一打标，**永不出现在持久化配置里**；
@@ -88,6 +88,19 @@ export interface Pet {
   assetRoot?: string;
   /** 渲染派生：所属条目的刷新周期（秒，事件名 → 间隔；合并时已填默认值） */
   eventsRefreshSec?: Record<string, number>;
+  /** 条目级：拖拽抛掷物理参数（全局共用；host 合并已填默认，拍平时吹入） */
+  physics?: PhysicsParams;
+}
+
+/** config.jsonc 的 physics 段：拖拽抛掷手感参数（全局，所有宠物共用）。
+ *  默认值 = src/shared/physics.ts 的常量（1400 / 0.78 / 2.5），内置配置与代码两侧保持一致。 */
+export interface PhysicsParams {
+  /** 重力加速度（px/s²）：抛掷下落/反弹的基础重力，越大落得越快 */
+  gravity: number;
+  /** 碰壁反弹恢复系数 0~1（1 = 完全弹性，0 = 撞上即停；墙/地共用） */
+  restitution: number;
+  /** 地面水平摩擦（/s）：落地时水平速度的衰减率，0 = 无摩擦 */
+  groundFriction: number;
 }
 
 /** config.jsonc 全集——运行时直接使用（ANIM 即本类型） */
@@ -97,6 +110,8 @@ export interface ClientConfig {
   pets: Pet[];
   animations: Animations;
   animationWeights: Weights;
+  /** 拖拽抛掷物理参数（全局，所有宠物共用；host 合并已填默认） */
+  physics: PhysicsParams;
   /** 事件刷新周期（秒）：事件名 → 间隔；balance = 余额数据刷新 + 动画触发间隔 */
   eventsRefreshSec: Record<string, number>;
 }

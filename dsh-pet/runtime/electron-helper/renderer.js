@@ -104,6 +104,8 @@ async function loadConfig() {
     pets: S.flattenConfigPets(merged),
     // 主条目周期（余额轮询等全局节奏；合并器已填内置默认）
     refreshSec: (merged && merged.main && merged.main.eventsRefreshSec) || {},
+    // 拖拽抛掷物理参数（顶层全局，所有宠物共用；合并器已填内置默认）
+    physics: (merged && merged.main && merged.main.physics) || S.DEFAULT_PHYSICS,
   };
 }
 
@@ -145,6 +147,8 @@ class PetSprite {
     // main 等常规宠物（无 anims 段）用全局 cfg.animations（与浏览器 pet.ts 同一语义）。
     this.animations = pet.animations || cfg.animations;
     this.weights = pet.animationWeights || cfg.animationWeights;
+    // 拖拽抛掷物理参数（顶层全局；拍平已吹入实例，兜底回全局/默认）
+    this.physics = pet.physics || config.physics || S.DEFAULT_PHYSICS;
     // 素材根按 assetRoot（文件宠物 = 配置文件前缀，多实例共享同一素材目录）或宠物 id 回落
     // 素材根 = 条目 key（assetRoot，多实例共享同一素材目录）
     this.assetBase = BASE + '/thumb/' + encodeURIComponent(pet.assetRoot || pet.id) + '/';
@@ -575,7 +579,7 @@ class PetSprite {
       const dt = (now - last) / 1000;
       last = now;
       const fallingVy = state.vy; // 本帧积分前的竖直速度（正=下落）：即落地冲击速度
-      const res = S.throwStep(state, dt, bounds);
+      const res = S.throwStep(state, dt, bounds, this.physics);
       state = { x: res.x, y: res.y, vx: res.vx, vy: res.vy };
       this.sendBounds(res.x, res.y);
       // 落地 Q 弹：只在空中→地面转换帧触发一次，力度随冲击速度（轻落 0.8 ~ 重砸 0.55）
