@@ -487,7 +487,15 @@ export function apply(ctx: any): void {
       if (method === 'PUT') {
         try {
           const parsed = JSON.parse(body ?? '');
-          const clean = saveUserConfig(parsed);
+          // 透传保留：读当前磁盘上的用户文件原对象，把非白名单顶层字段（physics/whisperPrompt/
+          // chatMemoryRounds/...）带回给 saveUserConfig——设置页保存不再抹掉用户手改的精调配置
+          let existing: Record<string, unknown> | undefined;
+          try {
+            existing = JSON.parse(await readFile(userConfigPath, 'utf8')) as Record<string, unknown>;
+          } catch {
+            /* 文件不存在/损坏：视为无既有用户字段，不阻塞保存 */
+          }
+          const clean = saveUserConfig(parsed, existing);
           if (!clean) {
             return {
               kind: 'json',

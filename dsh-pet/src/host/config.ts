@@ -399,10 +399,16 @@ export function findPetInstance(
 }
 
 /**
- * 保存用户层（PUT /config）：白名单重建 main-config.json，只接受可编辑字段；
+ * 保存用户层（PUT /config）：更新 main-config.json，接受可编辑字段（pets + notificationsEnabled）。
+ * 编辑语义：**非白名单顶层字段（physics / whisperPrompt / chatMemoryRounds / eventsRefreshSec 等）
+ * 从 `existing`（当前磁盘上的用户文件原对象）原样透传保留**——
+ * 用户手动编辑的精调配置不会被设置页保存抹掉（旧实现是纯白名单重建，会整体覆盖丢失）。
  * 非法 → 返回 null（宿主回 400）。与读取分离——文件宠物永不回写、不在本模式内。
  */
-export function saveUserConfig(raw: unknown): { pets: unknown[]; notificationsEnabled?: boolean } | null {
+export function saveUserConfig(
+  raw: unknown,
+  existing?: Record<string, unknown>,
+): { pets: unknown[]; notificationsEnabled?: boolean; [key: string]: unknown } | null {
   const o = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
   const arr = Array.isArray(o.pets) ? o.pets : null;
   if (!arr || !arr.length) return null;
@@ -437,7 +443,17 @@ export function saveUserConfig(raw: unknown): { pets: unknown[]; notificationsEn
   }
   const ne = o.notificationsEnabled;
   if (ne !== undefined && typeof ne !== 'boolean') return null;
-  const outConfig: { pets: unknown[]; notificationsEnabled?: boolean } = { pets: out };
+  // 白名单可编辑字段：pets 来自请求体、notificationsEnabled 来自请求体（未传则不写）
+  const outConfig: { pets: unknown[]; notificationsEnabled?: boolean; [key: string]: unknown } = { pets: out };
   if (ne !== undefined) outConfig.notificationsEnabled = ne;
+  // 透传保留：请求体未携带的顶层字段，从 existing（磁盘现有用户文件）原样带回——
+  // 设置页只提交 pets(+notificationsEnabled)，手改的 physics/whisperPrompt/... 借此保住
+  if (existing && typeof existing === 'object') {
+    for (const key of Object.keys(existing)) {
+      if (key === 'pets' || key === 'notificationsEnabled') continue; // 白名单字段由上方请求体决定
+      // 只透传可精调的顶层字段，其余（如 unknown/占位）一并保留，不丢弃用户内容
+      outConfig[key] = existing[key];
+    }
+  }
   return outConfig;
 }
