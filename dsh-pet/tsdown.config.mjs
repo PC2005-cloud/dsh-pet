@@ -12,7 +12,7 @@ export default defineConfig({
   format: ['esm'],
   platform: 'node',
   target: 'es2020',
-  external: [/^@deepseek-ai\//, /^node:/],
+  external: [/^@deepseek-ai\//, /^@electron\//, /^node:/],
   dts: false,
   outDir: 'lib',
   clean: false,

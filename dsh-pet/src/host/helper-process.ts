@@ -12,21 +12,14 @@
  */
 
 import { spawn } from 'node:child_process';
-import { createWriteStream, existsSync, mkdirSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
-import { dirname, join, resolve, sep } from 'node:path';
-import { Readable, Transform } from 'node:stream';
-import { pipeline as pipelineCallback } from 'node:stream';
-import { promisify } from 'node:util';
-import { tmpdir } from 'node:os';
-import { symlinkSync, writeFileSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
+import { downloadArtifact } from '@electron/get';
+import extract from '@electron-internal/extract-zip';
 
 const require = createRequire(import.meta.url);
-/** stream 的回调版 pipeline + promisify：与 stream/promises 同实现，但类型只认 Node 流，
- *  避开 @types/node 26.x 里 stream/promises.pipeline 与 DOM lib 的 ReadableStream 定义冲突。 */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- 重载歧义无法用具体类型表达，见下方调用处注释
-const nodePipeline = promisify(pipelineCallback) as unknown as (...streams: any[]) => Promise<void>;
 const here = dirname(fileURLToPath(import.meta.url));
 export const packageRoot = resolve(here, '..');
 export const defaultHelperMain = resolve(packageRoot, 'runtime', 'electron-helper', 'main.js');
@@ -81,14 +74,14 @@ type Logger = {
  * 优先级：
  *   1. 显式候选（用户配置）/ DSH_PET_ELECTRON_PATH 环境变量
  *   2. 本机已安装的 electron npm 包（require('electron') 返回二进制路径）
- *   3. 常见安装位置（$DSH_HOME/electron（默认 ~/.dsh/electron）、npm 全局目录、Program Files）
+ *   3. $DSH_HOME/electron（默认 ~/.dsh/electron）—— ensureElectronDownload 的落地路径
  *   4. 都不存在时由 ensureElectronDownload() 进程内异步下载（不 spawn 子进程，
  *      避免 process.execPath 在 Electron 宿主（如 DSH Desktop）里指向宿主 exe 导致崩溃）
  */
 export function resolveElectronPath(candidates: Array<string | undefined> = []): string | undefined {
   const seen = new Set<string>();
   const list: string[] = [];
-  const push = (value: string | undefined | null) => {
+  const push = (value: string | undefined | null): void => {
     if (!value || seen.has(value)) return;
     seen.add(value);
     list.push(value);
@@ -101,32 +94,9 @@ export function resolveElectronPath(candidates: Array<string | undefined> = []):
   } catch {
     /* electron 未安装时跳过 */
   }
-  const userProfile = process.env.USERPROFILE || process.env.HOME || '';
-  const appData = process.env.APPDATA || join(userProfile, 'AppData', 'Roaming');
-  const localAppData = process.env.LOCALAPPDATA || join(userProfile, 'AppData', 'Local');
-  // DSH 主目录：与 ensure-electron.mjs 保持一致，认 DSH_HOME（默认 ~/.dsh）
-  const dshHome = process.env.DSH_HOME || join(userProfile, '.dsh');
-  // 本地候选路径按平台：win32（electron.exe / Program Files）/ darwin（Electron.app）/ linux
-  const dshElectron = join(dshHome, 'electron', ELECTRON_REL);
-  const localCandidates =
-    PLAT === 'win32'
-      ? [
-          dshElectron,
-          join(appData, 'npm', 'node_modules', 'electron', 'dist', 'electron.exe'),
-          join(localAppData, 'Programs', 'Electron', 'electron.exe'),
-          'C:/Program Files/Electron/electron.exe',
-          'C:/Program Files (x86)/Electron/electron.exe',
-        ]
-      : PLAT === 'darwin'
-        ? [
-            dshElectron,
-            '/Applications/Electron.app/Contents/MacOS/Electron',
-            join(userProfile, 'Applications', 'Electron.app', 'Contents', 'MacOS', 'Electron'),
-            join('/usr/local/lib/node_modules/electron/dist', 'Electron.app', 'Contents', 'MacOS', 'Electron'),
-          ]
-        : [dshElectron, '/usr/local/bin/electron', '/usr/bin/electron', '/opt/electron/electron'];
-  for (const candidate of localCandidates) push(candidate);
-  if (process.env.ELECTRON_PATH) push(process.env.ELECTRON_PATH);
+  // 只认自己的落地路径（ensureElectronDownload 下载解压到 $DSH_HOME/electron）；
+  // 不再去 npm 全局目录 / Program Files / /usr/bin 等别处探测别人装的 Electron。
+  push(join(dshHomeDir(), 'electron', ELECTRON_REL));
   return list.find((value) => existsSync(value));
 }
 
@@ -151,13 +121,6 @@ const ELECTRON_REL =
       ? join('Electron.app', 'Contents', 'MacOS', 'Electron')
       : 'electron';
 
-/** 下载 zip 文件名：electron-v<ver>-<platform>-<arch>.zip（官方命名） */
-function electronZipName(version: string): string {
-  const plat = PLAT === 'win32' ? 'win32' : PLAT === 'darwin' ? 'darwin' : 'linux';
-  const arch = process.arch === 'arm64' ? 'arm64' : 'x64';
-  return `electron-v${version}-${plat}-${arch}.zip`;
-}
-
 /** Electron 落地路径：$DSH_HOME/electron/<按平台的可执行文件>。 */
 export function defaultElectronExe(): string {
   return join(dshHomeDir(), 'electron', ELECTRON_REL);
@@ -170,239 +133,6 @@ export interface EnsureElectronOptions {
   mirror?: string;
   /** 单次下载超时（默认 10 分钟）。 */
   timeoutMs?: number;
-}
-
-/** 解压后必须存在的关键文件（按平台校验下载完整性，缺则清理重试）。
- *  win32：electron.exe + 散文件；darwin：Electron.app 关键结构；linux：electron 单文件。 */
-const REQUIRED_FILES =
-  PLAT === 'win32'
-    ? [
-        'electron.exe',
-        'icudtl.dat',
-        'resources.pak',
-        'snapshot_blob.bin',
-        'chrome_100_percent.pak',
-        'v8_context_snapshot.bin',
-      ]
-    : PLAT === 'darwin'
-      ? [
-          ELECTRON_REL, // Electron.app/Contents/MacOS/Electron
-          join('Electron.app', 'Contents', 'Info.plist'),
-          join('Electron.app', 'Contents', 'Frameworks', 'Electron Framework.framework'),
-        ]
-      : ['electron'];
-
-/** 以子进程方式跑一条命令（tar/powershell），返回退出码（不依赖 process.execPath）。 */
-function runProcess(command: string, args: string[]): Promise<number> {
-  return new Promise((resolveProcess) => {
-    const child = spawn(command, args, { stdio: 'inherit', windowsHide: true });
-    child.once('error', () => resolveProcess(1));
-    child.once('exit', (code) => resolveProcess(code ?? 1));
-  });
-}
-
-/**
- * 一次解压尝试：命令 + 参数。按平台有序排列，逐个尝试直到成功。
- *
- * 【为什么必须按平台选命令】Electron 发布包是 **zip**（不是 tar），
- * 而 `tar -xf` 能否读 zip 完全取决于 tar 的实现：
- *   - win32：系统自带 tar 实为 bsdtar/libarchive，可透明识别 zip；
- *   - darwin：macOS 自带 tar 同为 bsdtar（/usr/bin/tar 是 libarchive 前端），同样支持 zip；
- *   - linux：绝大多数发行版是 **GNU tar**，只读 tar 格式，遇到 zip 直接报
- *     `This does not look like a tar archive` 并以 2 退出（实测 GNU tar 1.30/1.34/1.35 均如此）。
- * 因此非 Windows 平台不能把 tar 当主力：GNU tar 会稳定失败，白白跑完一遍再 fallback。
- *
- * 【为什么 darwin 优先 unzip 而不是 tar】macOS 的 bsdtar 虽然能解 zip，
- * 但对 zip 内 **符号链接** 的处理与原生 unzip 不一致（bsdtar 会把外链目标
- * 当普通文件写出或改写路径），而 Electron.app 内部结构强依赖 symlink：
- * 实测 v43.3.0 的 darwin 包 585 个条目里有 14 个 symlink，全在
- * `Electron.app/Contents/Frameworks/*.framework/` 下（如
- * `Electron Framework.framework/Versions/Current`）。symlink 被破坏后
- * REQUIRED_FILES 校验即使通过，Electron 启动时也会因框架结构损坏而失败。
- * 故 darwin/linux 一律优先 `unzip`（原生处理 symlink）。
- *
- * 【最后的纯 Node 兜底】unzip 并非所有环境预装（最小化容器 / Windows Server Core 等）。
- * 此时用 Node 的 zlib 自己解：zlib 是运行时内置的，零外部依赖、零新增 npm 包，
- * 且能精确还原 symlink（按 zip 条目的 external attributes 判断 S_IFLNK）。
- */
-export interface ExtractAttempt {
-  command: string;
-  args: (zipPath: string, targetDir: string) => string[];
-}
-
-export function extractAttempts(platform: NodeJS.Platform = process.platform): ExtractAttempt[] {
-  if (platform === 'win32') {
-    return [
-      { command: 'tar', args: (zipPath, targetDir) => ['-xf', zipPath, '-C', targetDir] },
-      {
-        command: 'powershell',
-        args: (zipPath, targetDir) => [
-          '-NoProfile',
-          '-Command',
-          `Expand-Archive -LiteralPath '${zipPath}' -DestinationPath '${targetDir}' -Force`,
-        ],
-      },
-    ];
-  }
-  // darwin / linux（以及其它类 unix 平台）：unzip 优先，tar 兜底（部分环境 tar 是 bsdtar 也能解 zip）
-  return [
-    { command: 'unzip', args: (zipPath, targetDir) => ['-q', '-o', zipPath, '-d', targetDir] },
-    { command: 'tar', args: (zipPath, targetDir) => ['-xf', zipPath, '-C', targetDir] },
-  ];
-}
-
-/**
- * 纯 Node 解压兜底：不依赖任何外部命令（unzip/tar/powershell）。
- *
- * 只在外部解压器全部失败时调用。相比 spawn 子进程，这里自己解析 zip 中央目录：
- *   - 零外部依赖（zlib 是 Node 运行时内置，不新增 npm 包）；
- *   - 能精确还原 **符号链接**（按 external attributes 的 S_IFLNK 位判断），
- *     这是 darwin 的 Electron.app/Contents/Frameworks/*.framework 结构所必需的；
- *   - 做路径穿越防护（拒绝 `..` 与绝对路径条目），避免恶意/损坏 zip 写到目标目录之外。
- *
- * @returns 错误信息；成功返回 undefined
- */
-export async function extractZipWithNode(zipPath: string, targetDir: string): Promise<string | undefined> {
-  const { inflateRaw } = await import('node:zlib');
-  const inflate = (payload: Buffer): Promise<Buffer> =>
-    new Promise((done, fail) => {
-      inflateRaw(payload, (error: Error | null, result: Buffer) => (error ? fail(error) : done(result)));
-    });
-  const { readFile } = await import('node:fs/promises');
-  const buf = await readFile(zipPath);
-
-  // 从尾部定位 End Of Central Directory（EOCD）记录；注释最长 64KB。
-  let eocd = -1;
-  const scan = Math.min(buf.length, 22 + 0xffff);
-  for (let i = buf.length - 22; i >= buf.length - scan; i -= 1) {
-    if (buf.readUInt32LE(i) === 0x06054b50) {
-      eocd = i;
-      break;
-    }
-  }
-  if (eocd < 0) return 'not a zip archive (EOCD not found)';
-
-  let count = buf.readUInt16LE(eocd + 10);
-  let cdOffset = buf.readUInt32LE(eocd + 16);
-  // zip64：计数/偏移为 0xffff/0xffffffff 哨兵时，改读 zip64 EOCD。
-  if (count === 0xffff || cdOffset === 0xffffffff) {
-    const zip64Eocd = buf.readUInt32LE(eocd - 20) === 0x07064b50 ? eocd - 20 : -1;
-    if (zip64Eocd < 0) return 'zip64 archive not supported by node fallback';
-    count = Number(buf.readBigUInt64LE(zip64Eocd + 32));
-    cdOffset = Number(buf.readBigUInt64LE(zip64Eocd + 48));
-  }
-
-  let pos = cdOffset;
-  const entries: Array<{ name: string; offset: number; mode: number; method: number; size: number }> = [];
-  for (let i = 0; i < count; i += 1) {
-    if (buf.readUInt32LE(pos) !== 0x02014b50) return `corrupt central directory at entry ${i}`;
-    const method = buf.readUInt16LE(pos + 10);
-    const compressedSize = buf.readUInt32LE(pos + 20);
-    const externalAttrs = buf.readUInt32LE(pos + 38);
-    const localOffset = buf.readUInt32LE(pos + 42);
-    const nameLen = buf.readUInt16LE(pos + 28);
-    const extraLen = buf.readUInt16LE(pos + 30);
-    const commentLen = buf.readUInt16LE(pos + 32);
-    const nameRaw = buf.subarray(pos + 46, pos + 46 + nameLen);
-    // 条目名编码：通用位标记第 11 位为 1 表示 UTF-8，否则按 CP437（此处退化为 latin1）。
-    const flags = buf.readUInt16LE(pos + 8);
-    const name = nameRaw.toString((flags & 0x800) !== 0 ? 'utf8' : 'latin1');
-    entries.push({
-      name,
-      offset: localOffset,
-      mode: externalAttrs >>> 16,
-      method,
-      size: compressedSize,
-    });
-    pos += 46 + nameLen + extraLen + commentLen;
-  }
-
-  for (const entry of entries) {
-    // 路径穿越防护：拒绝 .. 段与绝对路径。
-    const target = resolve(targetDir, entry.name);
-    if (target !== targetDir && !target.startsWith(targetDir + sep)) {
-      return `unsafe entry path rejected: ${entry.name}`;
-    }
-    const isSymlink = (entry.mode & 0o170000) === 0o120000;
-    const isDir = entry.name.endsWith('/');
-
-    if (entry.method === 0 && !isSymlink && !isDir) {
-      // stored（未压缩）：数据紧跟本地文件头。
-      const nameLen = buf.readUInt16LE(entry.offset + 26);
-      const extraLen = buf.readUInt16LE(entry.offset + 28);
-      const start = entry.offset + 30 + nameLen + extraLen;
-      mkdirSync(dirname(target), { recursive: true });
-      writeFileSync(target, buf.subarray(start, start + entry.size));
-      continue;
-    }
-
-    // 本地文件头（用于拿真实的名字/扩展字段长度；中央目录的副本可能与本地不一致）。
-    if (buf.readUInt32LE(entry.offset) !== 0x04034b50) return `corrupt local header for ${entry.name}`;
-    const lNameLen = buf.readUInt16LE(entry.offset + 26);
-    const lExtraLen = buf.readUInt16LE(entry.offset + 28);
-    const dataStart = entry.offset + 30 + lNameLen + lExtraLen;
-
-    if (isDir) {
-      mkdirSync(target, { recursive: true });
-      continue;
-    }
-    mkdirSync(dirname(target), { recursive: true });
-    const payload = buf.subarray(dataStart, dataStart + entry.size);
-    if (entry.method === 8) {
-      const raw = await inflate(payload);
-      if (isSymlink) {
-        const linkTarget = raw.toString('utf8');
-        rmSync(target, { force: true });
-        symlinkSync(linkTarget, target);
-        continue;
-      }
-      writeFileSync(target, raw);
-      continue;
-    }
-    if (entry.method === 0) {
-      if (isSymlink) {
-        const linkTarget = payload.toString('utf8');
-        rmSync(target, { force: true });
-        symlinkSync(linkTarget, target);
-        continue;
-      }
-      writeFileSync(target, payload);
-      continue;
-    }
-    return `unsupported compression method ${entry.method} for ${entry.name}`;
-  }
-  return undefined;
-}
-
-async function extractZip(zipPath: string, targetDir: string): Promise<void> {
-  mkdirSync(targetDir, { recursive: true });
-  const attempts = extractAttempts();
-  let lastError = 'no extractor attempted';
-  for (const attempt of attempts) {
-    const code = await runProcess(attempt.command, attempt.args(zipPath, targetDir));
-    if (code === 0) {
-      // 校验关键文件是否完整；不完整说明下载/解压失败，清理后重试。
-      const missing = REQUIRED_FILES.filter((name) => !existsSync(join(targetDir, name)));
-      if (missing.length === 0) return;
-      rmSync(targetDir, { recursive: true, force: true });
-      mkdirSync(targetDir, { recursive: true });
-      lastError = `Electron zip incomplete, missing: ${missing.join(', ')}`;
-      continue;
-    }
-    lastError = `${attempt.command} exited with ${code}`;
-  }
-  // 所有外部解压器都不可用（如最小化容器无 unzip 且 tar 是 GNU tar）：
-  // 用 Node 内置 zlib 自己解，零外部依赖，且能正确还原 symlink。
-  const fallbackError = await extractZipWithNode(zipPath, targetDir);
-  if (fallbackError) {
-    rmSync(targetDir, { recursive: true, force: true });
-    throw new Error(`failed to extract Electron zip (${lastError}; node fallback: ${fallbackError})`);
-  }
-  const missing = REQUIRED_FILES.filter((name) => !existsSync(join(targetDir, name)));
-  if (missing.length > 0) {
-    rmSync(targetDir, { recursive: true, force: true });
-    throw new Error(`Electron zip incomplete, missing: ${missing.join(', ')}`);
-  }
 }
 
 /**
@@ -426,80 +156,56 @@ export async function ensureElectronDownload(options: EnsureElectronOptions = {}
 
   log(`Electron not found, downloading v${version} (${PLAT}-${process.arch}) ...`);
   mkdirSync(targetDir, { recursive: true });
-  const zipName = electronZipName(version);
-  const url = `${mirror.replace(/\/$/, '')}/${version}/${zipName}`;
-  const zipPath = join(tmpdir(), zipName);
 
   try {
-    log(`GET ${url}`);
-    // 下载超时控制：AbortController + 定时器，超时中断 fetch 流。
+    // 官方 @electron/get 下载：负责 URL 拼装、镜像、SHA256 校验（sumchecker）、下载缓存
+    // （同一版本只下载一次，之后命中缓存秒回）。超时用 AbortController 传给 fetch。
     const controller = new AbortController();
     const timer = setTimeout(
       () => controller.abort(new Error(`Electron download timed out after ${timeoutMs}ms`)),
       timeoutMs,
     );
     timer.unref?.();
+    let nextLogAt = Date.now() + 3000;
     try {
-      const response = await fetch(url, { redirect: 'follow', signal: controller.signal });
-      if (!response.ok) {
-        throw new Error(`download failed: ${response.status} ${response.statusText} (${url})`);
-      }
-      if (!response.body) {
-        throw new Error(`download empty body (${url})`);
-      }
-      // Response.body 是 Web ReadableStream，转为 Node 流再交给 pipeline（类型安全）。
-      const totalBytes = Number(response.headers.get('content-length') ?? 0);
-      let received = 0;
-      let nextLogAt = Date.now() + 3000;
-      const progress = new Transform({
-        transform(chunk: Buffer, _encoding, callback) {
-          received += chunk.length;
-          const now = Date.now();
-          if (received > 0 && now >= nextLogAt) {
-            const percent =
-              totalBytes > 0
-                ? `${Math.round((received / totalBytes) * 100)}%`
-                : `${(received / 1024 / 1024).toFixed(1)}MB`;
-            log(
-              `downloading ${(received / 1024 / 1024).toFixed(1)}MB / ${(totalBytes / 1024 / 1024).toFixed(1)}MB (${percent})`,
-            );
+      const zipPath = await downloadArtifact({
+        version: `v${version}`,
+        artifactName: 'electron',
+        // platform/arch 不传：@electron/get 用宿主平台与架构自动推断
+        // （getHostArch 还处理 arm → armv7l 特例，比显式传 process.arch 更准）
+        mirrorOptions: { mirror: mirror.replace(/\/$/, '') + '/' },
+        downloadOptions: {
+          signal: controller.signal,
+          quiet: true, // 关掉 @electron/get 自己的进度条（stdout 走宿主日志，不进 bridge 协议）
+          getProgressCallback: async (progress: { transferred: number; total: number | null }) => {
+            const now = Date.now();
+            if (!progress.total || now < nextLogAt) return;
             nextLogAt = now + 3000;
-          }
-          callback(null, chunk);
+            log(
+              `downloading ${(progress.transferred / 1024 / 1024).toFixed(1)}MB / ${(progress.total / 1024 / 1024).toFixed(1)}MB`,
+            );
+          },
         },
       });
-      // @types/node 26.x + tsconfig lib 含 DOM 时，stream/promises 的 pipeline
-      // 存在重载歧义：三参数链条的末位会被当成 PipelineOptions（报 TS2345/TS2769）。
-      // 运行时行为完全正确（下载链路已端到端实测），这里改用 node:stream 的回调版
-      // pipeline + promisify，绕开重载选择问题。
-      await nodePipeline(
-        Readable.fromWeb(response.body as import('node:stream/web').ReadableStream),
-        progress,
-        createWriteStream(zipPath),
-      );
       const seconds = ((Date.now() - startedAt) / 1000).toFixed(1);
-      log(`download complete (${(received / 1024 / 1024).toFixed(1)}MB in ${seconds}s)`);
+      log(`download complete (${seconds}s), extracting to ${targetDir} ...`);
+      // 官方 @electron-internal/extract-zip 解压（electron 43 官方安装同款）：
+      // 纯 Node + native binding，跨平台一致，正确处理 symlink 与文件权限，
+      // 不需要系统 unzip/tar/powershell，也没有我们手写的平台适配链。
+      await extract(zipPath, { dir: targetDir });
+      if (!existsSync(exe)) {
+        throw new Error(`Electron zip extracted, but ${ELECTRON_REL} not found`);
+      }
+      const readySeconds = ((Date.now() - startedAt) / 1000).toFixed(1);
+      log(`ready in ${readySeconds}s: ${exe}`);
+      return exe;
     } finally {
       clearTimeout(timer);
     }
-    log(`extracting to ${targetDir} ...`);
-    await extractZip(zipPath, targetDir);
-    if (!existsSync(exe)) {
-      throw new Error(`Electron zip extracted, but ${ELECTRON_REL} not found`);
-    }
-    const seconds = ((Date.now() - startedAt) / 1000).toFixed(1);
-    log(`ready in ${seconds}s: ${exe}`);
-    return exe;
   } catch (error) {
     warn(`ensure failed: ${error instanceof Error ? error.message : String(error)}`);
     warn('desktop pet unavailable. Set DSH_PET_ELECTRON_PATH to an existing Electron, or retry later.');
     return undefined;
-  } finally {
-    try {
-      rmSync(zipPath, { force: true });
-    } catch {
-      /* ignore */
-    }
   }
 }
 
