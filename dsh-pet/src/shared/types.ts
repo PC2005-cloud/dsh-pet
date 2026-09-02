@@ -97,7 +97,7 @@ export interface Pet {
 /** config.jsonc 的 physics 段：拖拽抛掷手感参数（全局，所有宠物共用）。
  *  默认值 = src/shared/physics.ts 的常量（1400 / 0.78 / 2.5 / true / 1.0 / false），内置配置与代码两侧保持一致。 */
 export interface PhysicsParams {
-  /** 重力加速度（px/s²）：抛掷下落/反弹的基础重力，越大落得越快 */
+  /** 重力加速度（px/s²）：抛掷下落/反弹的基础重力，越大落得越快；0 = 无重力（合法，永不下落/均匀直线飞行） */
   gravity: number;
   /** 碰壁反弹恢复系数 0~1（1 = 完全弹性，0 = 撞上即停；墙/地共用） */
   restitution: number;

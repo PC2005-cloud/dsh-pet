@@ -141,7 +141,7 @@ function weightsValid(w: unknown): boolean {
   return true;
 }
 
-/** physics 段校验：gravity > 0、restitution ∈ [0,1]、groundFriction ≥ 0（均为有限数字）、
+/** physics 段校验：gravity ≥ 0（0 = 无重力，合法）、restitution ∈ [0,1]、groundFriction ≥ 0（均为有限数字）、
  *  ceilingBounce 为布尔、throwPower > 0（有限数字）、petCollision 为布尔 */
 function physicsValid(value: unknown): boolean {
   if (!value || typeof value !== 'object') return false;
@@ -152,7 +152,7 @@ function physicsValid(value: unknown): boolean {
   const tp = Number(p.throwPower);
   return (
     Number.isFinite(g) &&
-    g > 0 &&
+    g >= 0 &&
     Number.isFinite(r) &&
     r >= 0 &&
     r <= 1 &&

@@ -272,6 +272,7 @@ class PetSprite {
     // 注意：退订由窗口销毁自然回收（webContents 销毁后 ipc 事件不再派发），无需显式取消。
     this.others = {}; // petId -> {x,y,vx,vy,size,bottomPad}（其它宠物的最新状态，来自主进程广播）
     this.throwState = null; // 飞行中的实时状态（被撞查询 / 其它窗碰撞检测时上报用）
+    this.pressScoreFired = false; // 按下瞬间已触发过积分（pointerdown 即触发；click 据此不重复弹，同浏览器）
     this.lastFlightReport = 0;
     if (window.petBridge && window.petBridge.onFlightStates) {
       window.petBridge.onFlightStates((states) => {
@@ -587,13 +588,16 @@ class PetSprite {
     this.dragFollow = requestAnimationFrame(step);
   }
 
-  /** 停止抛掷（空中被抓/点菜单/回家时立即定格在当前落点） */
+  /** 停止抛掷（空中被抓/点菜单/回家时立即定格在当前落点）。
+   *  同时清速度状态 throwState——否则「抓住后温柔放下」会残留最后一次飞行速度，
+   *  静止的宠物点一下就误判为飞行中。点击积分用的飞行动态由 onPointerDown 提前记录。 */
   stopThrow() {
     this.throwToken++;
     if (this.throwRef !== null) {
       cancelAnimationFrame(this.throwRef);
       this.throwRef = null;
     }
+    this.throwState = null;
   }
 
   /** 抛掷驱动：重力 + 边缘反弹 + 落地摩擦，落定后写入 customPos */
@@ -717,6 +721,50 @@ class PetSprite {
   onPointerDown(e) {
     // 只认左键：右键进入拖拽判定会与右键菜单打架（右键不拖拽，两端一致）
     if (e.button !== 0) return;
+    // 抓取速度日志：stopThrow 之前读，否则飞行速度就没了；静止时记录 0（与浏览器同构）
+    const grabState = this.throwState;
+    console.log(
+      '[dsh-pet] ' +
+        new Date().toTimeString().slice(0, 8) +
+        ' pet=' +
+        this.pet.id +
+        ' grab vx=' +
+        (grabState ? Math.round(grabState.vx) : 0) +
+        ' vy=' +
+        (grabState ? Math.round(grabState.vy) : 0) +
+        ' |v|=' +
+        (grabState ? Math.round(Math.hypot(grabState.vx, grabState.vy)) : 0),
+    );
+    // 点击积分：**按下瞬间即触发**（不等松开）。读取 stopThrow 之前的飞行速度，
+    // 在飞行中且达标 → 立即粒子爆发 + 积分弹窗；pressScoreFired 标记本次按下已触发，
+    // 松开的 click 据此不再重复弹、也不再播普通点击动画（与浏览器同构）。
+    this.pressScoreFired = false;
+    if (grabState) {
+      const grabSpeed = Math.hypot(grabState.vx, grabState.vy);
+      if (grabSpeed >= S.SCORE_MIN_SPEED) {
+        this.pressScoreFired = true;
+        console.log(
+          '[dsh-pet] ' +
+            new Date().toTimeString().slice(0, 8) +
+            ' pet=' +
+            this.pet.id +
+            ' click-score speed=' +
+            Math.round(grabSpeed) +
+            ' size=' +
+            this.size +
+            ' -> +' +
+            S.clickScore(grabSpeed, this.size),
+        );
+        S.spawnScoreBurst(e.clientX, e.clientY);
+        S.mountScorePopup({
+          x: e.clientX,
+          y: e.clientY,
+          score: S.clickScore(grabSpeed, this.size),
+          speed: grabSpeed,
+          size: this.pet.size,
+        });
+      }
+    }
     this.stopThrow(); // 空中抓取：从当前落点开始新拖拽（this.pos 实时）
     this.stopDragFollow();
     this.stopMove();
@@ -806,6 +854,18 @@ class PetSprite {
       const vel = S.estimateReleaseVelocity(this.dragTrail, performance.now(), this.physics);
       this.dragTrail = [];
       if (vel) {
+        console.log(
+          '[dsh-pet] ' +
+            new Date().toTimeString().slice(0, 8) +
+            ' pet=' +
+            this.pet.id +
+            ' release vx=' +
+            Math.round(vel.vx) +
+            ' vy=' +
+            Math.round(vel.vy) +
+            ' |v|=' +
+            Math.round(Math.hypot(vel.vx, vel.vy)),
+        );
         this.startThrow(px, py, vel.vx, vel.vy);
       } else {
         // customPos 语义 = 宠物**中心**比例（position() 用 rx*W - halfW 还原左上角；
@@ -851,6 +911,14 @@ class PetSprite {
   onClick() {
     const d = this.dragState;
     if (d.active || d.dragging || this.justDragged) return;
+    // 积分判定已在 onPointerDown（按下即触发）完成：
+    // 本次按下已触发过积分 → 只收手停住、**不**再播普通点击动画（粒子+弹窗即反馈，与浏览器同构）
+    if (this.pressScoreFired) {
+      this.pressScoreFired = false;
+      this.stopThrow();
+      this.stopMove();
+      return;
+    }
     this.stopThrow(); // 点击飞行中的宠物 = 收手停住（再播点击回应）
     this.stopMove();
     if (!this.animations.clicks.length) return;

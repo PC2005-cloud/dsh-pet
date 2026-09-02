@@ -10,6 +10,7 @@ import { flattenConfigPets, isWebVisible } from '../shared/config';
 import { balanceEventIndex, balancePercent, fetchBalanceState, type BalanceState } from '../shared/balance';
 import { fetchWhisperState, fetchWhisperTrigger } from '../shared/whisper';
 import { makeBalanceBubble, makeWhisperBubble } from './bubble';
+import { clickScore, SCORE_MIN_SPEED, mountScorePopup, spawnScoreBurst } from '../shared/score-popup';
 import { CANVAS_H, FEET_Y, HIT_BOX, DRAG_THRESHOLD, PET_REF_WIDTH } from '../shared/constants';
 // 统一右键菜单：与桌面共用同一份组件（树 + 渲染 + 样式，src/shared/menu.ts）
 import {
@@ -183,6 +184,8 @@ export function makePetUI(rt: {
     const throwTokenRef = useRef(0);
     // 抛掷实时状态（宠物间碰撞查询用：每帧抛掷积分后同步，落定清空）
     const throwStateRef = useRef<ThrowState | null>(null);
+    // 按下瞬间已触发过积分（pointerdown 即触发；防止松开的 click 再触发一次/再播点击动画）
+    const pressScoreFiredRef = useRef(false);
     // Q 弹挤压（点击回应 / 抛掷落地）：rAF + 待压标记（等新动画真正成为前台再压，压的是新首帧）
     const squashRef = useRef<number | null>(null);
     const squashTokenRef = useRef(0);
@@ -649,13 +652,16 @@ export function makePetUI(rt: {
       dragTargetRef.current = null;
       dragVelRef.current = { vx: 0, vy: 0 };
     };
-    /** 停止抛掷（宠物在空中被抓住/点菜单/回家时立即定格在当前落点） */
+    /** 停止抛掷（宠物在空中被抓住/点菜单/回家时立即定格在当前落点）。
+     *  同时清速度状态 throwStateRef——否则「抓住后温柔放下」会残留最后一次飞行速度，
+     *  静止的宠物点一下就误判为飞行中。点击积分用的飞行动态由 pointerdown 提前记录。 */
     const stopThrow = () => {
       throwTokenRef.current++;
       if (throwRef.current !== null) {
         cancelAnimationFrame(throwRef.current);
         throwRef.current = null;
       }
+      throwStateRef.current = null;
     };
     /** rAF 弹簧跟随：包围盒朝拖拽目标（指针-抓取偏移）过阻尼追赶，抹平高频抖动 */
     const startDragFollow = (rootEl: HTMLDivElement) => {
@@ -851,6 +857,45 @@ export function makePetUI(rt: {
     const handlePointerDown = (e: ReactNS.PointerEvent<HTMLDivElement>) => {
       // 只认左键：右键进入拖拽判定会与右键菜单打架（右键不拖拽，两端一致）
       if (e.button !== 0) return;
+      // 抓取速度日志：stopThrow 之前读，否则飞行速度就没了；静止时记录 0
+      const grabState = throwStateRef.current;
+      console.log(
+        '[dsh-pet] ' +
+          new Date().toTimeString().slice(0, 8) +
+          ' pet=' +
+          cfg.id +
+          ' grab vx=' +
+          (grabState ? Math.round(grabState.vx) : 0) +
+          ' vy=' +
+          (grabState ? Math.round(grabState.vy) : 0) +
+          ' |v|=' +
+          (grabState ? Math.round(Math.hypot(grabState.vx, grabState.vy)) : 0),
+      );
+      // 点击积分：**按下瞬间即触发**（不等松开）。读取 stopThrow 之前的飞行速度，
+      // 在飞行中且达标 → 立即粒子爆发 + 积分弹窗；pressScoreFiredRef 标记本次按下已触发，
+      // 松开的 click 据此不再重复弹、也不再播普通点击动画。
+      pressScoreFiredRef.current = false;
+      if (grabState) {
+        const grabSpeed = Math.hypot(grabState.vx, grabState.vy);
+        if (grabSpeed >= SCORE_MIN_SPEED) {
+          const sc = clickScore(grabSpeed, size);
+          pressScoreFiredRef.current = true;
+          console.log(
+            '[dsh-pet] ' +
+              new Date().toTimeString().slice(0, 8) +
+              ' pet=' +
+              cfg.id +
+              ' click-score speed=' +
+              Math.round(grabSpeed) +
+              ' size=' +
+              size +
+              ' -> +' +
+              sc,
+          );
+          spawnScoreBurst(e.clientX, e.clientY);
+          mountScorePopup({ x: e.clientX, y: e.clientY, score: sc, speed: grabSpeed, size });
+        }
+      }
       // 空中抓取：停掉抛掷/漫游/弹簧跟随，从当前落点开始新拖拽
       stopThrow();
       stopDragFollow();
@@ -920,6 +965,18 @@ export function makePetUI(rt: {
         const vel = estimateReleaseVelocity(dragTrailRef.current, performance.now(), cfg.physics);
         dragTrailRef.current = [];
         if (vel) {
+          console.log(
+            '[dsh-pet] ' +
+              new Date().toTimeString().slice(0, 8) +
+              ' pet=' +
+              cfg.id +
+              ' release vx=' +
+              Math.round(vel.vx) +
+              ' vy=' +
+              Math.round(vel.vy) +
+              ' |v|=' +
+              Math.round(Math.hypot(vel.vx, vel.vy)),
+          );
           // 抛掷：飞行期间由 startThrow 的 rAF 直接写 left/top，落定后才提交 customPos
           startThrow(px, py, vel.vx, vel.vy);
         } else {
@@ -931,6 +988,14 @@ export function makePetUI(rt: {
     const handleClick = () => {
       const d = dragRef.current;
       if (d.active || d.dragging || justDraggedRef.current) return;
+      // 积分判定已在 pointerdown（按下即触发）完成：
+      // 本次按下已触发过积分 → 只收手停住、**不**再播普通点击动画（粒子+弹窗即反馈）
+      if (pressScoreFiredRef.current) {
+        pressScoreFiredRef.current = false;
+        stopThrow();
+        stopMove();
+        return;
+      }
       stopThrow(); // 点击飞行中的宠物 = 收手停住（再播点击回应）
       stopMove();
       setOnce(true);
