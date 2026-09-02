@@ -52,7 +52,10 @@
       "id": "main",
       "size": 462,
       "balanceEnabled": true,
-      "whisperEnabled": true,
+      // 碎碎念默认关闭：每次生成都会调用当前对话的模型。本地 LLM 单并发时，
+      // 后台碎碎念会顶掉正在跑的任务的 KV cache（与 DSH 多子代理同因）。
+      // 需要碎碎念的宠物改为 true（设置页也可开关）。
+      "whisperEnabled": false,
       "display": "both",
       "position": {
         "corner": "top-right",
