@@ -30,11 +30,15 @@ import {
   throwBounds,
   throwStep,
   trimTrail,
+  collidePet,
+  bodyPixelBox,
+  rectsOverlap,
   SQ_DURATION_MS,
   SQ_SQUASH,
   squashScale,
   landingSquash,
   type DragSample,
+  type PetCollisionSlot,
   type ThrowState,
 } from '../shared/physics';
 import type { Animations, Corner, Pet, PhysicsParams, Weights } from '../shared/types';
@@ -110,15 +114,19 @@ export function makePetUI(rt: {
     cfg,
     balance,
     balanceTick,
+    arena,
   }: {
     cfg: RuntimePet;
     balance: BalanceState | null;
     balanceTick: number;
+    arena: ReactNS.MutableRefObject<{ slots: Record<string, PetCollisionSlot> }>;
   }) {
     // ---- 尺寸（由配置传入；容器/设置页更新后即时跟随）----
     const [size, setSize] = useState(cfg.size);
     const halfW = size / 2;
     const halfH = (size * 9) / 16 / 2;
+    // 舞台脚底垫高（宠物站立于脚底线）：命中框 y、碰撞 body 框、渲染 stage 位移共用
+    const bottomPad = (size * (9 / 16) * (CANVAS_H - FEET_Y)) / CANVAS_H;
     // 动画池与权重：拍平时已把所属条目的池吹进 cfg（文件宠物自带完整独立池；主宠物用 main 条目
     // 即内置默认池）——成品绝对正确，直接读，不做任何回落
     const petAnims = cfg.animations;
@@ -173,6 +181,8 @@ export function makePetUI(rt: {
     const dragFollowTokenRef = useRef(0);
     const throwRef = useRef<number | null>(null);
     const throwTokenRef = useRef(0);
+    // 抛掷实时状态（宠物间碰撞查询用：每帧抛掷积分后同步，落定清空）
+    const throwStateRef = useRef<ThrowState | null>(null);
     // Q 弹挤压（点击回应 / 抛掷落地）：rAF + 待压标记（等新动画真正成为前台再压，压的是新首帧）
     const squashRef = useRef<number | null>(null);
     const squashTokenRef = useRef(0);
@@ -696,6 +706,37 @@ export function makePetUI(rt: {
         const fallingVy = state.vy; // 本帧积分前的竖直速度（正=下落）：即落地冲击速度
         const res = throwStep(state, dt, bounds, cfg.physics);
         state = { x: res.x, y: res.y, vx: res.vx, vy: res.vy };
+        throwStateRef.current = state;
+        // ---- 宠物间碰撞（仅 petCollision 开启）：飞行中的自己被甩出时撞到其它宠物 ----
+        if (cfg.physics.petCollision) {
+          const myBody = bodyPixelBox({ x: state.x, y: state.y, size, bottomPad });
+          for (const slotId of Object.keys(arena.current.slots)) {
+            if (slotId === cfg.id) continue;
+            const slot = arena.current.slots[slotId];
+            const otherBox = slot.getBox();
+            if (!otherBox) continue;
+            const otherBody = bodyPixelBox({
+              x: otherBox.x,
+              y: otherBox.y,
+              size: slot.size,
+              bottomPad: slot.bottomPad,
+            });
+            if (!rectsOverlap(myBody, otherBody)) continue;
+            const vel = slot.getVel();
+            const hit = collidePet(
+              { x: state.x, y: state.y, vx: state.vx, vy: state.vy, size },
+              { x: otherBox.x, y: otherBox.y, vx: vel.vx, vy: vel.vy, size: slot.size },
+            );
+            if (hit) {
+              // 飞行方：按动量结果继续弹开；被撞方：回调其 onHit 让被撞宠物以新初速抛出去
+              state.vx = hit.fvx;
+              state.vy = hit.fvy;
+              throwStateRef.current = state;
+              slot.onHit(hit.hvx, hit.hvy);
+              break; // 一帧只处理一次碰撞（避免连锁触发抖动）
+            }
+          }
+        }
         if (rootEl) {
           rootEl.style.left = res.x + 'px';
           rootEl.style.top = res.y + 'px';
@@ -716,6 +757,7 @@ export function makePetUI(rt: {
         prevGrounded = grounded;
         if (res.atRest) {
           throwRef.current = null;
+          throwStateRef.current = null;
           setCustomPos(customPosRef.current);
           return;
         }
@@ -723,6 +765,51 @@ export function makePetUI(rt: {
       };
       throwRef.current = requestAnimationFrame(step);
     };
+    /** 被撞回调（宠物间碰撞）：被其它飞行中宠物撞到 → 停当前动作，从落点以新初速抛出去（全复用现有物理） */
+    const startThrowLatestRef = useRef<(px: number, py: number, vx: number, vy: number) => void>(() => {});
+    startThrowLatestRef.current = startThrow;
+    const onPetHit = (vx: number, vy: number) => {
+      stopMove();
+      stopDragFollow();
+      stopThrow();
+      const bx = boxPxRef.current;
+      let sx = 0;
+      let sy = 0;
+      if (bx) {
+        sx = bx.x;
+        sy = bx.y;
+      } else {
+        const r = rootRef.current?.getBoundingClientRect();
+        if (r) {
+          sx = r.left;
+          sy = r.top;
+        }
+      }
+      startThrowLatestRef.current(sx, sy, vx, vy);
+    };
+    // 共享碰撞站场注册（只在本宠物参与时注册；卸载清理）。getVel 用最新抛掷状态；
+    // onHit 经 startThrowLatestRef 转发，杜绝陈旧闭包（startThrow 每次渲染重建）。
+    useEffect(() => {
+      const arenaSlots = arena.current.slots;
+      arenaSlots[cfg.id] = {
+        size,
+        bottomPad,
+        getBox: () => {
+          if (boxPxRef.current) return boxPxRef.current;
+          const r = rootRef.current?.getBoundingClientRect();
+          return r ? { x: r.left, y: r.top } : null;
+        },
+        getVel: () =>
+          throwRef.current !== null && throwStateRef.current
+            ? { vx: throwStateRef.current.vx, vy: throwStateRef.current.vy }
+            : { vx: 0, vy: 0 },
+        onHit: onPetHit,
+      };
+      return () => {
+        delete arenaSlots[cfg.id];
+      };
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [cfg.id, size, bottomPad, arena]);
     /** Q 弹挤压：前台视频垂直压扁（贴地锚定，transform-origin:bottom）再回弹；
      *  与桌面同构，曲线在 shared（squashScale）。depth = 下压幅度（点击固定 0.55；
      *  落地按冲击速度 landingSquash 动态取）。reduce-motion 时跳过。 */
@@ -958,7 +1045,6 @@ export function makePetUI(rt: {
     };
 
     // ---- 渲染 ----
-    const bottomPad = (size * (9 / 16) * (CANVAS_H - FEET_Y)) / CANVAS_H;
     // 左右透明边余量（视频盒内宠物身体居中）：夹取按"身体"贴边——宠物能走到屏幕边缘，身体永不越界
     const sideAllow = (HIT_BOX.x0 / 640) * size;
     const stageStyle = dragging ? { transform: 'none' } : { transform: 'translateY(' + bottomPad + 'px)' };
@@ -1027,6 +1113,9 @@ export function makePetUI(rt: {
   function PetMulti() {
     const [pets, setPets] = useState<Pet[]>([]);
     const [ready, setReady] = useState(false);
+    // 共享碰撞站场（宠物间碰撞）：每只 PetCard 注册自己的槽位；飞行中的宠物在 startThrow
+    // 每帧读数碰撞。纯 ref 同步，不触发 React 重渲染。
+    const arenaRef = useRef<{ slots: Record<string, PetCollisionSlot> }>({ slots: {} });
     // 文件宠物（非 main 条目的实例）：加载后填充；设置页 sync 过来的列表不含它们，这里统一合并回去
     const extrasRef = useRef<Pet[]>([]);
     // main 条目的条目级字段（设置页保存来的可编辑列表是裸实例，回填动画池/权重/周期用）
@@ -1159,7 +1248,9 @@ export function makePetUI(rt: {
       };
     }, [ready, anyBalanceEnabled]);
 
-    return ready ? visiblePets.map((p) => h(PetCard, { key: p.id, cfg: p as RuntimePet, balance, balanceTick })) : null;
+    return ready
+      ? visiblePets.map((p) => h(PetCard, { key: p.id, cfg: p as RuntimePet, balance, balanceTick, arena: arenaRef }))
+      : null;
   }
 
   return PetMulti;

@@ -267,6 +267,36 @@ class PetSprite {
       },
       { signal: ac.signal },
     );
+
+    // 宠物间碰撞（跨窗 broker）：订阅其它宠物状态广播（碰撞检测用）+ 「被撞」事件 → onDeskHit。
+    // 注意：退订由窗口销毁自然回收（webContents 销毁后 ipc 事件不再派发），无需显式取消。
+    this.others = {}; // petId -> {x,y,vx,vy,size,bottomPad}（其它宠物的最新状态，来自主进程广播）
+    this.throwState = null; // 飞行中的实时状态（被撞查询 / 其它窗碰撞检测时上报用）
+    this.lastFlightReport = 0;
+    if (window.petBridge && window.petBridge.onFlightStates) {
+      window.petBridge.onFlightStates((states) => {
+        if (!states || typeof states !== 'object') return;
+        const next = {};
+        for (const pid of Object.keys(states)) {
+          if (pid === this.pet.id) continue; // 排除自己
+          const s = states[pid];
+          next[pid] = {
+            x: Number(s && s.x) || 0,
+            y: Number(s && s.y) || 0,
+            vx: Number(s && s.vx) || 0,
+            vy: Number(s && s.vy) || 0,
+            size: Number(s && s.size) || 0,
+            bottomPad: Number(s && s.bottomPad) || 0,
+          };
+        }
+        this.others = next;
+      });
+      window.petBridge.onPetHit((payload) => {
+        const vx = Number(payload && payload.vx);
+        const vy = Number(payload && payload.vy);
+        if (Number.isFinite(vx) && Number.isFinite(vy)) this.onDeskHit(vx, vy);
+      });
+    }
   }
 
   dispose() {
@@ -298,6 +328,8 @@ class PetSprite {
         this.pos.y - this.margin.t,
         this.size + this.margin.l + this.margin.r,
         this.winH + this.margin.t + this.margin.b,
+        this.pos.x, // 包围盒左上角（碰撞站场用：窗口坐标 ≠ 包围盒坐标）
+        this.pos.y,
       );
     }
   }
@@ -581,6 +613,43 @@ class PetSprite {
       const fallingVy = state.vy; // 本帧积分前的竖直速度（正=下落）：即落地冲击速度
       const res = S.throwStep(state, dt, bounds, this.physics);
       state = { x: res.x, y: res.y, vx: res.vx, vy: res.vy };
+      this.throwState = state;
+      // 上报飞行状态（节流 ~30ms）：主进程 broker 汇聚后广播，其它窗口用它做跨窗碰撞检测
+      if (window.petBridge && window.petBridge.reportFlight && now - this.lastFlightReport > 30) {
+        window.petBridge.reportFlight({
+          x: state.x,
+          y: state.y,
+          vx: state.vx,
+          vy: state.vy,
+          size: this.size,
+          bottomPad: this.bottomPad,
+        });
+        this.lastFlightReport = now;
+      }
+      // 宠物间碰撞（仅 petCollision 开启）：飞行中的自己撞到其它宠物 → 动量弹开
+      if (this.physics && this.physics.petCollision) {
+        const myBody = S.bodyPixelBox({ x: state.x, y: state.y, size: this.size, bottomPad: this.bottomPad });
+        for (const pid of Object.keys(this.others)) {
+          const o = this.others[pid];
+          if (!o || !o.size) continue;
+          const otherBody = S.bodyPixelBox({ x: o.x, y: o.y, size: o.size, bottomPad: o.bottomPad });
+          if (!S.rectsOverlap(myBody, otherBody)) continue;
+          const hit = S.collidePet(
+            { x: state.x, y: state.y, vx: state.vx, vy: state.vy, size: this.size },
+            { x: o.x, y: o.y, vx: o.vx, vy: o.vy, size: o.size },
+          );
+          if (hit) {
+            // 飞行方：按动量结果继续弹开；被撞方：主进程转发给目标窗口 → 目标窗 startThrow
+            state.vx = hit.fvx;
+            state.vy = hit.fvy;
+            this.throwState = state;
+            if (window.petBridge && window.petBridge.reportCollide) {
+              window.petBridge.reportCollide(pid, hit.hvx, hit.hvy);
+            }
+            break; // 一帧只处理一次碰撞（避免连锁触发抖动）
+          }
+        }
+      }
       this.sendBounds(res.x, res.y);
       // 落地 Q 弹：只在空中→地面转换帧触发一次，力度随冲击速度（轻落 0.8 ~ 重砸 0.55）
       const grounded = res.y >= bounds.maxY - 1;
@@ -591,6 +660,7 @@ class PetSprite {
       prevGrounded = grounded;
       if (res.atRest) {
         this.throwRef = null;
+        this.throwState = null;
         this.customPos = { rx: (this.pos.x + this.halfW) / VIEW.w, ry: (this.pos.y + this.halfH) / VIEW.h };
         window.__dshPetDebug.lastDragRelease = { x: this.pos.x, y: this.pos.y };
         return;
@@ -598,6 +668,14 @@ class PetSprite {
       this.throwRef = requestAnimationFrame(step);
     };
     this.throwRef = requestAnimationFrame(step);
+  }
+
+  /** 被撞回调（跨窗碰撞 broker 转发）：停当前动作，从落点以新初速抛出去（全复用现有物理） */
+  onDeskHit(vx, vy) {
+    this.stopMove();
+    this.stopDragFollow();
+    this.stopThrow();
+    this.startThrow(this.pos.x, this.pos.y, vx, vy);
   }
 
   /** Q 弹挤压：前台视频垂直压扁（贴地锚定，transform-origin:bottom）再回弹；

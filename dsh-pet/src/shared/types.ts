@@ -93,7 +93,7 @@ export interface Pet {
 }
 
 /** config.jsonc 的 physics 段：拖拽抛掷手感参数（全局，所有宠物共用）。
- *  默认值 = src/shared/physics.ts 的常量（1400 / 0.78 / 2.5 / true / 1.0），内置配置与代码两侧保持一致。 */
+ *  默认值 = src/shared/physics.ts 的常量（1400 / 0.78 / 2.5 / true / 1.0 / false），内置配置与代码两侧保持一致。 */
 export interface PhysicsParams {
   /** 重力加速度（px/s²）：抛掷下落/反弹的基础重力，越大落得越快 */
   gravity: number;
@@ -105,6 +105,8 @@ export interface PhysicsParams {
   ceilingBounce: boolean;
   /** 总力度（拖拽/抛掷输出增益）：弹簧跟手 K/C、甩抛初速与软上限整体 ×p（1.0 = 现状；必须 > 0） */
   throwPower: number;
+  /** 多宠物互相碰撞开关：true = 飞行中被甩出的宠物撞到其它宠物时按动量守恒弹开；false = 关闭（默认，互相穿过） */
+  petCollision: boolean;
 }
 
 /** config.jsonc 全集——运行时直接使用（ANIM 即本类型） */

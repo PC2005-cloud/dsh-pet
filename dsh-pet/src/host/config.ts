@@ -142,7 +142,7 @@ function weightsValid(w: unknown): boolean {
 }
 
 /** physics 段校验：gravity > 0、restitution ∈ [0,1]、groundFriction ≥ 0（均为有限数字）、
- *  ceilingBounce 为布尔、throwPower > 0（有限数字） */
+ *  ceilingBounce 为布尔、throwPower > 0（有限数字）、petCollision 为布尔 */
 function physicsValid(value: unknown): boolean {
   if (!value || typeof value !== 'object') return false;
   const p = value as Record<string, unknown>;
@@ -160,7 +160,8 @@ function physicsValid(value: unknown): boolean {
     f >= 0 &&
     typeof p.ceilingBounce === 'boolean' &&
     Number.isFinite(tp) &&
-    tp > 0
+    tp > 0 &&
+    typeof p.petCollision === 'boolean'
   );
 }
 

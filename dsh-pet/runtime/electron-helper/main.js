@@ -54,6 +54,31 @@ if (BRIDGE) {
 const windows = new Map();
 
 /**
+ * 宠物间碰撞 broker 状态：petId -> { x, y, vx, vy, size, bottomPad }。
+ * 来源：pet:set-bounds（位置，随漫游/拖拽/静止保真上报）+ pet:report-flight（飞行中带速度）。
+ * 任何更新都广播全量给所有窗口——每窗飞行方用它做跨窗碰撞检测（滞后 ≤ 1 帧，可接受）。
+ */
+const petStates = new Map();
+
+/** 把当前全量宠物状态广播给所有窗口（碰撞检测的共享站场） */
+function broadcastPetStates() {
+  const states = {};
+  for (const [pid, s] of petStates) {
+    states[pid] = { x: s.x, y: s.y, vx: s.vx, vy: s.vy, size: s.size, bottomPad: s.bottomPad };
+  }
+  for (const win of windows.values()) {
+    if (!win.isDestroyed()) win.webContents.send('pet:flight-states', states);
+  }
+}
+
+/** 记录/更新一只宠物的状态并广播 */
+function updatePetState(petId, partial) {
+  const prev = petStates.get(petId) || { x: 0, y: 0, vx: 0, vy: 0, size: 0, bottomPad: 0 };
+  petStates.set(petId, Object.assign({}, prev, partial));
+  broadcastPetStates();
+}
+
+/**
  * 每窗口当前穿透状态（true = 整窗点击穿透）。所有 setIgnoreMouseEvents 只经本文件
  * （创建时初始化 + pet:set-interactive 翻转），这里镜像真实状态，供冒烟断言/排查使用
  * （Electron 无 isIgnoringMouseEvents 取值 API）。
@@ -279,6 +304,46 @@ app.whenReady().then(() => {
       { x: Math.round(x), y: Math.round(y), width: Math.round(width), height: Math.round(height) },
       false,
     );
+    // 碰撞站场：位置必须用**包围盒左上角**（renderer 显式上报 boxX/boxY）——
+    // 窗口坐标 = 包围盒 − margin（半只宠物宽），直接拿窗口坐标会让跨窗检测整体错位
+    const petId = [...windows.keys()].find((id) => windows.get(id) === win);
+    if (petId) {
+      const bx = Number(bounds?.boxX);
+      const by = Number(bounds?.boxY);
+      updatePetState(petId, {
+        x: Number.isFinite(bx) ? bx : x,
+        y: Number.isFinite(by) ? by : y,
+      });
+    }
+  });
+
+  // 飞行状态上报（碰撞站场）：renderer 飞行中每 ~30ms 上报一次自己的位置/速度/尺寸
+  ipcMain.on('pet:report-flight', (event, state) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (!win || win.isDestroyed()) return;
+    const petId = [...windows.keys()].find((id) => windows.get(id) === win);
+    if (!petId) return;
+    const s = state || {};
+    const x = Number(s.x);
+    const y = Number(s.y);
+    const vx = Number(s.vx);
+    const vy = Number(s.vy);
+    const size = Number(s.size);
+    const bottomPad = Number(s.bottomPad);
+    if (![x, y, vx, vy, size, bottomPad].every(Number.isFinite)) return;
+    updatePetState(petId, { x, y, vx, vy, size, bottomPad });
+  });
+
+  // 碰撞结果转发：飞行方窗口检测到撞到 targetId → 把动量结果（目标新初速）转发给目标窗口
+  ipcMain.on('pet:collide-result', (event, payload) => {
+    const targetId = payload && typeof payload === 'object' ? String(payload.targetId || '') : '';
+    const vx = Number(payload?.vx);
+    const vy = Number(payload?.vy);
+    if (!targetId || !Number.isFinite(vx) || !Number.isFinite(vy)) return;
+    const targetWin = windows.get(targetId);
+    if (targetWin && !targetWin.isDestroyed()) {
+      targetWin.webContents.send('pet:hit', { vx, vy });
+    }
   });
 
   // 点击穿透翻转：renderer 在光标进/出身体命中区时上报；穿透期间仍保留 forward（mousemove 继续转发）

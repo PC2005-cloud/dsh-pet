@@ -10,6 +10,7 @@
 // 本文件的常量只是**默认值来源**（= assets/config.jsonc 的 physics 段），
 // 运行时 throwStep 必须接收调用方传入的 PhysicsParams（浏览器/桌面都从配置成品读）。
 import type { PhysicsParams } from './types';
+import { HIT_BOX } from './constants';
 
 /** 拖拽弹簧刚度：越大跟手越紧 */
 export const SPRING_K = 200;
@@ -52,6 +53,7 @@ export const DEFAULT_PHYSICS: PhysicsParams = {
   groundFriction: GROUND_FRICTION,
   ceilingBounce: true,
   throwPower: 1,
+  petCollision: false,
 };
 
 /** 总力度默认量（throwPower=1 即现状） */
@@ -259,3 +261,90 @@ export const throwStep = (
     (y >= b.maxY - 1 && Math.abs(vy) < 1 && Math.abs(vx) < REST_VX) || (bounced && speed < REST_VY && Math.abs(vy) < 1);
   return { x, y, vx, vy, bounced, atRest };
 };
+
+// ---- 多宠物互相碰撞（宠物 vs 宠物，仅处理「飞行中撞到被撞方」）----
+/** 多宠物碰撞恢复系数：能量损失约 0.5%（e = 0.995，接近完全弹性） */
+export const PET_BOUNCE_E = 0.995;
+
+/** 一只参与碰撞的宠物：位置（包围盒左上角，px）+ 速度（px/s）+ 宽（px，质量 ∝ size²） */
+export interface PetCollider {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  size: number;
+}
+
+/** 身体包围盒（HIT_BOX 命中框比例换算到视口像素）：碰撞相交检测的几何。
+ *  box = 宠物包围盒左上角（浏览器 root 的 left/top、桌面窗口 pos）；
+ *  bottomPad = 舞台脚底垫高（stage 被 translateY 下移的量）。 */
+export const bodyPixelBox = (o: {
+  x: number;
+  y: number;
+  size: number;
+  bottomPad: number;
+}): { left: number; top: number; right: number; bottom: number } => {
+  const h = (o.size * 9) / 16;
+  return {
+    left: o.x + (HIT_BOX.x0 / 640) * o.size,
+    top: o.y + o.bottomPad + (HIT_BOX.y0 / 360) * h,
+    right: o.x + (HIT_BOX.x1 / 640) * o.size,
+    bottom: o.y + o.bottomPad + (HIT_BOX.y1 / 360) * h,
+  };
+};
+
+/** 两矩形是否相交（碰撞检测） */
+export const rectsOverlap = (
+  a: { left: number; top: number; right: number; bottom: number },
+  b: { left: number; top: number; right: number; bottom: number },
+): boolean => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+
+/** 两只宠物碰撞（近乎弹性：动量守恒 + 恢复系数 PET_BOUNCE_E=0.995）。
+ * 质量 ∝ size²；碰撞法向 = 两包围盒中心连线方向；
+ * 法向速度分量按一维动量公式重分配，切向分量各自保留（无切向摩擦，切向能量无损）。
+ * 返回 null = 中心重合无法定法向 / 正在分离（vrel ≤ 0，避免重复弹跳抖动）。
+ */
+export const collidePet = (
+  fly: PetCollider,
+  hit: PetCollider,
+): { fvx: number; fvy: number; hvx: number; hvy: number } | null => {
+  const hf = (fly.size * 9) / 16 / 2;
+  const hh = (hit.size * 9) / 16 / 2;
+  const cx = hit.x + hit.size / 2 - (fly.x + fly.size / 2);
+  const cy = hit.y + hh - (fly.y + hf);
+  const dist = Math.hypot(cx, cy);
+  if (dist < 1e-6) return null; // 中心重合：无法定碰撞法向，跳过本帧
+  const nx = cx / dist;
+  const ny = cy / dist;
+  // 相对速度在法向的投影（碰撞方向 = fly → hit，正 = 正在接近）
+  const vrel = (fly.vx - hit.vx) * nx + (fly.vy - hit.vy) * ny;
+  if (vrel <= 0) return null; // 正在分离：不再弹（避免重叠帧反复触发）
+  const e = PET_BOUNCE_E;
+  const m1 = fly.size * fly.size;
+  const m2 = hit.size * hit.size;
+  const v1n = fly.vx * nx + fly.vy * ny;
+  const v2n = hit.vx * nx + hit.vy * ny;
+  const v1n2 = ((m1 - e * m2) * v1n + (1 + e) * m2 * v2n) / (m1 + m2);
+  const v2n2 = ((m2 - e * m1) * v2n + (1 + e) * m1 * v1n) / (m1 + m2);
+  // 组合：切向分量（原速度 − 法向分量）不变 + 新法向分量
+  return {
+    fvx: fly.vx - v1n * nx + v1n2 * nx,
+    fvy: fly.vy - v1n * ny + v1n2 * ny,
+    hvx: hit.vx - v2n * nx + v2n2 * nx,
+    hvy: hit.vy - v2n * ny + v2n2 * ny,
+  };
+};
+
+/** 共享碰撞站场的槽位（每只宠物注册一个；浏览器 PetMulti 的 arena / 桌面 host broker 共用） */
+export interface PetCollisionSlot {
+  /** 宠物宽（px，质量 ∝ size²） */
+  size: number;
+  /** 舞台脚底垫高（bodyPixelBox 需要） */
+  bottomPad: number;
+  /** 当前包围盒左上角（px）；null = 未挂载/无位置 */
+  getBox: () => { x: number; y: number } | null;
+  /** 当前速度（px/s）；非飞行中 = 0 */
+  getVel: () => { vx: number; vy: number };
+  /** 被撞回调：用新初速从当前落点开始抛掷（内部复用 startThrow） */
+  onHit: (vx: number, vy: number) => void;
+}
