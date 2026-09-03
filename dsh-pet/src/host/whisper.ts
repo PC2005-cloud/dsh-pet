@@ -6,12 +6,16 @@
  * 设计：
  * - provider/model 直接取 agentDefaultModel.currentSelection()（与余额同源）；
  * - system = 用户配置的 whisperPrompt（人设），user = 一个极简的"说句话"请求；
- * - reasoningEffort: 'off' —— 统一关闭深度思考：碎碎念只求随口一句，不开推理（省时省 token）；
+ * - reasoningEffort: 'off' —— 仅当模型声明支持 reasoning effort（含 "off"）时传，
+ *   关闭深度思考：碎碎念只求随口一句，不开推理（省时省 token）。无 reasoning 元数据的
+ *   模型（如 reasoningEfforts: false）显式传 off 会被 dsh-llm 判为 UNSUPPORTED_REASONING_EFFORT
+ *   并折叠成空流（表现为"模型未返回文本"），因此这类模型省略该字段（语义等价于不传）；
  * - 流式收集 + BlockAssembler 拼装文本；生成失败显式返回结构化原因，不伪造文案；
  * - 短超时（LLM 冷启动/慢响应时快速放弃，不留挂起请求）。
  */
 
 import { BlockAssembler, createUserMessage, ReasoningEffortId } from '@deepseek-ai/dsh-llm';
+import { supportsReasoningOff } from './llm-reasoning';
 
 /** 生成失败原因（与 shared/whisper.ts 的 WhisperState 失败分支同构） */
 export type WhisperGenerateResult =
@@ -46,6 +50,10 @@ export async function generateWhisper(
   }
 
   const deadline = AbortSignal.timeout(TIMEOUT_MS);
+  // 仅当模型声明支持 reasoning effort（含 "off"）时才传，否则省略：
+  // 无 reasoning 元数据的模型（如 reasoningEfforts: false）显式传 off 会被
+  // dsh-llm 判为 UNSUPPORTED_REASONING_EFFORT 并折叠成空流（表现为"模型未返回文本"）。
+  const supportsOff = await supportsReasoningOff(ctx, sel.provider, sel.model);
   const options = {
     provider: sel.provider,
     model: sel.model,
@@ -58,8 +66,8 @@ export async function generateWhisper(
     system,
     maxTokens: 60,
     temperature: 1,
-    // 统一关闭深度思考：碎碎念不需要推理，只求随口一句（两适配器均支持 off）
-    reasoningEffort: ReasoningEffortId('off'),
+    // 统一关闭深度思考：碎碎念不需要推理，只求随口一句（仅模型声明支持时传）
+    ...(supportsOff ? { reasoningEffort: ReasoningEffortId('off') } : {}),
     signal: deadline,
   };
 
