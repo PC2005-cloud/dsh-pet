@@ -15,7 +15,16 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
-import { dshHomeDir, defaultElectronExe, hasGraphicalDisplay, resolveElectronPath } from './helper-process.ts';
+import {
+  HELPER_STABLE_MS,
+  dshHomeDir,
+  defaultElectronExe,
+  hasGraphicalDisplay,
+  helperRunIsStable,
+  restartBackoffDelayMs,
+  resolveElectronPath,
+  shouldCircuitBreak,
+} from './helper-process.ts';
 
 /** 建一个隔离的临时目录,并归还原 DSH_HOME / DSH_PET_ELECTRON_PATH 环境变量 */
 function withIsolatedHome(fn: (dir: string) => void): void {
@@ -163,5 +172,39 @@ describe('hasGraphicalDisplay —— 无图形环境时不拉起 Electron', () =
     delete process.env.WAYLAND_DISPLAY;
     process.env.DSH_PET_DESKTOP_FORCE = '1';
     assert.equal(hasGraphicalDisplay(), true);
+  });
+});
+
+describe('restartBackoffDelayMs —— 指数退避（750ms 起，2x 封顶 30s）', () => {
+  test('退避序列：750 → 1500 → 3000 → 6000 → 12000 → 24000 → 30000（封顶后不再翻倍）', () => {
+    // 注意别写 .map(restartBackoffDelayMs)：map 会把索引当 baseMs 传进去
+    const seq = [0, 1, 2, 3, 4, 5, 6, 7, 8].map((n) => restartBackoffDelayMs(n));
+    assert.deepEqual(seq, [750, 1500, 3000, 6000, 12000, 24000, 30000, 30000, 30000]);
+  });
+
+  test('DSH_PET_RESTART_BASE_MS 可调基值（同样 2x、封顶 30s）', () => {
+    assert.equal(restartBackoffDelayMs(0, 1000), 1000);
+    assert.equal(restartBackoffDelayMs(5, 1000), 30000);
+  });
+});
+
+describe('shouldCircuitBreak —— 连续崩溃 12 次（约 6 分钟）后熔断', () => {
+  test('前 11 次不熔断，第 12 次起熔断', () => {
+    assert.equal(shouldCircuitBreak(0), false);
+    assert.equal(shouldCircuitBreak(10), false);
+    assert.equal(shouldCircuitBreak(11), false);
+    assert.equal(shouldCircuitBreak(12), true);
+    assert.equal(shouldCircuitBreak(50), true);
+  });
+});
+
+describe('helperRunIsStable —— 稳定运行 ≥3 分钟后计数清零', () => {
+  test('不足 3 分钟：不稳定，不清零', () => {
+    assert.equal(helperRunIsStable(2 * 60 * 1000), false);
+  });
+
+  test('达到 3 分钟：稳定，应清零', () => {
+    assert.equal(helperRunIsStable(HELPER_STABLE_MS), true);
+    assert.equal(helperRunIsStable(10 * 60 * 1000), true);
   });
 });
