@@ -9,6 +9,7 @@ import { planMove } from '../shared/motion';
 import { flattenConfigPets, isWebVisible } from '../shared/config';
 import { balanceEventIndex, balancePercent, fetchBalanceState, type BalanceState } from '../shared/balance';
 import { fetchWhisperState, fetchWhisperTrigger } from '../shared/whisper';
+import { WORK_STATUS_INDEX, fetchWorkStatus, type WorkStatusSnapshot } from '../shared/work-status';
 import { makeBalanceBubble, makeWhisperBubble } from './bubble';
 import { clickScore, SCORE_MIN_SPEED, mountScorePopup, spawnScoreBurst } from '../shared/score-popup';
 import { CANVAS_H, FEET_Y, HIT_BOX, DRAG_THRESHOLD, PET_REF_WIDTH } from '../shared/constants';
@@ -115,11 +116,15 @@ export function makePetUI(rt: {
     cfg,
     balance,
     balanceTick,
+    workStatus,
+    workStatusTick,
     arena,
   }: {
     cfg: RuntimePet;
     balance: BalanceState | null;
     balanceTick: number;
+    workStatus: WorkStatusSnapshot | null;
+    workStatusTick: number;
     arena: ReactNS.MutableRefObject<{ slots: Record<string, PetCollisionSlot> }>;
   }) {
     // ---- 尺寸（由配置传入；容器/设置页更新后即时跟随）----
@@ -150,6 +155,10 @@ export function makePetUI(rt: {
     const whisperBubbleTimerRef = useRef<number | null>(null);
     // 碎碎念当前文本（本宠物独立生成的句子）
     const [whisperText, setWhisperText] = useState<string | null>(null);
+    // 工作状态气泡：DSH 会话状态联动（workStatusEnabled 开启时）——文本气泡独立于碎碎念，10s 显隐
+    const [workBubbleOn, setWorkBubbleOn] = useState(false);
+    const workBubbleTimerRef = useRef<number | null>(null);
+    const [workText, setWorkText] = useState<string | null>(null);
     // 右键菜单（统一自绘组件）：当前挂载的 close() 句柄，卸载/重开前清理
     const menuRef = useRef<{ close: () => void } | null>(null);
     // 对话弹窗（与桌面共用 shared 组件）：当前挂载的 close() 句柄，卸载/重开前清理
@@ -328,6 +337,68 @@ export function makePetUI(rt: {
       setAnim(name);
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [balanceTick]);
+
+    // 工作状态联动：容器轮询 /work-status 递增 workStatusTick → 本宠物（workStatusEnabled 开启时）
+    // 按 events.workStatus 档位播动画 + 弹文本气泡。
+    // 气泡驻留语义：thinking/working/result/waiting（"事情还没完"）常驻显示，直到状态切走；
+    //   success/error（"这事结束了"）10s 自动收起；
+    //   state=null（空闲，回合 aborted 等）收起气泡回待机。
+    // 动画循环语义：进行中档位循环播（once=false），终态档位播一遍（once=true）回 idle 链。
+    const prevWorkTickRef = useRef(0);
+    useEffect(() => {
+      if (!cfg.workStatusEnabled) return; // 未启用工作状态联动 -> 该宠物完全免疫
+      if (workStatusTick === 0 || workStatusTick === prevWorkTickRef.current) return;
+      prevWorkTickRef.current = workStatusTick;
+      if (!workStatus || workStatus.state === null) {
+        // 空闲：收起常驻气泡（动画不处理，由常规动画链回待机）
+        if (workBubbleTimerRef.current !== null) window.clearTimeout(workBubbleTimerRef.current);
+        workBubbleTimerRef.current = null;
+        setWorkText(null);
+        setWorkBubbleOn(false);
+        return;
+      }
+      const pool = petAnims.events?.workStatus;
+      if (!pool || pool.length === 0) {
+        console.error('[dsh-pet] 配置缺少 animations.events.workStatus，无法播放工作状态动画');
+        return;
+      }
+      const idx = WORK_STATUS_INDEX[workStatus.state];
+      const name = Array.isArray(pool) ? pool[idx] : undefined;
+      if (!name) {
+        console.error('[dsh-pet] work-status 档位索引越界：state=' + workStatus.state + ' idx=' + idx);
+        return;
+      }
+      console.log(
+        '[dsh-pet] ' +
+          new Date().toTimeString().slice(0, 8) +
+          ' workStatus pet=' +
+          cfg.id +
+          ' state=' +
+          workStatus.state +
+          ' -> [' +
+          idx +
+          '] ' +
+          name,
+      );
+      stopMove();
+      // 气泡文本：任务详情（todo/write 提供，如"正在做 X"）优先，否则从条目级配置
+      // workStatusTexts[档位]（数组）随机抽一句；整字段/整档缺失 = 不弹文本，只播动画。
+      const textGroup = Array.isArray(cfg.workStatusTexts) ? cfg.workStatusTexts[idx] : undefined;
+      const configuredText =
+        Array.isArray(textGroup) && textGroup.length > 0
+          ? textGroup[Math.floor(Math.random() * textGroup.length)]
+          : undefined;
+      setWorkText(workStatus.task ?? configuredText ?? null);
+      setWorkBubbleOn(true);
+      const terminal = workStatus.state === 'success' || workStatus.state === 'error';
+      if (workBubbleTimerRef.current !== null) window.clearTimeout(workBubbleTimerRef.current);
+      workBubbleTimerRef.current = terminal
+        ? window.setTimeout(() => setWorkBubbleOn(false), BUBBLE_DURATION_MS)
+        : null; // 非终态：常驻，不设自动收起
+      setOnce(!terminal); // 非终态循环播；终态播一遍
+      setAnim(name);
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [workStatusTick]);
 
     // 碎碎念：本宠物独立轮询 /whisper?pet=<id> —— host 按宠物独立生成（用本种类人设）、按宠物节流。
     // 首拉仅记基线（不触发，避免页面加载/刷新时重放）；之后 ts 变化（本宠物新周期的新句）才触发动画+气泡；
@@ -1160,6 +1231,8 @@ export function makePetUI(rt: {
         // 见上头 useEffect 的 319 行门控）；whisperText 只由 triggerWhisper 设置——
         // 自动轮询被门控后不会触发，所以这里任何说话气泡（碎碎念/对话回复）都照常渲染
         whisperText ? h(WhisperBubble, { text: whisperText, on: whisperBubbleOn }) : null,
+        // 工作状态气泡（仅启用工作状态联动的宠物渲染；文本 = 任务详情优先，状态文案兜底）
+        workText && cfg.workStatusEnabled ? h(WhisperBubble, { text: workText, on: workBubbleOn }) : null,
         h('div', {
           ref: stageRef,
           className: 'dsh-pet-stage',
@@ -1190,6 +1263,9 @@ export function makePetUI(rt: {
     // 余额状态（容器统一拉取，PetCard 共享；balanceTick 每次成功拉取递增，驱动事件动画）
     const [balance, setBalance] = useState<BalanceState | null>(null);
     const [balanceTick, setBalanceTick] = useState(0);
+    // 工作状态：容器统一轮询 /work-status（任一宠物启用才启动），快照 + tick 递增驱动各宠物播档位动画
+    const [workStatus, setWorkStatus] = useState<WorkStatusSnapshot | null>(null);
+    const [workStatusTick, setWorkStatusTick] = useState(0);
     // 碎碎念：轮询下沉到每只 PetCard（各自按自己的周期拉取 /whisper?pet=<id>，人设/文本/触发全部独立），
     // 容器不再持有共享状态——与「每只宠物单独触发对话」的产品语义一致。
 
@@ -1244,6 +1320,8 @@ export function makePetUI(rt: {
     const visiblePets = pets.filter((p) => isWebVisible(p.display));
     // 是否存在启用余额功能的宠物：全禁用时跳过余额轮询（不拉取 /dsh-pet-7340/balance，避免无意义的周期请求）
     const anyBalanceEnabled = visiblePets.some((p) => p.balanceEnabled);
+    // 是否存在启用工作状态联动的宠物：全禁用时不轮询 /work-status（避免无意义的周期请求）
+    const anyWorkStatusEnabled = visiblePets.some((p) => p.workStatusEnabled);
 
     // 余额轮询：配置就绪（ready）且至少一只宠物启用余额后启动拉取一次，之后按 eventsRefreshSec.balance（秒）周期刷新；
     // 成功递增 balanceTick 触发事件动画；失败/不支持均不触发动画（错误显式 console.error，绝不显示伪造余额）
@@ -1313,8 +1391,44 @@ export function makePetUI(rt: {
       };
     }, [ready, anyBalanceEnabled]);
 
+    // 工作状态轮询：任一宠物启用且配置就绪后，1s 轻量轮询 /work-status（host 端点 no-cache）。
+    // 拉取成功且 ts 变化才 setWorkStatus + 递增 workStatusTick（与 broadcast 同一触发语义，避免刷屏）。
+    useEffect(() => {
+      if (!ready || !anyWorkStatusEnabled) return; // 未就绪 / 全宠物未启用：不启动轮询
+      let alive = true;
+      let prevTs = -1;
+      const poll = async () => {
+        try {
+          const snap = await fetchWorkStatus();
+          if (!alive) return;
+          if (snap.ts === prevTs) return; // 无变化：不触发（首拉记基线，避免重放历史状态）
+          prevTs = snap.ts;
+          setWorkStatus(snap);
+          setWorkStatusTick((t) => t + 1); // 任何 ts 变化都触发（含回到空闲：用于收起常驻气泡）
+        } catch {
+          /* 轻量轮询失败静默：下一周期再试 */
+        }
+      };
+      void poll();
+      const timer = window.setInterval(() => void poll(), 1000);
+      return () => {
+        alive = false;
+        window.clearInterval(timer);
+      };
+    }, [ready, anyWorkStatusEnabled]);
+
     return ready
-      ? visiblePets.map((p) => h(PetCard, { key: p.id, cfg: p as RuntimePet, balance, balanceTick, arena: arenaRef }))
+      ? visiblePets.map((p) =>
+          h(PetCard, {
+            key: p.id,
+            cfg: p as RuntimePet,
+            balance,
+            balanceTick,
+            workStatus,
+            workStatusTick,
+            arena: arenaRef,
+          }),
+        )
       : null;
   }
 

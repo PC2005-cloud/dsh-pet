@@ -81,6 +81,9 @@ export interface Pet {
    *  缺失默认 false（默认关闭：碎碎念每次生成会调用当前对话的模型，本地 LLM 单并发时
    *  会顶掉正在跑的任务的 KV cache，见 config.jsonc 注释） */
   whisperEnabled: boolean;
+  /** 是否启用工作状态联动：true=监听 DSH 会话事件（tool/call 等），按 animations.events.workStatus
+   *  数组切档位动画 + 气泡；false=禁用（默认）。监听不调用模型，无 KV cache 风险 */
+  workStatusEnabled: boolean;
   /** 显示位置（web/desktop/both/none，必填）：缺失即配置错误，代码不做兜底 */
   display: PetDisplay;
   position: { corner: Corner; marginX: number; marginY: number };
@@ -92,6 +95,9 @@ export interface Pet {
   eventsRefreshSec?: Record<string, number>;
   /** 条目级：拖拽抛掷物理参数（全局共用；host 合并已填默认，拍平时吹入） */
   physics?: PhysicsParams;
+  /** 条目级：工作状态气泡文案（二维数组，外层索引 = workStatus 档位 0..5，内层每档可多句随机抽；
+   *  host 合并已填默认，拍平时吹入；整字段缺失 = 不弹工作状态文本，只播动画） */
+  workStatusTexts?: string[][];
 }
 
 /** config.jsonc 的 physics 段：拖拽抛掷手感参数（全局，所有宠物共用）。

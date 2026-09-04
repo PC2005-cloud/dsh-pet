@@ -51,6 +51,12 @@ import { generateWhisper } from './whisper';
 import { generateChat, type ChatMemoryMessage } from './chat';
 import { findPetInstance, flattenPetList, readAllConfig, saveUserConfig, type ConfigPaths } from './config';
 import {
+  reduceWorkStatus,
+  currentTaskFromTodo,
+  type HostWorkStatusState,
+  type WorkStatusSnapshot,
+} from './work-status';
+import {
   HelperProcess,
   defaultElectronExe,
   ensureElectronDownload,
@@ -174,6 +180,43 @@ export function apply(ctx: any): void {
   const thumbUserRoot = join(userRoot, 'main-animation');
   // 手动触发计数：/balance 命令 +1，两边（浏览器/桌面）同样的 1s 轮询检测变化后刷新余额（进程内内存态，重启归零）
   let balanceTriggerCount = 0;
+  // 工作状态联动快照（/work-status 端点响应，浏览器 1s 轮询）：state=当前活动状态（null=空闲）、
+  // task=当前任务详情、ts=最近变化时间（轮询侧检测变化用）。气泡文案不在此：浏览器读配置
+  // events.workStatusTexts（host 不内置文案）。
+  // 进程内内存态：重启回空闲；每次会话事件有实际状态变化才更新（签名比对防刷屏）。
+  const workStatus = {
+    state: null as HostWorkStatusState | null,
+    task: null as string | null,
+    ts: 0,
+  } satisfies WorkStatusSnapshot;
+  /** 每会话最近状态（会话 id → 状态），多会话时取优先级最高的作展示（与 better-dsh-pet 同思路） */
+  const workStatusBySession = new Map<string, { state: HostWorkStatusState; seq: number }>();
+  /** 展示优先级：waiting > error > working > thinking > success > result（同档按最近更新优先） */
+  const WORK_STATUS_PRIORITY: Record<HostWorkStatusState, number> = {
+    waiting: 60,
+    error: 50,
+    working: 40,
+    thinking: 30,
+    success: 20,
+    result: 10,
+  };
+  /** 重算当前展示状态：所有会话里优先级最高者（同优先级取最近 seq），无活动会话 → 空闲 */
+  const refreshWorkStatus = (): void => {
+    let best: { state: HostWorkStatusState; seq: number } | undefined;
+    for (const entry of workStatusBySession.values()) {
+      if (
+        !best ||
+        WORK_STATUS_PRIORITY[entry.state] > WORK_STATUS_PRIORITY[best.state] ||
+        (WORK_STATUS_PRIORITY[entry.state] === WORK_STATUS_PRIORITY[best.state] && entry.seq > best.seq)
+      ) {
+        best = entry;
+      }
+    }
+    const next = best?.state ?? null;
+    if (next === workStatus.state) return; // 无变化：不更新 ts（轮询侧不触发）
+    workStatus.state = next;
+    workStatus.ts = Date.now();
+  };
   // 命令「当前桌宠」（/pet 选择、/chat 使用）：全局单值不分会话；进程内内存，重启回默认第一只
   let activePetId = '';
   // 命令触发的展示气泡缓存（/chat 命令写入；浏览器/桌面 1s 轮询 /broadcast 拉取，ts 变化即弹气泡）。
@@ -689,6 +732,20 @@ export function apply(ctx: any): void {
       };
     }
 
+    // 工作状态联动：/dsh-pet-7340/work-status（GET，no-cache）
+    // host 监听 DSH session/event 聚合出"当前活动状态"（workStatusBySession → 优先级最高的会话状态）；
+    // 浏览器 1s 轻量轮询拉取，ts 变化即按 events.workStatus 档位播动画 + 弹气泡（与 broadcast 同语义）。
+    // 空闲（无会话活动）state=null、text=空串；不调用任何模型。
+    if (rest === 'work-status') {
+      if (method !== 'GET') return { kind: 'json', status: 405, obj: { error: 'method not allowed' } };
+      return {
+        kind: 'json',
+        status: 200,
+        obj: workStatus,
+        headers: { 'cache-control': 'no-cache, no-store' },
+      };
+    }
+
     // 动画文件：/dsh-pet-7340/thumb/<素材根>/<file>，唯一格式 webm。
     // 素材归属按「是否存在该宠物的独立素材目录 `pet/<petId>-animation/`」判定：
     //   - 存在（pet pack 宠物）：只查自己的目录，查不到即 404 显式报错——绝不混用
@@ -760,6 +817,52 @@ export function apply(ctx: any): void {
         },
       }),
     'dsh-pet: /dsh-pet-7340 asset route',
+  );
+
+  // 工作状态联动：监听 DSH 会话事件 → 聚合"当前活动状态"（workStatusBySession → 展示快照）。
+  // 只消费 6 类事件（turn/start、tool/call、tool/result、approval/asked、turn/end、todo/write）：
+  // 前 5 类驱动档位状态，todo/write 只更新任务详情文案（不切档位，避免任务列表刷新打断动画）。
+  // 纯监听不调用模型；有宠物启用 workStatusEnabled 时才被浏览器侧消费（host 侧恒轻量监听）。
+  ctx.effect(
+    () =>
+      ctx.on('session/event', (session: unknown, event: unknown) => {
+        const type = (event as { type?: string } | null)?.type;
+        if (!type) return;
+        const sessionId = String(
+          (session as { id?: unknown; header?: { id?: unknown } } | null)?.header?.id ??
+            (session as { id?: unknown } | null)?.id ??
+            'unknown',
+        );
+        if (type === 'todo/write') {
+          // 任务文案：仅当会话正是当前展示会话时更新任务详情（否则不打断当前展示）
+          if (workStatusBySession.has(sessionId)) {
+            const task = currentTaskFromTodo(
+              event as { data?: { todos?: Array<{ status?: string; content?: string }> } },
+            );
+            if (task !== workStatus.task) {
+              workStatus.task = task;
+              workStatus.ts = Date.now();
+            }
+          }
+          return;
+        }
+        const next = reduceWorkStatus(
+          event as { type?: string; data?: Record<string, unknown> & { reason?: { kind?: string } } },
+        );
+        if (!next) {
+          // turn/end 的 null（aborted / 未知 kind）＝该会话回合已结束：清掉会话状态，让展示回到空闲或
+          // 落到其他活跃会话，防止回合被打断后永久卡在上一档；其他事件的 null 是"不关心"，忽略。
+          if (type === 'turn/end' && workStatusBySession.delete(sessionId)) refreshWorkStatus();
+          return;
+        }
+        const seq = Number((event as { seq?: unknown }).seq ?? 0);
+        const prev = workStatusBySession.get(sessionId);
+        // 同会话同状态不重复更新（防刷屏）；不同状态才改写并重算展示
+        if (prev?.state === next && (prev?.seq ?? -1) >= seq) return;
+        workStatusBySession.set(sessionId, { state: next, seq });
+        refreshWorkStatus();
+      }),
+    'dsh-pet: work-status session events',
   );
 
   // /balance 斜杠命令：递增触发计数 → 浏览器/桌面检测到变化后立即刷新余额并播动画（不进模型历史）

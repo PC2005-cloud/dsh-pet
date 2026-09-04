@@ -16,6 +16,21 @@
   // 不需要时改为 false（修改后刷新或重启生效）。必填布尔值，缺失即配置错误；
   // 也可在用户配置（main-config.json）顶层覆盖，设置页保存宠物时会保留该字段。
   "notificationsEnabled": true,
+  // ===================== 工作状态联动文案（条目级，与 animations/physics 同级；种类文件 pet/<名>-config.json 顶层可覆盖） =====================
+  // 工作状态气泡文本（pets[].workStatusEnabled 开启时展示；仅在 events.workStatus 动画触发时弹）。
+  // 结构 = 二维数组，外层索引即档位（与 events.workStatus 动画索引一一对应，勿在中间插入新档）：
+  //   0 thinking（turn/start）/ 1 working（tool/call）/ 2 result（tool/result）/
+  //   3 waiting（approval/asked）/ 4 success（turn/end completed）/ 5 error（turn/end error/max-tokens）
+  // 每档内是多个备选句，播放时随机抽一句（想固定单句就只写一个；想换文案只改这里）。
+  // 省略整个字段 = 不弹工作状态气泡文本（仍播动画）；省略某档 = 该档不显示文本。
+  "workStatusTexts": [
+    ["正在认真想下一步呢", "让我整理一下思路~", "正在梳理接下来要做什么"],
+    ["正在处理任务呢", "这一步正在进行中哦", "正在继续干活呢，别打扰我~"],
+    ["这一步处理好啦，接着看下一步", "搞定一步，继续看看哦~"],
+    ["需要你确认一下呢", "这里要等你看一下哦", "轮到你来决定啦，等你~"],
+    ["这一轮搞定啦，真棒！", "任务完成咯，可以摸鱼啦~"],
+    ["这一步好像没跑通呢", "刚才的操作遇到点问题哦", "这里卡了一下，再等等你呢"]
+  ],
   // ===================== 宠物物理（拖拽抛掷手感，全局，所有宠物共用） =====================
   // gravity：抛掷下落/反弹的基础重力（px/s²）。默认 1400（数值越大落得越快）；0 = 无重力（合法，
   //   抛掷后匀速直线飞行/永不回落，配合 restitution/groundFriction=0 即纯无重力漂浮）。
@@ -57,6 +72,9 @@
       // 后台碎碎念会顶掉正在跑的任务的 KV cache（与 DSH 多子代理同因）。
       // 需要碎碎念的宠物改为 true（设置页也可开关）。
       "whisperEnabled": false,
+      // 工作状态联动默认关闭：开启后监听 DSH 会话事件（工具调用等），按
+      // animations.events.workStatus 数组切档位动画 + 气泡（仅监听，不调用模型）。
+      "workStatusEnabled": false,
       "display": "both",
       "position": {
         "corner": "top-right",
@@ -144,6 +162,22 @@
         "碎碎念-擦桌碎碎念",
         "碎碎念-发呆碎碎念",
         "碎碎念-对屏碎碎念"
+      ],
+      // 工作状态联动（pets[].workStatusEnabled 开启时）：按索引 = 状态档位，勿在中间插入新档
+      //（新档只可追加到末尾，否则已生效配置的档位含义错位）：
+      //   index 0 = thinking（turn/start 回合开）
+      //   index 1 = working（tool/call 工具调用）
+      //   index 2 = result（tool/result 工具完成回整理）
+      //   index 3 = waiting（approval/asked 等待批准）
+      //   index 4 = success（turn/end completed 完成）
+      //   index 5 = error（turn/end error/max-tokens 出错/达上限）
+      "workStatus": [
+        "深度思考碎碎念",
+        "写代码",
+        "轻快记录",
+        "东张西望",
+        "点击回应-开心跃动",
+        "玩游戏气急败坏"
       ]
     }
   },

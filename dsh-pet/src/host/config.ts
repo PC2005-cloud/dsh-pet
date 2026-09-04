@@ -165,6 +165,18 @@ function physicsValid(value: unknown): boolean {
   );
 }
 
+/** workStatusTexts 段校验：二维数组——外层每项都是非空字符串数组（档位文案，每档可多句随机）；空数组不可用 */
+function workStatusTextsValid(value: unknown): boolean {
+  if (!Array.isArray(value) || value.length === 0) return false;
+  for (const group of value) {
+    if (!Array.isArray(group) || group.length === 0) return false;
+    for (const text of group) {
+      if (typeof text !== 'string' || text.length === 0) return false;
+    }
+  }
+  return true;
+}
+
 /** 顶层标量字段的合法性（非法与缺失同处理：取默认值 + 告警） */
 function topFieldValid(key: string, value: unknown): boolean {
   switch (key) {
@@ -182,6 +194,8 @@ function topFieldValid(key: string, value: unknown): boolean {
       return weightsValid(value);
     case 'physics':
       return physicsValid(value);
+    case 'workStatusTexts':
+      return workStatusTextsValid(value);
     default:
       return true;
   }
@@ -336,6 +350,7 @@ function mergePet(
     size: petNumber(p.size, base.size, 1, label, 'size', id),
     balanceEnabled: petBool(p.balanceEnabled, base.balanceEnabled, label, 'balanceEnabled', id),
     whisperEnabled: petBool(p.whisperEnabled, base.whisperEnabled, label, 'whisperEnabled', id),
+    workStatusEnabled: petBool(p.workStatusEnabled, base.workStatusEnabled, label, 'workStatusEnabled', id),
     display: petEnum(p.display, PET_DISPLAY_SET, base.display, label, 'display', id),
     position: {
       corner: petEnum(ownPos.corner, CORNER_SET, basePos.corner, label, 'position.corner', id),
@@ -432,6 +447,8 @@ export function saveUserConfig(
     if (typeof balanceEnabled !== 'boolean') return null;
     const whisperEnabled = pp.whisperEnabled;
     if (whisperEnabled !== undefined && typeof whisperEnabled !== 'boolean') return null;
+    const workStatusEnabled = pp.workStatusEnabled;
+    if (workStatusEnabled !== undefined && typeof workStatusEnabled !== 'boolean') return null;
     const display = String(pp.display ?? '');
     if (!PET_DISPLAY_SET.has(display)) return null;
     const pos = pp.position && typeof pp.position === 'object' ? (pp.position as Record<string, unknown>) : {};
@@ -440,7 +457,16 @@ export function saveUserConfig(
     const marginX = Number(pos.marginX);
     const marginY = Number(pos.marginY);
     if (!Number.isFinite(marginX) || !Number.isFinite(marginY)) return null;
-    out.push({ id, name, size, balanceEnabled, whisperEnabled, display, position: { corner, marginX, marginY } });
+    out.push({
+      id,
+      name,
+      size,
+      balanceEnabled,
+      whisperEnabled,
+      workStatusEnabled,
+      display,
+      position: { corner, marginX, marginY },
+    });
   }
   const ne = o.notificationsEnabled;
   if (ne !== undefined && typeof ne !== 'boolean') return null;

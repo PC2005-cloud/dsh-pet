@@ -30,6 +30,7 @@ export function flattenConfigPets(merged: Record<string, Record<string, unknown>
         animationWeights: conf.animationWeights as Weights | undefined,
         eventsRefreshSec: conf.eventsRefreshSec as Record<string, number> | undefined,
         physics: conf.physics as PhysicsParams | undefined,
+        workStatusTexts: conf.workStatusTexts as string[][] | undefined,
         assetRoot: entry,
         extra: entry !== 'main',
       });
