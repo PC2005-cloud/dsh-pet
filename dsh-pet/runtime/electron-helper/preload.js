@@ -3,6 +3,8 @@
 //     x/y/width/height = 窗口内容区坐标（用于移动窗口）；boxX/boxY = 宠物包围盒左上角
 //     （工作区坐标）——碰撞站场必须用包围盒坐标，不能用窗口坐标（窗口 = 包围盒 + 四周外扩 margin，
 //     差半只宠物宽，会让跨窗碰撞检测整体错位）。
+//     size/bottomPad = 碰撞站场登记用（静止宠物只发 set-bounds，靠它带上尺寸才能被其它
+//     飞行宠物撞到）；vx/vy = 当前速度（飞行中实时值，静止/拖拽 = 0）。
 //   - setInteractive：点击穿透翻转——窗口默认整窗穿透（透明像素不挡下层应用），
 //     renderer 在光标进/出宠物身体命中区时上报，主进程 setIgnoreMouseEvents 翻转。
 //   - 宠物间碰撞（跨窗，主进程 broker）：
@@ -13,8 +15,8 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('petBridge', {
-  setBounds(x, y, width, height, boxX, boxY) {
-    ipcRenderer.send('pet:set-bounds', { x, y, width, height, boxX, boxY });
+  setBounds(x, y, width, height, boxX, boxY, size, bottomPad, vx, vy) {
+    ipcRenderer.send('pet:set-bounds', { x, y, width, height, boxX, boxY, size, bottomPad, vx, vy });
   },
   setInteractive(interactive) {
     ipcRenderer.send('pet:set-interactive', !!interactive);

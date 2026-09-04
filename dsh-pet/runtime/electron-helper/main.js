@@ -27,6 +27,15 @@ const fsPromises = require('node:fs/promises');
 // 允许无用户手势直接播放（余额动画等）
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 
+// Windows 透明分层窗口（WS_EX_LAYERED）在 DWM 硬件加速合成下存在多处缺陷：
+//   - 拖拽移动时窗口四周出现黑色边框（#37）
+//   - 大透明窗移动覆盖小透明窗时，被覆盖窗口内容丢失（显示"消失"）
+// 本进程只渲染轻量宠物动画（640×360），改走软件合成以规避上述缺陷，
+// 不影响浏览器形态与主 DSH（独立进程）；非 Windows（macOS/Linux）合成路径不同，保留硬件加速。
+if (process.platform === 'win32') {
+  app.disableHardwareAcceleration();
+}
+
 /** bridge 模式：DSH_PET_BRIDGE=1（宿主注入）。开启时注册 dsh-pet-bridge scheme + 管道转发 */
 const BRIDGE = process.env.DSH_PET_BRIDGE === '1';
 /** 协议行前缀（与 helper-process.ts 的 BRIDGE_PREFIX 一致） */
@@ -55,7 +64,8 @@ const windows = new Map();
 
 /**
  * 宠物间碰撞 broker 状态：petId -> { x, y, vx, vy, size, bottomPad }。
- * 来源：pet:set-bounds（位置，随漫游/拖拽/静止保真上报）+ pet:report-flight（飞行中带速度）。
+ * 来源：pet:set-bounds（位置+尺寸+速度，随漫游/拖拽/静止保真上报，每帧一次）+
+ *       pet:report-flight（飞行中每 ~30ms 高频补充速度）。
  * 任何更新都广播全量给所有窗口——每窗飞行方用它做跨窗碰撞检测（滞后 ≤ 1 帧，可接受）。
  */
 const petStates = new Map();
@@ -149,6 +159,10 @@ function createPetWindows() {
     });
     win.setAlwaysOnTop(true, 'screen-saver');
     win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+    // 窗口被其他窗口（另一只宠物）完全遮挡时，Chromium 默认会暂停本窗口渲染，
+    // 导致大宠物移动盖过小宠物时小宠物显示为"消失"。关闭后台节流，让被遮挡
+    // 窗口持续渲染，移开遮挡后立刻恢复显示。
+    win.webContents.setBackgroundThrottling(false);
     // 屏蔽 Electron 默认右键菜单：右键菜单由渲染端统一自绘组件弹出（两端一致），绝无双菜单
     win.webContents.on('context-menu', (event) => event.preventDefault());
     // 默认整窗点击穿透（renderer 在光标进/出身体命中区时经 IPC 翻转可交互）；
@@ -310,9 +324,20 @@ app.whenReady().then(() => {
     if (petId) {
       const bx = Number(bounds?.boxX);
       const by = Number(bounds?.boxY);
+      const size = Number(bounds?.size);
+      const bottomPad = Number(bounds?.bottomPad);
+      const vx = Number(bounds?.vx);
+      const vy = Number(bounds?.vy);
+      // 位置 + 尺寸 + 速度一并登记：set-bounds 是每次位置变化都会触发的全量上报
+      // （此前只更新 x/y，静止宠物 size 永远为 0，跨窗碰撞检测 `!o.size` 直接跳过它）；
+      // 速度取渲染端上报值（飞行中实时、静止/拖拽 = 0），落地后不再残留旧飞行速度。
       updatePetState(petId, {
         x: Number.isFinite(bx) ? bx : x,
         y: Number.isFinite(by) ? by : y,
+        size: Number.isFinite(size) && size > 0 ? size : petStates.get(petId)?.size || 0,
+        bottomPad: Number.isFinite(bottomPad) && bottomPad > 0 ? bottomPad : petStates.get(petId)?.bottomPad || 0,
+        vx: Number.isFinite(vx) ? vx : 0,
+        vy: Number.isFinite(vy) ? vy : 0,
       });
     }
   });

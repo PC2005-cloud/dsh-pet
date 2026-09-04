@@ -324,6 +324,10 @@ class PetSprite {
     this.pos = { x: Math.round(px), y: Math.round(py) };
     window.__dshPetDebug.dragPos = { x: this.pos.x, y: this.pos.y };
     if (window.petBridge) {
+      // 完整状态一次捎带：size/bottomPad 让静止宠物从首帧起就登记进碰撞站场
+      // （此前只有 report-flight 带尺寸，从没飞过的宠物 size=0 被碰撞检测直接跳过）；
+      // vx/vy 带当前速度——飞行中实时值、静止/拖拽 = 0，避免落地后残留上次飞行速度干扰碰撞动量。
+      const fly = this.throwState;
       window.petBridge.setBounds(
         this.pos.x - this.margin.l,
         this.pos.y - this.margin.t,
@@ -331,6 +335,10 @@ class PetSprite {
         this.winH + this.margin.t + this.margin.b,
         this.pos.x, // 包围盒左上角（碰撞站场用：窗口坐标 ≠ 包围盒坐标）
         this.pos.y,
+        this.size,
+        this.bottomPad,
+        fly ? fly.vx : 0,
+        fly ? fly.vy : 0,
       );
     }
   }
