@@ -101,6 +101,27 @@ export function resolveElectronPath(candidates: Array<string | undefined> = []):
 }
 
 /** $DSH_HOME（默认 ~/.dsh），与 ensure-electron.mjs 的 HOME 计算一致。 */
+/**
+ * 判断当前环境能否真的跑起 Electron 图形窗口。
+ *
+ * 【为什么需要】Linux 无显示环境（服务器 / 容器 / 纯 CLI）下，Electron 能被成功
+ * 下载并 spawn 拉起，但初始化图形栈时立刻崩溃。配合 Helper 的守护循环
+ * （异常退出自动重启），结果是每秒反复「拉起→崩溃→重启」，每个 core dump
+ * 约 14MB —— 实测几小时可堆到数十 GB 打满磁盘。必须在拉起之前判断。
+ *
+ * 判定口径（只拦「明确跑不起来」的情况）：
+ *   - win32 / darwin：桌面系统，放行（macOS 无 DISPLAY 也走 WindowServer）；
+ *   - linux：需要 DISPLAY 或 WAYLAND_DISPLAY 其一，都没有则判为无显示环境。
+ *
+ * 【逃生口】DSH_PET_DESKTOP_FORCE=1 强制跳过，供 Xvfb / 远程桌面等
+ * 「环境变量没设但其实能显示」的场景使用。
+ */
+export function hasGraphicalDisplay(): boolean {
+  if (process.platform !== 'linux') return true;
+  if (process.env.DSH_PET_DESKTOP_FORCE === '1') return true;
+  return Boolean(process.env.DISPLAY || process.env.WAYLAND_DISPLAY);
+}
+
 export function dshHomeDir(): string {
   const userProfile = process.env.USERPROFILE || process.env.HOME || '';
   return process.env.DSH_HOME || join(userProfile, '.dsh');
@@ -225,6 +246,10 @@ export class HelperProcess {
   declare private stopping: boolean;
   declare private restartSuppressed: boolean;
   declare private restartTimer?: NodeJS.Timeout;
+  /** 连续崩溃计数（稳定运行 ≥3 分钟清零；达上限触发熔断） */
+  declare private restartFailures: number;
+  /** 最近一次 start() 的时间戳（稳定性判定基准） */
+  declare private lastStartAt: number;
   /** stdout 按行缓冲（协议行按 \n 切分）。用 declare + 构造器赋值，避免类字段降级出外部 helper */
   declare private stdoutBuffer: string;
 
@@ -235,11 +260,14 @@ export class HelperProcess {
     this.stopping = false;
     this.restartSuppressed = false;
     this.restartTimer = undefined;
+    this.restartFailures = 0;
+    this.lastStartAt = 0;
     this.stdoutBuffer = '';
   }
 
   start(): import('node:child_process').ChildProcess | undefined {
     if (this.child || this.stopping || this.restartSuppressed) return this.child;
+    this.lastStartAt = Date.now();
     const helperPath = this.options.helperPath || defaultHelperMain;
     const launch = this.options.command
       ? { command: this.options.command, args: this.options.args || [helperPath] }
@@ -358,11 +386,78 @@ export class HelperProcess {
 
   private scheduleRestart(): void {
     if (this.restartTimer || this.stopping || this.restartSuppressed) return;
-    const delay = this.options.restartDelayMs ?? 750;
+    // ① 指数退避：750ms 起 2x 封顶 30s；② 熔断：连续崩溃 12 次（约 6 分钟）后停止重启。
+    // 两个阈值都可配（DSH_PET_RESTART_BASE_MS / DSH_PET_RESTART_MAX_FAILURES），稳定运行 ≥3 分钟清零。
+    // 纯逻辑（restartBackoffDelayMs / shouldCircuitBreak / helperRunIsStable）在 helper-process.test.ts 有独立用例。
+    if (helperRunIsStable(Date.now() - this.lastStartAt)) {
+      this.restartFailures = 0;
+    } else {
+      this.restartFailures += 1;
+    }
+    if (shouldCircuitBreak(this.restartFailures)) {
+      this.logger.error?.(
+        `dsh-pet desktop helper crashed ${this.restartFailures} consecutive times; circuit breaker tripped, ` +
+          `no more restarts. Fix the environment (e.g. DISPLAY/headless) or set DSH_PET_RESTART_MAX_FAILURES to raise the limit.`,
+      );
+      return;
+    }
+    const base = this.resolveRestartBaseMs();
+    const delay = restartBackoffDelayMs(this.restartFailures, base);
+    this.logger.warn?.(
+      `dsh-pet desktop helper exited; restarting in ${Math.round(delay)}ms ` +
+        `(attempt ${this.restartFailures}, consecutive-crash limit ${this.resolveMaxFailures()})`,
+    );
     this.restartTimer = setTimeout(() => {
       this.restartTimer = undefined;
       this.start();
     }, delay);
     this.restartTimer.unref?.();
   }
+
+  /** 退避基值：DSH_PET_RESTART_BASE_MS（ms，>0）可调，默认 750。 */
+  private resolveRestartBaseMs(): number {
+    return envPositiveInt(process.env.DSH_PET_RESTART_BASE_MS, RESTART_BASE_MS_DEFAULT);
+  }
+
+  /** 熔断阈值：DSH_PET_RESTART_MAX_FAILURES（次，>0）可调，默认 12。 */
+  private resolveMaxFailures(): number {
+    return envPositiveInt(process.env.DSH_PET_RESTART_MAX_FAILURES, RESTART_MAX_FAILURES_DEFAULT);
+  }
+}
+
+// ---------- 重启退避 / 熔断纯逻辑（可独立测试，不依赖 spawn） ----------
+
+/** 稳定运行判定阈值：Helper 连续无崩溃运行 ≥ 3 分钟后，重启失败计数清零。 */
+export const HELPER_STABLE_MS = 3 * 60 * 1000;
+
+/**
+ * 指数退避：第 n 次（0 起）失败后等待 base × 2ⁿ，封顶 30s。
+ * 默认 base 750ms 保持与旧版首延一致，序列：750 → 1500 → 3000 → … → 30000。
+ */
+export function restartBackoffDelayMs(consecutiveFailures: number, baseMs = 750): number {
+  const MAX = 30_000;
+  const raw = baseMs * 2 ** Math.max(0, consecutiveFailures);
+  return Math.min(raw, MAX);
+}
+
+/** 熔断判定：连续崩溃 ≥ limit（默认 12，按默认退避约 6 分钟）次后不再自动重启。 */
+export function shouldCircuitBreak(consecutiveFailures: number, limit = 12): boolean {
+  return consecutiveFailures >= limit;
+}
+
+/** 稳定运行判定：距上次拉起 ≥ HELPER_STABLE_MS 视为一次「成功运行」，可清零计数。 */
+export function helperRunIsStable(elapsedMs: number): boolean {
+  return elapsedMs >= HELPER_STABLE_MS;
+}
+
+/** 退避基值（ms）：默认 750 与旧版首延一致，DSH_PET_RESTART_BASE_MS 可调。 */
+const RESTART_BASE_MS_DEFAULT = 750;
+
+/** 熔断阈值（连续崩溃次数）：默认 12，DSH_PET_RESTART_MAX_FAILURES 可调。 */
+const RESTART_MAX_FAILURES_DEFAULT = 12;
+
+/** 非负整数 env 解析（非法/未设回落默认），供重启参数读取共用。 */
+function envPositiveInt(value: string | undefined, fallback: number): number {
+  const parsed = Number.parseInt(String(value ?? ''), 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }

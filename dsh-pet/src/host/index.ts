@@ -50,7 +50,13 @@ import { queryBalance } from './balance';
 import { generateWhisper } from './whisper';
 import { generateChat, type ChatMemoryMessage } from './chat';
 import { findPetInstance, flattenPetList, readAllConfig, saveUserConfig, type ConfigPaths } from './config';
-import { HelperProcess, defaultElectronExe, ensureElectronDownload, resolveElectronPath } from './helper-process';
+import {
+  HelperProcess,
+  defaultElectronExe,
+  ensureElectronDownload,
+  hasGraphicalDisplay,
+  resolveElectronPath,
+} from './helper-process';
 
 /** 插件行 id（与 cordis.patch.yml 一致） */
 export const name = 'pet';
@@ -355,6 +361,8 @@ export function apply(ctx: any): void {
   let startRetryTimer: NodeJS.Timeout | undefined;
   let electronEnsure: Promise<void> | undefined;
   let disposed = false;
+  /** 「无图形环境」提示只在进程生命周期内打一次，避免守护循环刷屏 */
+  let displayWarned = false;
 
   /** 用已确认存在的 Electron 路径拉起桌面 Helper（每只桌面宠物一个局部小窗口）。 */
   const launchHelper = (electronPath: string | undefined): void => {
@@ -422,6 +430,18 @@ export function apply(ctx: any): void {
   const startHelper = (): void => {
     if (helper || electronEnsure || disposed) return;
     if (!hasDesktopPet) return; // 无宠物显示在桌面（display 含 desktop/both）：不启动
+    // 无图形显示环境（Linux 服务器 / 容器）：直接放弃，不探测、不下载、不拉起。
+    // 否则 Electron 会「拉起即崩」，被守护循环反复重启并刷满 core dump。
+    if (!hasGraphicalDisplay()) {
+      if (!displayWarned) {
+        displayWarned = true;
+        ctx.logger?.warn?.(
+          '[dsh-pet] 未检测到图形显示环境（DISPLAY/WAYLAND_DISPLAY 均为空），已跳过桌面宠物。' +
+            '浏览器内宠物不受影响；如需在服务器上启用桌面模式，请配置 Xvfb 后设置 DSH_PET_DESKTOP_FORCE=1。',
+        );
+      }
+      return;
+    }
     const found = resolveElectronPath();
     if (found) {
       launchHelper(found);
