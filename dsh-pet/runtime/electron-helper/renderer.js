@@ -45,6 +45,7 @@ const BASE = BRIDGE ? 'dsh-pet-bridge://dsh-pet/dsh-pet-7340' : ORIGIN + '/dsh-p
 const BALANCE_URL = BASE + '/balance';
 const TRIGGER_URL = BASE + '/balance/trigger';
 const WHISPER_URL = BASE + '/whisper';
+const WORK_STATUS_URL = BASE + '/work-status'; // 工作状态联动：1s 轮询，ts 变化才触发（与浏览器同一端点）
 const BUBBLE_DURATION_MS = 10 * 1000; // 余额/碎碎念气泡展示时长（与浏览器一致：定时自动消失，与动画解耦）
 // 窗口四周外扩 = 该比例 × 宠物尺寸：为气泡 / 未来可能的弹窗预留显示空间；
 // 外扩区透明且点击穿透（只有身体命中区可交互）。单点可调——按实际观感改这里。
@@ -57,6 +58,7 @@ let config = null; // { pets: 拍平后的成品实例列表, refreshSec: 主条
 let sprites = []; // PetSprite[]（本窗口只装一只宠物）
 let balance = null; // BalanceState（本窗口单宠共用）
 let balanceTick = 0;
+let workTick = 0; // 工作状态联动 tick：容器 1s 轮询 /work-status，ts 变化才递增（各启用宠物以此触发）
 let bootTimer = null;
 let loopsStarted = false;
 
@@ -199,6 +201,12 @@ class PetSprite {
     this.broadcastLoopTimer = null;
     this.broadcastBaseline = false;
     this.prevBroadcastTs = 0;
+    // 工作状态联动（DSH 会话状态）：容器 1s 轮询 /work-status 递增 workTick → 本宠物按档位播动画+气泡。
+    // 气泡优先级 work > whisper > balance；workStatusEnabled 未启用时完全免疫（与浏览器一致）
+    this.workOn = false;
+    this.workTimer = null;
+    this.workText = null;
+    this.prevWorkTick = 0;
     // 对话弹窗（shared 组件）：当前挂载的 close() 句柄 + 开启标记
     // （chatOpen 是穿透守卫：弹窗是窗口内 DOM，期间整窗保持可交互，与 menuOpen 同语义——否则
     //   光标移到输入框（不在身体命中区）就会被 onMouseMove 翻回穿透，点击全被透传）
@@ -306,6 +314,7 @@ class PetSprite {
     if (this.whisperTimer !== null) window.clearTimeout(this.whisperTimer);
     if (this.whisperLoopTimer !== null) window.clearTimeout(this.whisperLoopTimer);
     if (this.broadcastLoopTimer !== null) window.clearTimeout(this.broadcastLoopTimer);
+    if (this.workTimer !== null) window.clearTimeout(this.workTimer);
     if (this.chatClose) {
       this.chatClose();
       this.chatClose = null;
@@ -1094,6 +1103,70 @@ class PetSprite {
     this.position();
   }
 
+  // ---- 工作状态联动（DSH 会话状态，每只宠物按 workStatusEnabled 门控；容器 1s 轮询，ts 变化才递增 tick）----
+  // 气泡驻留语义与浏览器一致：thinking/working/result/waiting（"事情还没完"）常驻直到状态切走；
+  //   success/error（"这事结束了"）10s 自动收起；state=null（空闲/回合被打断）收起气泡回待机。
+  // 动画循环语义：进行中档位循环播（switchTo once=false），终态档位播一遍回 idle 链。
+  onWorkTick(snapshot, tick) {
+    if (!this.pet.workStatusEnabled) return; // 未启用工作状态联动 -> 该宠物完全免疫（与浏览器一致）
+    if (tick === 0 || tick === this.prevWorkTick) return;
+    this.prevWorkTick = tick;
+    const state = snapshot && snapshot.state ? snapshot.state : null;
+    if (!state) {
+      // 空闲：收起常驻气泡（动画不处理，由常规动画链回待机）
+      if (this.workTimer !== null) window.clearTimeout(this.workTimer);
+      this.workTimer = null;
+      this.workOn = false;
+      this.workText = null;
+      this.renderBubble();
+      return;
+    }
+    const pool = this.animations.events?.workStatus;
+    if (!pool || pool.length === 0) {
+      console.error('[dsh-pet] 配置缺少 animations.events.workStatus，无法播放工作状态动画');
+      return;
+    }
+    const idx = S.WORK_STATUS_INDEX[state];
+    const name = Array.isArray(pool) ? pool[idx] : undefined;
+    if (!name) {
+      console.error('[dsh-pet] work-status 档位索引越界：state=' + state + ' idx=' + idx);
+      return;
+    }
+    console.log(
+      '[dsh-pet] ' +
+        new Date().toTimeString().slice(0, 8) +
+        ' workStatus pet=' +
+        this.pet.id +
+        ' state=' +
+        state +
+        ' -> [' +
+        idx +
+        '] ' +
+        name,
+    );
+    this.stopMove();
+    // 气泡文本：任务详情（todo/write 提供）优先，否则从条目级 workStatusTexts[档位]（数组）随机抽一句；
+    // 整字段/整档缺失 = 不弹文本，只播动画（与浏览器同一语义）。
+    const textGroup = Array.isArray(this.pet.workStatusTexts) ? this.pet.workStatusTexts[idx] : undefined;
+    const configuredText =
+      Array.isArray(textGroup) && textGroup.length > 0
+        ? textGroup[Math.floor(Math.random() * textGroup.length)]
+        : undefined;
+    this.workText = (snapshot && snapshot.task) || configuredText || null;
+    this.workOn = true;
+    const terminal = state === 'success' || state === 'error';
+    if (this.workTimer !== null) window.clearTimeout(this.workTimer);
+    this.workTimer = terminal
+      ? window.setTimeout(() => {
+          this.workOn = false;
+          this.renderBubble();
+        }, BUBBLE_DURATION_MS)
+      : null; // 非终态：常驻，不设自动收起
+    this.renderBubble();
+    if (terminal) this.playOnce(name);
+    else this.switchTo(name, false); // 进行中循环播（与浏览器 setOnce(!terminal) 一致）
+  }
+
   // ---- 余额事件（每只宠物按 balanceEnabled 门控；档位与气泡内容来自 shared） ----
   onBalanceTick(state, tick) {
     if (!this.pet.balanceEnabled) return; // 未启用余额功能 -> 该宠物对余额事件完全免疫（与浏览器一致）
@@ -1232,9 +1305,24 @@ class PetSprite {
   }
 
   renderBubble() {
-    // 碎碎念变体样式开关：碎碎念气泡小字号+换行+自适应宽，余额气泡保持原样式
-    this.bubble.classList.toggle('is-whisper', this.whisperOn && !!this.whisperView);
-    // 碎碎念气泡优先显示（若同时有余额气泡在展示，碎碎念覆盖）；两者都关时隐藏
+    // 气泡优先级：工作状态 > 碎碎念 > 余额（工作状态是 DSH 真实状态，最要紧；三者都关时隐藏）
+    this.bubble.classList.toggle('is-whisper', this.whisperOn && !!this.whisperView && !this.workOn);
+    if (this.workOn) {
+      // 工作状态气泡：workOn 期间占位（文本缺失时隐藏，绝不让更弱的碎碎念/余额气泡反超）
+      if (!this.workText) {
+        this.bubble.classList.remove('is-on');
+        window.__dshPetDebug.lastBubbleTitle = '';
+        return;
+      }
+      this.bubble.innerHTML = '';
+      const line = document.createElement('div');
+      line.className = 'pet-bub-row';
+      line.textContent = this.workText;
+      this.bubble.appendChild(line);
+      this.bubble.classList.add('is-on');
+      window.__dshPetDebug.lastBubbleTitle = this.bubble.textContent.slice(0, 60);
+      return;
+    }
     if (this.whisperOn && this.whisperView) {
       this.bubble.innerHTML = '';
       const line = document.createElement('div');
@@ -1343,6 +1431,31 @@ function startLoops() {
     setTimeout(() => void triggerLoop(), 1000);
   };
   if (anyBalanceEnabled) void triggerLoop();
+
+  // 工作状态联动：任一宠物启用才轮询 /work-status（1s；避免无意义的周期请求——与浏览器一致）。
+  // ts 变化（含回到空闲：host 在状态变化时更新 ts，切走 = 新 ts，用于收起常驻气泡）才递增 workTick →
+  // 各启用宠物播档位动画+气泡；首拉仅记基线，启动/刷新不重放历史状态。
+  const anyWorkStatusEnabled = sprites.some((s) => s.pet.workStatusEnabled);
+  if (anyWorkStatusEnabled) {
+    let workBaseline = null;
+    const workLoop = async () => {
+      try {
+        const snap = await S.fetchWorkStatus(WORK_STATUS_URL);
+        const ts = snap && typeof snap.ts === 'number' ? snap.ts : 0;
+        if (workBaseline === null) {
+          workBaseline = ts; // 首拉仅记基线
+        } else if (ts !== workBaseline) {
+          workBaseline = ts;
+          workTick++;
+          for (const s of sprites) s.onWorkTick(snap, workTick);
+        }
+      } catch {
+        /* 轻量轮询失败静默：下一周期再试 */
+      }
+      setTimeout(() => void workLoop(), 1000);
+    };
+    void workLoop();
+  }
 }
 
 // ---------- 启动（配置校验通过才建 sprite；失败大声报错 + 5s 自动重试） ----------
