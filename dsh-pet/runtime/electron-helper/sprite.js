@@ -1000,7 +1000,8 @@ class PetSprite {
 
   renderBubble() {
     // 气泡优先级：工作状态 > 碎碎念 > 余额（工作状态是 DSH 真实状态，最要紧；三者都关时隐藏）
-    this.bubble.classList.toggle('is-whisper', this.whisperOn && !!this.whisperView && !this.workOn);
+    // 工作气泡与碎碎念同款弹窗样式：宽度自适应 + 自动换行（is-whisper：正常 white-space、宽随内容）
+    this.bubble.classList.toggle('is-whisper', this.workOn || (this.whisperOn && !!this.whisperView));
     if (this.workOn) {
       // 工作状态气泡：workOn 期间占位（文本缺失时隐藏，绝不让更弱的碎碎念/余额气泡反超）
       if (!this.workText) {

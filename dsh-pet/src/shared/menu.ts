@@ -46,6 +46,7 @@ export type MenuNode = MenuLeaf | MenuBranch;
 const EVENT_LABELS: Record<string, string> = {
   balance: '余额档位',
   whisper: '碎碎念',
+  workStatus: '工作状态',
 };
 
 const leaf = (anim: string): MenuLeaf => ({ label: anim, anim });
