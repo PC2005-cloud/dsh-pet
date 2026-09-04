@@ -164,8 +164,12 @@
   <body>
     <div id="root"></div>
     <div id="pet-error" class="pet-error"></div>
-    <!-- 共享纯逻辑（src/shared 的 iife 构建产物，window.PetShared）——经典 script，避开 file:// ESM 的 CORS 限制 -->
+    <!-- 共享纯逻辑（src/shared 的 iife 构建产物，window.PetShared）——经经典 script，避开 file:// ESM 的 CORS 限制。
+         桌面端同模式拆分：constants（基础设施）→ sprite（宠物本体）→ events（事件联动）→ renderer（启动入口） -->
     <script src="./shared-core.js"></script>
+    <script src="./constants.js"></script>
+    <script src="./sprite.js"></script>
+    <script src="./events.js"></script>
     <script src="./renderer.js"></script>
   </body>
 </html>
