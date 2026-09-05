@@ -201,6 +201,9 @@ export function makePetUI(rt: {
     const pendingSquashRef = useRef(false);
     const animRef = useRef(anim);
     animRef.current = anim;
+    // workStatus 最新值同步：handleEnded 的 onended 闭包注册时可能早于状态更新，护栏用 ref 读当前值
+    const workStatusRef = useRef(workStatus);
+    workStatusRef.current = workStatus;
 
     const switchTo = (next: string, nextOnce: boolean) => {
       if (!next) return;
@@ -220,6 +223,20 @@ export function makePetUI(rt: {
       const target = frontRef.current === 0 ? videoBRef : videoARef;
       const el = target.current;
       if (!el) return;
+      // 诊断：事件池动画被切换（含 workStatus 触发/循环续播/其他事件顶替），once 反映 loop 语义
+      const inEvents = Object.values(petAnims.events ?? {}).some((pool) => pool.includes(next));
+      if (inEvents) {
+        console.log(
+          '[dsh-pet] ' +
+            new Date().toTimeString().slice(0, 8) +
+            ' pet=' +
+            cfg.id +
+            ' switch ' +
+            next +
+            ' once=' +
+            nextOnce,
+        );
+      }
       el.src =
         '/dsh-pet-7340/thumb/' +
         encodeURIComponent(cfg.assetRoot ?? cfg.id) +
@@ -345,11 +362,24 @@ export function makePetUI(rt: {
     //   state=null（空闲，回合 aborted 等）收起气泡回待机。
     // 动画循环语义：进行中档位循环播（once=false），终态档位播一遍（once=true）回 idle 链。
     const prevWorkTickRef = useRef(0);
+    // 调试日志：上一档位（null=空闲；undefined=启动后首次触发，显示为 null）
+    const prevWorkStateRef = useRef<string | null | undefined>(undefined);
     useEffect(() => {
       if (!cfg.workStatusEnabled) return; // 未启用工作状态联动 -> 该宠物完全免疫
       if (workStatusTick === 0 || workStatusTick === prevWorkTickRef.current) return;
       prevWorkTickRef.current = workStatusTick;
       if (!workStatus || workStatus.state === null) {
+        // 调试：状态回空闲（仅打印切换日志；动画不处理，由常规动画链回待机）
+        console.log(
+          '[dsh-pet] ' +
+            new Date().toTimeString().slice(0, 8) +
+            ' pet=' +
+            cfg.id +
+            ' ' +
+            (prevWorkStateRef.current ?? 'null') +
+            '->null    无动画（回待机，收起气泡）',
+        );
+        prevWorkStateRef.current = null;
         // 空闲：收起常驻气泡（动画不处理，由常规动画链回待机）
         if (workBubbleTimerRef.current !== null) window.clearTimeout(workBubbleTimerRef.current);
         workBubbleTimerRef.current = null;
@@ -371,15 +401,16 @@ export function makePetUI(rt: {
       console.log(
         '[dsh-pet] ' +
           new Date().toTimeString().slice(0, 8) +
-          ' workStatus pet=' +
+          ' pet=' +
           cfg.id +
-          ' state=' +
+          ' ' +
+          (prevWorkStateRef.current ?? 'null') +
+          '->' +
           workStatus.state +
-          ' -> [' +
-          idx +
-          '] ' +
+          '    ' +
           name,
       );
+      prevWorkStateRef.current = workStatus.state;
       stopMove();
       // 气泡文本：任务详情（todo/write 提供，如"正在做 X"）优先，否则从条目级配置
       // workStatusTexts[档位]（数组）随机抽一句；整字段/整档缺失 = 不弹文本，只播动画。
@@ -395,7 +426,7 @@ export function makePetUI(rt: {
       workBubbleTimerRef.current = terminal
         ? window.setTimeout(() => setWorkBubbleOn(false), BUBBLE_DURATION_MS)
         : null; // 非终态：常驻，不设自动收起
-      setOnce(!terminal); // 非终态循环播；终态播一遍
+      setOnce(terminal); // 终态播一遍回 idle；非终态 once=false 循环播（原 !terminal 写反，导致非终态播一遍、终态无限循环）
       setAnim(name);
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [workStatusTick]);
@@ -570,6 +601,30 @@ export function makePetUI(rt: {
       setSeq((s) => s + 1);
     };
 
+    // 互动打断后恢复：workStatus 非终态（thinking/working/result/waiting）期间，点击/拖拽等瞬时
+    // 互动结束应立即回到对应档位循环动画（打断-恢复语义）；无状态/终态返回 false 不接管，
+    // 调用方走原逻辑（回 idle / 随机池）。
+    const resumeWorkStatusAnim = (): boolean => {
+      const ws = workStatusRef.current;
+      if (!ws || !ws.state || ws.state === 'success' || ws.state === 'error') return false;
+      const pool = petAnims.events?.workStatus;
+      if (!pool || pool.length === 0) return false;
+      const idx = WORK_STATUS_INDEX[ws.state];
+      const name = Array.isArray(pool) ? pool[idx] : undefined;
+      if (!name) return false;
+      console.log(
+        '[dsh-pet] ' +
+          new Date().toTimeString().slice(0, 8) +
+          ' pet=' +
+          cfg.id +
+          ' 互动结束恢复状态动画: ' +
+          name,
+      );
+      setOnce(false);
+      setAnim(name);
+      return true;
+    };
+
     const handleEnded = (e?: Event) => {
       // 只认前台视频触发的 ended：后台（被降级停播）视频即便有残留事件也一律丢弃，防止掐断当前动画
       const evEl = e && (e.currentTarget as HTMLVideoElement | null);
@@ -578,7 +633,37 @@ export function makePetUI(rt: {
       if (dragRef.current.active) return;
       // 事件动画播完：回 idle（与 drag/clicks 同分支，不进入随机链）；气泡由定时器自动消失，与动画解耦
       const isEvent = Object.values(animations.events ?? {}).some((pool) => pool.includes(animRef.current));
+      // 工作状态循环护栏：非终态档位（thinking/working/result/waiting）期间，workStatus 事件动画
+      // 禁止“播完回 idle”——一旦意外触发 ended（loop 被某种原因掐断/once 被误置 true），
+      // 立即重设循环续播，直到状态真正切走（success/error/空闲）。其余事件动画仍按原语义回 idle。
+      const wsNow = workStatusRef.current;
+      if (isEvent && wsNow && wsNow.state && wsNow.state !== 'success' && wsNow.state !== 'error') {
+        if (animations.events?.workStatus?.includes(animRef.current)) {
+          console.log(
+            '[dsh-pet] ' +
+              new Date().toTimeString().slice(0, 8) +
+              ' pet=' +
+              cfg.id +
+              ' workStatus 循环续播: ' +
+              animRef.current,
+          );
+          setOnce(false);
+          setSeq((s) => s + 1);
+          return;
+        }
+      }
       if (isEvent) {
+        // 诊断：事件动画 ended 落地（余额/碎碎念/终态 workStatus 走到这里；非终态走上面护栏续播）
+        console.log(
+          '[dsh-pet] ' +
+            new Date().toTimeString().slice(0, 8) +
+            ' pet=' +
+            cfg.id +
+            ' 事件动画播完 ended anim=' +
+            animRef.current +
+            ' ws=' +
+            ((workStatusRef.current && workStatusRef.current.state) || 'null'),
+        );
         if (animations.idle.length) setAnim(pick(animations.idle, animRef.current));
         setOnce(true);
         setSeq((s) => s + 1);
@@ -590,6 +675,8 @@ export function makePetUI(rt: {
         facingRef.current = next; // 立即同步：翻转后的 pickNext 用新朝向过滤 noMirror（右侧不选文字类）
       }
       if (animations.drag.includes(animRef.current) || animations.clicks.includes(animRef.current)) {
+        // 互动动画播完：workStatus 非终态时恢复状态循环，否则回 idle（原语义）
+        if (resumeWorkStatusAnim()) return;
         if (animations.idle.length) setAnim(pick(animations.idle, animRef.current));
         setOnce(true);
         setSeq((s) => s + 1);
@@ -1026,8 +1113,11 @@ export function makePetUI(rt: {
         setDragging(false);
         const stageEl = stageRef.current;
         if (stageEl) stageEl.style.transform = 'translateY(' + bottomPad + 'px)';
-        if (petAnims.idle.length) setAnim(pick(petAnims.idle, animRef.current));
-        setOnce(false);
+        // 拖拽松手：workStatus 非终态时恢复状态循环，否则回 idle 循环（原语义）
+        if (!resumeWorkStatusAnim()) {
+          if (petAnims.idle.length) setAnim(pick(petAnims.idle, animRef.current));
+          setOnce(false);
+        }
         // 释放位置 = 弹簧跟随的实时包围盒左上角（不是指针目标：跟手滞后时落点跟随宠物实际位置）
         const bx = boxPxRef.current;
         const px = bx ? bx.x : e.clientX - d.offX - halfW;
