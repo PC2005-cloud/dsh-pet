@@ -172,12 +172,12 @@
       //   index 4 = success（turn/end completed 完成）
       //   index 5 = error（turn/end error/max-tokens 出错/达上限）
       "workStatus": [
-        "深度思考碎碎念",
-        "写代码",
-        "轻快记录",
-        "东张西望",
-        "点击回应-开心跃动",
-        "玩游戏气急败坏"
+        "工作状态-思考冒泡",      // index 0 thinking（turn/start 回合开）
+        "工作状态-忙碌点按",      // index 1 working（tool/call 工具调用）
+        "工作状态-清点归档",      // index 2 result（tool/result 工具完成回整理）
+        "工作状态-原地踱步张望",  // index 3 waiting（approval/asked 等待批准）
+        "工作状态-雀跃庆祝",      // index 4 success（turn/end completed 完成）
+        "工作状态-垂头叹气冒汗"   // index 5 error（turn/end error/max-tokens 出错/达上限）
       ]
     }
   },
