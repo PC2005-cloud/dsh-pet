@@ -613,12 +613,7 @@ export function makePetUI(rt: {
       const name = Array.isArray(pool) ? pool[idx] : undefined;
       if (!name) return false;
       console.log(
-        '[dsh-pet] ' +
-          new Date().toTimeString().slice(0, 8) +
-          ' pet=' +
-          cfg.id +
-          ' 互动结束恢复状态动画: ' +
-          name,
+        '[dsh-pet] ' + new Date().toTimeString().slice(0, 8) + ' pet=' + cfg.id + ' 互动结束恢复状态动画: ' + name,
       );
       setOnce(false);
       setAnim(name);

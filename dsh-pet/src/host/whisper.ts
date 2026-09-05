@@ -64,7 +64,8 @@ export async function generateWhisper(
       }),
     ],
     system,
-    maxTokens: 60,
+    // 不显式限 maxTokens：推理模型会把思考计入预算，显式小上限只会截断正文报"模型未返回文本"；
+    // 不传由 dsh-llm 按适配器 defaultMaxTokens（默认 32768）兜底，碎碎念短指令输出仍短。
     temperature: 1,
     // 统一关闭深度思考：碎碎念不需要推理，只求随口一句（仅模型声明支持时传）
     ...(supportsOff ? { reasoningEffort: ReasoningEffortId('off') } : {}),

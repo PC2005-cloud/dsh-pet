@@ -91,7 +91,8 @@ export async function generateChat(
       }),
     ],
     system,
-    maxTokens: 256,
+    // 不显式限 maxTokens：与碎碎念同因——推理模型把思考计入预算，显式小上限会截断正文；
+    // 不传由 dsh-llm 按适配器 defaultMaxTokens 兜底，对话短回复输出仍短。
     temperature: 1,
     // 统一关闭深度思考：闲聊对话不需要推理（与碎碎念同一约束；仅模型声明支持时传）
     ...(supportsOff ? { reasoningEffort: ReasoningEffortId('off') } : {}),
