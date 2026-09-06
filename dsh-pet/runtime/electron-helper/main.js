@@ -19,7 +19,7 @@
  * 宿主用与 HTTP 路由同一份 handlePetRoute 应答；素材应答带文件绝对路径，本进程读盘返回。
  * 无 DSH_PET_BRIDGE（手动 start-desktop / 开发流）时保持旧路径：渲染端直接 HTTP 访问宿主。
  */
-const { app, BrowserWindow, ipcMain, screen, shell, protocol } = require('electron');
+const { app, BrowserWindow, ipcMain, screen, shell, protocol, Tray, Menu, nativeImage } = require('electron');
 const path = require('node:path');
 const { writeFileSync } = require('node:fs');
 const fsPromises = require('node:fs/promises');
@@ -189,6 +189,72 @@ function createPetWindows() {
     windows.set(pet.id, win);
   }
 }
+
+// ---------- 隐藏人物（右键菜单「隐藏人物」→ 窗口隐藏 → 托盘恢复；宿主/DSH 照常运行） ----------
+// 隐藏 ≠ 关闭：窗口对象保留、RAF 被 Electron 自动节流（省资源），不会触发 window-all-closed。
+// 托盘图标在首次隐藏时创建并常驻，之后可随时用它隐藏/显示所有宠物窗口。
+let tray = null;
+
+function windowList() {
+  return [...windows.values()].filter((w) => !w.isDestroyed());
+}
+function anyWindowVisible() {
+  return windowList().some((w) => w.isVisible());
+}
+function rebuildTrayMenu() {
+  if (!tray) return;
+  const visible = anyWindowVisible();
+  tray.setContextMenu(
+    Menu.buildFromTemplate([
+      { label: '显示宠物', enabled: !visible, click: () => showAllPetWindows() },
+      { label: '隐藏宠物', enabled: visible, click: () => hideAllPetWindows() },
+      { type: 'separator' },
+      { label: '隐藏后点此托盘图标即可恢复', enabled: false },
+    ]),
+  );
+}
+function ensureTray() {
+  if (tray) return tray;
+  const icon = nativeImage.createFromPath(path.join(__dirname, 'tray-icon.png'));
+  if (icon.isEmpty()) {
+    console.error('[dsh-pet-desktop-helper] tray icon missing: ' + path.join(__dirname, 'tray-icon.png'));
+    return null;
+  }
+  tray = new Tray(icon);
+  tray.setToolTip('dsh-pet 桌宠');
+  tray.on('click', () => (anyWindowVisible() ? hideAllPetWindows() : showAllPetWindows()));
+  rebuildTrayMenu();
+  return tray;
+}
+function showAllPetWindows() {
+  for (const w of windowList()) {
+    if (!w.isVisible()) w.showInactive(); // 不抢焦点：窗口平时整窗穿透，无需聚焦
+  }
+  rebuildTrayMenu();
+}
+function hideAllPetWindows() {
+  for (const w of windowList()) {
+    if (w.isVisible()) w.hide();
+  }
+  ensureTray();
+  rebuildTrayMenu();
+}
+
+// 右键菜单「隐藏人物」：仅隐藏发起请求的宠物窗口（DSH 照常运行）
+ipcMain.on('pet:hide', (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (!win || win.isDestroyed()) return;
+  win.hide();
+  ensureTray();
+  rebuildTrayMenu();
+});
+
+app.on('before-quit', () => {
+  if (tray) {
+    tray.destroy();
+    tray = null;
+  }
+});
 
 // ---------- bridge 协议（渲染端 custom scheme → 本进程 → 宿主 stdout JSON 行 + 本地回调） ----------
 // 渲染端的每个 fetch 都落到 dsh-pet-bridge://，protocol.handle 把请求以一行 JSON 写 stdout 转发宿主。

@@ -25,6 +25,10 @@ contextBridge.exposeInMainWorld('petBridge', {
   openDshSite(url) {
     ipcRenderer.send('pet:open-site', { url });
   },
+  // 右键菜单「隐藏人物」：主进程隐藏本窗口（DSH 照常运行），托盘图标随时恢复
+  hidePet() {
+    ipcRenderer.send('pet:hide');
+  },
   // ---- 宠物间碰撞（跨窗 broker）----
   reportFlight(state) {
     ipcRenderer.send('pet:report-flight', state);

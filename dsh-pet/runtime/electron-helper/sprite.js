@@ -853,6 +853,7 @@ class PetSprite {
       { label: '碎碎念', action: 'whisper' },
       { label: '对话', action: 'chat' },
       { label: '回到初始位置', action: 'home' },
+      { label: '隐藏人物', action: 'hide-pet' },
     );
     const tree = tools.concat(S.buildMenuTree(this.animations));
     if (!tree.length) return;
@@ -894,6 +895,11 @@ class PetSprite {
     }
     if (leaf.action === 'home') {
       this.goHome(); // 停漫游/移动，清会话位置，回配置角落
+      return;
+    }
+    if (leaf.action === 'hide-pet') {
+      // 「隐藏人物」：主进程隐藏本窗口（DSH/宿主照常运行），系统托盘图标随时恢复
+      if (window.petBridge) window.petBridge.hidePet();
       return;
     }
     if (!leaf.anim) return;
