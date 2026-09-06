@@ -321,6 +321,40 @@ function petEnum(
   return typeof def === 'string' ? def : '';
 }
 
+/**
+ * task 段合并：folder/session/agentPreset 三字段逐字段处理（缺失 → 静默取默认；
+ * 显式写但非法 → 告警 + 默认）。session 接受 "last" / "new" 或任意非空 id 字符串（固定绑定）。
+ */
+function mergeTaskField(
+  base: Record<string, unknown>,
+  own: Record<string, unknown>,
+  label: string,
+  id: string,
+): { folder: string; session: string; agentPreset: string } {
+  const baseFolder = typeof base.folder === 'string' ? base.folder : '';
+  const ownFolder = own.folder;
+  let folder = baseFolder;
+  if (ownFolder !== undefined && ownFolder !== null) {
+    if (typeof ownFolder === 'string') folder = ownFolder;
+    else warnOnce(`${label}:task.folder:${id}`, `宠物「${id}」的 task.folder 非法，已取默认值`);
+  }
+  const baseSession = typeof base.session === 'string' && base.session.length > 0 ? base.session : 'last';
+  const ownSession = own.session;
+  let session = baseSession;
+  if (ownSession !== undefined && ownSession !== null) {
+    if (typeof ownSession === 'string' && ownSession.length > 0 && ownSession.length <= 128) session = ownSession;
+    else warnOnce(`${label}:task.session:${id}`, `宠物「${id}」的 task.session 非法，已取默认值`);
+  }
+  const basePreset = typeof base.agentPreset === 'string' ? base.agentPreset : '';
+  const ownPreset = own.agentPreset;
+  let agentPreset = basePreset;
+  if (ownPreset !== undefined && ownPreset !== null) {
+    if (typeof ownPreset === 'string') agentPreset = ownPreset;
+    else warnOnce(`${label}:task.agentPreset:${id}`, `宠物「${id}」的 task.agentPreset 非法，已取默认值`);
+  }
+  return { folder, session, agentPreset };
+}
+
 /** 一只实例 → 完成品实例（id 必须自己的且全局唯一；其余字段没写/非法 → 默认 + 告警） */
 function mergePet(
   base: Record<string, unknown>,
@@ -343,6 +377,9 @@ function mergePet(
   // position：逐子字段合并（缺失 → 静默取默认；显式写但非法 → 告警 + 默认）
   const basePos = base.position && typeof base.position === 'object' ? (base.position as Record<string, unknown>) : {};
   const ownPos = p.position && typeof p.position === 'object' ? (p.position as Record<string, unknown>) : {};
+  // task：任务桥段（缺失 → 静默填默认；显式写但非法 → 告警 + 默认）
+  const baseTask = base.task && typeof base.task === 'object' ? (base.task as Record<string, unknown>) : {};
+  const ownTask = p.task && typeof p.task === 'object' ? (p.task as Record<string, unknown>) : {};
 
   return {
     id,
@@ -357,6 +394,7 @@ function mergePet(
       marginX: petNumber(ownPos.marginX, basePos.marginX, -Infinity, label, 'position.marginX', id),
       marginY: petNumber(ownPos.marginY, basePos.marginY, -Infinity, label, 'position.marginY', id),
     },
+    task: mergeTaskField(baseTask, ownTask, label, id),
   };
 }
 
@@ -428,6 +466,8 @@ export function saveUserConfig(
   const o = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
   const arr = Array.isArray(o.pets) ? o.pets : null;
   if (!arr || !arr.length) return null;
+  // 磁盘现有用户文件的同 id 宠物（透传 task 段用：设置页不编辑任务配置，不能把它抹掉）
+  const existingPets = existing && Array.isArray(existing.pets) ? (existing.pets as Record<string, unknown>[]) : [];
   const out: unknown[] = [];
   for (const p of arr) {
     if (!p || typeof p !== 'object') return null;
@@ -457,6 +497,11 @@ export function saveUserConfig(
     const marginX = Number(pos.marginX);
     const marginY = Number(pos.marginY);
     if (!Number.isFinite(marginX) || !Number.isFinite(marginY)) return null;
+    // 透传保留：task 段从磁盘现有同 id 宠物原样带回（设置页只提交可编辑字段，手改的任务配置保住）
+    const existingPet = existingPets.find(
+      (e) => e && typeof e === 'object' && String((e as Record<string, unknown>).id) === id,
+    ) as Record<string, unknown> | undefined;
+    const existingTask = existingPet?.task;
     out.push({
       id,
       name,
@@ -466,6 +511,7 @@ export function saveUserConfig(
       workStatusEnabled,
       display,
       position: { corner, marginX, marginY },
+      ...(existingTask && typeof existingTask === 'object' ? { task: existingTask } : {}),
     });
   }
   const ne = o.notificationsEnabled;

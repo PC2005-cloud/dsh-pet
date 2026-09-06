@@ -49,6 +49,7 @@ import { credentialRef } from '@deepseek-ai/dsh-credentials';
 import { queryBalance } from './balance';
 import { generateWhisper } from './whisper';
 import { generateChat, type ChatMemoryMessage } from './chat';
+import { createTaskBridge, type TaskBridge } from './task';
 import { findPetInstance, flattenPetList, readAllConfig, saveUserConfig, type ConfigPaths } from './config';
 import {
   reduceWorkStatus,
@@ -66,8 +67,9 @@ import {
 
 /** 插件行 id（与 cordis.patch.yml 一致） */
 export const name = 'pet';
-/** 需要注入的服务：webServer（路由）+ agentDefaultModel（当前服务商）+ credentials（凭证）+ llm（对话模型调用）+ commands（/balance 斜杠命令） */
-export const inject = ['webServer', 'agentDefaultModel', 'credentials', 'llm', 'commands'];
+/** 需要注入的服务：webServer（路由）+ agentDefaultModel（当前服务商）+ credentials（凭证）+ llm（对话模型调用）+
+ *  commands（/balance 斜杠命令）+ agents（任务桥：进程内直调 DSH Agent 派发任务） */
+export const inject = ['webServer', 'agentDefaultModel', 'credentials', 'llm', 'commands', 'agents'];
 
 /** 本包目录：宿主构建产物位于 lib/，其上一级即包根。 */
 const PACKAGE_ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)));
@@ -176,6 +178,11 @@ export function apply(ctx: any): void {
     userFile: userConfigPath,
     petDir: petConfigDir,
   };
+  // 任务桥（进程内直调 DSH Agent）：/task* 路由挂进 handlePetRoute（HTTP 与桌面管道共用同一实现）
+  const taskBridge: TaskBridge = createTaskBridge(ctx, {
+    userRoot,
+    readAllConfig: () => readAllConfig(configPaths),
+  });
   // 用户动画目录（thumb 播放时优先于包内素材；唯一格式 webm，素材放 main-animation/webm/）
   const thumbUserRoot = join(userRoot, 'main-animation');
   // 手动触发计数：/balance 命令 +1，两边（浏览器/桌面）同样的 1s 轮询检测变化后刷新余额（进程内内存态，重启归零）
@@ -746,6 +753,12 @@ export function apply(ctx: any): void {
       };
     }
 
+    // 任务桥路由：/task/sessions|current|open|send|cancel|stream（host 进程内直调 DSH Agent；
+    // 任务窗两端共用；route 恒返回 json/text，与 RouteResult 结构兼容）
+    if (rest.startsWith('task/')) {
+      return await taskBridge.route(rest, method, body, url.searchParams);
+    }
+
     // 动画文件：/dsh-pet-7340/thumb/<素材根>/<file>，唯一格式 webm。
     // 素材归属按「是否存在该宠物的独立素材目录 `pet/<petId>-animation/`」判定：
     //   - 存在（pet pack 宠物）：只查自己的目录，查不到即 404 显式报错——绝不混用
@@ -974,10 +987,11 @@ export function apply(ctx: any): void {
   // 系统通知不在此处：它独立于宠物（浏览器半侧 notify.ts 经 connection 事件流监听），
   // 宿主无需任何通知端点/监听。
 
-  // 随插件生命周期清理：桌面 Helper 回收（异步下载完成后不再拉起）
+  // 随插件生命周期清理：桌面 Helper 回收（异步下载完成后不再拉起）+ 任务桥会话回收
   ctx.effect(() => () => {
     disposed = true;
     stopHelper('dsh-host-stop');
+    void taskBridge.dispose();
   });
 
   // 路由就绪后拉起桌面 Helper（Electron 缺失时仅告警，不影响 DSH 与浏览器 overlay）

@@ -98,6 +98,21 @@ export interface Pet {
   /** 条目级：工作状态气泡文案（二维数组，外层索引 = workStatus 档位 0..5，内层每档可多句随机抽；
    *  host 合并已填默认，拍平时吹入；整字段缺失 = 不弹工作状态文本，只播动画） */
   workStatusTexts?: string[][];
+  /** 任务桥配置段（缺失 = host 合并器填默认；运行时文件夹/会话的选择写每宠状态，不回写本字段） */
+  task?: PetTaskConfig;
+}
+
+/**
+ * 任务桥配置（与 config.jsonc pets[i].task 同构）：
+ *  - folder：默认目标工作文件夹（绝对路径；"" = 跟随 DSH 默认工作目录）
+ *  - session：会话策略——"last" = 粘性绑定（默认；选定后一直用，除非主动切换/新建）；
+ *    "new" = 每次任务都新建会话；其余非空字符串 = 固定绑定该 sessionId 的既有会话
+ *  - agentPreset：该宠物任务使用的 agentPreset id（"" = 沿用 DSH 默认，与 Web 一致）
+ */
+export interface PetTaskConfig {
+  folder: string;
+  session: string;
+  agentPreset: string;
 }
 
 /** config.jsonc 的 physics 段：拖拽抛掷手感参数（全局，所有宠物共用）。

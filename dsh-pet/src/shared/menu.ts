@@ -30,8 +30,9 @@ export interface MenuLeaf {
   /** 播放的动画名（点播动作）；action 优先于 anim */
   anim?: string;
   /** 自定义动作：open-site=打开网站 / show-balance=查看余额；whisper=立即碎碎念一句；
-   * chat=打开对话弹窗；home=回到初始位置。手动触发均不受 whisperEnabled 影响（该字段只关自动周期轮询） */
-  action?: 'open-site' | 'show-balance' | 'whisper' | 'chat' | 'home';
+   * chat=打开闲聊弹窗；task=打开任务对话窗（向 DSH 派发任务）；home=回到初始位置；
+   * hide-pet=隐藏人物（桌面端专属）。手动触发均不受 whisperEnabled 影响（该字段只关自动周期轮询） */
+  action?: 'open-site' | 'show-balance' | 'whisper' | 'chat' | 'task' | 'home' | 'hide-pet';
 }
 
 /** 分支：带子菜单的项 */

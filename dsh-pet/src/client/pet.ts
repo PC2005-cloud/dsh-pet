@@ -24,6 +24,7 @@ import {
 } from '../shared/menu';
 // 对话弹窗：与桌面共用同一份组件（数据经 host /chat 读写同一份记忆）
 import { mountChatDialog } from '../shared/chat';
+import { mountTaskDialog } from '../shared/task';
 import { petBridge } from './settings';
 // 拖拽抛掷物理（弹簧跟手 + 甩抛 + 重力反弹）：两端共用同一份纯计算（src/shared/physics.ts）
 import {
@@ -163,6 +164,7 @@ export function makePetUI(rt: {
     const menuRef = useRef<{ close: () => void } | null>(null);
     // 对话弹窗（与桌面共用 shared 组件）：当前挂载的 close() 句柄，卸载/重开前清理
     const chatRef = useRef<{ close: () => void } | null>(null);
+    const taskRef = useRef<{ close: () => void } | null>(null);
 
     // 配置变化即时跟随（容器重新合并 / 设置页保存后通过 petBridge.sync 触发）
     useEffect(() => {
@@ -307,6 +309,10 @@ export function makePetUI(rt: {
         if (chatRef.current) {
           chatRef.current.close();
           chatRef.current = null;
+        }
+        if (taskRef.current) {
+          taskRef.current.close();
+          taskRef.current = null;
         }
       },
       [],
@@ -1188,7 +1194,7 @@ export function makePetUI(rt: {
         return;
       }
       if (leaf.action === 'chat') {
-        // 对话：最简输入框（shared 组件，与桌面同一份）——回车发送后弹窗消失，
+        // 闲聊：最简输入框（shared 组件，与桌面同一份）——回车发送后弹窗消失，
         // 回复用**碎碎念同款显示**（说话动画 + 白色气泡 10s），只多一步用户输入。
         // 记忆经 host /chat 读写（memory.json，浏览器/桌面同一实例共享同一份记忆）。
         // 弹窗跟随宠物：基准是**身体命中区**（.dsh-pet-hit，与气泡同一定位源——
@@ -1206,6 +1212,23 @@ export function makePetUI(rt: {
           },
           onClose: () => {
             chatRef.current = null;
+          },
+        });
+        return;
+      }
+      if (leaf.action === 'task') {
+        // 任务对话窗（shared 组件，与桌面同一份）：直接向 DSH 派发任务——会话/文件夹粘性绑定、
+        // 流式回复、可取消。窗口跟随宠物（身体命中区右上角，同闲聊弹窗定位）。
+        if (taskRef.current) taskRef.current.close();
+        const hitRect2 = stageRef.current?.querySelector('.dsh-pet-hit')?.getBoundingClientRect();
+        taskRef.current = mountTaskDialog({
+          petId: cfg.id,
+          petName: cfg.name,
+          baseUrl: '/dsh-pet-7340',
+          x: hitRect2 ? hitRect2.right + 6 : window.innerWidth - 380,
+          y: hitRect2 ? hitRect2.top + 6 : 8,
+          onClose: () => {
+            taskRef.current = null;
           },
         });
         return;
@@ -1238,10 +1261,11 @@ export function makePetUI(rt: {
     };
     const handleContextMenu = (e: ReactNS.MouseEvent<HTMLDivElement>) => {
       // 工具项（碎碎念——手动触发**不受 whisperEnabled 限制**，该字段只影响自动周期轮询；
-      // 回到初始位置，两端共用）+ 动作树（动作→分类→具体动画）
+      // 任务/闲聊/回到初始位置，两端共用）+ 动作树（动作→分类→具体动画）
       const tree: MenuNode[] = [
         { label: '碎碎念', action: 'whisper' },
-        { label: '对话', action: 'chat' },
+        { label: '任务', action: 'task' },
+        { label: '闲聊', action: 'chat' },
         { label: '回到初始位置', action: 'home' },
         ...buildMenuTree(petAnims),
       ];

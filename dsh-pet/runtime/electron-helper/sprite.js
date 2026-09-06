@@ -102,11 +102,13 @@ class PetSprite {
     this.workTimer = null;
     this.workText = null;
     this.prevWorkTick = 0;
-    // 对话弹窗（shared 组件）：当前挂载的 close() 句柄 + 开启标记
-    // （chatOpen 是穿透守卫：弹窗是窗口内 DOM，期间整窗保持可交互，与 menuOpen 同语义——否则
+    // 对话/任务弹窗（shared 组件）：当前挂载的 close() 句柄 + 开启标记
+    // （chatOpen/taskOpen 是穿透守卫：弹窗是窗口内 DOM，期间整窗保持可交互，与 menuOpen 同语义——否则
     //   光标移到输入框（不在身体命中区）就会被 onMouseMove 翻回穿透，点击全被透传）
     this.chatClose = null;
     this.chatOpen = false;
+    this.taskClose = null;
+    this.taskOpen = false;
 
     // DOM：sprite 钉在窗口内 (margin.l, margin.t)；宠物"位置"= sprite 位置，窗口随余量外扩
     this.el = document.createElement('div');
@@ -164,9 +166,9 @@ class PetSprite {
       'mouseleave',
       () => {
         // 光标离开窗口：菜单若开着立刻收起（菜单是窗口内 DOM，离开即不可达），再恢复穿透；
-        // 对话弹窗开着则不恢复——弹窗是窗口内 DOM，鼠标还要回来点输入框（与 menuOpen 同守卫）
+        // 对话/任务弹窗开着则不恢复——弹窗是窗口内 DOM，鼠标还要回来点输入框（与 menuOpen 同守卫）
         this.closeMenu();
-        if (!this.chatOpen) this.setInteractive(false);
+        if (!this.chatOpen && !this.taskOpen) this.setInteractive(false);
       },
       { signal: ac.signal },
     );
@@ -213,6 +215,10 @@ class PetSprite {
     if (this.chatClose) {
       this.chatClose();
       this.chatClose = null;
+    }
+    if (this.taskClose) {
+      this.taskClose();
+      this.taskClose = null;
     }
     this.closeMenu();
     this.stopThrow();
@@ -805,8 +811,8 @@ class PetSprite {
       this.setInteractive(true);
       return;
     }
-    // 右键菜单/对话弹窗开启：整窗保持可交互（悬停菜单项/点输入框都不触发穿透翻转）；关闭后恢复命中区判定
-    if (this.menuOpen || this.chatOpen) {
+    // 右键菜单/对话/任务弹窗开启：整窗保持可交互（悬停菜单项/点输入框都不触发穿透翻转）；关闭后恢复命中区判定
+    if (this.menuOpen || this.chatOpen || this.taskOpen) {
       this.setInteractive(true);
       return;
     }
@@ -845,13 +851,14 @@ class PetSprite {
     e.preventDefault();
     this.stopThrow(); // 菜单弹出前停住飞行中的宠物
     this.stopMove(); // 菜单悬停期间宠物不漫游
-    // 桌面专属工具根项（打开网站 / 查看余额 / 碎碎念 / 对话 / 回到初始位置）+ 共享菜单树（动作→分类→具体动画）
-    // 碎碎念/对话项无条件显示：手动触发不受 whisperEnabled 限制（该字段只影响自动周期轮询）
+    // 桌面专属工具根项（打开网站 / 查看余额 / 碎碎念 / 任务 / 闲聊 / 回到初始位置）+ 共享菜单树（动作→分类→具体动画）
+    // 碎碎念/任务/闲聊项无条件显示：手动触发不受 whisperEnabled 限制（该字段只影响自动周期轮询）
     const tools = [{ label: '打开网站', action: 'open-site' }];
     if (this.pet.balanceEnabled) tools.push({ label: '查看余额', action: 'show-balance' });
     tools.push(
       { label: '碎碎念', action: 'whisper' },
-      { label: '对话', action: 'chat' },
+      { label: '任务', action: 'task' },
+      { label: '闲聊', action: 'chat' },
       { label: '回到初始位置', action: 'home' },
       { label: '隐藏人物', action: 'hide-pet' },
     );
@@ -890,7 +897,11 @@ class PetSprite {
       return;
     }
     if (leaf.action === 'chat') {
-      this.showChatFromMenu(); // 打开对话弹窗（记忆经 host /chat 读写，浏览器/桌面同一实例共享）
+      this.showChatFromMenu(); // 打开闲聊弹窗（记忆经 host /chat 读写，浏览器/桌面同一实例共享）
+      return;
+    }
+    if (leaf.action === 'task') {
+      this.showTaskFromMenu(); // 打开任务对话窗（host 进程内直调 DSH Agent 派发任务）
       return;
     }
     if (leaf.action === 'home') {
@@ -962,7 +973,7 @@ class PetSprite {
       });
   }
 
-  // 「对话」菜单：最简输入框（shared 组件，与浏览器同一份）——回车发送后弹窗消失，
+  // 「闲聊」菜单：最简输入框（shared 组件，与浏览器同一份）——回车发送后弹窗消失，
   // 回复用**碎碎念同款显示**（说话动画 + 白色气泡 10s），只多一步用户输入。
   // 记忆经 host /chat 读写（memory.json，同一实例的浏览器/桌面共享同一份）。
   // 弹窗跟随宠物：基准是**身体命中区** this.hit（与气泡同一定位源——桌宠在视频中间，
@@ -993,6 +1004,34 @@ class PetSprite {
     this.chatClose = m.close;
     this.chatOpen = true; // 穿透守卫：弹窗期间整窗保持可交互，光标移到输入框不被翻回穿透
     window.__dshPetDebug.chatOpen = true;
+    this.setInteractive(true);
+  }
+
+  // 「任务」菜单：任务对话窗（shared 组件，与浏览器同一份）——直接向 DSH 派发任务：
+  // 会话/文件夹粘性绑定（host task-state.json 落盘）、流式回复（500ms 轮询 /task/stream）、
+  // 可取消。窗口跟随宠物（基准同对话弹窗：身体命中区右上角），期间整窗保持可交互。
+  showTaskFromMenu() {
+    if (this.taskClose) {
+      this.taskClose();
+      this.taskClose = null;
+      return; // 已开着：先关旧的
+    }
+    const m = S.mountTaskDialog({
+      petId: this.pet.id,
+      petName: this.pet.name,
+      baseUrl: BASE,
+      x: Math.max(4, this.hit.getBoundingClientRect().right + 6),
+      y: Math.max(4, this.hit.getBoundingClientRect().top + 6),
+      onClose: () => {
+        this.taskClose = null;
+        this.taskOpen = false;
+        window.__dshPetDebug.taskOpen = false;
+        if (!this.menuOpen && !this.chatOpen) this.setInteractive(false); // 弹窗关了且无菜单/闲聊：恢复命中区穿透
+      },
+    });
+    this.taskClose = m.close;
+    this.taskOpen = true; // 穿透守卫：弹窗期间整窗保持可交互
+    window.__dshPetDebug.taskOpen = true;
     this.setInteractive(true);
   }
 
