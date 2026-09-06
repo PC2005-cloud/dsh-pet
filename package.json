@@ -1,0 +1,96 @@
+{
+  "name": "dsh-pet",
+  "version": "0.2.6",
+  "description": "A floating desktop pet for the DeepSeek Harness Web UI: idle breathing, occasional direction turns, random actions, and screen wandering.",
+  "_comment": [
+    "Fork redirect manifest: the real plugin lives in dsh-pet/ (upstream layout).",
+    "pnpm installs this repo from git (github:Vstorion/dsh-pet#local) using THIS root",
+    "manifest, which forwards main/exports/dsh into the dsh-pet/ subdirectory and runs",
+    "the upstream prepare build there. Keep version and peer/deps in sync with",
+    "dsh-pet/package.json after upstream merges. files=[dsh-pet] keeps the installed",
+    "tree small; devDependencies mirror the subdir's so prepare can build inside pnpm."
+  ],
+  "type": "module",
+  "main": "dsh-pet/lib/index.js",
+  "exports": {
+    ".": {
+      "types": "./dsh-pet/lib/types/index.d.ts",
+      "default": "./dsh-pet/lib/index.js"
+    },
+    "./client": {
+      "types": "./dsh-pet/lib/types/client/index.d.ts",
+      "default": "./dsh-pet/lib/client.js"
+    },
+    "./src/*": "./dsh-pet/src/*",
+    "./cordis.patch.yml": "./dsh-pet/cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dsh-pet"
+  ],
+  "scripts": {
+    "prepare": "node dsh-pet/scripts/prepare.js"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/Vstorion/dsh-pet#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Vstorion/dsh-pet.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Vstorion/dsh-pet/issues"
+  },
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "desktop-pet",
+    "pet",
+    "floating-widget",
+    "web-ui",
+    "cordis",
+    "react"
+  ],
+  "dependencies": {
+    "@electron-internal/extract-zip": "^1.0.5",
+    "@electron/get": "^5.1.0"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./dsh-pet/cordis.patch.yml"
+    },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-connection"
+      ],
+      "platform": "web"
+    }
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/dsh-agent-default-model": "^0.1.1-rc.2",
+    "@deepseek-ai/dsh-client-connection": "^0.1.1-rc.2",
+    "@deepseek-ai/dsh-client-runtime": "^0.1.1-rc.2",
+    "@deepseek-ai/dsh-client-ui-slots": "^0.1.1-rc.2",
+    "@deepseek-ai/dsh-commands": "^0.1.1-rc.2",
+    "@deepseek-ai/dsh-credentials": "^0.1.1-rc.2",
+    "@deepseek-ai/dsh-home-paths": "^0.1.1-rc.2",
+    "@deepseek-ai/dsh-host-webserver": "^0.1.1-rc.2",
+    "@deepseek-ai/dsh-llm": "^0.1.1-rc.2",
+    "react": "^18.2.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^26.2.0",
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0",
+    "eslint": "^10.9.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "prettier": "^3.9.6",
+    "rolldown": "1.0.0-beta.7",
+    "tsdown": "^0.8.0",
+    "typescript": "^5.5.0",
+    "typescript-eslint": "^8.67.0"
+  }
+}
