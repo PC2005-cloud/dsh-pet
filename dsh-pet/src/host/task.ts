@@ -6,11 +6,12 @@
  * 自包含（不 import src/shared —— DSH 单文件加载约束）；帧类型与
  * src/shared/task.ts 的 TaskStreamFrame 严格同步（host 不能引用共享目录，契约靠注释钉住）。
  *
- * 粘性绑定：每宠物 {folder, sessionId} 落盘 $DSH_HOME/dsh-pet/task-state.json；
+ * 粘性绑定（工作区驱动）：每宠物 {workspaceId, sessionId} 落盘 $DSH_HOME/dsh-pet/task-state.json；
+ * workspaceId = DSH 工作区注册表（与 Web 侧边栏同一份），'' = 默认工作目录（Web 的"未分组"）。
  * 会话策略（pets[i].task.session）：last=粘性（默认）/ new=每次任务新建 / 其余=固定绑定。
  * 用户主动「切换/新建」（/task/open）恒粘性写盘（决策 1：选定就一直用）。
  *
- * 会话对 Web 透明：新建会话带 meta.cwd（文件夹命中工作区时先 attach 进工作区），
+ * 会话对 Web 透明：新建会话带 meta.cwd（工作区路径），并在创建后 attach 进该工作区——
  * Web 侧边栏可见、可续聊同一会话。创建/恢复的 AgentHandle 由本模块持有，
  * 插件卸载时统一 dispose（与 Web 网关同款所有权语义）。
  */
@@ -38,9 +39,10 @@ export type TaskRouteResult =
   | { kind: 'json'; status: number; obj: unknown; headers?: Record<string, string> }
   | { kind: 'text'; status: number; body: string };
 
-/** 每宠物粘性绑定（task-state.json 持久化结构） */
+/** 每宠物粘性绑定（task-state.json 持久化结构；folder 为 v1 遗留字段，读取时迁移） */
 interface PetTaskState {
-  folder: string;
+  /** DSH 工作区 id；'' = 默认工作目录（未分组） */
+  workspaceId: string;
   sessionId: string | null;
 }
 
@@ -193,6 +195,34 @@ export function createTaskBridge(ctx: any, options: TaskBridgeOptions): TaskBrid
     }
   };
 
+  /** 工作区注册表（可选服务；多处经它读工作区/成员会话）——结构型最小面，避免跨版本类型依赖 */
+  interface WorkspaceEntityLike {
+    id?: unknown;
+    path?: unknown;
+    title?: unknown;
+    sessionIds?: unknown[];
+    attachSession?: (sessionId: string) => Promise<void>;
+  }
+  interface WorkspaceRegistryLike {
+    get: (id: string) => WorkspaceEntityLike | undefined;
+    list: () => WorkspaceEntityLike[];
+    resolveByPath: (path: string) => Promise<WorkspaceEntityLike | undefined>;
+  }
+  const wsRegistry = (): WorkspaceRegistryLike | undefined =>
+    ctx.get('workspaceRegistry') as WorkspaceRegistryLike | undefined;
+
+  /** 文件夹路径 → 工作区 id（未拥有该目录/服务缺失 → ''，即默认目录） */
+  const resolveIdByPath = async (folder: string): Promise<string> => {
+    const ws = wsRegistry();
+    if (!folder || !ws) return '';
+    try {
+      const w = await ws.resolveByPath(folder);
+      return w && typeof w.id === 'string' ? String(w.id) : '';
+    } catch {
+      return '';
+    }
+  };
+
   /** 运行时活动绑定（petId → 当前会话 id；驱动流式转发；进程内内存态） */
   const activeBindings = new Map<string, string>();
   /** 会话 id → 绑定它的宠物集合（事件监听反查；由 activeBindings 重建） */
@@ -243,38 +273,46 @@ export function createTaskBridge(ctx: any, options: TaskBridgeOptions): TaskBrid
     }
   };
 
-  /** 解析该宠物当前绑定（策略 + 状态文件） */
+  /** 解析该宠物当前绑定（策略 + 状态文件 + 配置默认文件夹；旧 folder 状态自动迁移为工作区 id） */
   const resolveBinding = async (petId: string): Promise<PetTaskState> => {
     const conf = petTaskConf(petId);
     const state = await readState();
     const st = state[petId];
+    const legacy = (st ?? {}) as { folder?: unknown; workspaceId?: unknown; sessionId?: unknown };
+    let workspaceId = typeof legacy.workspaceId === 'string' ? legacy.workspaceId : '';
+    // v1 遗留：状态存 folder 路径 → 解析成工作区 id（未命中归默认目录）
+    if (!workspaceId && typeof legacy.folder === 'string' && legacy.folder) {
+      workspaceId = await resolveIdByPath(legacy.folder);
+    }
+    // 配置默认文件夹（状态无工作区时生效）→ 工作区 id
+    if (!workspaceId && conf.folder) {
+      workspaceId = await resolveIdByPath(conf.folder);
+    }
     if (conf.session !== 'last' && conf.session !== 'new') {
-      return { folder: st?.folder ?? conf.folder ?? '', sessionId: conf.session };
+      return { workspaceId, sessionId: conf.session };
     }
     if (conf.session === 'new') {
-      return { folder: st?.folder ?? conf.folder ?? '', sessionId: null };
+      return { workspaceId, sessionId: null };
     }
-    return { folder: st?.folder ?? conf.folder ?? '', sessionId: st?.sessionId ?? null };
+    const sessionId = typeof legacy.sessionId === 'string' && legacy.sessionId ? legacy.sessionId : null;
+    return { workspaceId, sessionId };
   };
 
-  /** 新建会话：文件夹校验 → 工作区解析/附接 → agents.create → 粘性写盘（sticky=false 不存 sessionId） */
-  const createSession = async (petId: string, folder: string, sticky: boolean): Promise<{ sessionId: string }> => {
-    let usedFolder = '';
+  /** 新建会话：工作区路径 → agents.create → attach 工作区 → 粘性写盘（sticky=false 不存 sessionId） */
+  const createSession = async (petId: string, workspaceId: string, sticky: boolean): Promise<{ sessionId: string }> => {
     let cwd: string | undefined;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- workspaceRegistry 为可选运行时服务，跨版本类型未对齐
-    let ws: any;
-    const workspaceRegistry = ctx.get('workspaceRegistry');
-    if (folder && isDirectory(folder)) {
-      usedFolder = folder;
+    let ws: WorkspaceEntityLike | undefined;
+    const workspaceRegistry = wsRegistry();
+    if (workspaceId && workspaceRegistry) {
       try {
-        if (workspaceRegistry && typeof workspaceRegistry.resolveByPath === 'function') {
-          ws = await workspaceRegistry.resolveByPath(folder);
-          if (ws && typeof ws.path === 'string') usedFolder = ws.path;
+        const entity = workspaceRegistry.get(workspaceId);
+        if (entity && typeof entity.path === 'string' && isDirectory(entity.path)) {
+          ws = entity;
+          cwd = entity.path;
         }
       } catch {
-        /* 工作区解析失败：直接按文件夹 cwd 建会话 */
+        /* 未知工作区：按默认目录建会话 */
       }
-      cwd = usedFolder;
     }
     const conf = petTaskConf(petId);
     const sessionId = 'pet-' + randomUUID();
@@ -292,7 +330,7 @@ export function createTaskBridge(ctx: any, options: TaskBridgeOptions): TaskBrid
     }
     setActive(petId, sessionId);
     await writeState(petId, {
-      folder: usedFolder,
+      workspaceId: cwd ? workspaceId : '',
       sessionId: sticky ? sessionId : null,
     });
     return { sessionId };
@@ -317,7 +355,7 @@ export function createTaskBridge(ctx: any, options: TaskBridgeOptions): TaskBrid
         console.warn(
           `dsh-pet: 会话「${binding.sessionId}」恢复失败，已回退新建会话（${e instanceof Error ? e.message : String(e)}）`,
         );
-        await writeState(petId, { folder: binding.folder, sessionId: null });
+        await writeState(petId, { workspaceId: binding.workspaceId, sessionId: null });
       }
     }
     const conf = petTaskConf(petId);
@@ -325,7 +363,7 @@ export function createTaskBridge(ctx: any, options: TaskBridgeOptions): TaskBrid
     if (conf.session !== 'last' && conf.session !== 'new') {
       throw new Error('固定绑定的会话「' + String(binding.sessionId) + '」无法恢复，任务未派发');
     }
-    const { sessionId } = await createSession(petId, binding.folder, conf.session !== 'new');
+    const { sessionId } = await createSession(petId, binding.workspaceId, conf.session !== 'new');
     const agent = ctx.agents.get(sessionId);
     if (!agent) throw new Error('dsh-pet: 会话创建后未找到 Agent：' + sessionId);
     return { agent, sessionId };
@@ -357,14 +395,50 @@ export function createTaskBridge(ctx: any, options: TaskBridgeOptions): TaskBrid
   ): Promise<TaskRouteResult> => {
     const petId = String(params.get('pet') ?? '');
 
+    if (rest === 'task/workspaces') {
+      if (method !== 'GET') return json(405, { error: 'method not allowed' });
+      const items: Array<{ workspaceId: string; title: string; path: string }> = [
+        { workspaceId: '', title: '默认工作目录', path: '' },
+      ];
+      const ws = wsRegistry();
+      if (ws) {
+        try {
+          for (const w of ws.list()) {
+            const wid = String(w.id ?? '');
+            if (!wid) continue;
+            items.push({ workspaceId: wid, title: String(w.title ?? ''), path: String(w.path ?? '') });
+          }
+        } catch (e) {
+          console.warn('dsh-pet: 工作区列表读取失败，已降级：' + (e instanceof Error ? e.message : String(e)));
+        }
+      }
+      return json(200, { ok: true, items });
+    }
+
     if (rest === 'task/current') {
       if (method !== 'GET') return json(405, { error: 'method not allowed' });
       const binding = await resolveBinding(petId);
-      return json(200, { ok: true, sessionId: binding.sessionId, folder: binding.folder });
+      let folder = '';
+      const ws = wsRegistry();
+      if (binding.workspaceId && ws) {
+        try {
+          const w = ws.get(binding.workspaceId);
+          if (w && typeof w.path === 'string') folder = w.path;
+        } catch {
+          /* 工作区已删除：folder 留空（仅展示用） */
+        }
+      }
+      return json(200, {
+        ok: true,
+        sessionId: binding.sessionId,
+        workspaceId: binding.workspaceId,
+        folder,
+      });
     }
 
     if (rest === 'task/sessions') {
       if (method !== 'GET') return json(405, { error: 'method not allowed' });
+      const workspaceParam = String(params.get('workspace') ?? '');
       const agents = ctx.agents;
       const items: Array<{ sessionId: string; title: string; cwd: string; live: boolean }> = [];
       const seen = new Set<string>();
@@ -397,19 +471,33 @@ export function createTaskBridge(ctx: any, options: TaskBridgeOptions): TaskBrid
         const cwd = String(sess.header?.cwd ?? '');
         pushItem(sid, '', cwd, true);
       }
-      const ws = ctx.get('workspaceRegistry');
-      if (ws && typeof ws.list === 'function') {
-        for (const w of ws.list() as Array<Record<string, unknown>>) {
+      const ws = wsRegistry();
+      if (ws) {
+        for (const w of ws.list()) {
           const wpath = String(w.path ?? '');
-          const sids = Array.isArray(w.sessionIds) ? (w.sessionIds as unknown[]) : [];
+          const sids = Array.isArray(w.sessionIds) ? w.sessionIds : [];
           for (const sid of sids) pushItem(String(sid), '', wpath, Boolean(agents.get(sid)));
         }
       }
-      // 排序：该宠物当前文件夹的会话优先，其余保持原有顺序
-      const binding = await resolveBinding(petId);
-      const mine = binding.folder ? items.filter((i) => i.cwd === binding.folder) : [];
-      const restItems = binding.folder ? items.filter((i) => i.cwd !== binding.folder) : items;
-      return json(200, { ok: true, items: mine.concat(restItems) });
+      // 按工作区过滤：指定工作区 → 其成员会话；''（默认工作目录）→ 不属于任何工作区的会话
+      if (workspaceParam) {
+        let ids: Set<string> | null = null;
+        if (ws) {
+          const target = ws.get(workspaceParam);
+          if (target && Array.isArray(target.sessionIds)) {
+            ids = new Set(target.sessionIds.map(String));
+          }
+        }
+        return json(200, { ok: true, items: ids ? items.filter((i) => ids!.has(i.sessionId)) : [] });
+      }
+      const grouped = new Set<string>();
+      if (ws) {
+        for (const w of ws.list()) {
+          const sids = Array.isArray(w.sessionIds) ? w.sessionIds : [];
+          for (const sid of sids) grouped.add(String(sid));
+        }
+      }
+      return json(200, { ok: true, items: items.filter((i) => !grouped.has(i.sessionId)) });
     }
 
     if (rest === 'task/open') {
@@ -421,7 +509,11 @@ export function createTaskBridge(ctx: any, options: TaskBridgeOptions): TaskBrid
         return json(400, { ok: false, message: 'invalid JSON body' });
       }
       const bindSessionId = typeof parsed.sessionId === 'string' ? parsed.sessionId.trim() : '';
-      const folder = typeof parsed.folder === 'string' ? parsed.folder.trim() : '';
+      let workspaceId = typeof parsed.workspaceId === 'string' ? parsed.workspaceId.trim() : '';
+      // 兼容 v1：folder 传参 → 解析成工作区 id
+      if (!workspaceId && typeof parsed.folder === 'string' && parsed.folder.trim()) {
+        workspaceId = await resolveIdByPath(parsed.folder.trim());
+      }
       if (bindSessionId) {
         let agent = ctx.agents.get(bindSessionId);
         if (!agent) {
@@ -437,13 +529,15 @@ export function createTaskBridge(ctx: any, options: TaskBridgeOptions): TaskBrid
           }
         }
         setActive(petId, bindSessionId);
+        // 绑定既有会话：把该会话所属工作区一并粘性记住（保持"先工作区后对话"的导航一致）
         const cwd = String(agent?.session?.header?.cwd ?? '');
-        await writeState(petId, { folder: cwd, sessionId: bindSessionId });
+        const wid = await resolveIdByPath(cwd);
+        await writeState(petId, { workspaceId: wid, sessionId: bindSessionId });
         return json(200, { ok: true, sessionId: bindSessionId, created: false });
       }
-      // 新建（文件夹可空 = DSH 默认工作目录）
+      // 新建（workspaceId 空 = 默认工作目录）
       try {
-        const { sessionId } = await createSession(petId, folder, true);
+        const { sessionId } = await createSession(petId, workspaceId, true);
         return json(200, { ok: true, sessionId, created: true });
       } catch (e) {
         return json(500, { ok: false, message: e instanceof Error ? e.message : String(e) });

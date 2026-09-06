@@ -2,7 +2,8 @@
 //  - 与 chat.ts 同模式：数据获取 = 纯函数（fetch 封装），弹窗 = 两端共用同一份 DOM；
 //  - 任务走 host /dsh-pet-7340/task/* 端点（host 进程内直调 DSH Agent：followup 派发、
 //    会话粘性绑定、事件帧缓冲），本文件只负责「展示 + 输入 + 轮询排水」，不含任何业务判定；
-//  - 粘性绑定语义：folder + sessionId 由 host 落盘（task-state.json），本文件只读只提交；
+//  - 工作区驱动：先选 DSH 工作区（与 Web 侧边栏同一份，'' = 默认工作目录/未分组），
+//    再在该工作区内选对话或新建；绑定（workspaceId + sessionId）由 host 落盘 task-state.json；
 //  - 任务消息无长度上限（闲聊才限 2000 字）——textarea 不设 maxLength。
 
 /** 一条任务流帧（host 帧化后的最小展示词汇；两端共用同一契约） */
@@ -17,7 +18,16 @@ export type TaskStreamFrame =
   | { type: 'error'; seq: number; message: string }
   | { type: 'truncated'; seq: number };
 
-/** 会话下拉列表项（host /task/sessions 返回） */
+/** 工作区列表项（host /task/workspaces 返回；'' = 默认工作目录） */
+export interface TaskWorkspaceItem {
+  workspaceId: string;
+  /** 显示名（Web 同款标题；缺失时客户端按 path 回落） */
+  title: string;
+  /** 工作目录绝对路径（'' 仅见于默认目录条目） */
+  path: string;
+}
+
+/** 会话下拉列表项（host /task/sessions 返回，已按工作区过滤） */
 export interface TaskSessionItem {
   sessionId: string;
   /** 标题（host 尽力而为：无标题/降级时为空串） */
@@ -31,6 +41,8 @@ export interface TaskSessionItem {
 /** 当前粘性绑定（host /task/current 返回） */
 export interface TaskCurrentState {
   sessionId: string | null;
+  workspaceId: string;
+  /** 绑定工作区的路径（展示/提示用；工作区已删除时为空串） */
   folder: string;
 }
 
@@ -53,18 +65,44 @@ async function fetchJson(url: string, init?: RequestInit, timeoutMs = FETCH_TIME
   return raw;
 }
 
+/** GET /task/workspaces：工作区列表（首项恒为默认工作目录） */
+export async function fetchTaskWorkspaces(baseUrl: string, petId: string): Promise<TaskWorkspaceItem[]> {
+  const raw = (await fetchJson(baseUrl + '/task/workspaces?pet=' + encodeURIComponent(petId))) as Record<
+    string,
+    unknown
+  >;
+  const items = Array.isArray(raw.items) ? raw.items : [];
+  return items
+    .map((it) => {
+      const o = it as Record<string, unknown>;
+      return {
+        workspaceId: typeof o.workspaceId === 'string' ? o.workspaceId : '',
+        title: typeof o.title === 'string' ? o.title : '',
+        path: typeof o.path === 'string' ? o.path : '',
+      } as TaskWorkspaceItem;
+    })
+    .filter((it) => it.workspaceId !== '' || it.title.length > 0);
+}
+
 /** GET /task/current：当前粘性绑定 */
 export async function fetchTaskCurrent(baseUrl: string, petId: string): Promise<TaskCurrentState> {
   const raw = (await fetchJson(baseUrl + '/task/current?pet=' + encodeURIComponent(petId))) as Record<string, unknown>;
   return {
     sessionId: typeof raw.sessionId === 'string' && raw.sessionId ? raw.sessionId : null,
+    workspaceId: typeof raw.workspaceId === 'string' ? raw.workspaceId : '',
     folder: typeof raw.folder === 'string' ? raw.folder : '',
   };
 }
 
-/** GET /task/sessions：会话下拉列表 */
-export async function fetchTaskSessions(baseUrl: string, petId: string): Promise<TaskSessionItem[]> {
-  const raw = (await fetchJson(baseUrl + '/task/sessions?pet=' + encodeURIComponent(petId))) as Record<string, unknown>;
+/** GET /task/sessions?workspace=：某工作区内的会话列表 */
+export async function fetchTaskSessions(
+  baseUrl: string,
+  petId: string,
+  workspaceId: string,
+): Promise<TaskSessionItem[]> {
+  const url =
+    baseUrl + '/task/sessions?pet=' + encodeURIComponent(petId) + '&workspace=' + encodeURIComponent(workspaceId);
+  const raw = (await fetchJson(url)) as Record<string, unknown>;
   const items = Array.isArray(raw.items) ? raw.items : [];
   return items
     .map((it) => {
@@ -81,11 +119,11 @@ export async function fetchTaskSessions(baseUrl: string, petId: string): Promise
     .filter((it): it is TaskSessionItem => it !== null);
 }
 
-/** POST /task/open：绑定既有会话（sessionId）或新建（folder） */
+/** POST /task/open：绑定既有会话（sessionId）或在指定工作区新建（workspaceId） */
 export async function postTaskOpen(
   baseUrl: string,
   petId: string,
-  payload: { folder?: string; sessionId?: string },
+  payload: { workspaceId?: string; sessionId?: string },
 ): Promise<{ sessionId: string }> {
   const raw = (await fetchJson(baseUrl + '/task/open?pet=' + encodeURIComponent(petId), {
     method: 'POST',
@@ -133,7 +171,7 @@ export async function fetchTaskStream(baseUrl: string, petId: string): Promise<T
 }
 
 /** 弹窗样式 —— 两端注入同一份（与 CHAT_CSS 同模式；视觉对齐浏览器/桌面）。
- *  窗口形态：标题栏 + 会话/文件夹行 + 滚动消息区 + 底部输入。字体与气泡同款（上首软糖体）。 */
+ *  窗口形态：标题栏 + 工作区/会话行 + 滚动消息区 + 底部输入。字体与气泡同款（上首软糖体）。 */
 export const TASK_CSS = [
   '.dsh-pet-task{position:fixed;z-index:2147483002;width:340px;max-width:86vw;',
   'background:rgba(255,255,255,.985);border:1px solid rgba(0,0,0,.14);border-radius:12px;',
@@ -203,7 +241,7 @@ export interface TaskDialogMount {
 
 /**
  * 挂载任务对话窗（两端共用；位置为视口坐标，超出视口自动夹回）。
- * 行为：打开即任务模式（P1 无模式切换）；会话/文件夹粘性绑定（host 落盘）；
+ * 行为：打开即任务模式（P1 无模式切换）；工作区 → 会话两级选择，粘性绑定（host 落盘）；
  * 打开期间每 500ms 轮询 /task/stream 排水渲染；Esc 或点 × 关闭（不做点外关闭——窗口语义）。
  */
 export function mountTaskDialog(opts: {
@@ -239,7 +277,18 @@ export function mountTaskDialog(opts: {
   titleRow.appendChild(closeBtn);
   head.appendChild(titleRow);
 
-  // 会话行：下拉（含「＋ 新建对话」）
+  // 工作区行：先选工作区（同步 Web 已有工作区；'' = 默认工作目录/未分组）
+  const workspaceRow = document.createElement('div');
+  workspaceRow.className = 'dsh-pet-task-row';
+  const workspaceLabel = document.createElement('label');
+  workspaceLabel.textContent = '工作区';
+  const workspaceSelect = document.createElement('select');
+  workspaceSelect.title = '先选工作区，再选其中的对话';
+  workspaceRow.appendChild(workspaceLabel);
+  workspaceRow.appendChild(workspaceSelect);
+  head.appendChild(workspaceRow);
+
+  // 会话行：该工作区内的对话（含「＋ 新建对话」）
   const sessionRow = document.createElement('div');
   sessionRow.className = 'dsh-pet-task-row';
   const sessionLabel = document.createElement('label');
@@ -252,22 +301,6 @@ export function mountTaskDialog(opts: {
   sessionRow.appendChild(sessionLabel);
   sessionRow.appendChild(sessionSelect);
   head.appendChild(sessionRow);
-
-  // 文件夹行：输入 + 「换」（切换 = 在新文件夹新建会话并粘性绑定）
-  const folderRow = document.createElement('div');
-  folderRow.className = 'dsh-pet-task-row';
-  const folderLabel = document.createElement('label');
-  folderLabel.textContent = '文件夹';
-  const folderInput = document.createElement('input');
-  folderInput.type = 'text';
-  folderInput.placeholder = '留空 = DSH 默认工作目录';
-  const folderApply = document.createElement('button');
-  folderApply.textContent = '换';
-  folderApply.title = '在此文件夹新建会话并绑定';
-  folderRow.appendChild(folderLabel);
-  folderRow.appendChild(folderInput);
-  folderRow.appendChild(folderApply);
-  head.appendChild(folderRow);
 
   // ---- 消息区 ----
   const msgs = document.createElement('div');
@@ -318,7 +351,10 @@ export function mountTaskDialog(opts: {
   let currentAssistantEl: HTMLElement | null = null;
   let toolEls = new Map<string, HTMLElement>();
   let pollTimer: ReturnType<typeof setInterval> | null = null;
+  let workspaces: TaskWorkspaceItem[] = [];
   let sessions: TaskSessionItem[] = [];
+  let currentWorkspaceId = '';
+  let currentBoundSessionId: string | null = null;
 
   const showError = (text: string): void => {
     errline.textContent = text;
@@ -397,7 +433,20 @@ export function mountTaskDialog(opts: {
     sendBtn.disabled = sending || running;
   };
 
-  // 会话下拉重建（保持当前选中；会话列表失败静默——下拉最少可用「新建」）
+  // 工作区下拉重建（标题优先，无标题用路径；保持当前选中）
+  const rebuildWorkspaceSelect = (): void => {
+    workspaceSelect.innerHTML = '';
+    for (const w of workspaces) {
+      const opt = document.createElement('option');
+      opt.value = w.workspaceId;
+      opt.textContent = w.title || w.path || w.workspaceId || '默认工作目录';
+      if (w.path) opt.title = w.path;
+      workspaceSelect.appendChild(opt);
+    }
+    workspaceSelect.value = currentWorkspaceId;
+  };
+
+  // 会话下拉重建（保持当前选中；列表失败静默——下拉最少可用「新建」）
   const rebuildSessionSelect = (): void => {
     const current = sessionSelect.value;
     sessionSelect.innerHTML = '';
@@ -411,6 +460,14 @@ export function mountTaskDialog(opts: {
     if (current) sessionSelect.value = current;
   };
 
+  // 绑定会话若在当前工作区列表内则选中，否则停在「＋ 新建对话」
+  const syncSelectToBound = (): void => {
+    sessionSelect.value =
+      currentBoundSessionId && sessions.some((s) => s.sessionId === currentBoundSessionId)
+        ? currentBoundSessionId
+        : '__new';
+  };
+
   // 清空消息区（切换会话/新建后）
   const resetMessages = (): void => {
     msgs.innerHTML = '';
@@ -420,6 +477,20 @@ export function mountTaskDialog(opts: {
     toolEls = new Map();
     running = false;
     updateRunUi();
+  };
+
+  // 拉取某工作区内的会话列表
+  const refreshSessions = (): Promise<void> => {
+    return fetchTaskSessions(baseUrl, petId, currentWorkspaceId)
+      .then((items) => {
+        sessions = items;
+        rebuildSessionSelect();
+        syncSelectToBound();
+      })
+      .catch(() => {
+        sessions = [];
+        rebuildSessionSelect();
+      });
   };
 
   // 轮询排水：/task/stream 拉帧缓冲，逐帧处理；失败静默重试（下一轮）；in-flight 防护防堆积
@@ -442,13 +513,6 @@ export function mountTaskDialog(opts: {
       .finally(() => {
         polling = false;
       });
-  };
-
-  let currentBoundSessionId: string | null = null;
-  const syncSelectToBound = (): void => {
-    if (currentBoundSessionId && sessions.some((s) => s.sessionId === currentBoundSessionId)) {
-      sessionSelect.value = currentBoundSessionId;
-    }
   };
 
   // 绑定变更后的统一刷新：清消息 + 重拉当前绑定
@@ -490,13 +554,12 @@ export function mountTaskDialog(opts: {
     });
   };
 
-  // 新建会话（当前文件夹输入值）
+  // 在当前工作区新建会话
   const doNewSession = (): void => {
     if (closed || sending) return;
     sending = true;
     clearError();
-    const folder = folderInput.value.trim();
-    postTaskOpen(baseUrl, petId, folder ? { folder } : {})
+    postTaskOpen(baseUrl, petId, { workspaceId: currentWorkspaceId })
       .then(({ sessionId }) => {
         currentBoundSessionId = sessionId;
         refreshSessions().finally(() => {
@@ -525,24 +588,13 @@ export function mountTaskDialog(opts: {
       })
       .catch((e) => {
         showError('切换会话失败：' + String(e && e.message ? e.message : e));
-        rebuildSessionSelect();
+        refreshSessions().finally(() => {
+          syncSelectToBound();
+        });
       })
       .finally(() => {
         sending = false;
         updateRunUi();
-      });
-  };
-
-  // 拉取会话列表（打开时 + 新建后）
-  const refreshSessions = (): Promise<void> => {
-    return fetchTaskSessions(baseUrl, petId)
-      .then((items) => {
-        sessions = items;
-        rebuildSessionSelect();
-        syncSelectToBound();
-      })
-      .catch(() => {
-        /* 列表失败静默：仅「新建」可用 */
       });
   };
 
@@ -556,12 +608,16 @@ export function mountTaskDialog(opts: {
   });
   sendBtn.addEventListener('click', doSend);
   cancelBtn.addEventListener('click', doCancel);
+  workspaceSelect.addEventListener('change', () => {
+    // 换工作区：只切换会话列表过滤（不自动新建/绑定——由用户接着选对话或新建）
+    currentWorkspaceId = workspaceSelect.value;
+    refreshSessions();
+  });
   sessionSelect.addEventListener('change', () => {
     const v = sessionSelect.value;
     if (v === '__new') doNewSession();
     else doBindSession(v);
   });
-  folderApply.addEventListener('click', doNewSession);
   document.addEventListener('keydown', onDocKeyDown, true);
 
   function onDocKeyDown(e: KeyboardEvent): void {
@@ -581,23 +637,40 @@ export function mountTaskDialog(opts: {
     if (onClose) onClose();
   }
 
-  // ---- 启动：恢复粘性绑定 → 拉会话列表 → 开始轮询 ----
-  fetchTaskCurrent(baseUrl, petId)
-    .then((state) => {
-      if (closed) return;
-      currentBoundSessionId = state.sessionId;
-      folderInput.value = state.folder || '';
-    })
-    .catch(() => {
-      /* 绑定读取失败静默：仍可用（发送时会由 host 兜底建会话） */
-    })
-    .finally(() => {
-      if (closed) return;
-      refreshSessions().finally(() => {
-        if (!closed) pollTimer = setInterval(poll, POLL_INTERVAL_MS);
+  // ---- 启动：恢复粘性绑定 → 拉工作区 → 拉该工作区会话 → 开始轮询 ----
+  const boot = (): void => {
+    fetchTaskCurrent(baseUrl, petId)
+      .then((state) => {
+        if (closed) return;
+        currentBoundSessionId = state.sessionId;
+        currentWorkspaceId = state.workspaceId;
+      })
+      .catch(() => {
+        /* 绑定读取失败静默：仍可用（发送时会由 host 兜底建会话） */
+      })
+      .finally(() => {
+        if (closed) return;
+        fetchTaskWorkspaces(baseUrl, petId)
+          .then((items) => {
+            if (closed) return;
+            workspaces = items;
+            rebuildWorkspaceSelect();
+            // 绑定工作区若已不存在（被删），回落默认目录
+            if (!items.some((w) => w.workspaceId === currentWorkspaceId)) currentWorkspaceId = '';
+            workspaceSelect.value = currentWorkspaceId;
+            return refreshSessions();
+          })
+          .catch(() => {
+            workspaces = [{ workspaceId: '', title: '默认工作目录', path: '' }];
+            rebuildWorkspaceSelect();
+          })
+          .finally(() => {
+            if (!closed) pollTimer = setInterval(poll, POLL_INTERVAL_MS);
+          });
       });
-    });
+  };
 
+  boot();
   updateRunUi();
   input.focus();
   return { el: root, close };
