@@ -480,6 +480,7 @@ export function createTaskBridge(ctx: any, options: TaskBridgeOptions): TaskBrid
         }
       }
       // 按工作区过滤：指定工作区 → 其成员会话；''（默认工作目录）→ 不属于任何工作区的会话
+      let filtered: Array<{ sessionId: string; title: string; cwd: string; live: boolean }>;
       if (workspaceParam) {
         let ids: Set<string> | null = null;
         if (ws) {
@@ -488,16 +489,45 @@ export function createTaskBridge(ctx: any, options: TaskBridgeOptions): TaskBrid
             ids = new Set(target.sessionIds.map(String));
           }
         }
-        return json(200, { ok: true, items: ids ? items.filter((i) => ids!.has(i.sessionId)) : [] });
+        filtered = ids ? items.filter((i) => ids!.has(i.sessionId)) : [];
+      } else {
+        const grouped = new Set<string>();
+        if (ws) {
+          for (const w of ws.list()) {
+            const sids = Array.isArray(w.sessionIds) ? w.sessionIds : [];
+            for (const sid of sids) grouped.add(String(sid));
+          }
+        }
+        filtered = items.filter((i) => !grouped.has(i.sessionId));
       }
-      const grouped = new Set<string>();
-      if (ws) {
-        for (const w of ws.list()) {
-          const sids = Array.isArray(w.sessionIds) ? w.sessionIds : [];
-          for (const sid of sids) grouped.add(String(sid));
+      // 标题：经 sessionQuery 批量折叠（与 Web 侧边栏同款标题）；缺失/失败保持空串（客户端回落显示）
+      if (sq && typeof sq.readTitleSnapshots === 'function' && filtered.length > 0) {
+        try {
+          const results = (await sq.readTitleSnapshots(filtered.map((i) => i.sessionId))) as Array<
+            Record<string, unknown>
+          >;
+          const byId = new Map<string, string>();
+          for (const r of results) {
+            const sid = String(r.sessionId ?? '');
+            if (!sid || byId.has(sid)) continue;
+            if (r.status === 'fulfilled') {
+              const value = (r.value ?? {}) as Record<string, unknown>;
+              const snapshot = (value.title ?? {}) as Record<string, unknown>;
+              const text = typeof snapshot.title === 'string' ? snapshot.title : '';
+              byId.set(sid, text);
+            } else {
+              byId.set(sid, '');
+            }
+          }
+          for (const i of filtered) {
+            const t = byId.get(i.sessionId);
+            if (typeof t === 'string' && t.length > 0) i.title = t;
+          }
+        } catch (e) {
+          console.warn('dsh-pet: 会话标题批量折叠失败：' + (e instanceof Error ? e.message : String(e)));
         }
       }
-      return json(200, { ok: true, items: items.filter((i) => !grouped.has(i.sessionId)) });
+      return json(200, { ok: true, items: filtered });
     }
 
     if (rest === 'task/open') {

@@ -57,6 +57,12 @@ export interface TaskStreamState {
 const FETCH_TIMEOUT_MS = 10_000; // 单次请求超时（轮询失败静默重试；发送/取消略长）
 const POLL_INTERVAL_MS = 500; // 排水轮询周期（与插件既有轮询族一致）
 
+/** 无标题时的简短标识：剥掉 session-/pet- 前缀取 8 位（避免整串会话 id 刷屏） */
+function shortSessionLabel(sessionId: string): string {
+  const bare = sessionId.replace(/^(session|pet)-/, '');
+  return bare.slice(0, 8) || sessionId;
+}
+
 /** 带超时的 fetch JSON（网络/解析失败显式抛错，调用方决定处理方式，绝不静默伪造） */
 async function fetchJson(url: string, init?: RequestInit, timeoutMs = FETCH_TIMEOUT_MS): Promise<unknown> {
   const res = await fetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs) });
@@ -454,7 +460,7 @@ export function mountTaskDialog(opts: {
     for (const s of sessions) {
       const opt = document.createElement('option');
       opt.value = s.sessionId;
-      opt.textContent = (s.title || s.sessionId) + (s.live ? '' : '（离线）');
+      opt.textContent = (s.title || '未命名 · ' + shortSessionLabel(s.sessionId)) + (s.live ? '' : '（离线）');
       sessionSelect.appendChild(opt);
     }
     if (current) sessionSelect.value = current;
