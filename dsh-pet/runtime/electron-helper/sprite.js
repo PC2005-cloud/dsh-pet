@@ -222,8 +222,11 @@ class PetSprite {
     this.el.remove();
   }
 
-  // 目标包围盒左上角（工作区坐标）→ 移动窗口：窗口 = sprite + 四周外扩余量
-  // （sprite 钉在窗口 (margin.l, margin.t)，气泡/弹窗显示在余量里）
+  // 目标包围盒左上角（视口相对坐标）→ 移动窗口：窗口 = sprite + 四周外扩余量
+  // （sprite 钉在窗口 (margin.l, margin.t)，气泡/弹窗显示在余量里）。
+  // setContentBounds 要**屏幕**坐标，pos 是视口（桌面外接矩形）相对坐标——加上 VIEW.x/y
+  // 才是屏幕坐标：单显示器主屏在原点时 VIEW.x/y=0，与旧行为逐位一致；左侧/上方有扩展屏
+  // （原点非 0）时也不偏位（#43）。
   sendBounds(px, py) {
     this.pos = { x: Math.round(px), y: Math.round(py) };
     window.__dshPetDebug.dragPos = { x: this.pos.x, y: this.pos.y };
@@ -233,8 +236,8 @@ class PetSprite {
       // vx/vy 带当前速度——飞行中实时值、静止/拖拽 = 0，避免落地后残留上次飞行速度干扰碰撞动量。
       const fly = this.throwState;
       window.petBridge.setBounds(
-        this.pos.x - this.margin.l,
-        this.pos.y - this.margin.t,
+        this.pos.x - this.margin.l + VIEW.x,
+        this.pos.y - this.margin.t + VIEW.y,
         this.size + this.margin.l + this.margin.r,
         this.winH + this.margin.t + this.margin.b,
         this.pos.x, // 包围盒左上角（碰撞站场用：窗口坐标 ≠ 包围盒坐标）
@@ -812,9 +815,9 @@ class PetSprite {
     }
     const r = this.hitRect;
     // forwarded 事件坐标以窗口为原点（与页坐标一致）；转换到 sprite 坐标需扣减窗口余量；
-    // 异常时退回屏幕坐标 - 窗口位置推导（hitRect/pos 均为 sprite 坐标）
-    const wx = Number.isFinite(e.clientX) ? e.clientX : e.screenX - (this.pos.x - this.margin.l);
-    const wy = Number.isFinite(e.clientY) ? e.clientY : e.screenY - (this.pos.y - this.margin.t);
+    // 异常时退回屏幕坐标 − 窗口屏幕位置推导（hitRect/pos 均为 sprite 坐标）
+    const wx = Number.isFinite(e.clientX) ? e.clientX : e.screenX - (this.pos.x + VIEW.x - this.margin.l);
+    const wy = Number.isFinite(e.clientY) ? e.clientY : e.screenY - (this.pos.y + VIEW.y - this.margin.t);
     const px = wx - this.margin.l;
     const py = wy - this.margin.t;
     this.setInteractive(px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h);
@@ -844,8 +847,10 @@ class PetSprite {
   // 即可完整显示——**窗口和宠物零移动**，不存在跨进程位移竞态，也就不会瞬移闪帧。
   // 退化（可视区过小/窗口整体出屏，光标也点不到宠物）返回 null → 调用方按窗口视口兜底。
   visibleClampRect() {
-    const winX = this.pos.x - this.margin.l;
-    const winY = this.pos.y - this.margin.t;
+    // pos 是视口相对坐标，窗口屏幕位置 = pos + VIEW 原点 − 外扩余量（见 sendBounds）；
+    // 比较双方都用屏幕坐标（坐标系不混），返回的夹取矩形仍是窗口局部坐标
+    const winX = this.pos.x + VIEW.x - this.margin.l;
+    const winY = this.pos.y + VIEW.y - this.margin.t;
     const winW = this.size + this.margin.l + this.margin.r;
     const winH = this.winH + this.margin.t + this.margin.b;
     const vx0 = Math.max(VIEW.x, winX);

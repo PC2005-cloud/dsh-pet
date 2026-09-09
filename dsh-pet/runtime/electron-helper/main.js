@@ -126,8 +126,28 @@ function petWindowSize(size) {
   return { width: Math.round(size) + m * 2, height: Math.round(height + bottomPad) + m * 2 };
 }
 
+/**
+ * 全部显示器工作区的外接矩形（"整个桌面"的可用区域并集）。
+ * 注入给渲染端作为视口 VIEW —— 多显示器时漫游/抛掷/角落定位/菜单夹取全部跨屏
+ * （#43：宠物可以被甩/拖到其它显示器）；单显示器时它就是主屏工作区，行为与以前完全一致。
+ */
+function deskWorkArea() {
+  let x0 = Infinity;
+  let y0 = Infinity;
+  let x1 = -Infinity;
+  let y1 = -Infinity;
+  for (const d of screen.getAllDisplays()) {
+    const a = d.workArea;
+    x0 = Math.min(x0, a.x);
+    y0 = Math.min(y0, a.y);
+    x1 = Math.max(x1, a.x + a.width);
+    y1 = Math.max(y1, a.y + a.height);
+  }
+  return { x: x0, y: y0, width: x1 - x0, height: y1 - y0 };
+}
+
 function createPetWindows() {
-  const area = screen.getPrimaryDisplay().workArea;
+  const area = deskWorkArea();
   const configUrl = process.env.DSH_PET_CONFIG_URL || 'http://127.0.0.1:3080/dsh-pet-7340/config';
   const pets = petsFromEnv();
   for (const pet of pets) {
