@@ -17,8 +17,12 @@ const CONFIG = {
 // bridge 模式（DSH_PET_BRIDGE=1）：请求走自定义 scheme，经 Electron 主进程转宿主管道——
 // 绕开 DSH Desktop 2.0.3+ 的浏览器访问闸门（只放行带令牌的请求，插件自拉进程的裸 HTTP 全 403）
 const BRIDGE = params.get('bridge') === '1';
-// 视口 = 主屏工作区（窗口只是宠物的一块局部画布）：漫游边界/角落定位/位置比例换算用它
+// 视口 = 主屏工作区（窗口只是宠物的一块局部画布）：漫游边界/角落定位/位置比例换算用它。
+// x/y = 工作区左上角（多显示器时原点非 0）——visibleClampRect 计算「窗口 ∩ 工作区」需要它；
+// 缺省 0（单显示器原点即 0）。注意：缺失会令夹取矩形变 NaN，菜单将飞到窗口左上角（#41 回归）。
 const VIEW = {
+  x: Number(params.get('workAreaX') || 0),
+  y: Number(params.get('workAreaY') || 0),
   w: Number(params.get('workAreaW') || (window.screen && window.screen.availWidth) || 1920),
   h: Number(params.get('workAreaH') || (window.screen && window.screen.availHeight) || 1080),
 };

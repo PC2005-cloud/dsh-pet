@@ -97,7 +97,18 @@ export const MENU_CSS = [
   '.dsh-pet-menu,.dsh-pet-menu *{box-sizing:border-box}',
   '.dsh-pet-menu-column{position:absolute;min-width:150px;max-width:240px;padding:4px;',
   'background:rgba(255,255,255,.98);border:1px solid rgba(0,0,0,.12);border-radius:8px;',
-  'box-shadow:0 8px 28px rgba(0,0,0,.2);max-height:min(62vh,460px);overflow-y:auto}',
+  'box-shadow:0 8px 28px rgba(0,0,0,.2);max-height:min(62vh,460px);overflow-y:auto;',
+  // 自定义滚动条：细圆角半透明条（Chromium 系 Chrome/Edge/Electron 走 ::-webkit-scrollbar；
+  // Firefox 走 scrollbar-width/scrollbar-color）。thumb 用 border+background-clip 内缩 2px 留白，
+  // 与菜单的圆角白底协调；hover 加深并与 item:hover 的蓝呼应。track 透明不抢视觉。
+  'scrollbar-width:thin;scrollbar-color:rgba(0,0,0,.22) transparent}',
+  '.dsh-pet-menu-column::-webkit-scrollbar{width:8px;height:8px}',
+  '.dsh-pet-menu-column::-webkit-scrollbar-track{background:transparent}',
+  '.dsh-pet-menu-column::-webkit-scrollbar-thumb{background:rgba(0,0,0,.16);border-radius:4px;',
+  'border:2px solid transparent;background-clip:content-box}',
+  '.dsh-pet-menu-column::-webkit-scrollbar-thumb:hover{background:rgba(43,99,255,.4);',
+  'border:2px solid transparent;background-clip:content-box}',
+  '.dsh-pet-menu-column::-webkit-scrollbar-corner{background:transparent}',
   '.dsh-pet-menu-item{position:relative;display:flex;align-items:center;justify-content:space-between;',
   'gap:14px;padding:5px 12px;border-radius:6px;white-space:nowrap;cursor:default}',
   '.dsh-pet-menu-item:hover{background:rgba(43,99,255,.14)}',
@@ -125,6 +136,10 @@ function isBranchNode(n: MenuNode): n is MenuBranch {
  * 面板按触发项屏幕位置贴边定位（右/下边缘自动翻转夹取）。
  * 级联：悬停分支切换/展开子面板；指针整体离开菜单树（root mouseleave）才关闭整棵菜单；
  * 点击项回调后自动关闭、点击菜单外或按 Esc 关闭；超高列表面板内独立滚动。
+ *
+ * clamp（可选，#41）：菜单允许占用的矩形（视口局部坐标，默认整个视口）。
+ * 桌面模式传「窗口 ∩ 工作区」：宠物贴屏幕底/右时窗口外扩余量伸出屏幕，菜单走进
+ * 伸出的部分会被 OS 裁掉——约束到该矩形内即可完整显示，**窗口/宠物零移动零闪帧**。
  */
 export function mountContextMenu(opts: {
   tree: MenuNode[];
@@ -133,8 +148,16 @@ export function mountContextMenu(opts: {
   onAction: (leaf: MenuLeaf) => void;
   /** 菜单被关闭（点项/点外/Esc）后的通知：挂载方据此复位自身状态（如桌面可交互标记） */
   onClose?: () => void;
+  /** 菜单允许占用的矩形（视口局部坐标）；缺省 = 整个视口（浏览器既有行为） */
+  clamp?: { x: number; y: number; w: number; h: number };
 }): ContextMenuMount {
-  const { tree, x, y, onAction, onClose } = opts;
+  const { tree, x, y, onAction, onClose, clamp } = opts;
+  // 夹取基准：缺省整个视口；桌面传入「窗口 ∩ 工作区」后各级面板都只在这个矩形内落位/翻转。
+  // 防御：clamp 含非有限值（如坐标来源缺失变成 NaN）时回落整个视口——否则面板会落到 (0,0)
+  const c =
+    clamp && Number.isFinite(clamp.x + clamp.y + clamp.w + clamp.h)
+      ? clamp
+      : { x: 0, y: 0, w: window.innerWidth, h: window.innerHeight };
   const root = document.createElement('div');
   root.className = 'dsh-pet-menu';
   root.style.left = '0px';
@@ -158,19 +181,17 @@ export function mountContextMenu(opts: {
     }
   };
 
-  /** 把面板显示在触发项旁边：右缘展开，贴右/下边缘自动翻转夹取（视口坐标） */
+  /** 把面板显示在触发项旁边：右缘展开，贴右/下边缘自动翻转夹取（在 clamp 矩形内） */
   const showPanel = (panel: HTMLElement, item: HTMLElement): void => {
     const rect = item.getBoundingClientRect();
-    const vw = window.innerWidth;
-    const vh = window.innerHeight;
     panel.style.left = '';
     panel.style.top = '';
     panel.style.display = 'block';
     let left = rect.right + 4;
-    if (left + panel.offsetWidth > vw - 4) left = rect.left - panel.offsetWidth - 4;
-    left = Math.max(4, left);
+    if (left + panel.offsetWidth > c.x + c.w - 4) left = rect.left - panel.offsetWidth - 4;
+    left = Math.max(c.x + 4, left);
     let top = rect.top;
-    if (top + panel.offsetHeight > vh - 4) top = Math.max(4, vh - 4 - panel.offsetHeight);
+    if (top + panel.offsetHeight > c.y + c.h - 4) top = Math.max(c.y + 4, c.y + c.h - 4 - panel.offsetHeight);
     panel.style.left = left + 'px';
     panel.style.top = top + 'px';
   };
@@ -181,6 +202,8 @@ export function mountContextMenu(opts: {
     const panel = document.createElement('div');
     panel.className = 'dsh-pet-menu-column';
     panel.style.display = 'none';
+    // 桌面 clamp：把列高封顶到可视矩形内（否则 62vh 相对的是窗口高度，可视区更小时仍会溢出被裁）
+    if (clamp) panel.style.maxHeight = Math.min(460, Math.max(120, c.h - 16)) + 'px';
     root.appendChild(panel);
     for (const node of nodes) {
       const item = document.createElement('div');
@@ -225,13 +248,13 @@ export function mountContextMenu(opts: {
   // 关键：把菜单根容器真正挂进文档（v1→v2 重写时漏掉的挂载——不 append 则一切"静默无显示"）
   document.body.appendChild(root);
 
-  // 根面板定位：按 (x,y) 下落，超出视口时夹回（与子面板同一套逻辑但无触发项）
+  // 根面板定位：按 (x,y) 下落，超出 clamp 矩形时夹回（与子面板同一套逻辑但无触发项）
   rootPanel.style.left = '';
   rootPanel.style.top = '';
   const rw = rootPanel.offsetWidth;
   const rh = rootPanel.offsetHeight;
-  rootPanel.style.left = Math.max(4, Math.min(x, window.innerWidth - rw - 4)) + 'px';
-  rootPanel.style.top = Math.max(4, Math.min(y, window.innerHeight - rh - 4)) + 'px';
+  rootPanel.style.left = Math.max(c.x + 4, Math.min(x, c.x + c.w - rw - 4)) + 'px';
+  rootPanel.style.top = Math.max(c.y + 4, Math.min(y, c.y + c.h - rh - 4)) + 'px';
 
   // 指针整体离开菜单树（离开全部面板的并集）→ 200ms 后关闭整棵菜单；
   // 期间任何指针移动（mouseover 冒泡到 root）都视为仍在菜单内，取消关闭

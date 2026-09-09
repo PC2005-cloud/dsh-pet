@@ -180,6 +180,8 @@ function createPetWindows() {
           petIndex: String(pet.index),
           workAreaW: String(area.width),
           workAreaH: String(area.height),
+          workAreaX: String(area.x),
+          workAreaY: String(area.y),
         },
       })
       .catch((error) => {

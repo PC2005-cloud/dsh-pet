@@ -88,10 +88,14 @@ export interface ChatDialogMount {
   close: () => void;
 }
 
-/** 挂载一个对话输入弹窗（两端共用；位置为视口坐标，超出视口自动夹回）。
+/** 挂载一个对话输入弹窗（两端共用；位置为视口坐标，超出 clamp 矩形自动夹回）。
  *  最简形态：只有一条输入框（无标题/无按钮），回车即发送 → 弹窗关闭 →
  *  onReply(reply) 交给调用方走碎碎念同款显示（说话动画 + 气泡）；
- *  Esc / 点弹窗外关闭；生成失败则留在弹窗内显式提示，不伪造回复。 */
+ *  Esc / 点弹窗外关闭；生成失败则留在弹窗内显式提示，不伪造回复。
+ *
+ *  clamp（可选，#41）：弹窗允许占用的矩形（视口局部坐标，默认整个视口）。
+ *  桌面模式传「窗口 ∩ 工作区」——宠物贴屏幕底/右时窗口外扩余量伸出屏幕，
+ *  约束到该矩形内即可完整显示，**窗口/宠物零移动零闪帧**。 */
 export function mountChatDialog(opts: {
   petId: string;
   /** 端点基址：浏览器默认相对 /dsh-pet-7340/chat；桌面传绝对 URL（file:// 页面需绝对） */
@@ -101,11 +105,17 @@ export function mountChatDialog(opts: {
   /** 发送成功后的回复（弹窗此时已关闭）；调用方负责播动画 + 气泡展示 */
   onReply?: (reply: string) => void;
   onClose?: () => void;
+  /** 弹窗允许占用的矩形（视口局部坐标）；缺省 = 整个视口 */
+  clamp?: { x: number; y: number; w: number; h: number };
 }): ChatDialogMount {
   injectChatCss();
-  const { petId, x, y, onReply, onClose } = opts;
+  const { petId, x, y, onReply, onClose, clamp } = opts;
   const baseUrl = opts.baseUrl ?? '/dsh-pet-7340/chat';
   const withPet = baseUrl + '?pet=' + encodeURIComponent(petId);
+  const c =
+    clamp && Number.isFinite(clamp.x + clamp.y + clamp.w + clamp.h)
+      ? clamp
+      : { x: 0, y: 0, w: window.innerWidth, h: window.innerHeight };
 
   const root = document.createElement('div');
   root.className = 'dsh-pet-chat';
@@ -142,11 +152,11 @@ export function mountChatDialog(opts: {
   root.appendChild(err);
   document.body.appendChild(root);
 
-  // 位置：以 (x,y) 落点，超出视口夹回
+  // 位置：以 (x,y) 落点，超出 clamp 矩形夹回
   resizeInput(); // append 后再量一次（此时样式已生效）
   const rr = root.getBoundingClientRect();
-  root.style.left = Math.max(4, Math.min(x, window.innerWidth - rr.width - 4)) + 'px';
-  root.style.top = Math.max(4, Math.min(y, window.innerHeight - rr.height - 4)) + 'px';
+  root.style.left = Math.max(c.x + 4, Math.min(x, c.x + c.w - rr.width - 4)) + 'px';
+  root.style.top = Math.max(c.y + 4, Math.min(y, c.y + c.h - rr.height - 4)) + 'px';
 
   let closed = false;
   let sending = false;

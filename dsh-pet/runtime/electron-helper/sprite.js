@@ -839,6 +839,25 @@ class PetSprite {
   }
 
   // ---- 右键菜单（统一自绘组件：树+渲染都来自 shared-core 的同一份 menu 模块） ----
+  // 菜单/弹窗可视矩形（窗口局部坐标）= 窗口 ∩ 工作区（#41）：宠物贴屏幕底/右时窗口外扩余量
+  // 伸出屏幕，窗口内固定定位的菜单/弹窗会走进被屏幕裁掉的部分。把菜单/弹窗约束到这个矩形内
+  // 即可完整显示——**窗口和宠物零移动**，不存在跨进程位移竞态，也就不会瞬移闪帧。
+  // 退化（可视区过小/窗口整体出屏，光标也点不到宠物）返回 null → 调用方按窗口视口兜底。
+  visibleClampRect() {
+    const winX = this.pos.x - this.margin.l;
+    const winY = this.pos.y - this.margin.t;
+    const winW = this.size + this.margin.l + this.margin.r;
+    const winH = this.winH + this.margin.t + this.margin.b;
+    const vx0 = Math.max(VIEW.x, winX);
+    const vy0 = Math.max(VIEW.y, winY);
+    const vx1 = Math.min(VIEW.x + VIEW.w, winX + winW);
+    const vy1 = Math.min(VIEW.y + VIEW.h, winY + winH);
+    const w = vx1 - vx0;
+    const h = vy1 - vy0;
+    if (w < 40 || h < 40) return null;
+    return { x: vx0 - winX, y: vy0 - winY, w, h };
+  }
+
   onContextMenu(e) {
     const d = this.dragState;
     if (d.active || d.dragging || this.justDragged || this.menuOpen) return;
@@ -863,6 +882,8 @@ class PetSprite {
       tree,
       x: e.clientX,
       y: e.clientY,
+      // 只允许在「窗口 ∩ 工作区」内显示：宠物贴边时外扩余量伸出屏幕，菜单走进那里会被 OS 裁掉（#41）
+      clamp: this.visibleClampRect(),
       onAction: (leaf) => this.onMenuAction(leaf),
       // 菜单被点外/Esc 关闭（非菜单项路径）：同样复位可交互标记，恢复命中区判定
       onClose: () => {
@@ -973,6 +994,8 @@ class PetSprite {
       baseUrl: BASE + '/chat',
       x: Math.max(4, this.hit.getBoundingClientRect().right + 6),
       y: Math.max(4, this.hit.getBoundingClientRect().top + 6),
+      // 弹窗同菜单：只允许在「窗口 ∩ 工作区」内显示，贴边时不被屏幕裁掉（#41）
+      clamp: this.visibleClampRect(),
       onReply: (reply) => {
         console.info('[dsh-pet] 对话回复 pet=' + this.pet.id + '「' + reply + '」');
         this.showWhisper(reply); // 复用碎碎念链路：随机说话动画 + 气泡 10s 消失
