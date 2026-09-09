@@ -1,5 +1,6 @@
 // preload 桥：只暴露窗口控制原语——
 //   - setBounds：宠物窗口逐帧跟随（renderer 上报包围盒的屏幕坐标，主进程 setContentBounds）。
+//   - getCursorPoint：主进程 screen.getCursorScreenPoint（DIP，与 setContentBounds 同坐标系）。
 //     x/y/width/height = 窗口内容区坐标（用于移动窗口）；boxX/boxY = 宠物包围盒左上角
 //     （工作区坐标）——碰撞站场必须用包围盒坐标，不能用窗口坐标（窗口 = 包围盒 + 四周外扩 margin，
 //     差半只宠物宽，会让跨窗碰撞检测整体错位）。
@@ -17,6 +18,10 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('petBridge', {
   setBounds(x, y, width, height, boxX, boxY, size, bottomPad, vx, vy) {
     ipcRenderer.send('pet:set-bounds', { x, y, width, height, boxX, boxY, size, bottomPad, vx, vy });
+  },
+  // 与 setContentBounds 同一套 DIP；仅真实指针使用（冒烟派发的 PointerEvent 走 e.screenX）
+  getCursorPoint() {
+    return ipcRenderer.sendSync('pet:get-cursor');
   },
   setInteractive(interactive) {
     ipcRenderer.send('pet:set-interactive', !!interactive);

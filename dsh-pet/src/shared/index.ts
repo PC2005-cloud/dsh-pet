@@ -17,6 +17,7 @@ export * from './notify';
 export * from './menu'; // 统一右键菜单（本目录唯一的 DOM 例外：树=纯函数，渲染=两端共用同一份）
 export * from './chat'; // 对话弹窗（menu 之后第二个 DOM 例外：数据=纯函数，弹窗=两端共用同一份）
 export * from './physics'; // 拖拽抛掷物理（弹簧跟手 + 甩抛 + 重力反弹）
+export * from './displays'; // 多显示器几何（窗口落单屏 / 抛掷按真实工作区反弹）
 export * from './score'; // 点击积分（速度/大小 → 分数，纯逻辑）
 export * from './score-popup'; // 点击积分弹窗 + 粒子爆发（menu/chat 之后第三个 DOM 例外：渲染=两端共用同一份）
 export * from './work-status'; // 工作状态联动（DSH 会话事件 → 档位动画/气泡：档位常量 + reducer + 文案，浏览器消费）

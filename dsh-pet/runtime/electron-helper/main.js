@@ -146,8 +146,69 @@ function deskWorkArea() {
   return { x: x0, y: y0, width: x1 - x0, height: y1 - y0 };
 }
 
+/** 每块屏的 bounds + workArea（DIP），给渲染端做单屏落窗 / 按真实工作区抛掷 */
+function deskDisplays() {
+  return screen.getAllDisplays().map((d) => {
+    const b = d.bounds;
+    const a = d.workArea;
+    return {
+      x: b.x,
+      y: b.y,
+      width: b.width,
+      height: b.height,
+      workX: a.x,
+      workY: a.y,
+      workW: a.width,
+      workH: a.height,
+    };
+  });
+}
+
+/**
+ * 窗口必须整块落在「中心所在屏」的 bounds 内。
+ * 透明分层窗骑在屏缝上时，Windows DWM 会在两块屏同时合成，拖过缝 / 副屏抛甩就会分身闪烁。
+ */
+function fitBoundsToNearestDisplay(bounds) {
+  const displays = deskDisplays();
+  if (!displays.length) return bounds;
+  const cx = bounds.x + bounds.width / 2;
+  const cy = bounds.y + bounds.height / 2;
+  let nearest = displays[0];
+  let best = Infinity;
+  for (const d of displays) {
+    const inside = cx >= d.x && cx < d.x + d.width && cy >= d.y && cy < d.y + d.height;
+    if (inside) {
+      nearest = d;
+      best = 0;
+      break;
+    }
+    const px = Math.min(Math.max(cx, d.x), d.x + d.width - 1);
+    const py = Math.min(Math.max(cy, d.y), d.y + d.height - 1);
+    const dist = (px - cx) * (px - cx) + (py - cy) * (py - cy);
+    if (dist < best) {
+      best = dist;
+      nearest = d;
+    }
+  }
+  let { x, y, width, height } = bounds;
+  if (width <= nearest.width) {
+    if (x < nearest.x) x = nearest.x;
+    if (x + width > nearest.x + nearest.width) x = nearest.x + nearest.width - width;
+  } else {
+    x = nearest.x;
+  }
+  if (height <= nearest.height) {
+    if (y < nearest.y) y = nearest.y;
+    if (y + height > nearest.y + nearest.height) y = nearest.y + nearest.height - height;
+  } else {
+    y = nearest.y;
+  }
+  return { x, y, width, height };
+}
+
 function createPetWindows() {
   const area = deskWorkArea();
+  const displays = deskDisplays();
   const configUrl = process.env.DSH_PET_CONFIG_URL || 'http://127.0.0.1:3080/dsh-pet-7340/config';
   const pets = petsFromEnv();
   for (const pet of pets) {
@@ -202,6 +263,7 @@ function createPetWindows() {
           workAreaH: String(area.height),
           workAreaX: String(area.x),
           workAreaY: String(area.y),
+          displays: JSON.stringify(displays),
         },
       })
       .catch((error) => {
@@ -336,10 +398,21 @@ app.whenReady().then(() => {
     const width = Number(bounds?.width);
     const height = Number(bounds?.height);
     if (![x, y, width, height].every(Number.isFinite)) return;
-    win.setContentBounds(
-      { x: Math.round(x), y: Math.round(y), width: Math.round(width), height: Math.round(height) },
-      false,
-    );
+    const raw = {
+      x: Math.round(x),
+      y: Math.round(y),
+      width: Math.round(width),
+      height: Math.round(height),
+    };
+    const fitted = deskDisplays().length > 1 ? fitBoundsToNearestDisplay(raw) : raw;
+    const cur = win.getContentBounds();
+    if (cur.x === fitted.x && cur.y === fitted.y && cur.width === fitted.width && cur.height === fitted.height) {
+      // 尺寸位置都没变：跳过，避免无意义的 DPI 重算
+    } else if (cur.width === fitted.width && cur.height === fitted.height) {
+      win.setPosition(fitted.x, fitted.y, false);
+    } else {
+      win.setContentBounds(fitted, false);
+    }
     // 碰撞站场：位置必须用**包围盒左上角**（renderer 显式上报 boxX/boxY）——
     // 窗口坐标 = 包围盒 − margin（半只宠物宽），直接拿窗口坐标会让跨窗检测整体错位
     const petId = [...windows.keys()].find((id) => windows.get(id) === win);
@@ -391,6 +464,12 @@ app.whenReady().then(() => {
     if (targetWin && !targetWin.isDestroyed()) {
       targetWin.webContents.send('pet:hit', { vx, vy });
     }
+  });
+
+  // 指针屏幕坐标：主进程 DIP（与 setContentBounds / display.bounds 同一套）。
+  // 渲染端 e.screenX 在跨 DPI 屏时会跳变，拖过屏缝就跟丢。
+  ipcMain.on('pet:get-cursor', (event) => {
+    event.returnValue = screen.getCursorScreenPoint();
   });
 
   // 点击穿透翻转：renderer 在光标进/出身体命中区时上报；穿透期间仍保留 forward（mousemove 继续转发）

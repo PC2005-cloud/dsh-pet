@@ -36,6 +36,8 @@ class PetSprite {
     // 窗口 = sprite + 四边余量——气泡/未来弹窗显示在余量里；余量透明且点击穿透
     const m = this.size * WINDOW_MARGIN_RATIO;
     this.margin = { t: m, r: m, b: m, l: m };
+    this.spriteOff = { x: m, y: m };
+    this.winBox = null;
     window.__dshPetDebug.winMargin = this.margin;
     // 宠物包围盒左上角在【工作区】坐标系里的位置（本窗口的位置 = 宠物的位置）
     this.pos = { x: 0, y: 0 };
@@ -228,7 +230,34 @@ class PetSprite {
   // 才是屏幕坐标：单显示器主屏在原点时 VIEW.x/y=0，与旧行为逐位一致；左侧/上方有扩展屏
   // （原点非 0）时也不偏位（#43）。
   sendBounds(px, py) {
-    this.pos = { x: Math.round(px), y: Math.round(py) };
+    let petX = Math.round(px);
+    let petY = Math.round(py);
+    const desired = {
+      x: petX - this.margin.l + VIEW.x,
+      y: petY - this.margin.t + VIEW.y,
+      width: this.size + this.margin.l + this.margin.r,
+      height: this.winH + this.margin.t + this.margin.b,
+    };
+    // 多屏：HWND 整块落在中心所在屏，避免透明窗骑缝被 DWM 画成双屏分身。
+    // 窗口被挪开后必须改 sprite 偏移，宠物才仍停在逻辑坐标上（否则会瞬移/看起来像分身）。
+    const fitted = DISPLAYS.length > 1 && S.fitWindowToDisplay ? S.fitWindowToDisplay(desired, DISPLAYS) : desired;
+    let spriteX = petX + VIEW.x - fitted.x;
+    let spriteY = petY + VIEW.y - fitted.y;
+    const maxSX = fitted.width - this.size;
+    const maxSY = fitted.height - this.winH;
+    const clampX = Math.min(Math.max(spriteX, 0), Math.max(maxSX, 0));
+    const clampY = Math.min(Math.max(spriteY, 0), Math.max(maxSY, 0));
+    if (clampX !== spriteX || clampY !== spriteY) {
+      spriteX = clampX;
+      spriteY = clampY;
+      petX = Math.round(fitted.x + spriteX - VIEW.x);
+      petY = Math.round(fitted.y + spriteY - VIEW.y);
+    }
+    this.pos = { x: petX, y: petY };
+    this.spriteOff = { x: spriteX, y: spriteY };
+    this.winBox = fitted;
+    this.el.style.left = spriteX + 'px';
+    this.el.style.top = spriteY + 'px';
     window.__dshPetDebug.dragPos = { x: this.pos.x, y: this.pos.y };
     if (window.petBridge) {
       // 完整状态一次捎带：size/bottomPad 让静止宠物从首帧起就登记进碰撞站场
@@ -236,10 +265,10 @@ class PetSprite {
       // vx/vy 带当前速度——飞行中实时值、静止/拖拽 = 0，避免落地后残留上次飞行速度干扰碰撞动量。
       const fly = this.throwState;
       window.petBridge.setBounds(
-        this.pos.x - this.margin.l + VIEW.x,
-        this.pos.y - this.margin.t + VIEW.y,
-        this.size + this.margin.l + this.margin.r,
-        this.winH + this.margin.t + this.margin.b,
+        fitted.x,
+        fitted.y,
+        fitted.width,
+        fitted.height,
         this.pos.x, // 包围盒左上角（碰撞站场用：窗口坐标 ≠ 包围盒坐标）
         this.pos.y,
         this.size,
@@ -515,11 +544,25 @@ class PetSprite {
     this.throwState = null;
   }
 
-  /** 抛掷驱动：重力 + 边缘反弹 + 落地摩擦，落定后写入 customPos */
+  workAreas() {
+    return DISPLAYS.length && S.displayWorkArea
+      ? DISPLAYS.map(S.displayWorkArea)
+      : [{ x: VIEW.x, y: VIEW.y, width: VIEW.w, height: VIEW.h }];
+  }
+
+  /** 指针屏幕 DIP：真实手势走主进程 getCursorPoint（与 setContentBounds 同坐标系）；冒烟派发事件用 e.screenX */
+  pointerScreen(e) {
+    if (e && e.isTrusted && window.petBridge && typeof window.petBridge.getCursorPoint === 'function') {
+      const p = window.petBridge.getCursorPoint();
+      if (p && Number.isFinite(p.x) && Number.isFinite(p.y)) return p;
+    }
+    return { x: e.screenX, y: e.screenY };
+  }
+
+  /** 抛掷驱动：重力 + 当前屏工作区反弹；邻屏重叠边开口以便跨过，不再对外接矩形空洞弹跳 */
   startThrow(px, py, vx, vy) {
     this.stopDragFollow();
     this.stopMove();
-    const bounds = S.throwBounds({ W: VIEW.w, H: VIEW.h, size: this.size, sideAllow: this.sideAllow });
     const token = ++this.throwToken;
     let state = { x: px, y: py, vx, vy };
     let last = performance.now();
@@ -530,6 +573,20 @@ class PetSprite {
       const dt = (now - last) / 1000;
       last = now;
       const fallingVy = state.vy; // 本帧积分前的竖直速度（正=下落）：即落地冲击速度
+      const bounds =
+        (S.throwBoundsForPet &&
+          S.throwBoundsForPet({
+            displays: DISPLAYS,
+            originX: VIEW.x,
+            originY: VIEW.y,
+            size: this.size,
+            sideAllow: this.sideAllow,
+            petX: state.x,
+            petY: state.y,
+            halfW: this.halfW,
+            halfH: this.halfH,
+          })) ||
+        S.throwBounds({ W: VIEW.w, H: VIEW.h, size: this.size, sideAllow: this.sideAllow });
       const res = S.throwStep(state, dt, bounds, this.physics);
       state = { x: res.x, y: res.y, vx: res.vx, vy: res.vy };
       this.throwState = state;
@@ -570,6 +627,13 @@ class PetSprite {
         }
       }
       this.sendBounds(res.x, res.y);
+      if (this.pos.x !== state.x || this.pos.y !== state.y) {
+        if (this.pos.x !== state.x) state.vx = -state.vx * this.physics.restitution;
+        if (this.pos.y !== state.y) state.vy = -state.vy * this.physics.restitution;
+        state.x = this.pos.x;
+        state.y = this.pos.y;
+        this.throwState = state;
+      }
       // 落地 Q 弹：只在空中→地面转换帧触发一次，力度随冲击速度（轻落 0.8 ~ 重砸 0.55）
       const grounded = res.y >= bounds.maxY - 1;
       if (res.bounced && grounded && !prevGrounded) {
@@ -691,13 +755,14 @@ class PetSprite {
     } catch {
       /* 忽略捕获失败 */
     }
-    // 记录【按下时的指针屏幕坐标】与【按下时的宠物窗口位置】——之后全部用 e.screenX/Y
-    // 做增量：指针屏幕坐标与窗口位置无关，不受窗口被逐帧移动影响（window.screenX 会滞后/缓存）。
+    // 记录【按下时的指针屏幕 DIP】与【按下时的宠物视口位置】——之后用同一套 DIP 做增量。
+    // 真实手势走主进程光标（与 setContentBounds 同坐标系）；冒烟派发事件仍用 e.screenX。
+    const pointer = this.pointerScreen(e);
     this.dragState = {
       active: true,
       dragging: false,
-      sx: e.screenX,
-      sy: e.screenY,
+      sx: pointer.x,
+      sy: pointer.y,
       petX: this.pos.x,
       petY: this.pos.y,
     };
@@ -708,9 +773,10 @@ class PetSprite {
   onPointerMove(e) {
     const d = this.dragState;
     if (!d.active) return;
-    // 阈值判定用屏幕坐标增量（clientX 会随窗口移动而变化，屏幕坐标稳定）
-    const dx = e.screenX - d.sx;
-    const dy = e.screenY - d.sy;
+    // 阈值判定用屏幕 DIP 增量（clientX 会随窗口移动而变化；跨 DPI 屏不能直接信 e.screenX）
+    const pointer = this.pointerScreen(e);
+    const dx = pointer.x - d.sx;
+    const dy = pointer.y - d.sy;
     if (!d.dragging) {
       if (Math.hypot(dx, dy) < S.DRAG_THRESHOLD) return;
       d.dragging = true;
@@ -720,13 +786,26 @@ class PetSprite {
         this.playOnce(S.pick(this.animations.drag));
       }
     }
-    // 记录指针轨迹（screenX/Y 采样：与视口坐标只差常数偏移，速度一致；初速估算用）
+    // 记录指针轨迹（屏幕 DIP：与视口只差 VIEW 原点，速度一致；初速估算用）
     const now = performance.now();
-    this.dragTrail.push({ t: now, x: e.screenX, y: e.screenY });
+    this.dragTrail.push({ t: now, x: pointer.x, y: pointer.y });
     this.dragTrail = S.trimTrail(this.dragTrail, now);
-    // 弹簧目标 = 按下时的宠物位置 + 指针屏幕增量（窗口怎么动都不影响坐标）——不再硬贴指针，
-    // 由 rAF 弹簧跟随逐帧追赶（抹平高频抖动，与浏览器同构）
-    this.dragTarget = { x: d.petX + dx, y: d.petY + dy };
+    let tx = d.petX + dx;
+    let ty = d.petY + dy;
+    if (DISPLAYS.length > 1) {
+      const works = this.workAreas();
+      const sx = tx + this.halfW + VIEW.x;
+      const sy = ty + this.halfH + VIEW.y;
+      if (S.pointInRect && !works.some((w) => S.pointInRect(sx, sy, w))) {
+        const near = S.nearestRect(sx, sy, works);
+        if (near && S.clampPointToRect) {
+          const p = S.clampPointToRect(sx, sy, near);
+          tx += p.x - sx;
+          ty += p.y - sy;
+        }
+      }
+    }
+    this.dragTarget = { x: tx, y: ty };
     this.startDragFollow();
   }
 
@@ -744,14 +823,15 @@ class PetSprite {
         this.justDragged = false;
       }, 100);
       if (e && Number.isFinite(e.screenX)) {
+        const pointerUp = this.pointerScreen(e);
         // 原始输入留痕（实机排查用：验证指针屏幕坐标与窗口位移是否一致，如 DPI 缩放问题）
         window.__dshPetDebug.lastDragRaw = {
           petX: d.petX,
           petY: d.petY,
           sxDown: d.sx,
           syDown: d.sy,
-          xUp: e.screenX,
-          yUp: e.screenY,
+          xUp: pointerUp.x,
+          yUp: pointerUp.y,
         };
       }
       // 释放后接一段循环待机（与浏览器一致），再回随机链
@@ -816,10 +896,12 @@ class PetSprite {
     const r = this.hitRect;
     // forwarded 事件坐标以窗口为原点（与页坐标一致）；转换到 sprite 坐标需扣减窗口余量；
     // 异常时退回屏幕坐标 − 窗口屏幕位置推导（hitRect/pos 均为 sprite 坐标）
-    const wx = Number.isFinite(e.clientX) ? e.clientX : e.screenX - (this.pos.x + VIEW.x - this.margin.l);
-    const wy = Number.isFinite(e.clientY) ? e.clientY : e.screenY - (this.pos.y + VIEW.y - this.margin.t);
-    const px = wx - this.margin.l;
-    const py = wy - this.margin.t;
+    const offX = this.spriteOff ? this.spriteOff.x : this.margin.l;
+    const offY = this.spriteOff ? this.spriteOff.y : this.margin.t;
+    const wx = Number.isFinite(e.clientX) ? e.clientX : e.screenX - (this.pos.x + VIEW.x - offX);
+    const wy = Number.isFinite(e.clientY) ? e.clientY : e.screenY - (this.pos.y + VIEW.y - offY);
+    const px = wx - offX;
+    const py = wy - offY;
     this.setInteractive(px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h);
   }
 
@@ -847,12 +929,12 @@ class PetSprite {
   // 即可完整显示——**窗口和宠物零移动**，不存在跨进程位移竞态，也就不会瞬移闪帧。
   // 退化（可视区过小/窗口整体出屏，光标也点不到宠物）返回 null → 调用方按窗口视口兜底。
   visibleClampRect() {
-    // pos 是视口相对坐标，窗口屏幕位置 = pos + VIEW 原点 − 外扩余量（见 sendBounds）；
-    // 比较双方都用屏幕坐标（坐标系不混），返回的夹取矩形仍是窗口局部坐标
-    const winX = this.pos.x + VIEW.x - this.margin.l;
-    const winY = this.pos.y + VIEW.y - this.margin.t;
-    const winW = this.size + this.margin.l + this.margin.r;
-    const winH = this.winH + this.margin.t + this.margin.b;
+    // 用实际 HWND（sendBounds 裁切后）而不是「包围盒 − 余量」：多屏时窗口不再等于 pet+margin。
+    const fitted = this.winBox;
+    const winX = fitted ? fitted.x : this.pos.x + VIEW.x - this.margin.l;
+    const winY = fitted ? fitted.y : this.pos.y + VIEW.y - this.margin.t;
+    const winW = fitted ? fitted.width : this.size + this.margin.l + this.margin.r;
+    const winH = fitted ? fitted.height : this.winH + this.margin.t + this.margin.b;
     const vx0 = Math.max(VIEW.x, winX);
     const vy0 = Math.max(VIEW.y, winY);
     const vx1 = Math.min(VIEW.x + VIEW.w, winX + winW);

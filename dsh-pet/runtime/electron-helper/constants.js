@@ -28,6 +28,24 @@ const VIEW = {
   w: Number(params.get('workAreaW') || (window.screen && window.screen.availWidth) || 1920),
   h: Number(params.get('workAreaH') || (window.screen && window.screen.availHeight) || 1080),
 };
+// 各屏 bounds + workArea（主进程 deskDisplays）。多屏时窗口整块落在其中一块上；
+// 解析失败回落到 VIEW 单屏，单显示器行为与以前一致。
+const DISPLAYS = (function resolveDisplays() {
+  const parsed = S.parseDisplays ? S.parseDisplays(params.get('displays')) : [];
+  if (parsed.length) return parsed;
+  return [
+    {
+      x: VIEW.x,
+      y: VIEW.y,
+      width: VIEW.w,
+      height: VIEW.h,
+      workX: VIEW.x,
+      workY: VIEW.y,
+      workW: VIEW.w,
+      workH: VIEW.h,
+    },
+  ];
+})();
 const ORIGIN = new URL(CONFIG.configUrl).origin;
 /** 宿主 /dsh-pet-7340 前缀：bridge 走自定义 scheme（主进程转发），否则 HTTP 直连宿主 */
 const BASE = BRIDGE ? 'dsh-pet-bridge://dsh-pet/dsh-pet-7340' : ORIGIN + '/dsh-pet-7340';
