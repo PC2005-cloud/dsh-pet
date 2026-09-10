@@ -99,6 +99,37 @@ dsh-pet/
 - 运行形态不变：client 半侧为官方 `__ModuleLoader__.load({ id, factory })`，React 从 DSH 外壳平台模块表 require（不自己打包）
 - 构建命令：`npm run bundle`（tsdown）
 
+### 3.5 桌面渲染端坐标系（CSS 像素单一系 + 页面级缩放）
+
+> 背景：主进程 `--force-device-scale-factor=1` 线性化后，1 逻辑像素 = 1 物理像素，窗口内容区
+> 以物理像素为单位（#46）。宠物曾以「×CONFIG.scale 逐处补偿」恢复观感，但菜单/积分/聊天等
+> 固定 px UI 未补偿 → 150% 屏上视觉缩到 2/3。逐处 ÷scale 的补丁路线（CSS `zoom`）实测会劈裂
+> 坐标系（`getBoundingClientRect` 被放大而 `clientX`/`offsetWidth` 不放大，定位永远对不上），
+> 故废弃。
+
+**约定（唯一坚持项）**：
+
+1. **整窗页面级缩放**：main 在 `did-finish-load` 后 `webContents.setZoomFactor(CONFIG.scale)`。
+   此后渲染端 DOM 度量、事件坐标、桌面几何、全部 shared 组件都在**同一套 CSS 像素**里。
+   `webPreferences.zoomFactor` 对隐藏窗口不生效（实测），必须加载后设置。
+2. **宠物回归基准 CSS 尺寸**：`sprite.js` 不再乘 CONFIG.scale（size / marginX/Y / moves.margin
+   三处）。150% 屏上 462px 宠物经 zoom 渲染 ~693 物理 px，与旧补偿观感逐像素一致。
+3. **跨进程协议单位 = 物理像素**，换算只允许出现在两个收口（constants.js 的
+   `toScreen`/`toLocal`），组件与引擎代码**一律不得再乘除**：
+   - 收进来 ÷scale：`applyDeskGeometry`（`pet:displays` 与首帧 query 的 hull/areas）、
+     `onFlightStates`/`onPetHit`（碰撞 broker）、拖拽 `screenX` 采样与命中兜底；
+   - 发出去 ×scale：`sendBounds`（窗口 bounds + 碰撞站场状态）、`reportFlight`/`reportCollide`。
+   主进程侧（bounds 去重、碰撞 broker、显示热更新）零改动；其收到的数字与线性化旧行为逐位一致。
+4. **安全兜底**：100% 屏 / 探测失败时 CONFIG.scale=1，全部换算退化为恒等，行为与线性化前一致。
+
+**实测依据**（Electron 43.3.0 + `--force-device-scale-factor=1`，`temp/zoom-probe` 可复跑）：
+页面级缩放 `setZoomFactor(1.5)` 下 `getBoundingClientRect`/`offsetWidth`/真实点击 `clientX`
+全部同属一个 CSS 系（innerWidth 1386→909）；CSS `zoom:1.5` 则 gBCR×1.5 而 `clientX`/`offsetWidth`
+不换算，为废弃路线的失败根因。
+
+**待真机核验**（150% 屏）：拖拽 `screenX` 增量的 ÷scale（现有 `lastDragRaw` 调试钩子可对照）、
+自定义光标在页面缩放下的尺寸/热点（必要时启用 canvas 重绘缩放）、冒烟断言在 zoom≠1 下的表现。
+
 ## 4. 动画流程（链式模型）
 
 **核心设计：没有常驻待机、没有定时器**。每个动画（含待机呼吸休闲）都是一次性播放，播完立即按概率选下一个——首尾相接、永不停止。

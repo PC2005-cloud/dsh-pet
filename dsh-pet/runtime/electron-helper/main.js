@@ -339,6 +339,13 @@ function createPetWindows() {
     win.webContents.setBackgroundThrottling(false);
     // 屏蔽 Electron 默认右键菜单：右键菜单由渲染端统一自绘组件弹出（两端一致），绝无双菜单
     win.webContents.on('context-menu', (event) => event.preventDefault());
+    // 页面级缩放 = petScale()（渲染端 CONFIG.scale 的同一来源）：整窗内容统一放大，渲染端坐标系
+    // 回到 CSS 像素——右键菜单/积分弹窗/聊天框等固定 px UI 随之恢复 DIP 观感，不再逐处补偿
+    // （见 DESIGN.md §3.5；跨进程交换仍走物理像素，由渲染端 toScreen/toLocal 收口）。
+    // webPreferences.zoomFactor 对 show:false 的窗口不生效（实测），须在加载完成后设置。
+    win.webContents.on('did-finish-load', () => {
+      win.webContents.setZoomFactor(scale);
+    });
     // 默认整窗点击穿透（renderer 在光标进/出身体命中区时经 IPC 翻转可交互）；
     // forward:true 保证穿透期间 mousemove 仍转发进渲染端做命中判定。
     win.setIgnoreMouseEvents(true, { forward: true });

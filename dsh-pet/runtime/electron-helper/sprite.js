@@ -11,7 +11,11 @@
 class PetSprite {
   constructor(pet) {
     this.pet = pet; // 这只宠物的配置段（拍平后的成品实例，条目级字段已吹入：动画池/权重/周期）
-    this.size = pet.size * CONFIG.scale;
+    // 页面级缩放（main 对窗口 setZoomFactor(CONFIG.scale)，见 DESIGN.md §3.5）统一放大整窗：
+    // pet.size 即 CSS 像素基准，**不再手工乘 CONFIG.scale**——固定 px UI（菜单/积分/聊天）
+    // 随同一缩放自动恢复 DIP 观感；跨进程交换（bounds/几何/碰撞）由 constants.js 的
+    // toScreen/toLocal 收口换算，这里与 shared 组件一样零乘除。
+    this.size = pet.size;
     this.height = (this.size * 9) / 16;
     this.halfW = this.size / 2;
     this.halfH = this.height / 2;
@@ -186,12 +190,13 @@ class PetSprite {
           if (pid === this.pet.id) continue; // 排除自己
           const s = states[pid];
           next[pid] = {
-            x: Number(s && s.x) || 0,
-            y: Number(s && s.y) || 0,
-            vx: Number(s && s.vx) || 0,
-            vy: Number(s && s.vy) || 0,
-            size: Number(s && s.size) || 0,
-            bottomPad: Number(s && s.bottomPad) || 0,
+            // 碰撞 broker 协议单位是物理像素（与窗口 bounds 一致）：÷scale 进本窗口 CSS 系（§3.5）
+            x: toLocal(Number(s && s.x) || 0),
+            y: toLocal(Number(s && s.y) || 0),
+            vx: toLocal(Number(s && s.vx) || 0),
+            vy: toLocal(Number(s && s.vy) || 0),
+            size: toLocal(Number(s && s.size) || 0),
+            bottomPad: toLocal(Number(s && s.bottomPad) || 0),
           };
         }
         this.others = next;
@@ -199,7 +204,7 @@ class PetSprite {
       window.petBridge.onPetHit((payload) => {
         const vx = Number(payload && payload.vx);
         const vy = Number(payload && payload.vy);
-        if (Number.isFinite(vx) && Number.isFinite(vy)) this.onDeskHit(vx, vy);
+        if (Number.isFinite(vx) && Number.isFinite(vy)) this.onDeskHit(toLocal(vx), toLocal(vy));
       });
     }
   }
@@ -225,9 +230,9 @@ class PetSprite {
 
   // 目标包围盒左上角（视口相对坐标）→ 移动窗口：窗口 = sprite + 四周外扩余量
   // （sprite 钉在窗口 (margin.l, margin.t)，气泡/弹窗显示在余量里）。
-  // setContentBounds 要**屏幕**坐标，pos 是视口（桌面外接矩形）相对坐标——加上 VIEW.x/y
-  // 才是屏幕坐标：单显示器主屏在原点时 VIEW.x/y=0，与旧行为逐位一致；左侧/上方有扩展屏
-  // （原点非 0）时也不偏位（#43）。
+  // setContentBounds 要**屏幕**坐标：pos 是视口（桌面外接矩形）相对坐标，先加 VIEW.x/y
+  // 再统一 ×scale 回物理像素（§3.5 IPC 收口）——主进程收到的数字与线性化旧行为逐位一致，
+  // 主进程侧（bounds/去重/碰撞 broker）完全不用改。
   sendBounds(px, py) {
     this.pos = { x: Math.round(px), y: Math.round(py) };
     window.__dshPetDebug.dragPos = { x: this.pos.x, y: this.pos.y };
@@ -237,16 +242,16 @@ class PetSprite {
       // vx/vy 带当前速度——飞行中实时值、静止/拖拽 = 0，避免落地后残留上次飞行速度干扰碰撞动量。
       const fly = this.throwState;
       window.petBridge.setBounds(
-        this.pos.x - this.margin.l + VIEW.x,
-        this.pos.y - this.margin.t + VIEW.y,
-        this.size + this.margin.l + this.margin.r,
-        this.winH + this.margin.t + this.margin.b,
-        this.pos.x, // 包围盒左上角（碰撞站场用：窗口坐标 ≠ 包围盒坐标）
-        this.pos.y,
-        this.size,
-        this.bottomPad,
-        fly ? fly.vx : 0,
-        fly ? fly.vy : 0,
+        toScreen(this.pos.x - this.margin.l + VIEW.x),
+        toScreen(this.pos.y - this.margin.t + VIEW.y),
+        toScreen(this.size + this.margin.l + this.margin.r),
+        toScreen(this.winH + this.margin.t + this.margin.b),
+        toScreen(this.pos.x), // 包围盒左上角（碰撞站场用：窗口坐标 ≠ 包围盒坐标）
+        toScreen(this.pos.y),
+        toScreen(this.size),
+        toScreen(this.bottomPad),
+        fly ? toScreen(fly.vx) : 0,
+        fly ? toScreen(fly.vy) : 0,
       );
     }
   }
@@ -266,10 +271,10 @@ class PetSprite {
       // （实测右倒 T 型双屏，top-left 落在主屏上方的空洞里），配了该角落的宠物开机即隐身。
       const anchor = S.anchorPixel({
         corner: this.pet.position.corner,
-        // marginX/marginY 是配置里的绝对像素，与 size 一样要吃 CONFIG.scale：开启 DPI 线性化后
-        // 坐标系是物理像素，不乘的话边距会视觉缩水（150% 缩放下 marginY:100 只剩 2/3 观感）
-        marginX: this.pet.position.marginX * CONFIG.scale,
-        marginY: this.pet.position.marginY * CONFIG.scale,
+        // marginX/marginY 是配置里的绝对像素：页面级缩放（§3.5）已统一放大整窗，
+        // 配置值不再手工乘 CONFIG.scale——150% 屏上与「线性化 + 旧 CONFIG.scale 补偿」观感一致
+        marginX: this.pet.position.marginX,
+        marginY: this.pet.position.marginY,
         size: this.size,
         W,
         H,
@@ -446,7 +451,7 @@ class PetSprite {
       dir,
       minDist: mp.minDist * distScale,
       maxDist: mp.maxDist * distScale,
-      margin: mp.margin * CONFIG.scale, // 同 position() 的 marginX/marginY：绝对像素配置值须随坐标系缩放
+      margin: mp.margin, // 同 position() 的 marginX/marginY：页面级缩放统一放大，配置值不再乘 scale（§3.5）
       halfW: this.halfW,
       sideAllow: this.sideAllow,
       // 落点按显示器并集判定：能骑缝跨屏走，但走不进外接矩形里的空洞
@@ -569,15 +574,16 @@ class PetSprite {
       const res = S.throwStepRegion(state, dt, sp, this.physics);
       state = { x: res.x, y: res.y, vx: res.vx, vy: res.vy };
       this.throwState = state;
-      // 上报飞行状态（节流 ~30ms）：主进程 broker 汇聚后广播，其它窗口用它做跨窗碰撞检测
+      // 上报飞行状态（节流 ~30ms）：主进程 broker 汇聚后广播，其它窗口用它做跨窗碰撞检测；
+      // broker 协议单位 = 物理像素，这里 ×scale（§3.5 收口）
       if (window.petBridge && window.petBridge.reportFlight && now - this.lastFlightReport > 30) {
         window.petBridge.reportFlight({
-          x: state.x,
-          y: state.y,
-          vx: state.vx,
-          vy: state.vy,
-          size: this.size,
-          bottomPad: this.bottomPad,
+          x: toScreen(state.x),
+          y: toScreen(state.y),
+          vx: toScreen(state.vx),
+          vy: toScreen(state.vy),
+          size: toScreen(this.size),
+          bottomPad: toScreen(this.bottomPad),
         });
         this.lastFlightReport = now;
       }
@@ -599,7 +605,8 @@ class PetSprite {
             state.vy = hit.fvy;
             this.throwState = state;
             if (window.petBridge && window.petBridge.reportCollide) {
-              window.petBridge.reportCollide(pid, hit.hvx, hit.hvy);
+              // 被撞方初速同为 broker 物理像素协议：×scale（§3.5 收口）
+              window.petBridge.reportCollide(pid, toScreen(hit.hvx), toScreen(hit.hvy));
             }
             break; // 一帧只处理一次碰撞（避免连锁触发抖动）
           }
@@ -731,11 +738,12 @@ class PetSprite {
     }
     // 记录【按下时的指针屏幕坐标】与【按下时的宠物窗口位置】——之后全部用 e.screenX/Y
     // 做增量：指针屏幕坐标与窗口位置无关，不受窗口被逐帧移动影响（window.screenX 会滞后/缓存）。
+    // 屏幕坐标是物理像素，除以 CONFIG.scale 进 CSS 系（§3.5）——增量公式两边同一单位。
     this.dragState = {
       active: true,
       dragging: false,
-      sx: e.screenX,
-      sy: e.screenY,
+      sx: toLocal(e.screenX),
+      sy: toLocal(e.screenY),
       petX: this.pos.x,
       petY: this.pos.y,
     };
@@ -746,9 +754,9 @@ class PetSprite {
   onPointerMove(e) {
     const d = this.dragState;
     if (!d.active) return;
-    // 阈值判定用屏幕坐标增量（clientX 会随窗口移动而变化，屏幕坐标稳定）
-    const dx = e.screenX - d.sx;
-    const dy = e.screenY - d.sy;
+    // 阈值判定用屏幕坐标增量（clientX 会随窗口移动而变化，屏幕坐标稳定）；屏幕坐标 ÷scale 进 CSS 系
+    const dx = toLocal(e.screenX) - d.sx;
+    const dy = toLocal(e.screenY) - d.sy;
     if (!d.dragging) {
       if (Math.hypot(dx, dy) < S.DRAG_THRESHOLD) return;
       d.dragging = true;
@@ -758,9 +766,9 @@ class PetSprite {
         this.playOnce(S.pick(this.animations.drag));
       }
     }
-    // 记录指针轨迹（screenX/Y 采样：与视口坐标只差常数偏移，速度一致；初速估算用）
+    // 记录指针轨迹（screenX/Y 采样：与视口坐标只差常数偏移，速度一致；初速估算用；÷scale 进 CSS 系）
     const now = performance.now();
-    this.dragTrail.push({ t: now, x: e.screenX, y: e.screenY });
+    this.dragTrail.push({ t: now, x: toLocal(e.screenX), y: toLocal(e.screenY) });
     this.dragTrail = S.trimTrail(this.dragTrail, now);
     // 弹簧目标 = 按下时的宠物位置 + 指针屏幕增量（窗口怎么动都不影响坐标）——不再硬贴指针，
     // 由 rAF 弹簧跟随逐帧追赶（抹平高频抖动，与浏览器同构）
@@ -853,9 +861,10 @@ class PetSprite {
     }
     const r = this.hitRect;
     // forwarded 事件坐标以窗口为原点（与页坐标一致）；转换到 sprite 坐标需扣减窗口余量；
-    // 异常时退回屏幕坐标 − 窗口屏幕位置推导（hitRect/pos 均为 sprite 坐标）
-    const wx = Number.isFinite(e.clientX) ? e.clientX : e.screenX - (this.pos.x + VIEW.x - this.margin.l);
-    const wy = Number.isFinite(e.clientY) ? e.clientY : e.screenY - (this.pos.y + VIEW.y - this.margin.t);
+    // 异常时退回屏幕坐标 − 窗口屏幕位置推导（hitRect/pos 均为 CSS 系）：屏幕坐标 ÷scale 后
+    // 减去窗口屏幕原点（CSS 系）即窗口内坐标
+    const wx = Number.isFinite(e.clientX) ? e.clientX : toLocal(e.screenX) - (this.pos.x + VIEW.x - this.margin.l);
+    const wy = Number.isFinite(e.clientY) ? e.clientY : toLocal(e.screenY) - (this.pos.y + VIEW.y - this.margin.t);
     const px = wx - this.margin.l;
     const py = wy - this.margin.t;
     this.setInteractive(px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h);

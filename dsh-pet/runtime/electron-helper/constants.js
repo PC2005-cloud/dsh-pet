@@ -14,6 +14,19 @@ const CONFIG = {
   scale: Number(params.get('scale') || '1'),
   petIndex: Number(params.get('petIndex') || '0'),
 };
+
+// ---------- 渲染端坐标系统一约定（DESIGN.md §3.5） ----------
+// main 进程对窗口做页面级缩放 setZoomFactor(CONFIG.scale) 后，本窗口的 DOM 度量、事件坐标、
+// 桌面几何（VIEW/AREAS/PRIMARY_AREA）与全部 shared 组件（右键菜单/积分弹窗/聊天框）都在
+// **同一套 CSS 像素**里——固定 px UI 随缩放自动恢复 DIP 观感，组件代码零换算。
+// 主进程侧（窗口 bounds、逐屏几何、碰撞 broker）仍是物理像素：与它交换的值只允许在下面两个
+// 收口换算（×scale 发出去 / ÷scale 收进来），任何组件代码不得再乘除（防散修回归）。
+function toScreen(v) {
+  return v * CONFIG.scale;
+}
+function toLocal(v) {
+  return v / CONFIG.scale;
+}
 // bridge 模式（DSH_PET_BRIDGE=1）：请求走自定义 scheme，经 Electron 主进程转宿主管道——
 // 绕开 DSH Desktop 2.0.3+ 的浏览器访问闸门（只放行带令牌的请求，插件自拉进程的裸 HTTP 全 403）
 const BRIDGE = params.get('bridge') === '1';
@@ -25,11 +38,18 @@ const BRIDGE = params.get('bridge') === '1';
 // **边界判定一律不用它**，改用下面 AREAS 的并集：显示器摆放不规则时外接矩形里有大片空洞
 // （实测右倒 T 型双屏 23.7% 的面积不属于任何屏），拿它当边界会让宠物走进/飞进不可见区域。
 // 字段可变：显示器分辨率/缩放变化、插拔屏、旋转时由 applyDeskGeometry 就地重挂（#P4）。
-const VIEW = {
+// 主进程下发的视口（**物理像素**，原样保留给首帧 applyDeskGeometry）；VIEW 才是 ÷scale 后的 CSS 系
+const VIEW_SCREEN = {
   x: Number(params.get('workAreaX') || 0),
   y: Number(params.get('workAreaY') || 0),
   w: Number(params.get('workAreaW') || (window.screen && window.screen.availWidth) || 1920),
   h: Number(params.get('workAreaH') || (window.screen && window.screen.availHeight) || 1080),
+};
+const VIEW = {
+  x: toLocal(VIEW_SCREEN.x),
+  y: toLocal(VIEW_SCREEN.y),
+  w: toLocal(VIEW_SCREEN.w),
+  h: toLocal(VIEW_SCREEN.h),
 };
 /** 逐显示器工作区，**视口相对坐标**（= 屏幕坐标 − VIEW 原点）。抛掷/漫游/菜单夹取都走它们的并集 */
 let AREAS = [];
@@ -41,11 +61,16 @@ function applyDeskGeometry(geo) {
   const hull = geo && geo.hull;
   const list = geo && Array.isArray(geo.areas) ? geo.areas.filter((a) => a && a.width > 0 && a.height > 0) : [];
   if (!hull || !(hull.width > 0) || !(hull.height > 0) || list.length === 0) return false;
-  VIEW.x = hull.x;
-  VIEW.y = hull.y;
-  VIEW.w = hull.width;
-  VIEW.h = hull.height;
-  AREAS = S.translateRects(list, -hull.x, -hull.y);
+  // 主进程几何是物理像素：hull/areas 逐个 ÷scale 进 CSS 系（§3.5 收口约定——几何导入唯一入口）
+  VIEW.x = toLocal(hull.x);
+  VIEW.y = toLocal(hull.y);
+  VIEW.w = toLocal(hull.width);
+  VIEW.h = toLocal(hull.height);
+  AREAS = S.translateRects(
+    list.map((a) => ({ x: toLocal(a.x), y: toLocal(a.y), width: toLocal(a.width), height: toLocal(a.height) })),
+    -VIEW.x,
+    -VIEW.y,
+  );
   const pi = Number(geo.primaryIndex);
   PRIMARY_AREA = AREAS[Number.isInteger(pi) && pi >= 0 && pi < AREAS.length ? pi : 0];
   return true;
@@ -54,7 +79,7 @@ function applyDeskGeometry(geo) {
 // 首帧几何走 URL query（position() 定角落时就要用）；运行期变化再经 pet:displays 推送。
 // areas 缺失（手动 start-desktop / 老版本主进程）时退化为「整个视口就是一块屏」= 旧行为。
 applyDeskGeometry({
-  hull: { x: VIEW.x, y: VIEW.y, width: VIEW.w, height: VIEW.h },
+  hull: { x: VIEW_SCREEN.x, y: VIEW_SCREEN.y, width: VIEW_SCREEN.w, height: VIEW_SCREEN.h },
   areas: (() => {
     try {
       const parsed = JSON.parse(params.get('areas') || '[]');
@@ -62,7 +87,7 @@ applyDeskGeometry({
     } catch {
       /* 落到下面的单矩形兜底 */
     }
-    return [{ x: VIEW.x, y: VIEW.y, width: VIEW.w, height: VIEW.h }];
+    return [{ x: VIEW_SCREEN.x, y: VIEW_SCREEN.y, width: VIEW_SCREEN.w, height: VIEW_SCREEN.h }];
   })(),
   primaryIndex: Number(params.get('primaryIndex') || 0),
 });
