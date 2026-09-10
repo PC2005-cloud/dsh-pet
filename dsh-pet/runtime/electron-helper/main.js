@@ -279,6 +279,14 @@ function deskGeometry() {
     width: d.workArea.width,
     height: d.workArea.height,
   }));
+  // 每块屏的**完整面板**（含任务栏区）：抛掷的「越界侧有没有邻屏」探测用它，否则任务栏
+  // 在接缝处挖出的工作区条带会被当成墙，宠物穿不过上下叠放的屏（见 shared/physics.ts）
+  const panels = displays.map((d) => ({
+    x: d.bounds.x,
+    y: d.bounds.y,
+    width: d.bounds.width,
+    height: d.bounds.height,
+  }));
   let x0 = Infinity;
   let y0 = Infinity;
   let x1 = -Infinity;
@@ -294,7 +302,7 @@ function deskGeometry() {
     0,
     displays.findIndex((d) => d.id === primaryId),
   );
-  return { hull: { x: x0, y: y0, width: x1 - x0, height: y1 - y0 }, areas, primaryIndex };
+  return { hull: { x: x0, y: y0, width: x1 - x0, height: y1 - y0 }, areas, panels, primaryIndex };
 }
 
 function createPetWindows() {
@@ -369,6 +377,8 @@ function createPetWindows() {
           // 逐屏工作区（屏幕坐标）+ 主屏下标：渲染端所有边界判定走它们的并集，不走外接矩形。
           // 首帧就要用（position() 定角落），所以走 query；运行期变化再经 pet:displays 推送。
           areas: JSON.stringify(geo.areas),
+          // 逐屏完整面板（含任务栏区）：抛掷越界侧探测用（任务栏条带不当墙，见 shared/physics.ts）
+          panels: JSON.stringify(geo.panels),
           primaryIndex: String(geo.primaryIndex),
         },
       })

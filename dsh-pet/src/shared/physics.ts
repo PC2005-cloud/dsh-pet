@@ -152,8 +152,13 @@ export const throwBoundsIn = (area: Rect, size: number, sideAllow: number): Thro
 export interface ThrowSpace {
   /** 逐屏的包围盒左上角允许范围（与 areas 同序） */
   bounds: ThrowBounds[];
-  /** 逐屏工作区（判定「越界侧有没有邻屏」用） */
+  /** 逐屏工作区（反弹/归属判定；任务栏把面板挖掉的条带不在此列） */
   areas: Rect[];
+  /** 逐屏**完整面板**（含任务栏区，与 areas 同序）：越界侧「有没有邻屏」的探测用面板而非工作区——
+   * 任务栏在屏与屏接缝处时，工作区之间会有一段条带不属于任何 workArea，把它当墙会让宠物
+   * 永远穿不过上下叠放的屏（且反弹线停在任务栏上沿）。面板并集在真正错位的空洞处仍然是空的，
+   * 「空洞是墙」的语义不受影响。缺省 = areas（老主进程/单屏退化为原行为） */
+  panels: Rect[];
   /** 宠物包围盒宽 */
   size: number;
   /** 身体相对包围盒左右各内缩的量 */
@@ -161,9 +166,13 @@ export interface ThrowSpace {
 }
 
 /** 由工作区列表构造抛掷空间（单块屏时等价于 throwBounds） */
-export const throwSpace = (o: { areas: Rect[]; size: number; sideAllow: number }): ThrowSpace => ({
+export const throwSpace = (o: { areas: Rect[]; panels?: Rect[]; size: number; sideAllow: number }): ThrowSpace => ({
   bounds: o.areas.map((a) => throwBoundsIn(a, o.size, o.sideAllow)),
   areas: o.areas,
+  panels:
+    o.panels && o.panels.length === o.areas.length
+      ? o.panels
+      : o.areas, // 面板缺失/不同序：退化用工作区（保持旧行为）
   size: o.size,
   sideAllow: o.sideAllow,
 });
@@ -314,6 +323,13 @@ export const throwStep = (
  *   - 那里有别的屏 ⇒ **原样放行**（不夹不弹），宠物自然跨屏飞行 / 落到下一块屏；
  *   - 那里什么都没有 ⇒ 按该边反弹。这正是外接矩形方案缺的那道墙，宠物再也飞不进空洞。
  *
+ * 探测目标与探测点都用**完整面板**（space.panels，含任务栏区）而不是工作区：
+ * 任务栏位于上下两块屏的接缝时，两块屏的 workArea 之间会隔一条不属于任何 workArea 的条带，
+ * 按 workArea 探测会把它当墙——宠物甩到接缝处就在任务栏上沿反弹，永远穿不过去（且下边界
+ * 视觉上停在任务栏上方）。面板包含任务栏条带，跨越接缝自然放行；反弹/休息线仍按工作区
+ * （脚不踩任务栏）。探测点 = 当前屏**面板**的边外第一像素：面板底 = 物理屏底，单屏任务栏时
+ * 探不到邻屏照常反弹，不会顺着自己面板的条带无限下坠。
+ *
  * 关键：放行时**不改位置也不记录「当前屏」**，下一帧照样由身体中心重新定位。
  * 不能改成「越界即切屏」——相邻两屏的 AABB 在缝隙处留有 2×sideAllow 宽的重叠盲区
  * （主屏 maxX = 缝 − size + sideAllow，副屏 minX = 缝 − sideAllow），骑缝的宠物落在盲区里，
@@ -342,15 +358,16 @@ export const throwStepRegion = (
   let cur = screenOfBox(space, x, y);
   let b = space.bounds[cur];
   let a = space.areas[cur];
+  const pa = space.panels[cur] || a;
   const cy = y + h / 2;
   if (x < b.minX) {
-    if (indexAtPoint(space.areas, a.x - 1, cy) < 0) {
+    if (indexAtPoint(space.panels, pa.x - 1, cy) < 0) {
       x = b.minX;
       vx = Math.abs(vx) * physics.restitution;
       bounced = true;
     }
   } else if (x > b.maxX) {
-    if (indexAtPoint(space.areas, rectRight(a), cy) < 0) {
+    if (indexAtPoint(space.panels, rectRight(pa), cy) < 0) {
       x = b.maxX;
       vx = -Math.abs(vx) * physics.restitution;
       bounced = true;
@@ -361,17 +378,18 @@ export const throwStepRegion = (
   cur = screenOfBox(space, x, y);
   b = space.bounds[cur];
   a = space.areas[cur];
+  const pa2 = space.panels[cur] || a;
   const cx = x + space.size / 2;
   if (y < b.minY) {
     // ceilingBounce=false：顶部无边界，不夹不弹——宠物飞出屏幕顶部，靠重力落回
-    if (physics.ceilingBounce && indexAtPoint(space.areas, cx, a.y - 1) < 0) {
+    if (physics.ceilingBounce && indexAtPoint(space.panels, cx, pa2.y - 1) < 0) {
       y = b.minY;
       vy = Math.abs(vy) * physics.restitution;
       bounced = true;
     }
   } else if (y >= b.maxY) {
     // 下方还有一块屏（上下排布的桌面）⇒ 不当地面，继续往下掉
-    if (indexAtPoint(space.areas, cx, rectBottom(a)) < 0) {
+    if (indexAtPoint(space.panels, cx, rectBottom(pa2)) < 0) {
       y = b.maxY;
       vx *= Math.max(0, 1 - physics.groundFriction * dt);
       if (Math.abs(vy) < REST_VY) vy = 0;

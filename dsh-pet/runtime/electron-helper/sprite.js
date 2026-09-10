@@ -286,10 +286,10 @@ class PetSprite {
     this.sendBounds(x, y);
   }
 
-  /** 抛掷空间（逐屏 AABB）。AREAS 变化时由 relayout() 置空重建——飞行中每帧重算太浪费 */
+  /** 抛掷空间（逐屏 AABB）。AREAS/PANELS 变化时由 relayout() 置空重建——飞行中每帧重算太浪费 */
   throwSpaceOf() {
-    if (!this.space || this.space.areas !== AREAS) {
-      this.space = S.throwSpace({ areas: AREAS, size: this.size, sideAllow: this.sideAllow });
+    if (!this.space || this.space.areas !== AREAS || this.space.panels !== PANELS) {
+      this.space = S.throwSpace({ areas: AREAS, panels: PANELS, size: this.size, sideAllow: this.sideAllow });
     }
     return this.space;
   }

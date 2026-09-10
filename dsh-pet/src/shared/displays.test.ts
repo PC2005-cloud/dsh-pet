@@ -40,16 +40,17 @@ const SIDE_ALLOW = (HIT_BOX.x0 / 640) * SIZE; // 144.375
 
 const SPACE = throwSpace({ areas: AREAS, size: SIZE, sideAllow: SIDE_ALLOW });
 
-/** 抛掷步进跑到静止（或到步数上限），返回终态。dt 固定 1/60。 */
+/** 抛掷步进跑到静止（或到步数上限），返回终态。dt 固定 1/60。space 默认用双屏布局，可覆盖 */
 function settle(
   start: { x: number; y: number; vx: number; vy: number },
   physics: PhysicsParams = DEFAULT_PHYSICS,
   maxSteps = 4000,
+  space: ReturnType<typeof throwSpace> = SPACE,
 ): { x: number; y: number; vx: number; vy: number; screen: number; steps: number } {
   let s = { ...start };
-  let screen = screenOfBox(SPACE, start.x, start.y);
+  let screen = screenOfBox(space, start.x, start.y);
   for (let i = 0; i < maxSteps; i++) {
-    const r = throwStepRegion(s, 1 / 60, SPACE, physics);
+    const r = throwStepRegion(s, 1 / 60, space, physics);
     s = { x: r.x, y: r.y, vx: r.vx, vy: r.vy };
     screen = r.screen;
     if (r.atRest) return { ...s, screen, steps: i + 1 };
@@ -197,6 +198,83 @@ describe('throwStepRegion —— 空洞是墙，屏缝不是', () => {
     const noCeil: PhysicsParams = { ...DEFAULT_PHYSICS, ceilingBounce: false };
     const end = settle({ x: 1000, y: 100, vx: 0, vy: -3000 }, noCeil);
     assert.ok(bodyVisible(end.x, end.y), `落点 ${end.x},${end.y} 必须回到可见区`);
+  });
+});
+
+describe('throwStepRegion —— 任务栏条带不是墙，空洞仍是墙（面板探测）', () => {
+  // 上下叠放双屏，任务栏在上屏底边（高 48）：上屏 workArea 底 1392 ≠ 下屏顶 1440，
+  // 两块工作区之间隔一条 48px 条带——它属于上屏**面板**、不属于任何工作区。
+  const A = { x: 0, y: 0, width: 2560, height: 1392 };
+  const B = { x: 0, y: 1440, width: 2560, height: 1392 };
+  const AREAS_TB = [A, B];
+  const PANELS_TB = [
+    { x: 0, y: 0, width: 2560, height: 1440 },
+    { x: 0, y: 1440, width: 2560, height: 1440 },
+  ];
+  const SPACE_TB = throwSpace({ areas: AREAS_TB, panels: PANELS_TB, size: SIZE, sideAllow: SIDE_ALLOW });
+
+  test('向下甩能穿过任务栏条带落到下屏', () => {
+    let cur = { x: 1000, y: 800, vx: 0, vy: 1300 };
+    let reachedBottom = false;
+    for (let i = 0; i < 900 && !reachedBottom; i++) {
+      const r = throwStepRegion(cur, 1 / 60, SPACE_TB, DEFAULT_PHYSICS);
+      cur = { x: r.x, y: r.y, vx: r.vx, vy: r.vy };
+      if (r.screen === 1) reachedBottom = true;
+    }
+    assert.ok(reachedBottom, '应当穿过任务栏条带落到下屏');
+    const end = settle({ x: 1000, y: 800, vx: 0, vy: 1300 }, DEFAULT_PHYSICS, 2400, SPACE_TB);
+    assert.equal(end.screen, 1, '最终应歇在下屏');
+    assert.ok(
+      end.y <= B.y + B.height - PET_H + 0.001 && end.y >= B.y,
+      `落点 ${end.y} 应在下屏内（贴下屏工作区底）`,
+    );
+  });
+
+  test('向上甩能穿过任务栏条带飞进上屏', () => {
+    let cur = { x: 1000, y: 2100, vx: 0, vy: -2300 };
+    let reachedTop = false;
+    for (let i = 0; i < 900 && !reachedTop; i++) {
+      const r = throwStepRegion(cur, 1 / 60, SPACE_TB, DEFAULT_PHYSICS);
+      cur = { x: r.x, y: r.y, vx: r.vx, vy: r.vy };
+      if (r.screen === 0) reachedTop = true;
+    }
+    assert.ok(reachedTop, '应当穿过任务栏条带飞进上屏');
+  });
+
+  test('同一布局但不传 panels（退化）：任务栏条带仍是墙（旧行为）', () => {
+    const spaceNoPanels = throwSpace({ areas: AREAS_TB, size: SIZE, sideAllow: SIDE_ALLOW });
+    let cur = { x: 1000, y: 800, vx: 0, vy: 1300 };
+    let reachedBottom = false;
+    for (let i = 0; i < 400 && !reachedBottom; i++) {
+      const r = throwStepRegion(cur, 1 / 60, spaceNoPanels, DEFAULT_PHYSICS);
+      cur = { x: r.x, y: r.y, vx: r.vx, vy: r.vy };
+      if (r.screen === 1) reachedBottom = true;
+    }
+    assert.equal(reachedBottom, false, '无 panels 时任务栏条带应按墙处理（旧行为）');
+    assert.ok(cur.y <= A.y + A.height - PET_H + 1, `应停在任务栏上方，实际 ${cur.y}`);
+  });
+
+  test('单屏 + 底部任务栏：面板探测不造成无限下坠，仍在工作区底反弹', () => {
+    const onlyPanel = [{ x: 0, y: 0, width: 2560, height: 1440 }];
+    const onlyArea = [{ x: 0, y: 0, width: 2560, height: 1392 }];
+    const sp = throwSpace({ areas: onlyArea, panels: onlyPanel, size: SIZE, sideAllow: SIDE_ALLOW });
+    const end = settle({ x: 1000, y: 500, vx: 0, vy: 900 }, DEFAULT_PHYSICS, 2400, sp);
+    assert.equal(end.screen, 0);
+    assert.ok(end.y <= onlyArea[0].height - PET_H + 1, `应停在任务栏上方（工作区底），实际 y=${end.y}`);
+  });
+
+  test('T 形布局（有 panels 但仍与工作区同形）：空洞仍然是墙', () => {
+    // 主屏（无任务栏）面板 == 工作区：探测结果与旧行为一致，空洞处照判无屏
+    const sp = throwSpace({ areas: AREAS, panels: AREAS, size: SIZE, sideAllow: SIDE_ALLOW });
+    let cur = { x: 2700, y: -400, vx: -2600, vy: 0 };
+    const noGravity: PhysicsParams = { ...DEFAULT_PHYSICS, gravity: 0 };
+    let minX = Infinity;
+    for (let i = 0; i < 60; i++) {
+      const r = throwStepRegion(cur, 1 / 60, sp, noGravity);
+      cur = { x: r.x, y: r.y, vx: r.vx, vy: r.vy };
+      minX = Math.min(minX, r.x);
+    }
+    assert.ok(minX >= sp.bounds[1].minX, `空洞侧必须仍是墙，最左 ${minX}`);
   });
 });
 

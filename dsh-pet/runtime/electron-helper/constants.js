@@ -53,10 +53,13 @@ const VIEW = {
 };
 /** 逐显示器工作区，**视口相对坐标**（= 屏幕坐标 − VIEW 原点）。抛掷/漫游/菜单夹取都走它们的并集 */
 let AREAS = [];
+/** 逐显示器**完整面板**（含任务栏区，视口相对坐标，与 AREAS 同序）：抛掷「越界侧有没有邻屏」
+ *  的探测用它——任务栏在接缝处挖出的工作区条带不当墙（见 shared/physics.ts） */
+let PANELS = [];
 /** 主屏工作区（视口相对坐标）：角落定位与「回到初始位置」用它——外接矩形的角落可能落在空洞里 */
 let PRIMARY_AREA = null;
 
-/** 把主进程给的桌面几何（{hull, areas, primaryIndex}，屏幕坐标）挂到 VIEW / AREAS / PRIMARY_AREA */
+/** 把主进程给的桌面几何（{hull, areas, panels, primaryIndex}，屏幕坐标）挂到 VIEW / AREAS / PANELS */
 function applyDeskGeometry(geo) {
   const hull = geo && geo.hull;
   const list = geo && Array.isArray(geo.areas) ? geo.areas.filter((a) => a && a.width > 0 && a.height > 0) : [];
@@ -71,13 +74,23 @@ function applyDeskGeometry(geo) {
     -VIEW.x,
     -VIEW.y,
   );
+  // 面板与工作区同序；缺失/长度不符（老主进程）退化为工作区，保持旧行为
+  const panelsList =
+    geo && Array.isArray(geo.panels) && geo.panels.length === list.length
+      ? geo.panels.filter((p) => p && p.width > 0 && p.height > 0)
+      : null;
+  PANELS = S.translateRects(
+    (panelsList || list).map((a) => ({ x: toLocal(a.x), y: toLocal(a.y), width: toLocal(a.width), height: toLocal(a.height) })),
+    -VIEW.x,
+    -VIEW.y,
+  );
   const pi = Number(geo.primaryIndex);
   PRIMARY_AREA = AREAS[Number.isInteger(pi) && pi >= 0 && pi < AREAS.length ? pi : 0];
   return true;
 }
 
 // 首帧几何走 URL query（position() 定角落时就要用）；运行期变化再经 pet:displays 推送。
-// areas 缺失（手动 start-desktop / 老版本主进程）时退化为「整个视口就是一块屏」= 旧行为。
+// areas/panels 缺失（手动 start-desktop / 老版本主进程）时退化为「整个视口就是一块屏」= 旧行为。
 applyDeskGeometry({
   hull: { x: VIEW_SCREEN.x, y: VIEW_SCREEN.y, width: VIEW_SCREEN.w, height: VIEW_SCREEN.h },
   areas: (() => {
@@ -88,6 +101,15 @@ applyDeskGeometry({
       /* 落到下面的单矩形兜底 */
     }
     return [{ x: VIEW_SCREEN.x, y: VIEW_SCREEN.y, width: VIEW_SCREEN.w, height: VIEW_SCREEN.h }];
+  })(),
+  panels: (() => {
+    try {
+      const parsed = JSON.parse(params.get('panels') || '[]');
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    } catch {
+      /* 落到下面的面板兜底（= 工作区） */
+    }
+    return null;
   })(),
   primaryIndex: Number(params.get('primaryIndex') || 0),
 });
