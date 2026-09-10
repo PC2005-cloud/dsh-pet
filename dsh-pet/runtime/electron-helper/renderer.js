@@ -111,10 +111,24 @@ function injectAssets() {
   document.head.appendChild(menuStyle);
 }
 
-// 工作区尺寸由主进程注入并在进程生命周期内不变；窗口本身跟随宠物移动，
-// 这里仍兜底处理窗口内容区尺寸异常的情况（按当前窗口位置重新规整）。
+// 显示器几何变化（改分辨率/缩放、插拔屏、旋转）：主进程重算后推来，渲染端就地重挂视口与边界。
+// 这条通道是必需的——桌面几何原先只在窗口创建时经 URL query 注入一次，运行期永不更新。
+if (window.petBridge && window.petBridge.onDisplays) {
+  window.petBridge.onDisplays((geo) => {
+    if (!applyDeskGeometry(geo)) return;
+    for (const s of sprites) s.relayout();
+  });
+}
+
+// 窗口内容区尺寸异常时按当前位置重新规整。
+// 守卫：拖拽/飞行/漫游中**绝不**重设位置——这三种状态下位置由输入或物理驱动，而 position()
+// 会把宠物拉回 customPos（上一次的落点）。跨屏时 Windows 会因 WM_DPICHANGED 主动改窗口尺寸，
+// 那正好落在拖拽/飞行过程中，不设防就会看到宠物瞬间跳回上一个落点。
 window.addEventListener('resize', () => {
-  for (const s of sprites) s.position();
+  for (const s of sprites) {
+    if (s.dragState.active || s.throwRef !== null || s.moveRef !== null) continue;
+    s.position();
+  }
 });
 
 injectAssets();

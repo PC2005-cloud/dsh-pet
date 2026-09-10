@@ -21,11 +21,22 @@
  */
 const { app, BrowserWindow, ipcMain, screen, shell, protocol } = require('electron');
 const path = require('node:path');
-const { writeFileSync } = require('node:fs');
+const { execFileSync } = require('node:child_process');
+const { readFileSync, writeFileSync } = require('node:fs');
 const fsPromises = require('node:fs/promises');
 
 // 允许无用户手势直接播放（余额动画等）
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
+
+// 显式定名：Helper 是被 `electron.exe <main.js>` 直接拉起的，Electron 取不到 app 名会回落成
+// "Electron"，userData 便落到 %APPDATA%\Electron —— 那是所有这么跑的 Electron 脚本的公共目录，
+// 我们的 DPI 缓存与 Chromium profile 都会和别人混在一起。必须赶在任何 getPath('userData') 之前设。
+app.setName('dsh-pet-electron-helper');
+
+/** DPI 探测子进程模式：不建窗口，只把主屏 scaleFactor 打到 stdout 就退出（见 probePrimaryScale） */
+const DPI_PROBE = process.env.DSH_PET_DPI_PROBE === '1';
+/** 探测进程的输出标记（父进程按它抓值） */
+const DPI_MARK = 'dsh-pet-primary-scale:';
 
 // Windows 透明分层窗口（WS_EX_LAYERED）在 DWM 硬件加速合成下存在多处缺陷：
 //   - 拖拽移动时窗口四周出现黑色边框（#37）
@@ -34,6 +45,129 @@ app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 // 不影响浏览器形态与主 DSH（独立进程）；非 Windows（macOS/Linux）合成路径不同，保留硬件加速。
 if (process.platform === 'win32') {
   app.disableHardwareAcceleration();
+}
+
+// ---------- 全局 DPI 线性化（多显示器异构缩放的根因修复） ----------
+//
+// Windows 上 Chromium 的 DIP↔物理 换算是**逐显示器**的仿射变换，而且
+// ScreenWin::DIPToScreenRect(hwnd, rect) 用的是「hwnd 当前归属屏」的那一组参数：
+//   physical = (dip − D.dipOrigin) × D.scale + D.pixelOrigin
+// 归属由 MonitorFromWindow(MONITOR_DEFAULTTONEAREST) 按面积占比决定，窗口骑缝时会反复翻转。
+// 两屏缩放不同时，同一个 DIP 值在翻转前后落到不同物理位置、算出不同物理尺寸
+// （实测 1.5/1.75 双屏：位置差 110px、924 DIP 宽的窗口尺寸差 231px），
+// 于是 setContentBounds 每帧的落点在两套坐标系之间横跳 —— 这就是拖过屏缝时的「分身闪烁」，
+// 也是两屏缩放一致时同样骑缝却毫无问题的原因。
+//
+// --force-device-scale-factor 让 Chromium 的 GetMonitorScaleFactors() 对所有显示器
+// 直接返回同一个值，全部屏塌缩成**同一个**仿射变换 ⇒ DIPToScreenRect 的结果与窗口归属无关。
+//
+// 取值必须是 **1**，不能取主屏的 scaleFactor。实测（tools/probe-dpi.cjs，1.5 + 1.75 双屏）：
+//   forced=1.5 → display.bounds 被二次缩放（主屏物理 3840 宽报成 1706 = 3840/1.5/1.5，
+//                而同一块屏的 workArea 报 2560 = 3840/1.5，两者自相矛盾）。
+//                DIPToScreenPoint 用 bounds.origin() 当 dipOrigin，于是
+//                pixelOrigin(3840) ≠ dipOrigin(1706)×1.5，副屏多出 1281px 的**恒定**偏移——
+//                比不加 switch 时的 75px 还糟。
+//   forced=1   → bounds 与 workArea 一致，每块屏都满足 pixelOrigin == dipOrigin×scale，
+//                DIP 与物理像素成为恒等映射，探针的 DELTA 全 0（尺寸差 231×151 也一并归零）。
+// 所以这里锁死 1：坐标系 = Windows 物理像素，跨屏几何再无换算与舍入。
+//
+// 代价：宠物尺寸的单位从 DIP 变成物理像素，不补偿的话在 150% 的屏上会小 1/1.5。
+// 用探测到的**真实主屏 scaleFactor** 乘进渲染端的 CONFIG.scale 抵掉（见 petScale()）——
+// 主屏上的观感与修复前逐像素相同；其余屏改按主屏缩放渲染宠物（同尺寸同分辨率的两块屏上
+// 物理大小反而一致了）。探测失败就整个不启用，退回修复前行为，不做没有补偿的缩放。
+//
+// 环境变量 DSH_PET_FORCE_DSF：'0' = 关闭本机制；其它正数 = 强制该值（排障用，会踩上面的 bug）。
+//
+// 取值时机是个麻烦：switch 必须在 app ready 之前设，而那时 screen 模块还不可用。
+// 所以首次启动 spawn 一个自己的探测子进程（DSH_PET_DPI_PROBE=1，只打印 scaleFactor 就退出，
+// ~0.5s）并把结果落盘；之后每次启动直接读缓存，零开销。
+
+/** 主屏缩放缓存文件（userData 在 ready 前即可用） */
+function dpiCacheFile() {
+  return path.join(app.getPath('userData'), 'primary-scale.json');
+}
+
+function readCachedPrimaryScale() {
+  try {
+    const v = Number(JSON.parse(readFileSync(dpiCacheFile(), 'utf8')).scaleFactor);
+    return Number.isFinite(v) && v > 0 ? v : 0;
+  } catch {
+    return 0; // 首次启动/文件损坏：当作无缓存，重新探测
+  }
+}
+
+function writeCachedPrimaryScale(value) {
+  try {
+    writeFileSync(dpiCacheFile(), JSON.stringify({ scaleFactor: value }), 'utf8');
+  } catch (e) {
+    console.error('[dsh-pet-desktop-helper] write dpi cache failed:', String(e && e.message ? e.message : e));
+  }
+}
+
+/** 从探测子进程的输出里抓 scaleFactor（0 = 没抓到） */
+function parseProbeOutput(text) {
+  const m = new RegExp(DPI_MARK + '([0-9.]+)').exec(String(text || ''));
+  const v = m ? Number(m[1]) : 0;
+  return Number.isFinite(v) && v > 0 ? v : 0;
+}
+
+/** 拉起探测子进程读主屏 scaleFactor（同一个 electron + 同一个 main.js，走 DPI_PROBE 分支） */
+function probePrimaryScale() {
+  const opts = {
+    env: { ...process.env, DSH_PET_DPI_PROBE: '1', DSH_PET_BRIDGE: '0', DSH_PET_SMOKE: '0' },
+    timeout: 20000,
+    encoding: 'utf8',
+    windowsHide: true,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  };
+  let out = '';
+  try {
+    out = execFileSync(process.execPath, [__filename, '--dsh-pet-dpi-probe'], opts);
+  } catch (e) {
+    // 只认 stdout，不认退出码：一个不开窗口的 Electron 进程调 app.exit() 在 Windows 上
+    // 偶发 0xC0000005（退出期访问违例），但那时值早就写出来了，丢掉它纯属浪费一次冷启动。
+    out = e && e.stdout ? String(e.stdout) : '';
+    if (!parseProbeOutput(out)) {
+      const detail = [
+        e && e.status !== undefined ? 'status=' + e.status : '',
+        e && e.stderr ? 'stderr=' + String(e.stderr).trim().slice(0, 300) : '',
+      ]
+        .filter(Boolean)
+        .join(' ');
+      console.error(
+        '[dsh-pet-desktop-helper] dpi probe failed:',
+        String(e && e.message ? e.message : e).split('\n')[0],
+        detail,
+      );
+      return 0; // 探测失败：不加 switch，退回修复前行为（多屏异构 DPI 会闪，但不影响可用性）
+    }
+  }
+  const v = parseProbeOutput(out);
+  if (v > 0) writeCachedPrimaryScale(v);
+  return v;
+}
+
+/** 真实主屏 scaleFactor（探测所得；0 = 未知）。开启线性化后 screen API 只会报 1，只能靠它。 */
+let PRIMARY_SCALE = 0;
+/** 实际生效的强制缩放（0 = 未启用，坐标系维持修复前的逐屏 DIP） */
+let FORCED_SCALE = 0;
+if (!DPI_PROBE && process.env.DSH_PET_FORCE_DSF !== '0') {
+  PRIMARY_SCALE = readCachedPrimaryScale() || probePrimaryScale();
+  const override = Number(process.env.DSH_PET_FORCE_DSF);
+  const forced = Number.isFinite(override) && override > 0 ? override : PRIMARY_SCALE > 0 ? 1 : 0;
+  if (forced > 0) {
+    app.commandLine.appendSwitch('force-device-scale-factor', String(forced));
+    FORCED_SCALE = forced;
+  }
+}
+
+/**
+ * 渲染端的 CONFIG.scale：宿主给的基准 × 物理像素补偿。
+ * 线性化开启后 1 逻辑像素 = 1 物理像素，宠物按主屏缩放放大回原来的观感。
+ */
+function petScale() {
+  const base = Number(process.env.DSH_PET_SCALE || '1') || 1;
+  return FORCED_SCALE > 0 && PRIMARY_SCALE > 0 ? base * (PRIMARY_SCALE / FORCED_SCALE) : base;
 }
 
 /** bridge 模式：DSH_PET_BRIDGE=1（宿主注入）。开启时注册 dsh-pet-bridge scheme + 管道转发 */
@@ -61,6 +195,9 @@ if (BRIDGE) {
 
 /** 窗口表：petId -> BrowserWindow */
 const windows = new Map();
+
+/** win.id -> 上一次**请求**的内容区矩形（"x,y,w,h"）：pet:set-bounds 的去重基准，见那里的注释 */
+const lastRequestedBounds = new Map();
 
 /**
  * 宠物间碰撞 broker 状态：petId -> { x, y, vx, vy, size, bottomPad }。
@@ -127,31 +264,48 @@ function petWindowSize(size) {
 }
 
 /**
- * 全部显示器工作区的外接矩形（"整个桌面"的可用区域并集）。
- * 注入给渲染端作为视口 VIEW —— 多显示器时漫游/抛掷/角落定位/菜单夹取全部跨屏
- * （#43：宠物可以被甩/拖到其它显示器）；单显示器时它就是主屏工作区，行为与以前完全一致。
+ * 桌面几何：**逐显示器的工作区列表** + 它们的外接矩形 + 主屏下标。
+ *
+ * 外接矩形（hull）仍然是渲染端视口 VIEW 的来源——它只用作坐标系原点与比例换算基准。
+ * 但所有边界判定（漫游落点 / 抛掷反弹 / 角落定位 / 菜单夹取）必须走 areas 的**并集**：
+ * 显示器摆放不规则时 hull 里会有大片不属于任何屏的空洞，以 hull 为边界会把宠物放进去
+ * （实测右倒 T 型双屏：hull 的 23.7% 是空洞，宠物飞进去就彻底看不见了）。
  */
-function deskWorkArea() {
+function deskGeometry() {
+  const displays = screen.getAllDisplays();
+  const areas = displays.map((d) => ({
+    x: d.workArea.x,
+    y: d.workArea.y,
+    width: d.workArea.width,
+    height: d.workArea.height,
+  }));
   let x0 = Infinity;
   let y0 = Infinity;
   let x1 = -Infinity;
   let y1 = -Infinity;
-  for (const d of screen.getAllDisplays()) {
-    const a = d.workArea;
+  for (const a of areas) {
     x0 = Math.min(x0, a.x);
     y0 = Math.min(y0, a.y);
     x1 = Math.max(x1, a.x + a.width);
     y1 = Math.max(y1, a.y + a.height);
   }
-  return { x: x0, y: y0, width: x1 - x0, height: y1 - y0 };
+  const primaryId = screen.getPrimaryDisplay().id;
+  const primaryIndex = Math.max(
+    0,
+    displays.findIndex((d) => d.id === primaryId),
+  );
+  return { hull: { x: x0, y: y0, width: x1 - x0, height: y1 - y0 }, areas, primaryIndex };
 }
 
 function createPetWindows() {
-  const area = deskWorkArea();
+  const geo = deskGeometry();
+  const area = geo.hull;
   const configUrl = process.env.DSH_PET_CONFIG_URL || 'http://127.0.0.1:3080/dsh-pet-7340/config';
   const pets = petsFromEnv();
+  const scale = petScale();
   for (const pet of pets) {
-    const { width, height } = petWindowSize(pet.size);
+    // 初始窗口尺寸也要吃缩放补偿，否则启动瞬间会有一次可见的尺寸跳变
+    const { width, height } = petWindowSize(pet.size * scale);
     const win = new BrowserWindow({
       width,
       height,
@@ -190,18 +344,25 @@ function createPetWindows() {
     win.setIgnoreMouseEvents(true, { forward: true });
     windowIgnore.set(win.id, true);
     win.once('ready-to-show', () => win.show());
-    win.on('closed', () => windows.delete(pet.id));
+    win.on('closed', () => {
+      windows.delete(pet.id);
+      lastRequestedBounds.delete(win.id);
+    });
     win
       .loadFile('index.html', {
         query: {
           configUrl,
           bridge: BRIDGE ? '1' : '0',
-          scale: process.env.DSH_PET_SCALE || '1',
+          scale: String(scale),
           petIndex: String(pet.index),
           workAreaW: String(area.width),
           workAreaH: String(area.height),
           workAreaX: String(area.x),
           workAreaY: String(area.y),
+          // 逐屏工作区（屏幕坐标）+ 主屏下标：渲染端所有边界判定走它们的并集，不走外接矩形。
+          // 首帧就要用（position() 定角落），所以走 query；运行期变化再经 pet:displays 推送。
+          areas: JSON.stringify(geo.areas),
+          primaryIndex: String(geo.primaryIndex),
         },
       })
       .catch((error) => {
@@ -311,6 +472,24 @@ async function handleBridgeRequest(request) {
 }
 
 app.whenReady().then(() => {
+  // 探测子进程：此时没有 force-device-scale-factor，读到的是 Windows 的真实主屏缩放。
+  // 退出推迟一拍——在 ready 回调里直接 app.exit() 会赶在 stdout 落盘前拆掉进程
+  if (DPI_PROBE) {
+    process.stdout.write(DPI_MARK + screen.getPrimaryDisplay().scaleFactor + '\n');
+    setTimeout(() => app.exit(0), 0);
+    return;
+  }
+  console.error(
+    '[dsh-pet-desktop-helper] displays: ' +
+      JSON.stringify(deskGeometry()) +
+      ' forcedScaleFactor=' +
+      (FORCED_SCALE || 'off') +
+      ' primaryScale=' +
+      (PRIMARY_SCALE || 'unknown') +
+      ' petScale=' +
+      petScale(),
+  );
+
   if (BRIDGE) {
     // 自定义 scheme 接住渲染端全部请求（配置/余额/碎碎念/广播/素材）
     protocol.handle('dsh-pet-bridge', (request) =>
@@ -336,10 +515,15 @@ app.whenReady().then(() => {
     const width = Number(bounds?.width);
     const height = Number(bounds?.height);
     if (![x, y, width, height].every(Number.isFinite)) return;
-    win.setContentBounds(
-      { x: Math.round(x), y: Math.round(y), width: Math.round(width), height: Math.round(height) },
-      false,
-    );
+    // 去重必须比较**我们上一次请求的值**，绝不能拿 win.getContentBounds() 回读值来比：
+    // 跨缩放屏的 DIP↔物理 往返有 ScaleToEnclosingRect（向外取整）与 origin 舍入，
+    // 读回值与设定值永远不相等，去重永远不生效，反而变成每帧强制重设窗口位置。
+    const rect = { x: Math.round(x), y: Math.round(y), width: Math.round(width), height: Math.round(height) };
+    const key = rect.x + ',' + rect.y + ',' + rect.width + ',' + rect.height;
+    if (lastRequestedBounds.get(win.id) !== key) {
+      lastRequestedBounds.set(win.id, key);
+      win.setContentBounds(rect, false);
+    }
     // 碰撞站场：位置必须用**包围盒左上角**（renderer 显式上报 boxX/boxY）——
     // 窗口坐标 = 包围盒 − margin（半只宠物宽），直接拿窗口坐标会让跨窗检测整体错位
     const petId = [...windows.keys()].find((id) => windows.get(id) === win);
@@ -411,6 +595,46 @@ app.whenReady().then(() => {
       console.error('[dsh-pet-desktop-helper] openExternal failed:', error);
     });
   });
+
+  // 显示器热更新：分辨率/缩放变化、插拔屏、旋转都会让桌面几何失效。原先几何只在
+  // createPetWindows() 算一次并经 URL query 注入，渲染端 VIEW 是模块顶层常量，运行期永不更新——
+  // 表现为「改了分辨率后可移动范围还是旧的」。这里重算并推给所有窗口，渲染端就地重挂。
+  let displaysTimer = null;
+  const pushDisplays = () => {
+    const geo = deskGeometry();
+    lastRequestedBounds.clear(); // 坐标系变了，去重缓存作废，下一帧必须真的重设一次
+    for (const win of windows.values()) {
+      if (!win.isDestroyed()) win.webContents.send('pet:displays', geo);
+    }
+    console.error('[dsh-pet-desktop-helper] displays changed: ' + JSON.stringify(geo));
+    // 主屏缩放可能一起变了（它决定宠物的尺寸补偿）。线性化生效期间 screen API 只报被强制的值，
+    // 真实值只能靠探测子进程拿；不一致就刷新缓存，下次启动自动用上。
+    if (FORCED_SCALE > 0) {
+      setTimeout(() => {
+        const real = probePrimaryScale();
+        if (real > 0 && Math.abs(real - PRIMARY_SCALE) > 1e-6) {
+          console.error(
+            '[dsh-pet-desktop-helper] primary scaleFactor changed ' +
+              PRIMARY_SCALE +
+              ' -> ' +
+              real +
+              '; restart the desktop pet to resize',
+          );
+        }
+      }, 1000).unref?.();
+    }
+  };
+  /** 显示器事件会连发（一次改动能来好几条），去抖后只重算一次 */
+  const scheduleDisplays = () => {
+    if (displaysTimer) clearTimeout(displaysTimer);
+    displaysTimer = setTimeout(() => {
+      displaysTimer = null;
+      pushDisplays();
+    }, 300);
+  };
+  screen.on('display-metrics-changed', scheduleDisplays);
+  screen.on('display-added', scheduleDisplays);
+  screen.on('display-removed', scheduleDisplays);
 
   // 冒烟自检模式（默认关闭）：DSH_PET_SMOKE=1 时延时截图到 DSH_PET_SMOKE_OUT 后退出，
   // 用于验证窗口/渲染/动画链路（如 CI 或本地验证）。
