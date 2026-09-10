@@ -17,17 +17,55 @@ const CONFIG = {
 // bridge 模式（DSH_PET_BRIDGE=1）：请求走自定义 scheme，经 Electron 主进程转宿主管道——
 // 绕开 DSH Desktop 2.0.3+ 的浏览器访问闸门（只放行带令牌的请求，插件自拉进程的裸 HTTP 全 403）
 const BRIDGE = params.get('bridge') === '1';
-// 视口 = 全部显示器工作区的外接矩形（多显示器时即整个桌面；窗口只是宠物的一块局部画布）：
-// 漫游边界/角落定位/抛掷反弹/位置比例换算都用它——宠物可以跨屏漫游、被甩到其它显示器（#43）；
-// 单显示器时它即主屏工作区，行为与以前完全一致。
+// 视口 = 全部显示器工作区的外接矩形（多显示器时即整个桌面；窗口只是宠物的一块局部画布）。
+// 它只是**坐标系原点与比例换算基准**：位置比例（customPos）、漫游 ratio 都按它算。
 // x/y = 外接矩形左上角（多显示器时原点非 0）——visibleClampRect 计算「窗口 ∩ 工作区」需要它；
 // 缺省 0（单显示器原点即 0）。注意：缺失会令夹取矩形变 NaN，菜单将飞到窗口左上角（#41 回归）。
+//
+// **边界判定一律不用它**，改用下面 AREAS 的并集：显示器摆放不规则时外接矩形里有大片空洞
+// （实测右倒 T 型双屏 23.7% 的面积不属于任何屏），拿它当边界会让宠物走进/飞进不可见区域。
+// 字段可变：显示器分辨率/缩放变化、插拔屏、旋转时由 applyDeskGeometry 就地重挂（#P4）。
 const VIEW = {
   x: Number(params.get('workAreaX') || 0),
   y: Number(params.get('workAreaY') || 0),
   w: Number(params.get('workAreaW') || (window.screen && window.screen.availWidth) || 1920),
   h: Number(params.get('workAreaH') || (window.screen && window.screen.availHeight) || 1080),
 };
+/** 逐显示器工作区，**视口相对坐标**（= 屏幕坐标 − VIEW 原点）。抛掷/漫游/菜单夹取都走它们的并集 */
+let AREAS = [];
+/** 主屏工作区（视口相对坐标）：角落定位与「回到初始位置」用它——外接矩形的角落可能落在空洞里 */
+let PRIMARY_AREA = null;
+
+/** 把主进程给的桌面几何（{hull, areas, primaryIndex}，屏幕坐标）挂到 VIEW / AREAS / PRIMARY_AREA */
+function applyDeskGeometry(geo) {
+  const hull = geo && geo.hull;
+  const list = geo && Array.isArray(geo.areas) ? geo.areas.filter((a) => a && a.width > 0 && a.height > 0) : [];
+  if (!hull || !(hull.width > 0) || !(hull.height > 0) || list.length === 0) return false;
+  VIEW.x = hull.x;
+  VIEW.y = hull.y;
+  VIEW.w = hull.width;
+  VIEW.h = hull.height;
+  AREAS = S.translateRects(list, -hull.x, -hull.y);
+  const pi = Number(geo.primaryIndex);
+  PRIMARY_AREA = AREAS[Number.isInteger(pi) && pi >= 0 && pi < AREAS.length ? pi : 0];
+  return true;
+}
+
+// 首帧几何走 URL query（position() 定角落时就要用）；运行期变化再经 pet:displays 推送。
+// areas 缺失（手动 start-desktop / 老版本主进程）时退化为「整个视口就是一块屏」= 旧行为。
+applyDeskGeometry({
+  hull: { x: VIEW.x, y: VIEW.y, width: VIEW.w, height: VIEW.h },
+  areas: (() => {
+    try {
+      const parsed = JSON.parse(params.get('areas') || '[]');
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    } catch {
+      /* 落到下面的单矩形兜底 */
+    }
+    return [{ x: VIEW.x, y: VIEW.y, width: VIEW.w, height: VIEW.h }];
+  })(),
+  primaryIndex: Number(params.get('primaryIndex') || 0),
+});
 const ORIGIN = new URL(CONFIG.configUrl).origin;
 /** 宿主 /dsh-pet-7340 前缀：bridge 走自定义 scheme（主进程转发），否则 HTTP 直连宿主 */
 const BASE = BRIDGE ? 'dsh-pet-bridge://dsh-pet/dsh-pet-7340' : ORIGIN + '/dsh-pet-7340';

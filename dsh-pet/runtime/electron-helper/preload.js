@@ -38,4 +38,9 @@ contextBridge.exposeInMainWorld('petBridge', {
   onPetHit(cb) {
     ipcRenderer.on('pet:hit', (e, payload) => cb(payload));
   },
+  // 显示器热更新：分辨率/缩放变化、插拔屏、旋转后主进程重算桌面几何并推来
+  // （{hull, areas, primaryIndex}，屏幕坐标）——渲染端就地重挂视口与边界。
+  onDisplays(cb) {
+    ipcRenderer.on('pet:displays', (e, geo) => cb(geo));
+  },
 });

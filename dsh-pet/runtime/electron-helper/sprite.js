@@ -67,6 +67,7 @@ class PetSprite {
     this.dragFollowToken = 0;
     this.throwRef = null; // 抛掷 rAF handle
     this.throwToken = 0;
+    this.space = null; // 抛掷空间（逐屏 AABB）缓存；显示器变化时由 relayout() 置空重建
     // Q 弹挤压（点击回应 / 抛掷落地）：rAF + 待压标记（等新动画成为前台再压，压新首帧）
     this.squashRef = null;
     this.squashToken = 0;
@@ -261,18 +262,49 @@ class PetSprite {
       x = this.customPos.rx * W - this.halfW;
       y = this.customPos.ry * H - this.halfH;
     } else {
+      // 角落取**主屏**而不是外接矩形：不规则多屏布局下外接矩形的角落可能不属于任何显示器
+      // （实测右倒 T 型双屏，top-left 落在主屏上方的空洞里），配了该角落的宠物开机即隐身。
       const anchor = S.anchorPixel({
         corner: this.pet.position.corner,
-        marginX: this.pet.position.marginX,
-        marginY: this.pet.position.marginY,
+        // marginX/marginY 是配置里的绝对像素，与 size 一样要吃 CONFIG.scale：开启 DPI 线性化后
+        // 坐标系是物理像素，不乘的话边距会视觉缩水（150% 缩放下 marginY:100 只剩 2/3 观感）
+        marginX: this.pet.position.marginX * CONFIG.scale,
+        marginY: this.pet.position.marginY * CONFIG.scale,
         size: this.size,
         W,
         H,
+        area: PRIMARY_AREA || undefined,
       });
       x = anchor.x;
       y = anchor.y;
     }
     this.sendBounds(x, y);
+  }
+
+  /** 抛掷空间（逐屏 AABB）。AREAS 变化时由 relayout() 置空重建——飞行中每帧重算太浪费 */
+  throwSpaceOf() {
+    if (!this.space || this.space.areas !== AREAS) {
+      this.space = S.throwSpace({ areas: AREAS, size: this.size, sideAllow: this.sideAllow });
+    }
+    return this.space;
+  }
+
+  /**
+   * 显示器几何变化（改分辨率/缩放、插拔屏、旋转）后就地重挂：
+   * 抛掷空间作废，并把宠物从可能变成空洞的位置拉回可见区。
+   * 拖拽中不动它（用户正握着，位置由指针决定）；飞行中也不动（下一帧物理自会按新边界夹取）。
+   */
+  relayout() {
+    this.space = null;
+    if (this.dragState.active || this.throwRef !== null) return;
+    this.stopMove();
+    const cx = this.pos.x + this.halfW;
+    const cy = this.pos.y + this.halfH;
+    const p = S.clampPointToRegion(AREAS, cx, cy);
+    if (p.x !== cx || p.y !== cy) {
+      this.customPos = { rx: p.x / VIEW.w, ry: p.y / VIEW.h };
+    }
+    this.position();
   }
 
   currentCenterX() {
@@ -414,9 +446,11 @@ class PetSprite {
       dir,
       minDist: mp.minDist * distScale,
       maxDist: mp.maxDist * distScale,
-      margin: mp.margin,
+      margin: mp.margin * CONFIG.scale, // 同 position() 的 marginX/marginY：绝对像素配置值须随坐标系缩放
       halfW: this.halfW,
       sideAllow: this.sideAllow,
+      // 落点按显示器并集判定：能骑缝跨屏走，但走不进外接矩形里的空洞
+      areas: AREAS,
     });
     if (!plan) return false;
     this.pendingMove = { ...plan, dir, leadSec: mp.leadSec, tailSec: mp.tailSec };
@@ -519,7 +553,7 @@ class PetSprite {
   startThrow(px, py, vx, vy) {
     this.stopDragFollow();
     this.stopMove();
-    const bounds = S.throwBounds({ W: VIEW.w, H: VIEW.h, size: this.size, sideAllow: this.sideAllow });
+    // 边界 = 显示器工作区**并集**：空洞是墙（宠物再也飞不进不可见区域），屏缝不是墙（跨屏弹跳照旧）
     const token = ++this.throwToken;
     let state = { x: px, y: py, vx, vy };
     let last = performance.now();
@@ -530,7 +564,9 @@ class PetSprite {
       const dt = (now - last) / 1000;
       last = now;
       const fallingVy = state.vy; // 本帧积分前的竖直速度（正=下落）：即落地冲击速度
-      const res = S.throwStep(state, dt, bounds, this.physics);
+      // 每帧重取：显示器变化时 relayout() 会让缓存失效，res.screen 必须与这一份对应
+      const sp = this.throwSpaceOf();
+      const res = S.throwStepRegion(state, dt, sp, this.physics);
       state = { x: res.x, y: res.y, vx: res.vx, vy: res.vy };
       this.throwState = state;
       // 上报飞行状态（节流 ~30ms）：主进程 broker 汇聚后广播，其它窗口用它做跨窗碰撞检测
@@ -570,8 +606,10 @@ class PetSprite {
         }
       }
       this.sendBounds(res.x, res.y);
-      // 落地 Q 弹：只在空中→地面转换帧触发一次，力度随冲击速度（轻落 0.8 ~ 重砸 0.55）
-      const grounded = res.y >= bounds.maxY - 1;
+      // 落地 Q 弹：只在空中→地面转换帧触发一次，力度随冲击速度（轻落 0.8 ~ 重砸 0.55）。
+      // 「地面」是**当前所在屏**的底边——多屏各有各的地面高度
+      const curBounds = sp.bounds[res.screen] || sp.bounds[0];
+      const grounded = curBounds ? res.y >= curBounds.maxY - 1 : false;
       if (res.bounced && grounded && !prevGrounded) {
         const frontEl = this.front === 0 ? this.videoA : this.videoB;
         this.startSquash(frontEl, S.landingSquash(fallingVy));
@@ -848,15 +886,21 @@ class PetSprite {
   // 退化（可视区过小/窗口整体出屏，光标也点不到宠物）返回 null → 调用方按窗口视口兜底。
   visibleClampRect() {
     // pos 是视口相对坐标，窗口屏幕位置 = pos + VIEW 原点 − 外扩余量（见 sendBounds）；
-    // 比较双方都用屏幕坐标（坐标系不混），返回的夹取矩形仍是窗口局部坐标
+    // 比较双方都用屏幕坐标（坐标系不混），返回的夹取矩形仍是窗口局部坐标。
+    // 夹取用**宠物所在的那块屏**而不是外接矩形：外接矩形含空洞，按它夹菜单会伸进
+    // 不属于任何显示器的区域（看不见）；菜单本来也不该跨屏显示。
+    const area = S.resolveRect(AREAS, this.pos.x + this.halfW, this.pos.y + this.halfH);
+    if (!area) return null;
     const winX = this.pos.x + VIEW.x - this.margin.l;
     const winY = this.pos.y + VIEW.y - this.margin.t;
     const winW = this.size + this.margin.l + this.margin.r;
     const winH = this.winH + this.margin.t + this.margin.b;
-    const vx0 = Math.max(VIEW.x, winX);
-    const vy0 = Math.max(VIEW.y, winY);
-    const vx1 = Math.min(VIEW.x + VIEW.w, winX + winW);
-    const vy1 = Math.min(VIEW.y + VIEW.h, winY + winH);
+    const ax = area.x + VIEW.x;
+    const ay = area.y + VIEW.y;
+    const vx0 = Math.max(ax, winX);
+    const vy0 = Math.max(ay, winY);
+    const vx1 = Math.min(ax + area.width, winX + winW);
+    const vy1 = Math.min(ay + area.height, winY + winH);
     const w = vx1 - vx0;
     const h = vy1 - vy0;
     if (w < 40 || h < 40) return null;

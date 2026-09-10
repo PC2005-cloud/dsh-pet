@@ -9,8 +9,9 @@
 // 可调参数：重力 / 弹性 / 地面摩擦来自配置顶层 physics 段（host 合并成品，全局共用）；
 // 本文件的常量只是**默认值来源**（= assets/config.jsonc 的 physics 段），
 // 运行时 throwStep 必须接收调用方传入的 PhysicsParams（浏览器/桌面都从配置成品读）。
-import type { PhysicsParams } from './types';
+import type { PhysicsParams, Rect } from './types';
 import { HIT_BOX } from './constants';
+import { indexAtPoint, nearestIndex, rectBottom, rectRight } from './displays';
 
 /** 拖拽弹簧刚度：越大跟手越紧 */
 export const SPRING_K = 200;
@@ -131,6 +132,48 @@ export interface ThrowState {
 export const throwBounds = (o: { W: number; H: number; size: number; sideAllow: number }): ThrowBounds => {
   const h = (o.size * 9) / 16;
   return { minX: -o.sideAllow, minY: 0, maxX: o.W - o.size + o.sideAllow, maxY: o.H - h };
+};
+
+/** 同 throwBounds，但基于任意一块工作区矩形（原点不必是 0）。area 取整个视口时两者逐位相同。 */
+export const throwBoundsIn = (area: Rect, size: number, sideAllow: number): ThrowBounds => {
+  const h = (size * 9) / 16;
+  return {
+    minX: area.x - sideAllow,
+    minY: area.y,
+    maxX: rectRight(area) - size + sideAllow,
+    maxY: rectBottom(area) - h,
+  };
+};
+
+/**
+ * 抛掷空间：**每块屏一套 AABB**，而不是整个桌面一个大 AABB。
+ * 不规则多屏布局下外接矩形含空洞，用它当边界会让宠物飞进不可见区域（见 shared/displays.ts 注释）。
+ */
+export interface ThrowSpace {
+  /** 逐屏的包围盒左上角允许范围（与 areas 同序） */
+  bounds: ThrowBounds[];
+  /** 逐屏工作区（判定「越界侧有没有邻屏」用） */
+  areas: Rect[];
+  /** 宠物包围盒宽 */
+  size: number;
+  /** 身体相对包围盒左右各内缩的量 */
+  sideAllow: number;
+}
+
+/** 由工作区列表构造抛掷空间（单块屏时等价于 throwBounds） */
+export const throwSpace = (o: { areas: Rect[]; size: number; sideAllow: number }): ThrowSpace => ({
+  bounds: o.areas.map((a) => throwBoundsIn(a, o.size, o.sideAllow)),
+  areas: o.areas,
+  size: o.size,
+  sideAllow: o.sideAllow,
+});
+
+/** 宠物当前该归属哪块屏：身体中心所在屏，落在空洞里时取最近的一块 */
+export const screenOfBox = (space: ThrowSpace, x: number, y: number): number => {
+  const cx = x + space.size / 2;
+  const cy = y + (space.size * 9) / 16 / 2;
+  const hit = indexAtPoint(space.areas, cx, cy);
+  return hit >= 0 ? hit : nearestIndex(space.areas, cx, cy);
 };
 
 /** 剔除超过保留窗口的旧采样（顺带排序去重，调用前采样按时间追加即可） */
@@ -260,6 +303,89 @@ export const throwStep = (
   const atRest =
     (y >= b.maxY - 1 && Math.abs(vy) < 1 && Math.abs(vx) < REST_VX) || (bounced && speed < REST_VY && Math.abs(vy) < 1);
   return { x, y, vx, vy, bounced, atRest };
+};
+
+/**
+ * 多屏抛掷步进：与 throwStep 同一套物理，唯一区别是**边界取自「身体中心所在屏」而不是整个桌面**，
+ * 且越界后多问一句「越出去的那一侧到底有没有屏」。
+ *
+ * 越界条件与 throwStep 逐字相同（`x < minX` / `x > maxX` / `y < minY` / `y >= maxY`），
+ * 命中后探一下越界侧：探测点 = 该边外第一像素 × 身体中心的另一轴坐标。
+ *   - 那里有别的屏 ⇒ **原样放行**（不夹不弹），宠物自然跨屏飞行 / 落到下一块屏；
+ *   - 那里什么都没有 ⇒ 按该边反弹。这正是外接矩形方案缺的那道墙，宠物再也飞不进空洞。
+ *
+ * 关键：放行时**不改位置也不记录「当前屏」**，下一帧照样由身体中心重新定位。
+ * 不能改成「越界即切屏」——相邻两屏的 AABB 在缝隙处留有 2×sideAllow 宽的重叠盲区
+ * （主屏 maxX = 缝 − size + sideAllow，副屏 minX = 缝 − sideAllow），骑缝的宠物落在盲区里，
+ * 切过去会立刻被新屏判为反向越界再切回来，逐帧对跳。无状态判定天然没有这个问题。
+ *
+ * 与「把屏缝当墙」相反：屏缝两侧都有屏，恒放行——DPI 一致时的跨屏弹跳手感一点不减。
+ * 单块屏时探测点恒无邻屏、恒反弹，与 throwStep 逐位一致（有单测钉住）。
+ */
+export const throwStepRegion = (
+  s: ThrowState,
+  dtRaw: number,
+  space: ThrowSpace,
+  physics: PhysicsParams = DEFAULT_PHYSICS,
+): ThrowState & { screen: number; bounced: boolean; atRest: boolean } => {
+  const dt = Math.min(Math.max(dtRaw, 0), MAX_STEP_DT);
+  let { x, y, vx, vy } = s;
+  vy += physics.gravity * dt;
+  x += vx * dt;
+  y += vy * dt;
+  if (space.areas.length === 0) return { x, y, vx, vy, screen: -1, bounced: false, atRest: false };
+
+  const h = (space.size * 9) / 16;
+  let bounced = false;
+
+  // ---- 横向：边界来自身体中心所在屏，放行与否看缝外同高度处有没有像素 ----
+  let cur = screenOfBox(space, x, y);
+  let b = space.bounds[cur];
+  let a = space.areas[cur];
+  const cy = y + h / 2;
+  if (x < b.minX) {
+    if (indexAtPoint(space.areas, a.x - 1, cy) < 0) {
+      x = b.minX;
+      vx = Math.abs(vx) * physics.restitution;
+      bounced = true;
+    }
+  } else if (x > b.maxX) {
+    if (indexAtPoint(space.areas, rectRight(a), cy) < 0) {
+      x = b.maxX;
+      vx = -Math.abs(vx) * physics.restitution;
+      bounced = true;
+    }
+  }
+
+  // ---- 纵向（横向若被夹回，身体中心可能已换屏，重新定位）----
+  cur = screenOfBox(space, x, y);
+  b = space.bounds[cur];
+  a = space.areas[cur];
+  const cx = x + space.size / 2;
+  if (y < b.minY) {
+    // ceilingBounce=false：顶部无边界，不夹不弹——宠物飞出屏幕顶部，靠重力落回
+    if (physics.ceilingBounce && indexAtPoint(space.areas, cx, a.y - 1) < 0) {
+      y = b.minY;
+      vy = Math.abs(vy) * physics.restitution;
+      bounced = true;
+    }
+  } else if (y >= b.maxY) {
+    // 下方还有一块屏（上下排布的桌面）⇒ 不当地面，继续往下掉
+    if (indexAtPoint(space.areas, cx, rectBottom(a)) < 0) {
+      y = b.maxY;
+      vx *= Math.max(0, 1 - physics.groundFriction * dt);
+      if (Math.abs(vy) < REST_VY) vy = 0;
+      else vy = -Math.abs(vy) * physics.restitution;
+      bounced = true;
+    }
+  }
+
+  cur = screenOfBox(space, x, y);
+  b = space.bounds[cur];
+  const speed = Math.hypot(vx, vy);
+  const atRest =
+    (y >= b.maxY - 1 && Math.abs(vy) < 1 && Math.abs(vx) < REST_VX) || (bounced && speed < REST_VY && Math.abs(vy) < 1);
+  return { x, y, vx, vy, screen: cur, bounced, atRest };
 };
 
 // ---- 多宠物互相碰撞（宠物 vs 宠物，仅处理「飞行中撞到被撞方」）----

@@ -8,6 +8,14 @@
 /** 支持的角落 */
 export type Corner = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
 
+/** 轴对齐矩形（左上角 + 宽高）。显示器工作区、窗口内容区、可视夹取区共用同一形状。 */
+export interface Rect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 /**
  * 宠物的显示位置（四个值，必填）：
  * - web     = 只显示在浏览器 overlay
