@@ -341,7 +341,7 @@ class PetSprite {
     const target = this.front === 0 ? this.videoB : this.videoA;
     const el = target;
     if (!el) return;
-    el.src = this.assetBase + encodeURIComponent(next) + '.webm';
+    el.src = this.assetBase + encodeURIComponent(next) + (S.ANIMATION_EXT || '.webm');
     el.loop = !nextOnce;
     el.muted = true;
     el.autoplay = true;

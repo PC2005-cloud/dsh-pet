@@ -18,9 +18,10 @@
  *                                GET 读取成品、PUT 保存用户层（白名单重建 main-config.json）、
  *                                DELETE 删除用户层（恢复内置默认）
  *   /dsh-pet-7340/config/meta         → 配置文件与素材目录路径（设置页展示用）
- *   /dsh-pet-7340/thumb/<素材根>/<动画名>.webm  → 素材按宠物归属：
+ *   /dsh-pet-7340/thumb/<素材根>/<动画名>.webm|.mov  → 素材按宠物归属（.mov 为 macOS 定制，扩展名取决于
+ *       客户端播放常量 ANIMATION_EXT；本路由固定双扩展名兜底）：
  *       文件宠物 = $DSH_HOME/dsh-pet/pet/<素材根>-animation/（只查自己的，绝不回落）；
- *       主宠物   = $DSH_HOME/dsh-pet/main-animation/webm（用户目录，优先）→ 包内 assets/webm
+ *       主宠物   = $DSH_HOME/dsh-pet/main-animation/<webm|mov>（用户目录，优先）→ 包内 assets/<webm|mov>
  *   /dsh-pet-7340/whisper|whisper/trigger → 碎碎念周期/手动生成（按宠物独立，人设读成品）
  *   /dsh-pet-7340/chat                → 对话与记忆（GET 最近窗口 / POST 对话并写 memory.json）
  *   /dsh-pet-7340/broadcast            → /chat 命令触发的气泡广播（两端 1s 轻轮询）
@@ -81,6 +82,7 @@ const ROUTE_PREFIX = '/dsh-pet-7340';
 /** 不同扩展名对应的 Content-Type 映射 */
 const MIME: Record<string, string> = {
   '.webm': 'video/webm',
+  '.mov': 'video/quicktime',
   '.mp4': 'video/mp4',
   '.png': 'image/png',
   '.json': 'application/json; charset=utf-8',
@@ -179,7 +181,7 @@ export function apply(ctx: any): void {
     userFile: userConfigPath,
     petDir: petConfigDir,
   };
-  // 用户动画目录（thumb 播放时优先于包内素材；唯一格式 webm，素材放 main-animation/webm/）
+  // 用户动画目录（thumb 播放时优先于包内素材；webm 放 main-animation/webm/，mov（macOS 定制）放 main-animation/mov/）
   const thumbUserRoot = join(userRoot, 'main-animation');
   // 手动触发计数：/balance 命令 +1，两边（浏览器/桌面）同样的 1s 轮询检测变化后刷新余额（进程内内存态，重启归零）
   let balanceTriggerCount = 0;
@@ -546,11 +548,14 @@ export function apply(ctx: any): void {
     startHelper();
   };
 
-  /** 包内动画素材根：唯一格式 webm。 */
-  const assetRootFor = (): string => join(PACKAGE_ROOT, 'assets', 'webm');
+  /** 扩展名 → 素材子目录名（webm → webm/，mov → mov/；其余落在动画目录平级放行） */
+  const animSubdirFor = (ext: string): string => (ext === '.mov' ? 'mov' : 'webm');
 
-  /** 用户动画根：唯一格式 webm（main-animation/webm）。 */
-  const userRootFor = (): string => join(thumbUserRoot, 'webm');
+  /** 包内动画素材根：按扩展名取子目录（webm/ 随包发布；mov/ 不存在时为 404 兜底，仅 macOS 自维护）。 */
+  const assetRootFor = (ext: string): string => join(PACKAGE_ROOT, 'assets', animSubdirFor(ext));
+
+  /** 用户动画根：按扩展名取子目录（main-animation/webm 或 main-animation/mov）。 */
+  const userRootFor = (ext: string): string => join(thumbUserRoot, animSubdirFor(ext));
 
   /** 单次业务路由(WebServer 注册 → HTTP 落盘 / 桌面 Helper 管道 → scheme 应答,共用同一份实现):
    *  输入只需 rawUrl(/dsh-pet-7340/... + 查询) + method + body 文本;返回 RouteResult(JSON/文本/文件),
@@ -769,13 +774,14 @@ export function apply(ctx: any): void {
       };
     }
 
-    // 动画文件：/dsh-pet-7340/thumb/<素材根>/<file>，唯一格式 webm。
+    // 动画文件：/dsh-pet-7340/thumb/<素材根>/<file>，扩展名 webm（默认）/ mov（macOS 定制）。
     // 素材归属按「是否存在该宠物的独立素材目录 `pet/<petId>-animation/`」判定：
     //   - 存在（pet pack 宠物）：只查自己的目录，查不到即 404 显式报错——绝不混用
     //   - 不存在（**所有主配置宠物**，main 与用户添加的任意多只）：主素材链
-    //     main-animation/webm 优先 → 包内 assets/webm（与宠物数量无关，多只共用）
-    // Safari/HEVC(.mov) 兼容属 fork 定制（保留流水线 scripts/encode_hevc_alpha.sh）；
-    // 需要者自行在本路由加回 .mov 扩展名分支——插件本体不发布、不支持 .mov。
+    //     main-animation/<webm|mov> 优先 → 包内 assets/<webm|mov>（与宠物数量无关，多只共用）
+    // mov（HEVC-with-Alpha）为 macOS Safari/WKWebView 定制格式：默认不随包发布，
+    // 用户从 GitHub Release（assets-mov）下载后放 main-animation/mov/，并把客户端播放
+    // 扩展名常量（src/shared/constants.ts 的 ANIMATION_EXT / 产物 lib/client.js）改为 .mov。
     // 注意：font / pic 是扁平的 /<scope>/<file>，只有 thumb 是 /<scope>/<petId>/<file>——
     // 这里先拆 scope，再按 scope 各自拆剩余段，避免 font/pic 被误当作 petId 吞掉文件段。
     const [scope, ...restParts] = rest.split('/');
@@ -806,18 +812,18 @@ export function apply(ctx: any): void {
     }
     const fileName = nameParts.join('/');
     const ext = fileName.slice(fileName.lastIndexOf('.')).toLowerCase();
-    if (ext !== '.webm') {
-      return { kind: 'text', status: 400, body: 'dsh-pet: unsupported animation format (expected .webm)' };
+    if (ext !== '.webm' && ext !== '.mov') {
+      return { kind: 'text', status: 400, body: 'dsh-pet: unsupported animation format (expected .webm or .mov)' };
     }
     // 素材归属（按是否存在该宠物的独立素材目录判定，绝不静默混用）：
     //   - 存在 `pet/<petId>-animation/`（pet pack 宠物，URL 段 = 素材根 assetRoot）：
     //     只查自己的目录，查不到即 404 显式报错——绝不回落别的素材
     //   - 不存在（**所有主配置宠物**：main 及用户添加的任意多只，共用全局动画池）：
-    //     主素材链——用户 main-animation/webm 优先，其次包内 assets/webm
+    //     主素材链——用户 main-animation/<ext 子目录> 优先，其次包内 assets/<ext 子目录>
     const extraAnimDir = join(userRoot, 'pet', petId + '-animation');
     const file = existsSync(extraAnimDir)
       ? resolveExisting(extraAnimDir, fileName)
-      : (resolveExisting(userRootFor(), fileName) ?? resolveExisting(assetRootFor(), fileName));
+      : (resolveExisting(userRootFor(ext), fileName) ?? resolveExisting(assetRootFor(ext), fileName));
     if (file === undefined) return { kind: 'text', status: 404, body: 'dsh-pet: asset not found' };
     return { kind: 'file', file, contentType: MIME[ext] ?? 'application/octet-stream' };
   };
