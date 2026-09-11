@@ -23,7 +23,9 @@ export function makeFactory(): (require: (mod: string) => any) => any {
     const PetMulti = makePetUI({ h, useState, useEffect, useRef });
 
     const name = 'pet';
-    const inject = ['slots', 'locale', 'connection', 'remote', 'remote.commands'];
+    // commandUi 写成服务依赖（与官方 client-ui-permission-presets 的写法一致）：
+    // 让 cordis 等「/」命令入口服务就绪后才 apply 本插件，保证 /pet 装饰必然注册成功。
+    const inject = ['slots', 'locale', 'connection', 'remote', 'remote.commands', 'commandUi'];
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- DSH 注入的 ctx（locale/slots/webServer 等 service 无静态类型）
     function apply(ctx: any) {
       // 本地化字典（设置页文案）
@@ -43,7 +45,8 @@ export function makeFactory(): (require: (mod: string) => any) => any {
       }, 'dsh-pet: notifications');
 
       // /pet 选择框：裸输 /pet 回车或菜单点选时弹出桌宠列表，选中后提交 /pet <id> 由 host 命令落地。
-      // commandUi 是官方 GUI 提供的可选服务：缺失时仅退化为手输参数（/pet <id|名字>），不影响命令本身。
+      // commandUi 已声明为服务依赖（上方 inject）：插件只在「/」命令服务就绪后 apply，
+      // 装饰注册有保障；仍保留缺失时的降级提示，防止异常装配下静默失效。
       ctx.effect(() => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any -- DSH 注入服务无静态类型
         const commandUi = (ctx as any).get?.('commandUi');
