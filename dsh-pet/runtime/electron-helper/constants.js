@@ -80,7 +80,12 @@ function applyDeskGeometry(geo) {
       ? geo.panels.filter((p) => p && p.width > 0 && p.height > 0)
       : null;
   PANELS = S.translateRects(
-    (panelsList || list).map((a) => ({ x: toLocal(a.x), y: toLocal(a.y), width: toLocal(a.width), height: toLocal(a.height) })),
+    (panelsList || list).map((a) => ({
+      x: toLocal(a.x),
+      y: toLocal(a.y),
+      width: toLocal(a.width),
+      height: toLocal(a.height),
+    })),
     -VIEW.x,
     -VIEW.y,
   );

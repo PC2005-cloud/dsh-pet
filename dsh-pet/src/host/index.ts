@@ -852,82 +852,82 @@ export function apply(ctx: any): void {
   // 消费的事件：turn/start、user/message（goal 续跑轮判定）、tool/call（update_goal 收尾判定）、
   // tool/result、approval/asked、turn/end、todo/write（只更新任务详情文案，不切档位）。
   // 纯监听不调用模型；有宠物启用 workStatusEnabled 时才被浏览器侧消费（host 侧恒轻量监听）。
-  ctx.effect(
-    () => {
-      const dispose = ctx.on('session/event', (session: unknown, event: unknown) => {
-        const type = (event as { type?: string } | null)?.type;
-        if (!type) return;
-        const sessionId = String(
-          (session as { id?: unknown; header?: { id?: unknown } } | null)?.header?.id ??
-            (session as { id?: unknown } | null)?.id ??
-            'unknown',
-        );
-        if (type === 'todo/write') {
-          // 任务文案：仅当会话正是当前展示会话时更新任务详情（否则不打断当前展示）
-          if (workStatusBySession.has(sessionId)) {
-            const task = currentTaskFromTodo(
-              event as { data?: { todos?: Array<{ status?: string; content?: string }> } },
-            );
-            if (task !== workStatus.task) {
-              workStatus.task = task;
-              workStatus.ts = Date.now();
-            }
-          }
-          return;
-        }
-        if (type === 'user/message') {
-          // 目标续跑轮判定：自动轮的消息带 source.kind==='goal'（round>0），该轮属自动续跑，
-          // 其 turn/end completed 只是"本轮完成"，不是整个任务完成
-          const source = (event as { data?: { source?: { kind?: string } } })?.data?.source;
-          if (source?.kind === 'goal') {
-            const flags = turnFlags.get(sessionId) ?? { goalRound: false, closing: null };
-            flags.goalRound = true;
-            turnFlags.set(sessionId, flags);
-          }
-          return; // user/message 不驱动档位动画
-        }
-        if (type === 'turn/start') {
-          turnFlags.set(sessionId, { goalRound: false, closing: null }); // 新一轮：清 turn 级标志
-        }
-        if (type === 'tool/call' && String((event as { data?: { name?: unknown } })?.data?.name ?? '') === GOAL_UPDATE_TOOL) {
-          // update_goal complete/blocked = 本轮是该目标的收尾轮，其 completed 才是真完成
-          const action = goalUpdateAction(String((event as { data?: { arguments?: unknown } })?.data?.arguments ?? ''));
-          if (action) {
-            const flags = turnFlags.get(sessionId) ?? { goalRound: false, closing: null };
-            flags.closing = action;
-            turnFlags.set(sessionId, flags);
+  ctx.effect(() => {
+    const dispose = ctx.on('session/event', (session: unknown, event: unknown) => {
+      const type = (event as { type?: string } | null)?.type;
+      if (!type) return;
+      const sessionId = String(
+        (session as { id?: unknown; header?: { id?: unknown } } | null)?.header?.id ??
+          (session as { id?: unknown } | null)?.id ??
+          'unknown',
+      );
+      if (type === 'todo/write') {
+        // 任务文案：仅当会话正是当前展示会话时更新任务详情（否则不打断当前展示）
+        if (workStatusBySession.has(sessionId)) {
+          const task = currentTaskFromTodo(
+            event as { data?: { todos?: Array<{ status?: string; content?: string }> } },
+          );
+          if (task !== workStatus.task) {
+            workStatus.task = task;
+            workStatus.ts = Date.now();
           }
         }
-        const next = reduceWorkStatus(
-          event as { type?: string; data?: Record<string, unknown> & { reason?: { kind?: string } } },
-          turnFlags.get(sessionId),
-        );
-        if (!next) {
-          // turn/end 的 null（aborted / 未知 kind）＝该会话回合已结束：清掉会话状态，让展示回到空闲或
-          // 落到其他活跃会话，防止回合被打断后永久卡在上一档；其他事件的 null 是"不关心"，忽略。
-          if (type === 'turn/end') {
-            turnFlags.delete(sessionId);
-            if (workStatusBySession.delete(sessionId)) refreshWorkStatus();
-          }
-          return;
+        return;
+      }
+      if (type === 'user/message') {
+        // 目标续跑轮判定：自动轮的消息带 source.kind==='goal'（round>0），该轮属自动续跑，
+        // 其 turn/end completed 只是"本轮完成"，不是整个任务完成
+        const source = (event as { data?: { source?: { kind?: string } } })?.data?.source;
+        if (source?.kind === 'goal') {
+          const flags = turnFlags.get(sessionId) ?? { goalRound: false, closing: null };
+          flags.goalRound = true;
+          turnFlags.set(sessionId, flags);
         }
-        const seq = Number((event as { seq?: unknown }).seq ?? 0);
-        const prev = workStatusBySession.get(sessionId);
-        // 同会话同状态不重复更新（防刷屏）；不同状态才改写并重算展示
-        if (prev?.state === next && (prev?.seq ?? -1) >= seq) return;
-        workStatusBySession.set(sessionId, { state: next, seq });
-        refreshWorkStatus();
-        // 终态只展示短暂窗口后自动清理：陈旧完成态不再浮上来（Bug 3 的一环，顺带缓解 Bug 2 残留）
-        if (next === 'success' || next === 'error') scheduleTerminalCleanup(sessionId);
-      });
-      return () => {
-        dispose();
-        for (const t of terminalTimers.values()) clearTimeout(t);
-        terminalTimers.clear();
-      };
-    },
-    'dsh-pet: work-status session events',
-  );
+        return; // user/message 不驱动档位动画
+      }
+      if (type === 'turn/start') {
+        turnFlags.set(sessionId, { goalRound: false, closing: null }); // 新一轮：清 turn 级标志
+      }
+      if (
+        type === 'tool/call' &&
+        String((event as { data?: { name?: unknown } })?.data?.name ?? '') === GOAL_UPDATE_TOOL
+      ) {
+        // update_goal complete/blocked = 本轮是该目标的收尾轮，其 completed 才是真完成
+        const action = goalUpdateAction(String((event as { data?: { arguments?: unknown } })?.data?.arguments ?? ''));
+        if (action) {
+          const flags = turnFlags.get(sessionId) ?? { goalRound: false, closing: null };
+          flags.closing = action;
+          turnFlags.set(sessionId, flags);
+        }
+      }
+      const next = reduceWorkStatus(
+        event as { type?: string; data?: Record<string, unknown> & { reason?: { kind?: string } } },
+        turnFlags.get(sessionId),
+      );
+      if (!next) {
+        // turn/end 的 null（aborted / 未知 kind）＝该会话回合已结束：清掉会话状态，让展示回到空闲或
+        // 落到其他活跃会话，防止回合被打断后永久卡在上一档；其他事件的 null 是"不关心"，忽略。
+        if (type === 'turn/end') {
+          turnFlags.delete(sessionId);
+          if (workStatusBySession.delete(sessionId)) refreshWorkStatus();
+        }
+        return;
+      }
+      const seq = Number((event as { seq?: unknown }).seq ?? 0);
+      const prev = workStatusBySession.get(sessionId);
+      // 同会话同状态不重复更新（防刷屏）；不同状态才改写并重算展示
+      if (prev?.state === next && (prev?.seq ?? -1) >= seq) return;
+      workStatusBySession.set(sessionId, { state: next, seq });
+      refreshWorkStatus();
+      // 终态只展示短暂窗口后自动清理：陈旧完成态不再浮上来（Bug 3 的一环，顺带缓解 Bug 2 残留）
+      if (next === 'success' || next === 'error') scheduleTerminalCleanup(sessionId);
+    });
+    return () => {
+      dispose();
+      for (const t of terminalTimers.values()) clearTimeout(t);
+      terminalTimers.clear();
+    };
+  }, 'dsh-pet: work-status session events');
 
   // /balance 斜杠命令：递增触发计数 → 浏览器/桌面检测到变化后立即刷新余额并播动画（不进模型历史）
   ctx.effect(

@@ -224,10 +224,7 @@ describe('throwStepRegion —— 任务栏条带不是墙，空洞仍是墙（�
     assert.ok(reachedBottom, '应当穿过任务栏条带落到下屏');
     const end = settle({ x: 1000, y: 800, vx: 0, vy: 1300 }, DEFAULT_PHYSICS, 2400, SPACE_TB);
     assert.equal(end.screen, 1, '最终应歇在下屏');
-    assert.ok(
-      end.y <= B.y + B.height - PET_H + 0.001 && end.y >= B.y,
-      `落点 ${end.y} 应在下屏内（贴下屏工作区底）`,
-    );
+    assert.ok(end.y <= B.y + B.height - PET_H + 0.001 && end.y >= B.y, `落点 ${end.y} 应在下屏内（贴下屏工作区底）`);
   });
 
   test('向上甩能穿过任务栏条带飞进上屏', () => {

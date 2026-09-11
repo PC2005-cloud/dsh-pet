@@ -107,24 +107,10 @@ describe('readAllConfig —— events 槽位 string | string[] 校验', () => {
         animations: animationsWithEvents({
           balance: BASE.animations.events.balance, // 既有规则：events.balance 必填非空数组（用户改 workStatus 会保留）
           whisper: BASE.animations.events.whisper,
-          workStatus: [
-            ['工作思考', '开始工作'],
-            '认真工作',
-            '长时间工作看表',
-            '工作被打扰',
-            '工作结束',
-            '摸鱼被抓',
-          ],
+          workStatus: [['工作思考', '开始工作'], '认真工作', '长时间工作看表', '工作被打扰', '工作结束', '摸鱼被抓'],
         }),
       },
-      expectWorkStatus: [
-        ['工作思考', '开始工作'],
-        '认真工作',
-        '长时间工作看表',
-        '工作被打扰',
-        '工作结束',
-        '摸鱼被抓',
-      ],
+      expectWorkStatus: [['工作思考', '开始工作'], '认真工作', '长时间工作看表', '工作被打扰', '工作结束', '摸鱼被抓'],
     });
   });
 

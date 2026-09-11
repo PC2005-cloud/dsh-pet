@@ -466,15 +466,11 @@ class PetSprite {
     if (slot === undefined) return false;
     const name = S.pickSlot(slot, this.anim); // 避开当前正播动画（避免连续重复）
     console.log(
-      '[dsh-pet] ' +
-        new Date().toTimeString().slice(0, 8) +
-        ' pet=' +
-        this.pet.id +
-        ' 恢复工作状态动画: ' +
-        name,
+      '[dsh-pet] ' + new Date().toTimeString().slice(0, 8) + ' pet=' + this.pet.id + ' 恢复工作状态动画: ' + name,
     );
     const rotating = Array.isArray(slot) && slot.length > 1;
-    if (rotating) this.playOnce(name); // 多候选：播完由 handleEnded 轮换
+    if (rotating)
+      this.playOnce(name); // 多候选：播完由 handleEnded 轮换
     else this.switchTo(name, false); // 单候选：无限循环
     return true;
   }

@@ -169,10 +169,7 @@ export interface ThrowSpace {
 export const throwSpace = (o: { areas: Rect[]; panels?: Rect[]; size: number; sideAllow: number }): ThrowSpace => ({
   bounds: o.areas.map((a) => throwBoundsIn(a, o.size, o.sideAllow)),
   areas: o.areas,
-  panels:
-    o.panels && o.panels.length === o.areas.length
-      ? o.panels
-      : o.areas, // 面板缺失/不同序：退化用工作区（保持旧行为）
+  panels: o.panels && o.panels.length === o.areas.length ? o.panels : o.areas, // 面板缺失/不同序：退化用工作区（保持旧行为）
   size: o.size,
   sideAllow: o.sideAllow,
 });
