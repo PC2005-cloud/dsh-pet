@@ -7,7 +7,7 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { isEventAnim, pickSlot, poolIncludes, slotIncludes } from './pickers.ts';
+import { isEventAnim, nextWorkStatusAnim, pickSlot, poolIncludes, slotIncludes } from './pickers.ts';
 
 describe('pickSlot —— 事件档位取值', () => {
   test('字符串槽位原样返回（原行为不变），exclude 不影响字符串', () => {
@@ -76,5 +76,46 @@ describe('成员判断 —— 数组槽位成员也要命中', () => {
     assert.equal(isEventAnim(events, '开始工作'), true);
     assert.equal(isEventAnim(events, '不存在'), false);
     assert.equal(isEventAnim(undefined, '开始工作'), false);
+  });
+});
+
+describe('nextWorkStatusAnim —— workStatus 播完续播决策（档内轮换）', () => {
+  // 与 config.jsonc 同构：档 0 双候选、档 1 单动画、其余单动画
+  const wsPool = [
+    ['工作思考', '开始工作'],
+    '认真工作',
+    '长时间工作看表',
+    '工作被打扰',
+    '工作结束',
+    '摸鱼被抓',
+  ];
+
+  test('多候选档位：排除当前段，返回另一候选（不连抽同一个）', () => {
+    const saved = Math.random;
+    try {
+      Math.random = () => 0.999; // 若排除失效会抽到 工作思考
+      assert.equal(nextWorkStatusAnim(wsPool, '工作思考'), '开始工作');
+      Math.random = () => 0.0;
+      assert.equal(nextWorkStatusAnim(wsPool, '开始工作'), '工作思考');
+    } finally {
+      Math.random = saved;
+    }
+  });
+
+  test('轮换必然换来换去：双候选下连续两次轮换必为不同段', () => {
+    const pool = [['A', 'B']];
+    assert.equal(nextWorkStatusAnim(pool, 'A'), 'B');
+    assert.equal(nextWorkStatusAnim(pool, 'B'), 'A');
+  });
+
+  test('单动画/单候选档位 → null（原样续播，不轮换）', () => {
+    assert.equal(nextWorkStatusAnim(wsPool, '认真工作'), null);
+    assert.equal(nextWorkStatusAnim(wsPool, '长时间工作看表'), null);
+    assert.equal(nextWorkStatusAnim([['Solo']], 'Solo'), null);
+  });
+
+  test('动画不属于 workStatus 池 → null（按原语义处理，如回 idle）', () => {
+    assert.equal(nextWorkStatusAnim(wsPool, '余额-钱袋满溢'), null);
+    assert.equal(nextWorkStatusAnim([], '认真工作'), null);
   });
 });

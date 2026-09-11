@@ -33,6 +33,20 @@ export const poolIncludes = (pool: readonly EventSlot[], anim: string): boolean 
 export const isEventAnim = (events: Readonly<Events> | undefined, anim: string): boolean =>
   events ? Object.values(events).some((pool) => poolIncludes(pool, anim)) : false;
 
+/**
+ * workStatus 播完（ended）续播决策：找到包含 current 动画的档位——
+ * 多候选档位（≥2）→ 返回档内下一候选（排除 current，避免连抽）：播完一段自动轮换，长时间状态不单段重复；
+ * 单候选/单动画档位或动画不属于 workStatus 池 → null（原样续播同一段/按原语义处理）。
+ * 浏览器与桌面共用同一份决策，双端轮换行为严格一致。
+ */
+export const nextWorkStatusAnim = (pool: readonly EventSlot[], current: string): string | null => {
+  const idx = pool.findIndex((slot) => slotIncludes(slot, current));
+  if (idx === -1) return null;
+  const slot = pool[idx];
+  if (!Array.isArray(slot) || slot.length <= 1) return null;
+  return pickSlot(slot, current);
+};
+
 /** 生成 [min, max) 区间内的随机整数 */
 export const randomBetween = (min: number, max: number): number => Math.floor(min + Math.random() * (max - min));
 

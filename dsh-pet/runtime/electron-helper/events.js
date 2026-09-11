@@ -67,8 +67,11 @@ PetSprite.prototype.onWorkTick = function onWorkTick(snapshot, tick) {
       }, BUBBLE_DURATION_MS)
     : null; // 非终态：常驻，不设自动收起
   this.renderBubble();
-  if (terminal) this.playOnce(name);
-  else this.switchTo(name, false); // 进行中循环播（与浏览器 setOnce(!terminal) 一致）
+  // 循环语义（与浏览器 setOnce 一致）：终态播一遍回 idle；非终态多候选档位播一遍 →
+  // ended 由 sprite.handleEnded 轮换到下一候选（长时间状态不单段重复）；非终态单候选档位无限循环。
+  const rotating = !terminal && Array.isArray(slot) && slot.length > 1;
+  if (terminal || rotating) this.playOnce(name);
+  else this.switchTo(name, false); // 进行中循环播（单动画/单候选档位）
 };
 
 // ---- 余额事件（每只宠物按 balanceEnabled 门控；档位与气泡内容来自 shared） ----

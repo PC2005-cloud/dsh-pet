@@ -413,6 +413,24 @@ class PetSprite {
     // 事件动画播完：回 idle（与 drag/clicks 同分支，不进随机链）；气泡由定时器自动消失，与动画解耦
     const isEvent = S.isEventAnim(animations.events, this.anim);
     if (isEvent) {
+      // 工作状态多候选档位：播完一段自动轮换到下一候选（排除当前段，避免连抽），继续循环——
+      // 长时间状态不单段重复（与浏览器 ended 护栏共用同一决策 nextWorkStatusAnim）。
+      // 单候选档位仍由 loop 无限循环（不触发 ended，不会走到这里）。
+      const nextWork = S.nextWorkStatusAnim(animations.events?.workStatus ?? [], this.anim);
+      if (nextWork !== null) {
+        console.log(
+          '[dsh-pet] ' +
+            new Date().toTimeString().slice(0, 8) +
+            ' pet=' +
+            this.pet.id +
+            ' workStatus 档内轮换: ' +
+            this.anim +
+            ' -> ' +
+            nextWork,
+        );
+        this.playOnce(nextWork); // 继续播一遍（once=true）→ ended 再轮换
+        return;
+      }
       if (animations.idle.length) this.playOnce(S.pick(animations.idle, this.anim));
       return;
     }

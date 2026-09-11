@@ -4,7 +4,15 @@
 // 配置唯一入口 = GET /dsh-pet-7340/config 的**成品聚合**（host readAllConfig 保证绝对正确）：
 // PetMulti 一次拉取 → flattenConfigPets 拍平成渲染列表，PetCard 直接读字段，零校验零兜底。
 // 纯逻辑（选择/移动几何/余额/拍平）来自 src/shared —— 与桌面模式共用同一份源码。
-import { pick, rollKind, pickCategoryAction, pickSlot, isEventAnim, poolIncludes } from '../shared/pickers';
+import {
+  pick,
+  rollKind,
+  pickCategoryAction,
+  pickSlot,
+  isEventAnim,
+  poolIncludes,
+  nextWorkStatusAnim,
+} from '../shared/pickers';
 import { planMove } from '../shared/motion';
 import { flattenConfigPets, isWebVisible } from '../shared/config';
 import { balanceEventIndex, balancePercent, fetchBalanceState, type BalanceState } from '../shared/balance';
@@ -428,7 +436,10 @@ export function makePetUI(rt: {
       workBubbleTimerRef.current = terminal
         ? window.setTimeout(() => setWorkBubbleOn(false), BUBBLE_DURATION_MS)
         : null; // 非终态：常驻，不设自动收起
-      setOnce(terminal); // 终态播一遍回 idle；非终态 once=false 循环播（原 !terminal 写反，导致非终态播一遍、终态无限循环）
+      // 循环语义：终态播一遍回 idle（once=true）；非终态单候选档位 once=false 无限循环；
+      // 非终态多候选档位 once=true 播一遍 → ended 由 handleEnded 护栏轮换到下一候选（长时间状态不单段重复）
+      const rotating = !terminal && Array.isArray(slot) && slot.length > 1;
+      setOnce(terminal || rotating);
       setAnim(name);
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [workStatusTick]);
@@ -619,7 +630,8 @@ export function makePetUI(rt: {
       console.log(
         '[dsh-pet] ' + new Date().toTimeString().slice(0, 8) + ' pet=' + cfg.id + ' 互动结束恢复状态动画: ' + name,
       );
-      setOnce(false);
+      // 多候选档位恢复后同样走 ended 轮换（once=true 播一遍 → 护栏换下一候选）；单候选/单动画维持无限循环
+      setOnce(Array.isArray(slot) && slot.length > 1);
       setAnim(name);
       return true;
     };
@@ -637,6 +649,25 @@ export function makePetUI(rt: {
       // 立即重设循环续播，直到状态真正切走（success/error/空闲）。其余事件动画仍按原语义回 idle。
       const wsNow = workStatusRef.current;
       if (isEvent && wsNow && wsNow.state && wsNow.state !== 'success' && wsNow.state !== 'error') {
+        // 多候选档位：播完一段自动轮换到下一候选（排除当前段，避免连抽）——长时间状态不单段重复
+        const nextWork = nextWorkStatusAnim(animations.events?.workStatus ?? [], animRef.current);
+        if (nextWork !== null) {
+          console.log(
+            '[dsh-pet] ' +
+              new Date().toTimeString().slice(0, 8) +
+              ' pet=' +
+              cfg.id +
+              ' workStatus 档内轮换: ' +
+              animRef.current +
+              ' -> ' +
+              nextWork,
+          );
+          setOnce(true); // 保持 once=true：下一段播完再 ended → 再轮换
+          setAnim(nextWork);
+          setSeq((s) => s + 1);
+          return;
+        }
+        // 单候选/单动画档位（意外 ended：loop 被掐断/once 误置 true）：原护栏语义续播同一段
         if (poolIncludes(animations.events?.workStatus ?? [], animRef.current)) {
           console.log(
             '[dsh-pet] ' +
