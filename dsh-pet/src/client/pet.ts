@@ -1153,10 +1153,11 @@ export function makePetUI(rt: {
         setDragging(false);
         const stageEl = stageRef.current;
         if (stageEl) stageEl.style.transform = 'translateY(' + bottomPad + 'px)';
-        // 拖拽松手：workStatus 非终态时恢复状态循环，否则回 idle 循环（原语义）
+        // 拖拽松手：workStatus 非终态时恢复状态循环；否则播一遍待机 → ended → 回随机链
+        // （once=true；旧实现 once=false 无限循环，ended 永不触发、随机链永远回不来——历史卡死 bug）
         if (!resumeWorkStatusAnim()) {
           if (petAnims.idle.length) setAnim(pick(petAnims.idle, animRef.current));
-          setOnce(false);
+          setOnce(true);
         }
         // 释放位置 = 弹簧跟随的实时包围盒左上角（不是指针目标：跟手滞后时落点跟随宠物实际位置）
         const bx = boxPxRef.current;

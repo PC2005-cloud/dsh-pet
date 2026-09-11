@@ -852,16 +852,11 @@ class PetSprite {
           yUp: e.screenY,
         };
       }
-      // 拖拽松手：workStatus 非终态时恢复状态循环，否则回 idle 循环（与浏览器 handlePointerUp 一致）
-      // 修复：旧实现无条件 switchTo(idle,false)（loop 永不 ended）→ 事件的档位动画被顶掉后
-      // 既不走 handleEnded 恢复、也回不了随机链，永远卡在同一段待机动画
+      // 拖拽松手：workStatus 非终态时恢复状态循环，否则回 idle（与浏览器 handlePointerUp 一致）
+      // 修复：旧实现 switchTo(idle,false)（loop=true，ended 永不触发）→ 随机链永远回不来，
+      // 永远卡在同一段待机动画；改为 playOnce（once=true）播一遍 → ended → handleEnded → playIdle 随机链
       if (!this.resumeWorkStatusAnim()) {
-        if (this.animations.idle.length) {
-          const name = S.pick(this.animations.idle, this.anim);
-          this.anim = name;
-          this.once = false;
-          this.switchTo(name, false);
-        }
+        if (this.animations.idle.length) this.playOnce(S.pick(this.animations.idle, this.anim));
       }
       // 释放位置 = 弹簧跟随后的实际包围盒左上角（this.pos 实时；不是指针目标——
       // 跟手滞后时落点跟随宠物实际位置，与浏览器 boxPx 同语义）
