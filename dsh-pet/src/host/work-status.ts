@@ -28,11 +28,52 @@ function turnEndState(kind: string): HostWorkStatusState | null {
 /** ask_user_question 工具名：模型在等用户选择题答复 → 归为 waiting（等待确认）而非普通工作 */
 const USER_QUESTION_TOOL = 'ask_user_question';
 
-/** 从会话事件压缩出工作状态；无变化/不关心返回 null */
-export function reduceWorkStatus(event: {
-  type?: string;
-  data?: Record<string, unknown> & { reason?: { kind?: string } };
-}): HostWorkStatusState | null {
+/** update_goal 工具名：目标工具，action=complete/blocked = 本轮是该目标任务的收尾轮 */
+export const GOAL_UPDATE_TOOL = 'update_goal';
+
+/** 本 turn 的 turn 级标志（goal 续跑轮判定；不参与展示，由 index.ts 维护） */
+export interface WorkStatusTurnContext {
+  /** 本轮是否为自动目标续跑轮（user/message source.kind==='goal' 时置位，turn/start 清零） */
+  goalRound?: boolean;
+  /** 本轮是否调用过 update_goal 收尾（'complete' | 'blocked'；undefined/null = 未收尾） */
+  closing?: 'complete' | 'blocked' | null;
+}
+
+/** 解析 update_goal 的 arguments（原始 JSON 字符串）→ 收尾动作；解析失败/非收尾动作 → null */
+export function goalUpdateAction(args: string): 'complete' | 'blocked' | null {
+  try {
+    const o = JSON.parse(args) as { action?: unknown } | null;
+    const action = String(o?.action ?? '');
+    if (action === 'complete' || action === 'blocked') return action;
+  } catch {
+    /* 非法 JSON：按未收尾处理 */
+  }
+  return null;
+}
+
+/**
+ * turn/end reason=completed 的终局判定：
+ *   - 非 goal 轮（默认）→ success（原行为：一轮答完即成功）；
+ *   - 自动续跑轮中间轮（goalRound && 未收尾）→ result：本轮完成 ≠ 整个任务完成，不庆祝；
+ *   - 收尾轮 complete → success（整个目标达成，庆祝）；
+ *   - 收尾轮 blocked → error（目标被阻塞结束，诚实地表沮丧而非庆祝）。
+ */
+export function completedState(turn: WorkStatusTurnContext | undefined): HostWorkStatusState {
+  if (!turn?.goalRound) return 'success';
+  if (turn.closing === 'blocked') return 'error';
+  if (turn.closing === 'complete') return 'success';
+  return 'result';
+}
+
+/** 从会话事件压缩出工作状态；无变化/不关心返回 null。
+ *  turn 为当前回合上下文（goal 续跑轮判定），只影响 turn/end completed 的终局语义。 */
+export function reduceWorkStatus(
+  event: {
+    type?: string;
+    data?: Record<string, unknown> & { reason?: { kind?: string } };
+  },
+  turn?: WorkStatusTurnContext,
+): HostWorkStatusState | null {
   switch (event?.type) {
     case 'turn/start':
       return 'thinking';
@@ -47,7 +88,11 @@ export function reduceWorkStatus(event: {
       return 'waiting';
     case 'turn/end': {
       // completed→success、错误系→error、blocked→waiting；其余（aborted 等）→null＝清该会话回空闲
-      return turnEndState(String(event?.data?.reason?.kind ?? ''));
+      const reason = turnEndState(String(event?.data?.reason?.kind ?? ''));
+      // completed=本轮完成：是否等于整个任务完成交给 completedState 判定
+      // （goal 自动续跑轮的中间轮 → result 不庆祝，避免"任务没完成却播成功"）
+      if (reason === 'success') return completedState(turn);
+      return reason;
     }
     default:
       return null; // todo/write 等：不切动画（详情文案由调用方另行处理）
