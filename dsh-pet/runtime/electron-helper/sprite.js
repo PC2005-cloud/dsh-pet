@@ -107,6 +107,7 @@ class PetSprite {
     this.workTimer = null;
     this.workText = null;
     this.workState = null; // 最近一次工作状态（互动/事件动画播完恢复档位循环用）
+    this.prevWorkState = null; // 上一档状态（气泡只在状态变化时点亮/收起，Bug 2）
     this.prevWorkTick = 0;
     // 对话弹窗（shared 组件）：当前挂载的 close() 句柄 + 开启标记
     // （chatOpen 是穿透守卫：弹窗是窗口内 DOM，期间整窗保持可交互，与 menuOpen 同语义——否则

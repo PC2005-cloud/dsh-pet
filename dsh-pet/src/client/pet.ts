@@ -420,6 +420,7 @@ export function makePetUI(rt: {
           '    ' +
           name,
       );
+      const stateChanged = prevWorkStateRef.current !== workStatus.state;
       prevWorkStateRef.current = workStatus.state;
       stopMove();
       // 气泡文本：任务详情（todo/write 提供，如"正在做 X"）优先，否则从条目级配置
@@ -429,13 +430,19 @@ export function makePetUI(rt: {
         Array.isArray(textGroup) && textGroup.length > 0
           ? textGroup[Math.floor(Math.random() * textGroup.length)]
           : undefined;
+      // 文本总是更新（任务详情可能在同一状态下变化）
       setWorkText(workStatus.task ?? configuredText ?? null);
-      setWorkBubbleOn(true);
       const terminal = workStatus.state === 'success' || workStatus.state === 'error';
-      if (workBubbleTimerRef.current !== null) window.clearTimeout(workBubbleTimerRef.current);
-      workBubbleTimerRef.current = terminal
-        ? window.setTimeout(() => setWorkBubbleOn(false), BUBBLE_DURATION_MS)
-        : null; // 非终态：常驻，不设自动收起
+      // 气泡点亮/收起只在状态变化时动作：同状态后续 tick（todo 文案更新、其它会话事件搅动 ts）
+      // 不重新点亮**已自动收起的终态气泡**——否则"任务完成"的气泡会被后续 ts 变化反复弹回（Bug 2）；
+      // 非终态同状态 tick 气泡本就常驻，无需重复点亮。
+      if (stateChanged) {
+        setWorkBubbleOn(true);
+        if (workBubbleTimerRef.current !== null) window.clearTimeout(workBubbleTimerRef.current);
+        workBubbleTimerRef.current = terminal
+          ? window.setTimeout(() => setWorkBubbleOn(false), BUBBLE_DURATION_MS)
+          : null; // 非终态：常驻，不设自动收起
+      }
       // 循环语义：终态播一遍回 idle（once=true）；非终态单候选档位 once=false 无限循环；
       // 非终态多候选档位 once=true 播一遍 → ended 由 handleEnded 护栏轮换到下一候选（长时间状态不单段重复）
       const rotating = !terminal && Array.isArray(slot) && slot.length > 1;

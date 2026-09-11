@@ -16,6 +16,8 @@ PetSprite.prototype.onWorkTick = function onWorkTick(snapshot, tick) {
   this.prevWorkTick = tick;
   const state = snapshot && snapshot.state ? snapshot.state : null;
   this.workState = state; // 当前工作状态：互动/事件动画播完恢复档位循环用（与浏览器 workStatusRef 同用途）
+  const stateChanged = this.prevWorkState !== state;
+  this.prevWorkState = state;
   if (!state) {
     // 空闲：收起常驻气泡（动画不处理，由常规动画链回待机）
     if (this.workTimer !== null) window.clearTimeout(this.workTimer);
@@ -58,15 +60,20 @@ PetSprite.prototype.onWorkTick = function onWorkTick(snapshot, tick) {
       ? textGroup[Math.floor(Math.random() * textGroup.length)]
       : undefined;
   this.workText = (snapshot && snapshot.task) || configuredText || null;
-  this.workOn = true;
   const terminal = state === 'success' || state === 'error';
-  if (this.workTimer !== null) window.clearTimeout(this.workTimer);
-  this.workTimer = terminal
-    ? window.setTimeout(() => {
-        this.workOn = false;
-        this.renderBubble();
-      }, BUBBLE_DURATION_MS)
-    : null; // 非终态：常驻，不设自动收起
+  // 气泡点亮/收起只在状态变化时动作：同状态后续 tick（todo 文案更新、其它会话事件搅动 ts）
+  // 不重新点亮**已自动收起的终态气泡**——否则"任务完成"的气泡会被后续 ts 变化反复弹回（Bug 2，
+  // 与浏览器 workBubbleOn 同一语义）。
+  if (stateChanged) {
+    this.workOn = true;
+    if (this.workTimer !== null) window.clearTimeout(this.workTimer);
+    this.workTimer = terminal
+      ? window.setTimeout(() => {
+          this.workOn = false;
+          this.renderBubble();
+        }, BUBBLE_DURATION_MS)
+      : null; // 非终态：常驻，不设自动收起
+  }
   this.renderBubble();
   // 循环语义（与浏览器 setOnce 一致）：终态播一遍回 idle；非终态多候选档位播一遍 →
   // ended 由 sprite.handleEnded 轮换到下一候选（长时间状态不单段重复）；非终态单候选档位无限循环。
