@@ -91,7 +91,7 @@ dsh plugin --profile web add file:D:/path/to/dsh-pet
 
 - **操作系统**：Windows / Linux / macOS 三端均可运行——浏览器 overlay 与桌面模式（Electron 透明置顶窗）行为完全一致；Electron 按平台自动探测/下载（`electron.exe` / `Electron.app` / linux 单文件），无需手动安装
 - **无头 / 无桌面环境**：支持 Linux headless 等无图形会话——桌面模式自动检测显示环境（Linux 无 `DISPLAY` / `WAYLAND_DISPLAY` 时判定无显示、跳过桌面窗口，仅日志告警），浏览器 overlay 不受影响
-- **浏览器**：浏览器 overlay 兼容 **Chromium 内核（Chrome / Edge 等）与 Firefox**——透明动画依赖 VP9-Alpha webm，三者均已实测透明确认；**不支持 Safari**（macOS 自带浏览器不认 webm alpha，透明渲染为黑底；HEVC-with-Alpha 素材流水线为 fork 定制，见「②.5 Safari/HEVC 兼容流水线」）
+- **浏览器**：浏览器 overlay 兼容 **Chromium 内核（Chrome / Edge 等）与 Firefox**——透明动画依赖 VP9-Alpha webm，三者均已实测透明确认；**不支持 Safari**（macOS 不认 webm alpha，透明渲染为黑底）——macOS 用 `.mov` 素材（GitHub Release `assets-mov`），下载放入 + 改 `ANIMATION_EXT` 变量即可（见「②.5 Safari/HEVC 兼容素材」）
 - **多显示器**：支持多屏环境——跨屏漫游/抛掷以各屏工作区为界，异构缩放（各屏 DPI 不同）、任务栏条带、屏幕之间空洞均正确判定（横屏 / 竖屏 / 上下叠放皆可）
 
 ## 🪟 桌面模式（可选，脱离浏览器）
@@ -449,14 +449,15 @@ python encode_thumbs.py      # 转码 640×360 播放变体 → step04/
 
 > **本项目全部采用路线 B**（全部动作均为 PR 手工抠像）：对"含第三方物品/透明边缘复杂"的动作，自动 HSV 抠像易残边或误抠，PR 手动遮罩更精细。两条路线产出同一级 `step02/`，后续步骤完全一致；`chroma_step02.py` 保留为自动化兜底，任何动作仍可一键自动生成。
 
-### ②.5 🍎 Safari/HEVC 兼容流水线（保留，不参与发布，fork 定制用）
+### ②.5 🍎 Safari/HEVC 兼容素材（macOS 专用 mov）
 
-插件**只发布单一 webm 格式**（VP9-alpha）：浏览器 overlay 的 Chrome/Edge/Firefox 与桌面模式（Electron = Chromium）共用，无需第二套素材；**宿主端 thumb 路由不发布 `.mov`**（`dsh-pet/src/host/index.ts`）。Safari 不认 webm alpha（渲染黑底）、只支持 **HEVC-with-Alpha mov**（编码器 `hevcWithAlpha` 仅 macOS 有），需要 Safari 兼容者可 **fork 仓库自行启用**保留的流水线并自行加回 `.mov` 路由：
+插件默认只发布 `.webm`（VP9-alpha），Safari/WKWebView 不认 webm alpha（黑底），macOS 需要在 GitHub Release 下载官方转码的 **HEVC-with-Alpha `.mov`** 素材使用，三步：
 
-- workflow：`.github/workflows/hevc-alpha.yml`（手动触发 `workflow_dispatch`，macOS runner 云端批量转码）
-- 编码脚本：`scripts/encode_hevc_alpha.sh`（ffmpeg 解码 webm → BGRA 帧管线 → Swift `hevc_alpha_encoder.swift` 走 AVAssetWriter `hevcWithAlpha` 原生 API）+ `scripts/check_alpha.py`（产物校验）
-- 输入：`dsh-pet/assets/webm/*.webm`；输出写回 `dsh-pet/assets/mov/`（流水线输出目录，不入库不发布）；产物 `hvc1` tag + alpha 校验后打包为 artifact
-- 启用方式：自行把 mov 素材同步进包并恢复双格式支持（`prepare.js` 已收敛为 webm、宿主 thumb 路由已移除 `.mov`，源码历史里都有 mov 分支可参考）
+1. **下载**：<https://github.com/PC2005-cloud/dsh-pet/releases/tag/assets-mov>（固定 tag，保持最新；zip 解压后文件名与 webm 一一对应）
+2. **放入**：`.mov` 文件放进 `$DSH_HOME/dsh-pet/main-animation/mov/`（pet pack 宠物则是 `pet/<种类名>-animation/mov/`）
+3. **改变量**：搜 `ANIMATION_EXT`，把 `.webm` 改为 `.mov`——npm 包改产物 `lib/client.js`（桌面端如需再改 `runtime/electron-helper/shared-core.js`）；自构建改源码 `src/shared/constants.ts` 后重新构建
+
+宿主路由已固定双扩展名兜底（白名单 `webm|mov`、MIME、素材根按扩展名分派），无需改宿主。详情见插件 README「macOS 使用 mov」。
 
 ### ③ 动画 → 插件
 
@@ -480,7 +481,7 @@ npm publish --tag latest   # npm publish 自动执行 prepare 钩子（构建完
 ```
 
 - client 端不做运行时浏览器判断——唯一播放格式 webm 在源码写死，无发布期注入
-- 需要 Safari/HEVC 版：见上方 ②.5，fork 仓库后启用保留的流水线自行定制
+- 需要 Safari/HEVC 版（macOS）：mov 素材官方发布在 GitHub Release `assets-mov`，下载解压进 `main-animation/mov/`，再把集中播放扩展名常量 `ANIMATION_EXT` 改为 `.mov`（见上方 ②.5）
 
 ### 项目结构
 
@@ -494,7 +495,7 @@ npm publish --tag latest   # npm publish 自动执行 prepare 钩子（构建完
 ├── pr/  prproj/       # ② 路线 B：PR 手工抠像输入与工程（本地工作数据，不入库）
 ├── tools/             # 开发小工具（素材链各阶段预览等）
 ├── assets/            # 仓库展示用截图
-├── .github/workflows/ # CI：Safari/HEVC 转码流水线（macOS runner，手动触发）
+├── .github/workflows/ # CI：Safari/HEVC 转码流水线（macOS runner，手动触发 → 发布 assets-mov Release）
 ├── dsh-pet/           # ③ 插件（可独立 npm 发布）
 │   ├── src/           #   TS 源码：host（配置/路由/工作状态）、client（动画链）、shared（双端共用纯逻辑）
 │   ├── lib/           #   构建产物（prepare 自动构建，不入库）

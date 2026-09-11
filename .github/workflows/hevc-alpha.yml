@@ -16,7 +16,12 @@
 # 触发：手动（workflow_dispatch）——素材稳定后一次性转码，避免每次 CI 都跑
 #   漫长的 macOS 编码。
 #
-# 产物：dsh-pet/assets/mov/*.mov（HEVC with Alpha, hvc1 tag），打包为 artifact。
+# 产物：dsh-pet/assets/mov/*.mov（HEVC with Alpha, hvc1 tag），全量打包为
+#   单个 zip 并发布到 GitHub Release（macOS 用户直接从 Release 下载）。
+#
+# Release 策略：固定 tag = assets-mov（与 webm 素材 tag assets-videos 对应）。
+#   每次运行先删除旧 tag + Release，再用同名重建 → 指向最新提交，下载链接
+#   永远不变（下游/桌面端固定引用同名 Release 地址）。
 # ============================================================================
 
 name: hevc-alpha
@@ -24,10 +29,20 @@ name: hevc-alpha
 on:
   workflow_dispatch:
 
+# 发布 Release / 删除旧 tag 需要 contents: write
+permissions:
+  contents: write
+
+concurrency:
+  group: hevc-alpha
+  cancel-in-progress: false
+
 jobs:
   encode:
     # HEVC-with-Alpha 编码（AVFoundation hevcWithAlpha）需要 macOS
-    runs-on: macos-latest
+    # 固定 macos-14：同源素材/同脚本/同 quality 0.75 下，不同 macOS 版本的
+    # VideoToolbox HEVC 编码器码率映射不同（macos-latest 产物约为 macos-14 的 1.66×）
+    runs-on: macos-14
     timeout-minutes: 120
     steps:
       - name: 检出本仓库（含插件素材与编码脚本）
@@ -56,9 +71,66 @@ jobs:
               -of csv=p=0 "$f"
           done
 
-      - name: 上传产物
-        uses: actions/upload-artifact@v4
+      - name: 生成发布标签
+        id: release
+        run: |
+          # 固定 tag 名，与 webm 素材 tag `assets-videos` 对应
+          tag="assets-mov"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "release tag: $tag"
+          # mov 数量（供 Release 正文引用）
+          echo "count=$(ls dsh-pet/assets/mov/*.mov | wc -l | tr -d ' ')" >> "$GITHUB_OUTPUT"
+
+      - name: 清理旧 tag 与 Release（同名重建）
+        run: |
+          set -euo pipefail
+          tag="${{ steps.release.outputs.tag }}"
+          # 删除旧 Release（连带 tag）。不存在时 gh 报错，忽略即可。
+          gh release delete "$tag" --yes --cleanup-tag || true
+          # 双保险：远端 tag 若残留（gh 未清理干净）直接删除
+          git push origin ":refs/tags/$tag" || true
+          git tag -d "$tag" 2>/dev/null || true
+          echo "cleaned old release/tag: $tag"
+
+      - name: 打包全量 zip
+        run: |
+          set -euo pipefail
+          # 输出到仓库根（$(pwd) = GITHUB_WORKSPACE）下的 dsh-pet/assets/；
+          # 用 python3 zipfile 打包（macOS 自带 zip 的退出码在中文文件名下不稳定，绕开）
+          zip_path="$(pwd)/dsh-pet/assets/dsh-pet-mov-${{ steps.release.outputs.tag }}.zip"
+          python3 - "$zip_path" <<'EOF'
+          import sys, zipfile, glob
+          zp = sys.argv[1]
+          movs = sorted(glob.glob('dsh-pet/assets/mov/*.mov'))
+          assert movs, 'no mov files to pack'
+          with zipfile.ZipFile(zp, 'w', zipfile.ZIP_DEFLATED, compresslevel=9) as z:
+              for f in movs:
+                  z.write(f, arcname=f.rsplit('/', 1)[-1])
+          EOF
+          echo "zip: $zip_path ($(du -h "$zip_path" | cut -f1))"
+          # 校验条目：用 python zipfile 读回（避免 unzip|grep 在 pipefail 下的计数陷阱）
+          python3 - "$zip_path" <<'EOF'
+          import sys, zipfile
+          with zipfile.ZipFile(sys.argv[1]) as z:
+              names = z.namelist()
+          movs = [n for n in names if n.endswith('.mov')]
+          print(f'entries={len(names)} mov={len(movs)}')
+          assert movs and len(movs) == len(names), 'zip 内容异常：应全为 .mov'
+          EOF
+
+      - name: 发布到 GitHub Release
+        uses: softprops/action-gh-release@v2
         with:
-          name: dsh-pet-hevc-alpha
-          path: dsh-pet/assets/mov/*.mov
-          if-no-files-found: error
+          tag_name: ${{ steps.release.outputs.tag }}
+          name: dsh-pet macOS 素材（HEVC-alpha .mov）${{ steps.release.outputs.tag }}
+          body: |
+            macOS 桌宠透明播放素材（HEVC-with-Alpha .mov，hvc1 tag）。
+
+            - 来源：`dsh-pet/assets/webm/*.webm`（VP9-alpha，共 ${{ steps.release.outputs.count }} 个）
+            - 编码：本仓库 `scripts/encode_hevc_alpha.sh`（ffmpeg 解码 + AVFoundation hevcWithAlpha）
+            - 用途：Safari/WKWebView 不支持 WebM alpha，需用此 mov 替代
+            - 解压后文件名与 webm 一一对应，放入素材目录即可
+
+            由 hevc-alpha 流水线自动生成。固定 tag，每次运行同名重建（指向最新提交）。
+          files: ${{ github.workspace }}/dsh-pet/assets/dsh-pet-mov-${{ steps.release.outputs.tag }}.zip
+          fail_on_unmatched_files: true

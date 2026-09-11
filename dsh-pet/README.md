@@ -24,9 +24,21 @@ dsh plugin --profile web add dsh-pet
 
 重启 `dsh web`，宠物出现在界面右上角（默认配置角落，可在设置页修改）——全部透明动画开箱即用，无需任何生成流程。
 
-> 💡 单一格式（无运行时浏览器判断，源码写死 `.webm`）：只内置 `.webm`（VP9-alpha），浏览器 Chrome/Edge/Firefox 与桌面模式（Electron=Chromium）共用。Safari 不认 webm alpha（黑底）；需要 Safari/HEVC 兼容请 fork 仓库启用保留的流水线（`scripts/encode_hevc_alpha.sh` + `hevc-alpha.yml`）并自行在宿主路由加回 `.mov` 分支（`src/host/index.ts` 的 thumb 路由），插件本体不发布、不支持 `.mov`。
+> 💡 单一格式（默认 `.webm`）：浏览器 Chrome/Edge/Firefox 与桌面模式（Electron=Chromium）直接透明播放；Safari 不认 webm alpha（黑底），macOS 需要改用 `.mov`，见下方「🖥️ macOS 使用 mov」。
 
 > 💡 想自己造一只专属宠物？克隆 [PC2005-cloud/dsh-pet](https://github.com/PC2005-cloud/dsh-pet) 仓库，用内置素材链（AI 提示词 → 绿幕视频 → 透明动画，素材由豆包生成）从零生成，全流程可复现。
+
+## 🖥️ macOS 使用 mov（Safari 透明播放）
+
+macOS 的 Safari/WKWebView 下透明动画需用 `.mov` 素材，三步：
+
+1. **下载 mov 素材**：<https://github.com/PC2005-cloud/dsh-pet/releases/tag/assets-mov>（保持最新，zip 解压后文件名与 webm 一一对应）
+2. **放入素材目录**：把 `.mov` 文件放进 `$DSH_HOME/dsh-pet/main-animation/mov/`（pet pack 宠物则是 `pet/<种类名>-animation/mov/`）
+3. **改变量**：搜 `ANIMATION_EXT`，把 `.webm` 改为 `.mov`：
+   - npm 包用户改产物 `lib/client.js`（桌面端如需再改 `runtime/electron-helper/shared-core.js`）
+   - 自构建用户改源码 `src/shared/constants.ts` 后重新构建
+
+改完重启 `dsh web`（或重新加载页面）即生效，其余平台不受影响。
 
 ## ✨ 功能特性
 
