@@ -122,8 +122,19 @@ function animationsValid(a: unknown): boolean {
   const evEntries = ev as Record<string, unknown>;
   for (const pool of Object.values(evEntries)) {
     if (!Array.isArray(pool) || pool.length === 0) return false;
-    for (const name of pool) {
-      if (typeof name !== 'string' || name.length === 0) return false;
+    for (const slot of pool) {
+      // 档位槽位：单个动画名（原行为）或候选数组（档内随机抽 1，见 shared/pickers pickSlot）；
+      // 空字符串 / 空数组 / 成员为空串的数组均非法
+      if (typeof slot === 'string') {
+        if (slot.length === 0) return false;
+      } else if (Array.isArray(slot)) {
+        if (slot.length === 0) return false;
+        for (const name of slot) {
+          if (typeof name !== 'string' || name.length === 0) return false;
+        }
+      } else {
+        return false;
+      }
     }
   }
   const balance = evEntries.balance;

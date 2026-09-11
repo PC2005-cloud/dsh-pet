@@ -411,7 +411,7 @@ class PetSprite {
     if (this.dragState.active) return;
     const { animations } = { animations: this.animations };
     // 事件动画播完：回 idle（与 drag/clicks 同分支，不进随机链）；气泡由定时器自动消失，与动画解耦
-    const isEvent = Object.values(animations.events ?? {}).some((pool) => pool.includes(this.anim));
+    const isEvent = S.isEventAnim(animations.events, this.anim);
     if (isEvent) {
       if (animations.idle.length) this.playOnce(S.pick(animations.idle, this.anim));
       return;

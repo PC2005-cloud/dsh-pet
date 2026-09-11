@@ -30,11 +30,12 @@ PetSprite.prototype.onWorkTick = function onWorkTick(snapshot, tick) {
     return;
   }
   const idx = S.WORK_STATUS_INDEX[state];
-  const name = Array.isArray(pool) ? pool[idx] : undefined;
-  if (!name) {
+  const slot = pool[idx];
+  if (slot === undefined) {
     console.error('[dsh-pet] work-status 档位索引越界：state=' + state + ' idx=' + idx);
     return;
   }
+  const name = S.pickSlot(slot, this.anim); // 数组槽位档内随机抽 1，且避开当前正播动画（避免连续重复，与浏览器一致）
   console.log(
     '[dsh-pet] ' +
       new Date().toTimeString().slice(0, 8) +
@@ -153,7 +154,8 @@ PetSprite.prototype.showWhisper = function showWhisper(text) {
     console.error('[dsh-pet] 配置缺少 animations.events.whisper，无法播放碎碎念动画');
     return;
   }
-  const name = pool[Math.floor(Math.random() * pool.length)];
+  // 整池随机抽 1 槽（避开当前正播动画，避免连续重复）；槽位若为数组候选再档内随机（与浏览器一致）
+  const name = S.pickSlot(S.pick(pool, this.anim), this.anim);
   console.log(
     '[dsh-pet] ' +
       new Date().toTimeString().slice(0, 8) +
@@ -189,11 +191,12 @@ PetSprite.prototype.showBalanceNow = function showBalanceNow(state) {
     return;
   }
   const idx = S.balanceEventIndex(p);
-  const name = pool[idx];
-  if (!name) {
+  const slot = pool[idx];
+  if (!slot) {
     console.error('[dsh-pet] balance 档位索引越界：p=' + p + ' idx=' + idx);
     return;
   }
+  const name = S.pickSlot(slot, this.anim); // 数组槽位档内随机抽 1，且避开当前正播动画（避免连续重复，与浏览器一致）
   this.stopMove();
   this.bubbleOn = true;
   this.balanceView = S.balanceBubbleView(state);

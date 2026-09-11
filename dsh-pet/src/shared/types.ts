@@ -45,8 +45,11 @@ export interface Category {
   actions: string[];
 }
 
-/** 事件动画：事件名 → 动画名数组（数组顺序 = 档位顺序；不进随机链，只由代码显式触发） */
-export type Events = Record<string, string[]>;
+/** 事件档位槽位：单个动画名（固定播放，原行为）或候选数组（触发时档内随机抽 1，尽量不连续重复） */
+export type EventSlot = string | string[];
+
+/** 事件动画：事件名 → 档位槽位数组（数组顺序 = 档位顺序；不进随机链，只由代码显式触发） */
+export type Events = Record<string, EventSlot[]>;
 
 /** 动画权重 */
 export interface Weights {

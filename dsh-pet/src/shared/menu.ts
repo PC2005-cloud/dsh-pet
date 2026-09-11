@@ -73,11 +73,17 @@ export function buildMenuTree(animations: Animations): MenuNode[] {
   for (const c of cats) {
     groups.push({ label: c.id, children: c.actions.map(leaf) });
   }
-  // 事件动画：每个事件为一个分类（不来自随机链，点播与代码触发同一池）
+  // 事件动画：每个事件为一个分类（不来自随机链，点播与代码触发同一池）。
+  // 数组槽位（档内随机候选）展平为逐个叶子——所有候选都可右键点播预览。
   const events = animations.events ?? {};
   for (const key of Object.keys(events)) {
     const pool = events[key] ?? [];
-    if (pool.length) groups.push({ label: EVENT_LABELS[key] ?? key, children: pool.map(leaf) });
+    const names: string[] = [];
+    for (const slot of pool) {
+      if (typeof slot === 'string') names.push(slot);
+      else names.push(...slot);
+    }
+    if (names.length) groups.push({ label: EVENT_LABELS[key] ?? key, children: names.map(leaf) });
   }
   if (!groups.length) return [];
   return [{ label: '动作', children: groups }];

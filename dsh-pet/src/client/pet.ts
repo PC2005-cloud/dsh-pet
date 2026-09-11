@@ -4,7 +4,7 @@
 // 配置唯一入口 = GET /dsh-pet-7340/config 的**成品聚合**（host readAllConfig 保证绝对正确）：
 // PetMulti 一次拉取 → flattenConfigPets 拍平成渲染列表，PetCard 直接读字段，零校验零兜底。
 // 纯逻辑（选择/移动几何/余额/拍平）来自 src/shared —— 与桌面模式共用同一份源码。
-import { pick, rollKind, pickCategoryAction } from '../shared/pickers';
+import { pick, rollKind, pickCategoryAction, pickSlot, isEventAnim, poolIncludes } from '../shared/pickers';
 import { planMove } from '../shared/motion';
 import { flattenConfigPets, isWebVisible } from '../shared/config';
 import { balanceEventIndex, balancePercent, fetchBalanceState, type BalanceState } from '../shared/balance';
@@ -224,7 +224,7 @@ export function makePetUI(rt: {
       const el = target.current;
       if (!el) return;
       // 诊断：事件池动画被切换（含 workStatus 触发/循环续播/其他事件顶替），once 反映 loop 语义
-      const inEvents = Object.values(petAnims.events ?? {}).some((pool) => pool.includes(next));
+      const inEvents = isEventAnim(petAnims.events, next);
       if (inEvents) {
         console.log(
           '[dsh-pet] ' +
@@ -328,11 +328,12 @@ export function makePetUI(rt: {
         return;
       }
       const idx = balanceEventIndex(p);
-      const name = pool[idx];
-      if (!name) {
+      const slot = pool[idx];
+      if (!slot) {
         console.error('[dsh-pet] balance 档位索引越界：p=' + p + ' idx=' + idx);
         return;
       }
+      const name = pickSlot(slot, animRef.current); // 数组槽位档内随机抽 1，且避开当前正播动画（避免连续重复）
       console.log(
         '[dsh-pet] ' +
           new Date().toTimeString().slice(0, 8) +
@@ -393,11 +394,12 @@ export function makePetUI(rt: {
         return;
       }
       const idx = WORK_STATUS_INDEX[workStatus.state];
-      const name = Array.isArray(pool) ? pool[idx] : undefined;
-      if (!name) {
+      const slot = pool[idx];
+      if (slot === undefined) {
         console.error('[dsh-pet] work-status 档位索引越界：state=' + workStatus.state + ' idx=' + idx);
         return;
       }
+      const name = pickSlot(slot, animRef.current); // 数组槽位档内随机抽 1，且避开当前正播动画（避免连续重复）
       console.log(
         '[dsh-pet] ' +
           new Date().toTimeString().slice(0, 8) +
@@ -522,7 +524,8 @@ export function makePetUI(rt: {
         console.error('[dsh-pet] 配置缺少 animations.events.whisper，无法播放碎碎念动画');
         return;
       }
-      const name = pool[Math.floor(Math.random() * pool.length)];
+      // 整池随机抽 1 槽（避开当前正播动画，避免连续重复）；槽位若为数组候选再档内随机
+      const name = pickSlot(pick(pool, animRef.current), animRef.current);
       console.log(
         '[dsh-pet] ' +
           new Date().toTimeString().slice(0, 8) +
@@ -610,8 +613,9 @@ export function makePetUI(rt: {
       const pool = petAnims.events?.workStatus;
       if (!pool || pool.length === 0) return false;
       const idx = WORK_STATUS_INDEX[ws.state];
-      const name = Array.isArray(pool) ? pool[idx] : undefined;
-      if (!name) return false;
+      const slot = pool[idx];
+      if (slot === undefined) return false;
+      const name = pickSlot(slot, animRef.current); // 互动结束后恢复档位循环：数组槽位档内随机（避开当前正播动画）
       console.log(
         '[dsh-pet] ' + new Date().toTimeString().slice(0, 8) + ' pet=' + cfg.id + ' 互动结束恢复状态动画: ' + name,
       );
@@ -627,13 +631,13 @@ export function makePetUI(rt: {
       const animations = petAnims;
       if (dragRef.current.active) return;
       // 事件动画播完：回 idle（与 drag/clicks 同分支，不进入随机链）；气泡由定时器自动消失，与动画解耦
-      const isEvent = Object.values(animations.events ?? {}).some((pool) => pool.includes(animRef.current));
+      const isEvent = isEventAnim(animations.events, animRef.current);
       // 工作状态循环护栏：非终态档位（thinking/working/result/waiting）期间，workStatus 事件动画
       // 禁止“播完回 idle”——一旦意外触发 ended（loop 被某种原因掐断/once 被误置 true），
       // 立即重设循环续播，直到状态真正切走（success/error/空闲）。其余事件动画仍按原语义回 idle。
       const wsNow = workStatusRef.current;
       if (isEvent && wsNow && wsNow.state && wsNow.state !== 'success' && wsNow.state !== 'error') {
-        if (animations.events?.workStatus?.includes(animRef.current)) {
+        if (poolIncludes(animations.events?.workStatus ?? [], animRef.current)) {
           console.log(
             '[dsh-pet] ' +
               new Date().toTimeString().slice(0, 8) +
