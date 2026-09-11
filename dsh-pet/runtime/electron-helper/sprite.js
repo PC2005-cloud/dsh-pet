@@ -106,6 +106,7 @@ class PetSprite {
     this.workOn = false;
     this.workTimer = null;
     this.workText = null;
+    this.workState = null; // 最近一次工作状态（互动/事件动画播完恢复档位循环用）
     this.prevWorkTick = 0;
     // 对话弹窗（shared 组件）：当前挂载的 close() 句柄 + 开启标记
     // （chatOpen 是穿透守卫：弹窗是窗口内 DOM，期间整窗保持可交互，与 menuOpen 同语义——否则
@@ -415,8 +416,10 @@ class PetSprite {
     if (isEvent) {
       // 工作状态多候选档位：播完一段自动轮换到下一候选（排除当前段，避免连抽），继续循环——
       // 长时间状态不单段重复（与浏览器 ended 护栏共用同一决策 nextWorkStatusAnim）。
-      // 单候选档位仍由 loop 无限循环（不触发 ended，不会走到这里）。
-      const nextWork = S.nextWorkStatusAnim(animations.events?.workStatus ?? [], this.anim);
+      // 仅非终态档位轮换；终态（success/error）播完一次即结束，绝不轮换续播。单候选档位由
+      // loop 无限循环（不触发 ended，不会走到这里）。
+      const nonTerminal = this.workState && this.workState !== 'success' && this.workState !== 'error';
+      const nextWork = nonTerminal ? S.nextWorkStatusAnim(animations.events?.workStatus ?? [], this.anim) : null;
       if (nextWork !== null) {
         console.log(
           '[dsh-pet] ' +
@@ -431,6 +434,9 @@ class PetSprite {
         this.playOnce(nextWork); // 继续播一遍（once=true）→ ended 再轮换
         return;
       }
+      // 非 workStatus 事件动画（余额/碎碎念）播完：workStatus 仍非终态 → 立即恢复档位循环动画，
+      // 不进随机链（长事件期间状态不变，随机链会一直播到状态切换才被拉回）
+      if (this.resumeWorkStatusAnim()) return;
       if (animations.idle.length) this.playOnce(S.pick(animations.idle, this.anim));
       return;
     }
@@ -439,10 +445,37 @@ class PetSprite {
       this.facing = next; // 立即同步：翻转后的 pickNext 用新朝向过滤 noMirror
     }
     if (animations.drag.includes(this.anim) || animations.clicks.includes(this.anim)) {
+      // 互动动画播完：workStatus 非终态时恢复状态循环，否则回 idle（与浏览器同一语义）
+      if (this.resumeWorkStatusAnim()) return;
       if (animations.idle.length) this.playOnce(S.pick(animations.idle, this.anim));
       return;
     }
     this.playIdle();
+  }
+
+  // 互动/事件动画播完后恢复 workStatus 档位循环：非终态 → 按当前状态档位重选动画（多候选档内
+  // 随机并避开当前段）；终态/空闲 → false 不接管，调用方走原逻辑（回 idle / 随机池，与浏览器一致）。
+  resumeWorkStatusAnim() {
+    const state = this.workState;
+    if (!state || state === 'success' || state === 'error') return false;
+    const pool = this.animations.events?.workStatus;
+    if (!pool || pool.length === 0) return false;
+    const idx = S.WORK_STATUS_INDEX[state];
+    const slot = pool[idx];
+    if (slot === undefined) return false;
+    const name = S.pickSlot(slot, this.anim); // 避开当前正播动画（避免连续重复）
+    console.log(
+      '[dsh-pet] ' +
+        new Date().toTimeString().slice(0, 8) +
+        ' pet=' +
+        this.pet.id +
+        ' 恢复工作状态动画: ' +
+        name,
+    );
+    const rotating = Array.isArray(slot) && slot.length > 1;
+    if (rotating) this.playOnce(name); // 多候选：播完由 handleEnded 轮换
+    else this.switchTo(name, false); // 单候选：无限循环
+    return true;
   }
 
   // ---- 漫游（rAF 驱动，动画首尾各 leadSec/tailSec 秒原地不动；几何在 shared/planMove） ----

@@ -694,6 +694,9 @@ export function makePetUI(rt: {
             ' ws=' +
             ((workStatusRef.current && workStatusRef.current.state) || 'null'),
         );
+        // 事件动画播完但 workStatus 仍处于非终态（余额/碎碎念等抢占播完）：立即恢复档位循环动画，
+        // 绝不留进随机链——否则长事件期间当前状态不变（ts 不变），随机链会一直播到状态切换才被拉回
+        if (resumeWorkStatusAnim()) return;
         if (animations.idle.length) setAnim(pick(animations.idle, animRef.current));
         setOnce(true);
         setSeq((s) => s + 1);

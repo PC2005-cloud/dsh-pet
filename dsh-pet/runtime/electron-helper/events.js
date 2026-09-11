@@ -15,6 +15,7 @@ PetSprite.prototype.onWorkTick = function onWorkTick(snapshot, tick) {
   if (tick === 0 || tick === this.prevWorkTick) return;
   this.prevWorkTick = tick;
   const state = snapshot && snapshot.state ? snapshot.state : null;
+  this.workState = state; // 当前工作状态：互动/事件动画播完恢复档位循环用（与浏览器 workStatusRef 同用途）
   if (!state) {
     // 空闲：收起常驻气泡（动画不处理，由常规动画链回待机）
     if (this.workTimer !== null) window.clearTimeout(this.workTimer);
