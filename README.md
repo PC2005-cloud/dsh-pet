@@ -13,7 +13,7 @@
   <img alt="assets" src="https://img.shields.io/badge/assets-dynamic%20animations-ff69b4">
 </p>
 
-一只住在 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 里的桌面宠物：待机呼吸、随机动作（打瞌睡、玩魔方、写代码、吃火锅……97 个手绘风透明动画随时无缝衔接）、左右转向、屏幕漫游、点击 Q 弹、拖拽甩抛反弹、右键菜单点播动作、余额动画 + 头顶联想气泡——可多开同屏，能脱离浏览器住上**桌面**（透明置顶小窗），也能自己添加**全新宠物种类**（pet pack）。
+一只住在 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 里的桌面宠物：待机呼吸、随机动作（打瞌睡、玩魔方、吃火锅……）、左右转向、屏幕漫游、点击 Q 弹、拖拽甩抛反弹、右键菜单点播——一百余个手绘风透明动画随时无缝衔接；还能跟随 DSH 会话事件切换工作状态动画、按档位播放余额动画 + 头顶气泡、碎碎念与对话聊天、窗口失焦时弹系统通知。可多开同屏，能脱离浏览器住上**桌面**（透明置顶小窗），也能自己添加**全新宠物种类**（pet pack）。
 
 这不是一个普通插件，而是**完整的三件套项目**：
 
@@ -44,7 +44,7 @@ dsh plugin --profile web add dsh-pet
 
 重启 `dsh web`，宠物出现在界面右上角（默认配置角落，可在设置页修改）。
 
-> **兼容性**：本插件在 dsh **`0.1.1-rc.2`** 下开发并测试（`dsh --version` 可查看你的版本）。建议使用相同版本；其他版本如遇问题欢迎反馈。
+> **兼容性**：本插件当前在 dsh **`0.1.5-rc.1`** 下开发并测试（`dsh --version` 可查看你的版本）。建议使用相同版本；其他版本如遇问题欢迎反馈。
 
 ### 从源码安装（clone 本仓库后）
 
@@ -69,39 +69,62 @@ dsh plugin --profile web add file:D:/path/to/dsh-pet
 
 ## 插件功能
 
-- **纯粹的桌宠**：核心就是陪你——没有天气查询、系统监控、Agent 状态感知等花活；除了**可选的余额展示**（见下节）与**系统通知**（对话完成 / 生成失败 / 输出截断 / 权限申请 / 用户选择，窗口失焦时弹系统级通知）外没有其他业务功能。零核心改动（不碰 DSH 内核）
-- **余额展示**：实时显示当前 LLM 服务商的余额/额度——DeepSeek 官方显示账户余额（¥），OpenCode Zen Go 显示 5h/周/月 三个额度窗口中最紧张的一个；每次刷新按档位播放余额动画，头顶弹出联想气泡（随宠物大小等比缩放，10 秒后自动消失）；每只宠物可独立开关（`balanceEnabled`）
-- **动画链**：每个动画（含待机）播完立即按权重选下一个（权重配置于 `config.jsonc`，默认 idle 10 / turn 5 / move 5 + 动作分类权重），首尾相接永不停止
-- **多开**：可配置同时显示多个宠物，每只宠物独立的大小与位置（设置页「桌宠配置」添加/删除）
-- **屏幕漫游**：朝 facing 方向行走，先检查空间、不走出屏幕
-- **点击/拖拽（弹簧跟手 + 甩抛反弹 + Q 弹）**：点击有回应动画并「Q 弹」挤压回弹（贴地锚定，reduce-motion 跳过）；拖拽为过阻尼弹簧跟手，用力甩出会沿抛物线飞行、屏幕边缘反弹、落地摩擦停稳且**每次落地 Q 弹一下**（温柔放下 = 原地停住），两端同一套纯函数物理与挤压曲线（`dsh-pet/src/shared/physics.ts`）
-- **右键菜单**：右键宠物弹出级联菜单——桌面端根项为「**打开网站 / 查看余额 / 回到初始位置** + **动作**」、浏览器端为「**回到初始位置** + 动作」；「打开网站」用系统默认浏览器打开 DSH 网站（等效网页里 Ctrl+点击链接）；「查看余额」立即弹余额气泡播档位动画（桌面端；浏览器端用对话框 `/balance` 命令）；动作 → **分类** → **具体动画**，可任意点播（**移动**分类动画点播会真实行走一段——边界检查/随机距离/起停时段与随机移动同一套）；同一份组件两端共用、外观行为一致
-- **左右朝向**：所有动画可镜像，人物可朝左/朝右
-- **落地对齐**：动画统一脚底线，宠物始终站在地面上
+- **纯粹的桌宠**：不做天气、监控等无关功能，不碰 DSH 内核；可选能力只有下面这些（余额 / 碎碎念 / 对话 / 工作状态 / 系统通知）
+- **动画链**：每个动画（含待机）播完即按权重选下一个（默认 idle 10 / turn 5 / move 5 + 分类权重，`config.jsonc` 可调），首尾相接
+- **事件动画**：余额 / 碎碎念 / 工作状态按档位触发专属动画；档位支持候选数组——触发时档内随机、循环播放自动轮换，避免连播同一段
+- **多开**：同时显示多个宠物，各自独立大小与位置（设置页「桌宠配置」添加/删除）
+- **屏幕漫游**：朝朝向方向行走，先探测空间、不走出屏幕（多屏按各屏边界判定）
+- **点击 / 拖拽 / 甩抛**：点击有回应动画并 Q 弹挤压；拖拽过阻尼弹簧跟手，甩出即抛物线飞行、屏幕边缘反弹、落地摩擦停稳并 Q 弹一下；温柔放下原地停住；两端同一套纯函数物理与挤压曲线（`dsh-pet/src/shared/physics.ts`）
+- **右键菜单**：「动作 → 分类 → 具体动画」任意点播（移动类动画点播会真实行走一段）；工具项——浏览器端：碎碎念 / 对话 / 回到初始位置；桌面端：+ 打开网站、查看余额（余额启用时显示）
+- **朝向与落地**：全部动画可镜像（可朝左 / 朝右）；脚底线统一，宠物始终站在地面上
 - **流畅切换**：双缓冲交叉淡入，切换无空白帧
-- **桌面模式（可选）**：可脱离浏览器，为每只桌面宠物开一个独立透明置顶局部小窗，与浏览器严格同行为、共用同一份素材与纯逻辑（见下节）
-- **额外宠物种类（pet pack）**：在 `$DSH_HOME/dsh-pet/pet/` 下建 `种类名-config.json` + `种类名-animation/`，即可添加拥有**独立动画池与素材**的全新种类，多实例共享素材（见「配置 → 方式四」）
-- **自定义动画**：往 `main-animation/webm/` 放入 VP9-Alpha 的 `.webm` 即可作为新动画，优先于包内素材
+- **余额展示**：按已用百分比分档播余额动画 + 头顶联想气泡（10 秒自动消失）；DeepSeek 显示账户余额，OpenCode Zen Go 显示最紧迫的一个额度窗口；按宠物独立开关
+- **碎碎念与对话**：碎碎念按周期自动生成一句（说话动画 + 气泡，也可手动触发）；对话在右键弹输入框与宠物聊天，记忆持久化（浏览器 / 桌面共享同一份）
+- **工作状态联动**：监听 DSH 会话事件，切「思考 / 工作 / 整理 / 等待 / 成功 / 出错」档位动画 + 常驻气泡；目标多轮任务只在真正收尾轮庆祝
+- **系统通知**：窗口失焦时弹系统 toast（对话完成 / 生成失败 / 输出截断 / 权限申请 / 用户选择）
+- **桌面模式（可选）**：每只宠物开一个独立透明置顶局部小窗，与浏览器严格同行为、共用同一份素材与纯逻辑（见下节）
+- **pet pack（额外宠物种类）**：`pet/` 下建 `种类名-config.json` + `种类名-animation/` 即新增独立动画池与素材的全新种类，多实例共享素材（见「配置 → 方式四」）
+- **自定义动画**：往 `main-animation/webm/` 放 VP9-Alpha 的 `.webm` 即为新动画，优先于包内素材
 - **无障碍**：支持 `prefers-reduced-motion`（减少动效时跳过 Q 弹挤压与淡入切换）
+
+## 兼容性
+
+- **操作系统**：Windows / Linux / macOS 三端均可运行——浏览器 overlay 与桌面模式（Electron 透明置顶窗）行为完全一致；Electron 按平台自动探测/下载（`electron.exe` / `Electron.app` / linux 单文件），无需手动安装
+- **无头 / 无桌面环境**：支持 Linux headless 等无图形会话——桌面模式自动检测显示环境（Linux 无 `DISPLAY` / `WAYLAND_DISPLAY` 时判定无显示、跳过桌面窗口，仅日志告警），浏览器 overlay 不受影响
+- **浏览器**：浏览器 overlay 兼容 **Chromium 内核（Chrome / Edge 等）与 Firefox**——透明动画依赖 VP9-Alpha webm，三者均已实测透明确认；**不支持 Safari**（macOS 自带浏览器不认 webm alpha，透明渲染为黑底；HEVC-with-Alpha 素材流水线为 fork 定制，见「②.5 Safari/HEVC 兼容流水线」）
+- **多显示器**：支持多屏环境——跨屏漫游/抛掷以各屏工作区为界，异构缩放（各屏 DPI 不同）、任务栏条带、屏幕之间空洞均正确判定（横屏 / 竖屏 / 上下叠放皆可）
 
 ## 🪟 桌面模式（可选，脱离浏览器）
 
-插件内建**双模式**：安装后默认会拉起**独立透明置顶窗口**——为每只桌面宠物各开一个**局部小窗口**（尺寸 = 宠物包围盒 + 四周外扩余量，为气泡/弹窗预留空间，跟随宠物移动；**永不铺满屏幕**：全屏透明分层窗会触发 Windows DWM 视频合成黑屏）。与浏览器 overlay **严格同行为**——同一份纯逻辑源码（`dsh-pet/src/shared/`），两端的功能/动画/文案/配置完全对齐，不会出现"一个有另一个没有"：
+插件内建**双模式**：安装后默认会拉起**独立透明置顶小窗**——为每只桌面宠物各开一个局部窗口（跟随宠物移动，**不铺满屏幕**），与浏览器 overlay 严格同行为、功能完全对齐：
 
-- **依赖**：首次启动自动探测 Electron（`DSH_PET_ELECTRON_PATH` 环境变量 → 全局 npm → 常见安装位置），找不到时自动下载到 `~/.dsh/electron/`（可 `cd dsh-pet && npm run ensure:electron` 手动触发）；缺失时仅日志告警，不影响浏览器形态
-- **开关 = 每只宠物的必填字段 `display`**（四个值）：`web` = 仅浏览器 / `desktop` = 仅桌面 / `both` = 两者 / `none` = 都不显示；桌面模式渲染 display 含 desktop 的**全部**宠物（多开同屏，与浏览器一致）。在 DSH 设置页「桌宠配置」编辑，保存即时生效；缺失即配置错误，代码不做兜底
-- **实现**：浏览器 bundle 与桌面 `shared-core.js`（`src/shared` 的 iife 构建产物，`window.PetShared`）共用同一份纯逻辑；桌面端 `dsh-pet/runtime/electron-helper/` 只是薄壳（Electron 窗口 + 纯 DOM 渲染），行为差异为零
-- **数据通道（bridge）**：桌面 Helper 是插件自拉的独立 Electron 进程，宿主与它之间走**进程管道 + 本地回调**（`dsh-pet-bridge://` 自定义 scheme → Electron 主进程 → stdout JSON 行 → 宿主 `handlePetRoute` 应答，素材只传文件路径由 Helper 读盘）——桌面端**不依赖 DSH 的 HTTP 路由**，因此不受 DSH Desktop 2.0.3+ 浏览器访问闸门影响（该闸门只放行带内部令牌的请求，插件子进程的裸 HTTP 会被 403）。`start:desktop` 本地调试/无宿主场景自动回落旧 HTTP 路径
-- 本地调试：`cd dsh-pet && npm run start:desktop -- http://127.0.0.1:3080/dsh-pet-7340/config`（无 `DSH_PET_BRIDGE`，走 HTTP）
+- **依赖**：首次启动自动探测/下载 Electron（`~/.dsh/electron/`，也可 `cd dsh-pet && npm run ensure:electron` 手动触发）；缺失时仅日志告警，不影响浏览器形态
+- **开关 = 每只宠物的必填字段 `display`**：`web` = 仅浏览器 / `desktop` = 仅桌面 / `both` = 两者 / `none` = 都不显示；桌面模式渲染 display 含 desktop 的**全部**宠物（多开同屏，与浏览器一致），设置页「桌宠配置」编辑即时生效
+- 桌面端数据走独立进程管道，不依赖 DSH 的 HTTP 路由，不受 web 访问闸门影响
+- 本地调试：`cd dsh-pet && npm run start:desktop -- http://127.0.0.1:3080/dsh-pet-7340/config`（无宿主时自动回落 HTTP 路径）
 
 ## ⚙️ 余额展示（Balance）
 
-余额是"事件动画"的一种：运行时按 `eventsRefreshSec.balance`（秒）周期拉取当前服务商（跟随 `agent-default-model` 的 provider）的余额/用量数据，每次刷新按档位触发一次余额动画，并在宠物头顶弹出**联想气泡**（气泡为角色"思考"式白泡，随宠物大小等比缩放，10 秒后自动消失）：
+按 `eventsRefreshSec.balance`（秒）周期拉取当前服务商的余额/用量数据，每次刷新按档位触发一次余额动画，并在宠物头顶弹出**联想气泡**（随宠物大小等比缩放，10 秒自动消失）：
 
 - **DeepSeek 官方（`deepseek-official`）**：气泡显示账户余额（如 `余额 ¥8.79`）；余额按 ¥20 满额折算成已用百分比，分 6 档播放动画（钱袋满溢 → 金袋叮当 → 钱袋如常 → 数金皱眉 → 袋空如洗 → 分文不剩）
 - **OpenCode Zen Go（`opencode-go`）**：气泡显示 5h/周/月 三个额度窗口中最先告急的一个（如 `周额度已用 88%` / `2.5 天重置`），同样按已用百分比分档
-- **按宠物开关**：`pets[i].balanceEnabled`（必填布尔）控制该宠物是否触发余额动画/显示气泡；全部宠物关闭时自动跳过余额轮询
-- **所需凭据**：对应 provider 的 API key（`deepseek-official` → `DEEPSEEK_API_KEY`；`opencode-go` → `OPENCODE_GO_API_KEY`），在 DSH 凭据中配置后启用；未匹配的服务商按设计不触发动画、不显示气泡
+- **按宠物开关**：`pets[i].balanceEnabled`（必填布尔）控制该宠物是否触发余额动画/显示气泡
+- **所需凭据**：对应 provider 的 API key（`deepseek-official` → `DEEPSEEK_API_KEY`；`opencode-go` → `OPENCODE_GO_API_KEY`），在 DSH 凭据中配置后启用；未匹配的服务商不触发动画、不显示气泡
+
+## ⚙️ 碎碎念与对话
+
+- **碎碎念**：`pets[i].whisperEnabled` 开启后，按 `eventsRefreshSec.whisper`（秒，默认 300）周期自动生成一句——每只宠物独立周期、独立文案；触发时随机抽 `events.whisper` 动画 + 头顶说话气泡（10 秒消失）。默认关闭
+- **手动触发**：右键菜单「碎碎念」随时来一句——不受 `whisperEnabled` 门控（该字段只关自动周期轮询）
+- **对话**：右键菜单「对话」或 `/chat` 命令打开输入框，与宠物聊天——回复走碎碎念同款展示（说话动画 + 气泡）；记忆持久化在 `$DSH_HOME/dsh-pet/memory.json`，浏览器与桌面共享同一份；多宠物时先用 `/pet` 选择对话目标
+
+## ⚙️ 工作状态联动（Work Status）
+
+`pets[i].workStatusEnabled` 开启后，宠物跟随 DSH 会话活动切「思考 / 工作 / 整理 / 等待 / 成功 / 出错」六档动画 + 头顶气泡：非终态动画循环播、气泡常驻；成功 / 出错播一遍、气泡 10 秒自动收起。
+
+- **档位动画**：`animations.events.workStatus` 数组，索引即档位（勿在中间插入新档，只可追加末尾）
+- **气泡文案**：`workStatusTexts` 每档可配多句随机，任务详情（todo）优先
+- **档位候选数组**：任意档位槽位可写 `string | string[]`——数组 = 档内随机抽 1，循环播放自动轮换、避免连播同一段（余额 / 碎碎念档位同样适用）
 
 ## ⚙️ 配置（大小 / 位置 / 多开）
 
@@ -362,6 +385,25 @@ $DSH_HOME/dsh-pet/
   <img src="dsh-pet/assets/preview/fen-wen-bu-sheng.gif" width="160" alt="余额-分文不剩" title="余额-分文不剩">
 </p>
 
+**碎碎念说话动画**（碎碎念 / 对话回复触发，随机抽 1 段）
+
+<p>
+  <img src="dsh-pet/assets/preview/suisuinian-cazhuo-suisuinian.gif" width="160" alt="碎碎念-擦桌碎碎念" title="碎碎念-擦桌碎碎念">
+  <img src="dsh-pet/assets/preview/suisuinian-fadai-suisuinian.gif" width="160" alt="碎碎念-发呆碎碎念" title="碎碎念-发呆碎碎念">
+  <img src="dsh-pet/assets/preview/suisuinian-duiping-suisuinian.gif" width="160" alt="碎碎念-对屏碎碎念" title="碎碎念-对屏碎碎念">
+</p>
+
+**工作状态动画**（跟随 DSH 会话事件，六档：思考 / 工作 / 整理 / 等待 / 成功 / 出错）
+
+<p>
+  <img src="dsh-pet/assets/preview/gongzuozhuangtai-sikao-maopao.gif" width="160" alt="工作状态-思考冒泡" title="工作状态-思考冒泡">
+  <img src="dsh-pet/assets/preview/gongzuozhuangtai-manglu-dianan.gif" width="160" alt="工作状态-忙碌点按" title="工作状态-忙碌点按">
+  <img src="dsh-pet/assets/preview/gongzuozhuangtai-qingdian-guidang.gif" width="160" alt="工作状态-清点归档" title="工作状态-清点归档">
+  <img src="dsh-pet/assets/preview/gongzuozhuangtai-yuandi-duobu-zhangwang.gif" width="160" alt="工作状态-原地踱步张望" title="工作状态-原地踱步张望">
+  <img src="dsh-pet/assets/preview/gongzuozhuangtai-queyue-qingzhu.gif" width="160" alt="工作状态-雀跃庆祝" title="工作状态-雀跃庆祝">
+  <img src="dsh-pet/assets/preview/gongzuozhuangtai-chuitou-tanqi-maohan.gif" width="160" alt="工作状态-垂头叹气冒汗" title="工作状态-垂头叹气冒汗">
+</p>
+
 > 注：动画为透明背景；GIF 预览中透明部分显示为页面底色，实际 webm 播放为透明。
 
 ## 从零生成你自己的宠物（完整流程）
@@ -405,7 +447,7 @@ python encode_thumbs.py      # 转码 640×360 播放变体 → step04/
 
 **依赖**：Python 3 + ffmpeg + numpy + scipy（素材链脚本自动用工作区 `.tools/` 下的 ffmpeg）。
 
-> **本项目全部采用路线 B**（97 个动作均为 PR 手工抠像）：对"含第三方物品/透明边缘复杂"的动作，自动 HSV 抠像易残边或误抠，PR 手动遮罩更精细。两条路线产出同一级 `step02/`，后续步骤完全一致；`chroma_step02.py` 保留为自动化兜底，任何动作仍可一键自动生成。
+> **本项目全部采用路线 B**（全部动作均为 PR 手工抠像）：对"含第三方物品/透明边缘复杂"的动作，自动 HSV 抠像易残边或误抠，PR 手动遮罩更精细。两条路线产出同一级 `step02/`，后续步骤完全一致；`chroma_step02.py` 保留为自动化兜底，任何动作仍可一键自动生成。
 
 ### ②.5 🍎 Safari/HEVC 兼容流水线（保留，不参与发布，fork 定制用）
 
@@ -442,37 +484,28 @@ npm publish --tag latest   # npm publish 自动执行 prepare 钩子（构建完
 
 ### 项目结构
 
-```
-├── prompts/                 # ① 各动作的生成提示词（绿幕规范 + 按秒分解）
-├── step01/                  # ② 素材链中间产物：水印去除后的绿幕视频（不入库）
-├── step02/                  # ② 素材链中间产物：抠像（不入库）
-├── step03/                  # ② 素材链中间产物：归一化 2160×1215 统一站立居中（不入库）
-├── step04/                  # ② 素材链中间产物：640×360 播放变体（不入库）
-├── scripts/                 # ② 素材生成链（Python：水印/抠像/归一化/转码）
-├── video/                   # ② 源视频（绿幕 mp4 + 水印 mask，一动作一文件；不入库，Releases 有压缩包）
-├── pr/                      # ② 路线 B 输入：PR 导出的透明 .mov（本地工作数据，不入库）
-├── prproj/                  # ② PR 工程目录（.prproj + 遮罩缓存 + 自动保存，本地不入库）
-├── tools/                   # 开发工具：preview.html（素材链各阶段效果预览）
-├── .github/workflows/       # CI：hevc-alpha.yml（macOS runner 批量转码 webm → mov，手动触发）
-├── dsh-pet/                 # ③ 插件（可独立 npm 发布）
-│   ├── src/                 #   TS 源码（host 半侧 /dsh-pet-7340 路由 + client 半侧动画链）
-│   ├── lib/                 #   tsdown 构建产物（prepare 自动构建，lib/*.js 不入库）
-│   ├── assets/webm/         #   640×360 VP9-alpha 播放动画（Chrome/Edge/Firefox 版素材，唯一发布格式）
-│   ├── assets/preview/      #   GIF 预览（README 展示用，拼音命名）
-│   ├── assets/fonts/        #   气泡/通知字体
-│   ├── assets/pic/          #   通知图标 + 手套光标
-│   ├── assets/config.jsonc  #   默认配置（动画池 / 权重 / 宠物列表，单一事实来源）
-│   ├── scripts/prepack-check.js  # 发布前健康检查
-│   └── scripts/prepare.js   # 发布前微调（构建完整产物 + 收敛 files）
-├── DESIGN.md                # 设计与实现文档
-└── LICENSE                  # MIT
-```
+三件套按 ①②③ 分块（gitignore 的本地目录不列）：
 
-## 文档
-
-- [设计与实现](DESIGN.md) —— 架构、动画链模型、素材链
+```
+├── prompts/           # ① 动画生成提示词配方（绿幕规范 + 按秒分解）
+├── video/             # ② 素材源视频（绿幕 mp4；不入库，Releases 提供压缩包）
+├── scripts/           # ② 素材生成链（Python/ffmpeg：水印 → 抠像 → 归一化 → 转码 → GIF 预览）
+├── step01~04/         # ② 素材链中间产物（不入库）
+├── pr/  prproj/       # ② 路线 B：PR 手工抠像输入与工程（本地工作数据，不入库）
+├── tools/             # 开发小工具（素材链各阶段预览等）
+├── assets/            # 仓库展示用截图
+├── .github/workflows/ # CI：Safari/HEVC 转码流水线（macOS runner，手动触发）
+├── dsh-pet/           # ③ 插件（可独立 npm 发布）
+│   ├── src/           #   TS 源码：host（配置/路由/工作状态）、client（动画链）、shared（双端共用纯逻辑）
+│   ├── lib/           #   构建产物（prepare 自动构建，不入库）
+│   ├── runtime/       #   桌面模式运行壳（Electron 透明窗）
+│   ├── assets/        #   webm 动画 / preview GIF / 字体 / 图标 / config.jsonc 默认配置
+│   └── scripts/       #   构建与发布脚本（prepare / prepack-check / ensure-electron 等）
+└── LICENSE            # MIT
+```
 
 ## 许可
 
 - 代码：MIT
 - 素材（动画/提示词/源视频）：允许开源使用，**禁止商用**
+- **二次创作（二创）约定**：基于本项目的衍生 / 改版 / 换皮作品，在**任何介绍、展示、分发该作品的地方**，须附上原作者 GitHub 地址：<https://github.com/PC2005-cloud/dsh-pet>

@@ -85,6 +85,13 @@
   ],
 
   // ===================== 动作动画池配置 =====================
+  // 动画素材目录（用户自定义 / 覆盖包内素材）：
+  //   $DSH_HOME/dsh-pet/main-animation/webm/（如 C:\Users\<你>\.dsh\dsh-pet\main-animation\webm\）
+  //   —— 唯一格式 .webm，文件名必须与下面各池写定的动画名一致（不含扩展名，中文/空格都行）。
+  //   注意：素材要放在 main-animation\webm\ 子目录里，直接放 main-animation\ 下会查不到文件。
+  //   （症状：右键菜单照常显示名字——菜单来自本配置——但点击不播放，资源 404。）
+  //   素材归属：存在 pet/<素材根>-animation/ 的文件宠物只查自己的目录（绝不回落）；
+  //   主配置宠物（main 等）按 main-animation\webm 优先 → 包内 assets/webm 依次查找。
   "animations": {
     // 待机动画池（数组，可放多个，等概率抽）
     "idle": ["待机呼吸休闲"],
