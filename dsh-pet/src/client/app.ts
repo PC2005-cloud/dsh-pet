@@ -32,16 +32,13 @@ export function makeFactory(): (require: (mod: string) => any) => any {
       ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'dsh-pet: dictionaries');
       const t = ctx.locale.bind(NS);
 
-      // 系统通知：订阅 DSH 事件流（对话完成/生成失败/权限申请/用户选择），窗口失焦时弹出
+      // 系统通知：host 侧监听 DSH 宿主事件生成通知帧（/dsh-pet-7340/notify），本引擎轮询拉取。
+      // 不再依赖浏览器 connection 事件流（DSH 0.1.5 删除了 api.events.mux/host）——
+      // 启动仅需 AbortSignal，host 端点缺失时轮询静默失败，不影响页面其余功能。
       ctx.effect(() => {
-        const api = ctx.connection?.api;
-        if (api && typeof api?.events?.mux === 'function' && typeof api?.events?.host === 'function') {
-          const ac = new AbortController();
-          void startNotify(api, ac.signal);
-          return () => ac.abort();
-        }
-        console.warn('[dsh-pet] 系统通知未启动：connection 服务不可用');
-        return () => {};
+        const ac = new AbortController();
+        void startNotify(ac.signal);
+        return () => ac.abort();
       }, 'dsh-pet: notifications');
 
       // /pet 选择框：裸输 /pet 回车或菜单点选时弹出桌宠列表，选中后提交 /pet <id> 由 host 命令落地。

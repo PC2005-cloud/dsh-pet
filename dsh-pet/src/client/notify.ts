@@ -1,4 +1,4 @@
-// 系统通知引擎（client 半侧，浏览器专属）：订阅 DSH 事件流（mux + host），按「聚焦不弹」规则
+// 系统通知引擎（client 半侧，浏览器专属）：轮询 host 通知帧队列，按「聚焦不弹」规则
 // 发出系统级 toast（Web Notification API，Windows 为右下角原生通知）。
 // 这是**独立于宠物**的能力（监测 DSH 事件 → 弹 toast），天然只随 DSH 网页端走；
 // 桌面模式是宠物本体，不做宠物无关的功能——「两端一致」只约束宠物行为。
@@ -6,12 +6,18 @@
 // 单一总开关：读成品配置（GET /dsh-pet-7340/config）main 条目的 notificationsEnabled；纯副作用模块，
 // 无 react 依赖，由 app.ts 装配层启动。
 //
+// 事件路径（与 0.1.1 版的差异）：旧实现经浏览器 connection 事件流（api.events.mux / events.host）
+// 订阅 DSH 事件；DSH 0.1.5 已删除这两个 API。现改为 host 侧监听 DSH 宿主事件
+// （session/event 的 turn/end、approval/asked、tool/call-ask_user_question + agent/error），
+// 生成与 shared/notify.ts 同契约的帧入队，本引擎 1s 轮询 /dsh-pet-7340/notify 增量拉取——
+// 与 work-status/broadcast 轮询同族，帧→文案映射零改动。
 // 触发清单（与 DSH 事件契约一一对应，见 shared/notify.ts）：
 //   - 对话完成 / 生成失败 / 输出截断（turn/end reason.kind）
-//   - 生成失败（host/agent-error，无回合位置）
-//   - 权限申请（approval/requested）
-//   - 用户选择（question/requested）
-// 过滤：aborted / interrupted 不弹；重连重放的 approval/question 帧按 rpcId 去重。
+//   - 生成失败（agent/error，无回合位置）
+//   - 权限申请（approval/asked）
+//   - 用户选择（tool/call ask_user_question）
+// 过滤：aborted / interrupted 不弹（host 侧 reduceNotifyFrame 已滤）；重连不重放历史帧
+//（首拉记基线 seq，与 broadcast/work-status 首次记基线同语义）。
 
 import { frameToToast, truncate, NOTIFY_ICONS as ICON_NAMES, type NotifyFrame } from '../shared/notify';
 
@@ -134,64 +140,61 @@ export async function reloadNotifications(): Promise<void> {
   notifyEnabled = await readNotificationsEnabled();
 }
 
-// ---------- mux 流：会话事件 + 权限 + 问题 ----------
+// ---------- host 通知帧轮询：1s 轻量拉取增量帧（与 work-status/broadcast 同族） ----------
 
-async function runMuxLoop(
-  api: {
-    events: { mux: (req: unknown, signal: AbortSignal) => AsyncIterable<{ rpcId: unknown; payload: NotifyFrame }> };
-  },
-  signal: AbortSignal,
-): Promise<void> {
-  // 重连时服务器会重放仍 pending 的 approval/question 帧（rpcId 保持不变）——按 rpcId 去重
-  const seen = new Set<unknown>();
-  for await (const env of api.events.mux({}, signal)) {
-    const frame = env?.payload;
-    if (!frame) continue;
-    // session/event + approval/requested + question/requested：映射与过滤都在 shared
-    if (frame.type === 'approval/requested' || frame.type === 'question/requested') {
-      if (seen.has(env.rpcId)) continue;
-      seen.add(env.rpcId);
-    }
-    toastFrame(frame);
+/** 拉一轮 /notify（since=已消费 seq）；失败返回 null（静默，下轮再试）。 */
+async function fetchNotify(seq: number): Promise<{ seq: number; frames: NotifyFrame[] } | null> {
+  try {
+    const r = await fetch('/dsh-pet-7340/notify?since=' + seq);
+    if (!r.ok) return null;
+    const d = (await r.json().catch(() => null)) as { seq?: unknown; frames?: unknown } | null;
+    if (typeof d?.seq !== 'number') return null;
+    return { seq: d.seq, frames: Array.isArray(d.frames) ? (d.frames as NotifyFrame[]) : [] };
+  } catch {
+    return null; // 轻量轮询失败静默：下一周期再试
   }
 }
 
-// ---------- host 流：无回合位置的失败 ----------
-
-async function runHostLoop(
-  api: {
-    events: { host: (req: unknown, signal: AbortSignal) => AsyncIterable<{ rpcId: unknown; payload: NotifyFrame }> };
-  },
-  signal: AbortSignal,
-): Promise<void> {
-  for await (const env of api.events.host({}, signal)) {
-    const frame = env?.payload;
-    if (!frame) continue;
-    toastFrame(frame);
-  }
+/** 等一拍（1s），支持中途取消 */
+function sleep(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    const timer = window.setTimeout(resolve, ms);
+    signal.addEventListener(
+      'abort',
+      () => {
+        window.clearTimeout(timer);
+        resolve();
+      },
+      { once: true },
+    );
+  });
 }
 
 /**
- * 启动系统通知。引擎常驻（开关在触发时按实时值判断，不用重启）；
- * 总开关开启且权限未决定时兜底申请一次权限，并行消费 mux + host 两条流。
- * 流关闭/出错即整体静默退出：DSH 连接层自身负责重连，页面刷新或下个 socket 代际会重新启动。
+ * 启动系统通知引擎。常驻（开关在触发时按实时值判断，不用重启）；
+ * 总开关开启且权限未决定时兜底申请一次权限。
+ * 1s 轮询 /dsh-pet-7340/notify 拉增量帧：首拉只记基线 seq 不弹历史（页面加载不重放旧通知），
+ * 之后每次递增拉新帧并逐条 toast；轮询失败静默，下轮重试；信号中止即退出。
  */
-export async function startNotify(
-  api: {
-    events: {
-      mux: (req: unknown, signal: AbortSignal) => AsyncIterable<{ rpcId: unknown; payload: NotifyFrame }>;
-      host: (req: unknown, signal: AbortSignal) => AsyncIterable<{ rpcId: unknown; payload: NotifyFrame }>;
-    };
-  },
-  signal: AbortSignal,
-): Promise<void> {
+export async function startNotify(signal: AbortSignal): Promise<void> {
   notifyEnabled = await readNotificationsEnabled();
   if (typeof Notification !== 'undefined' && notifyEnabled && Notification.permission === 'default') {
     void requestNotificationPermission(); // 兜底申请（无手势时浏览器可能压制；真正的申请在设置页开关/按钮点击处）
   }
   const disposeFocus = initFocusTracking();
+  let seq = 0;
   try {
-    await Promise.allSettled([runMuxLoop(api, signal), runHostLoop(api, signal)]);
+    // 首拉：只记基线 seq，不弹历史帧
+    const baseline = await fetchNotify(0);
+    if (baseline) seq = baseline.seq;
+    while (!signal.aborted) {
+      await sleep(1000, signal);
+      if (signal.aborted) break;
+      const batch = await fetchNotify(seq);
+      if (!batch || batch.seq <= seq) continue; // 无新帧：保持基线继续等
+      for (const frame of batch.frames) toastFrame(frame);
+      seq = batch.seq;
+    }
   } finally {
     disposeFocus();
   }

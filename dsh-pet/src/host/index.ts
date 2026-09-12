@@ -26,10 +26,13 @@
  *   /dsh-pet-7340/chat                → 对话与记忆（GET 最近窗口 / POST 对话并写 memory.json）
  *   /dsh-pet-7340/broadcast            → /chat 命令触发的气泡广播（两端 1s 轻轮询）
  *   /dsh-pet-7340/balance|balance/trigger → 余额查询 / 手动触发计数（/balance 命令 +1）
+ *   /dsh-pet-7340/notify              → 系统通知帧（host 监听 DSH 宿主事件生成，浏览器增量轮询）
  *   /dsh-pet-7340/font|pic             → 字体 / 通知图标素材
  *
- * 系统通知不属于宠物行为、不在这里：它是"监测 DSH 事件 → 弹系统 toast"的独立能力，
- * 天然只跟 DSH 网页端走（浏览器半侧 notify.ts，经 connection 事件流 + Web Notification API）。
+ * 系统通知不属于宠物行为、不在这里的旧实现是：浏览器半侧 notify.ts 经 connection 事件流
+ * （api.events.mux/host）监听 DSH 事件。但 DSH 0.1.5 已删除该事件流 API——通知改为
+ * host 侧监听宿主事件（session/event + agent/error）生成帧入队，浏览器轮询
+ * /dsh-pet-7340/notify 拉取（见下方 notify 队列与监听；帧契约与 shared/notify.ts 一致）。
  *
  * 桌面模式（Electron 透明窗）没有独立配置文件：宠物显示在哪全部由宠物条目的 display 决定
  * （web=仅浏览器 / desktop=仅桌面 / both=两者 / none=都不显示；缺失时合并器填内置默认值）。
@@ -60,6 +63,7 @@ import {
   type WorkStatusSnapshot,
   type WorkStatusTurnContext,
 } from './work-status';
+import { agentErrorFrame, reduceNotifyFrame, type HostNotifyFrame } from './notify-events';
 import {
   HelperProcess,
   defaultElectronExe,
@@ -194,6 +198,18 @@ export function apply(ctx: any): void {
     task: null as string | null,
     ts: 0,
   } satisfies WorkStatusSnapshot;
+  // 系统通知帧队列（/notify 端点增量拉取）：host 监听 DSH 宿主事件生成通知帧
+  // （帧契约与 shared/notify.ts 一致），浏览器 1s 轮询 /notify?since=<seq> 拉增量弹 toast。
+  // 背景：DSH 0.1.5 删除浏览器侧 api.events.mux/host 事件流，改为 host 转发通道——
+  // 不依赖 DSH 版本间变化的事件 API。进程内内存态：重启清空（通知本来就是瞬时提醒）。
+  const notifyFrames: Array<{ seq: number; frame: HostNotifyFrame }> = [];
+  let notifySeq = 0;
+  const NOTIFY_QUEUE_MAX = 100; // 上限防膨胀：超出丢最旧（1s 轮询正常不会积压）
+  const pushNotifyFrame = (frame: HostNotifyFrame): void => {
+    notifySeq += 1;
+    notifyFrames.push({ seq: notifySeq, frame });
+    if (notifyFrames.length > NOTIFY_QUEUE_MAX) notifyFrames.shift();
+  };
   /** 每会话最近状态（会话 id → 状态），多会话时取优先级最高的作展示（与 better-dsh-pet 同思路） */
   const workStatusBySession = new Map<string, { state: HostWorkStatusState; seq: number }>();
   /** 每会话 turn 级标志（goal 续跑轮判定；不参与展示，仅修正 turn/end 终局语义） */
@@ -774,6 +790,22 @@ export function apply(ctx: any): void {
       };
     }
 
+    // 系统通知帧：/dsh-pet-7340/notify?since=<seq>（GET，no-cache）
+    // host 监听 DSH session/event + agent/error 生成通知帧（帧契约 = shared/notify.ts），
+    // 浏览器 1s 轮询增量拉取（只返回 seq>since 的帧）；无 since 时返回全量队列
+    //（浏览器首拉记基线 seq，不重放历史——与 broadcast/work-status 首次记基线同语义）。
+    if (rest === 'notify') {
+      if (method !== 'GET') return { kind: 'json', status: 405, obj: { error: 'method not allowed' } };
+      const since = Number(url.searchParams.get('since') ?? '0');
+      const frames = notifyFrames.filter((f) => f.seq > since).map((f) => f.frame);
+      return {
+        kind: 'json',
+        status: 200,
+        obj: { ok: true, seq: notifySeq, frames },
+        headers: { 'cache-control': 'no-cache, no-store' },
+      };
+    }
+
     // 动画文件：/dsh-pet-7340/thumb/<素材根>/<file>，扩展名 webm（默认）/ mov（macOS 定制）。
     // 素材归属按「是否存在该宠物的独立素材目录 `pet/<petId>-animation/`」判定：
     //   - 存在（pet pack 宠物）：只查自己的目录，查不到即 404 显式报错——绝不混用
@@ -929,6 +961,36 @@ export function apply(ctx: any): void {
     };
   }, 'dsh-pet: work-status session events');
 
+  // 系统通知：监听 DSH 宿主事件 → 生成通知帧入队（浏览器轮询 /notify 拉取弹 toast）。
+  // 与 work-status 同一 session/event 源，但职责各自独立（通知帧 = 事件 → toast 的一对一映射，
+  // 不做状态聚合）。帧契约与 shared/notify.ts 完全一致，浏览器侧映射零改动。
+  //   事件源：turn/end（完成/失败/截断）、approval/asked（权限申请）、
+  //          tool/call（ask_user_question：用户选择）、agent/error（无回合位置失败，0.1.5 新增）。
+  // 纯监听不调用模型；通知是浏览器网页端能力，桌面模式不消费本队列（不影响任何宠物行为）。
+  ctx.effect(() => {
+    const sessionDispose = ctx.on(
+      'session/event',
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (_session: any, event: any) => {
+        const frame = reduceNotifyFrame(event as Parameters<typeof reduceNotifyFrame>[0]);
+        if (frame) pushNotifyFrame(frame);
+      },
+    );
+    // agent/error（agent-loop dispatch.emit）：无回合位置的生成失败；0.1.5 新增，
+    // 旧版无此事件 = 少一条通知（turn/end error 分支已覆盖大部分失败场景），不报错。
+    const errorDispose = ctx.on(
+      'agent/error',
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (payload: any) => {
+        pushNotifyFrame(agentErrorFrame(payload?.error));
+      },
+    );
+    return () => {
+      sessionDispose();
+      errorDispose();
+    };
+  }, 'dsh-pet: notify frames');
+
   // /balance 斜杠命令：递增触发计数 → 浏览器/桌面检测到变化后立即刷新余额并播动画（不进模型历史）
   ctx.effect(
     () =>
@@ -1035,8 +1097,9 @@ export function apply(ctx: any): void {
     'dsh-pet: /chat command',
   );
 
-  // 系统通知不在此处：它独立于宠物（浏览器半侧 notify.ts 经 connection 事件流监听），
-  // 宿主无需任何通知端点/监听。
+  // 系统通知的宿主监听已在上方注册（notify frames effect）：host 监听 session/event +
+  // agent/error 生成通知帧入队，浏览器轮询 /notify 拉取弹 toast（DSH 0.1.5 删除了浏览器侧
+  // api.events.mux/host 事件流，通知与宠物一样改走 host 通道，两端行为一致）。
 
   // 随插件生命周期清理：桌面 Helper 回收（异步下载完成后不再拉起）
   ctx.effect(() => () => {

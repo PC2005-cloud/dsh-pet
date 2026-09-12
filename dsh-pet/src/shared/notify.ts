@@ -1,7 +1,10 @@
 // 系统通知：事件帧 → toast 文案映射（src/shared 单一来源）。
 // 这是**独立于宠物**的能力（监测 DSH 事件 → 弹系统 toast），天然只随 DSH 网页端走：
-//   - 浏览器半侧 notify.ts 经 mux 流（session/event、approval/requested、question/requested）
-//     与 host 流（host/agent-error）消费本映射；
+//   - 浏览器半侧 notify.ts 轮询 host 的 /dsh-pet-7340/notify 增量帧队列，消费本映射；
+//   - 帧由 host 侧监听 DSH 宿主事件生成（turn/end、approval/asked、tool/call-ask_user_question、
+//     agent/error，见 host/notify-events.ts）——DSH 0.1.5 删除了浏览器侧 api.events.mux/host
+//     事件流，旧实现就是经该流（session/event、approval/requested、question/requested 与
+//     host/agent-error）消费本映射，帧契约不变，只是帧的产地从浏览器直连改为 host 转发；
 //   - 桌面模式是宠物本体，不重复实现通知（宠物 ≠ 通知；「两端一致」只约束宠物行为）。
 // 纯函数无副作用；帧形状不匹配/不认识的类型一律返回 null（不弹、不报错）。
 
