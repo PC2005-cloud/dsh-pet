@@ -577,7 +577,7 @@ export function apply(ctx: any): void {
       });
   };
 
-  /** 停止桌面 Helper（保留配置，可再次拉起）。 */
+  /** 停止桌面 Helper（保留配置，可再次拉起）。宿主退出/插件卸载路径：不等它退干净（见 stopAndWait）。 */
   const stopHelper = (reason = 'settings-change'): void => {
     if (startRetryTimer) {
       clearTimeout(startRetryTimer);
@@ -587,11 +587,37 @@ export function apply(ctx: any): void {
     helper = undefined;
   };
 
-  /** 宠物配置（display 等）变更后：重解析桌面宠物并按需重启 Helper。 */
-  const syncDesktop = (): void => {
-    refreshDesktop();
-    stopHelper('desktop-config-change');
-    startHelper();
+  /** 停止并**等旧 helper 真正退出**：配置变更触发的"停旧起新"专用（issue #64）。 */
+  const stopHelperAndWait = async (reason: string): Promise<void> => {
+    if (startRetryTimer) {
+      clearTimeout(startRetryTimer);
+      startRetryTimer = undefined;
+    }
+    const old = helper;
+    helper = undefined;
+    await old?.stopAndWait(reason);
+  };
+
+  /**
+   * 宠物配置（display / size 等）变更后：重解析桌面宠物，**等旧 helper 退出**再拉起新的。
+   *
+   * 为什么要等（issue #64）：Electron 收到 SIGTERM 后关窗是异步的（几百 ms 起），"发完 kill 就 spawn
+   * 新进程"会让旧窗口（旧大小）与新窗口（新大小）短暂共存——用户看到的就是"改完大小冒出来第二只宠物"。
+   * 为什么要串行：连续保存会触发多次重启，两次重启交错同样会同时拉起两个 helper，所以用队列串起来。
+   * 队列自身绝不留下 rejected 状态，否则后续保存再也不会重启 helper。
+   */
+  let desktopSyncQueue: Promise<void> = Promise.resolve();
+  const syncDesktop = (): Promise<void> => {
+    desktopSyncQueue = desktopSyncQueue
+      .then(async () => {
+        refreshDesktop();
+        await stopHelperAndWait('desktop-config-change');
+        startHelper();
+      })
+      .catch((e: unknown) => {
+        ctx.logger?.warn?.(`[dsh-pet] 重启桌面 Helper 失败：${e instanceof Error ? e.message : String(e)}`);
+      });
+    return desktopSyncQueue;
   };
 
   /** 扩展名 → 素材子目录名（webm → webm/，mov → mov/；其余落在动画目录平级放行） */
@@ -645,7 +671,7 @@ export function apply(ctx: any): void {
           }
           await mkdir(userRoot, { recursive: true });
           await writeFile(userConfigPath, JSON.stringify(clean, null, 2), 'utf8');
-          syncDesktop(); // display 等可能变化：重解析桌面宠物并重启 Helper
+          void syncDesktop(); // display/size 等可能变化：重解析桌面宠物并重启 Helper（异步，不阻塞保存响应）
           // 响应体 = 保存后的**成品聚合**（与 GET /config 同一份，字段已填满）：
           // 设置页把它直接交给容器的 flattenConfigPets 拍平渲染——客户端的条目级字段
           // （动画池/权重/物理参数/工作状态文案）只有这一处填充，不再有第二份补吹实现。
@@ -660,7 +686,7 @@ export function apply(ctx: any): void {
         } catch {
           /* 不存在也视为成功 */
         }
-        syncDesktop(); // 恢复默认配置：重解析桌面宠物并重启 Helper
+        void syncDesktop(); // 恢复默认配置：重解析桌面宠物并重启 Helper（异步，不阻塞响应）
         return { kind: 'json', status: 200, obj: readAllConfig(configPaths) };
       }
       return { kind: 'json', status: 405, obj: { error: 'method not allowed' } };

@@ -251,6 +251,30 @@ export function defaultLaunch(options: HelperOptions = {}): { command: string; a
   return { command: electronPath, args: [helperPath] };
 }
 
+/** 停止 helper 的等待上限（ms）：超过就升级 SIGKILL（issue #64） */
+export const HELPER_STOP_TIMEOUT_MS = 3000;
+/** SIGKILL 之后还给进程多久退出（ms）；到点仍未退出就放弃等待，绝不无限挂住调用方 */
+export const HELPER_STOP_GRACE_MS = 1000;
+
+/**
+ * spawn helper 用的环境变量（纯函数，可独立测试）。
+ *
+ * **必须删掉 `ELECTRON_RUN_AS_NODE`**（issue #63）：宿主自己可能就是个 Electron 应用（DSH Desktop），
+ * 它的 `process.env` 里可能带着这个变量；原样透传会让我们 spawn 的 Electron 以**纯 Node 模式**启动——
+ * 内置 `electron` 模块根本不注册，main.js 顶部 `require('electron')` 直接 MODULE_NOT_FOUND →
+ * helper 崩 → 守护循环重启 → 12 次熔断 → 桌面模式彻底不再出现，且没有任何用户可见提示。
+ *
+ * 为什么是"删除"而不是设成空串：Electron 只看这个变量**存不存在**。实测 Electron 43.3.0（Windows，
+ * 与插件用的是同一份二进制）：删除 → `process.type=browser`、`require('electron')` 正常拿到 app；
+ * 设 `''` → 直接 abort（exit 134，`node::CreateEnvironment` 断言失败）；设 `'0'`/`'false'`/`'1'` →
+ * 都进纯 Node 模式。运行期再 `delete process.env` 已经晚了（模块加载器在进程启动瞬间就定了）。
+ */
+export function helperSpawnEnv(hostPid: number, extra?: Record<string, string | undefined>): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = { ...process.env, DSH_PET_HOST_PID: String(hostPid), ...extra };
+  delete env.ELECTRON_RUN_AS_NODE;
+  return env;
+}
+
 export class HelperProcess {
   declare readonly options: HelperOptions;
   declare readonly logger: Logger;
@@ -294,7 +318,9 @@ export class HelperProcess {
       // JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE 的 job 对象，宿主一退出内核就顺手杀掉它——实测
       // helper 的心跳正好停在宿主退出的那一刻、连 process.on('exit') 都不触发；POSIX 没有这层
       // 兜底，宿主非正常退出后 helper 会一直留着（issue #56 报告的就是这个）。
-      env: { ...process.env, DSH_PET_HOST_PID: String(process.pid), ...this.options.env },
+      // 环境变量统一经 helperSpawnEnv 构造：它会删掉会劫持 Electron 启动模式的 ELECTRON_RUN_AS_NODE
+      // （issue #63，详见该函数注释）。
+      env: helperSpawnEnv(process.pid, this.options.env),
       stdio: ['pipe', 'pipe', 'pipe'], // stdin 也要：bridge 协议响应回写（main.js 请求经 stdout 上来）
       windowsHide: true,
     });
@@ -391,6 +417,9 @@ export class HelperProcess {
     }
   }
 
+  /** 停止 helper：发 SIGTERM 即返回，**不等它退出**。宿主退出/插件卸载路径用它——
+   *  宿主马上就没了（Windows 有 job 对象、POSIX 有 helper 自己的 host-liveness 兜底，见 issue #56）。
+   *  **停止后要立刻重启的场景必须用 stopAndWait()**，否则新旧进程会短暂重叠（issue #64）。 */
   stop(reason = 'plugin-disposed'): void {
     this.stopping = true;
     if (this.restartTimer) clearTimeout(this.restartTimer);
@@ -399,6 +428,29 @@ export class HelperProcess {
     const child = this.child;
     if (!child) return;
     child.kill();
+  }
+
+  /**
+   * 停止 helper 并**等它真正退出**（issue #64）：原实现只发一次 SIGTERM 就返回、紧接着 spawn 新进程，
+   * 而 Electron 收到 SIGTERM 后关窗、销毁 GPU/动画合成器是异步的（几百 ms 起）——旧窗口（旧大小）
+   * 还没消失、新窗口（新大小）已经画出来，桌面上就短暂出现"两只宠物"。
+   *   ① 先置 `stopping`（由 stop() 完成）：守护逻辑不得把这次主动停止误判成崩溃去自动重启；
+   *   ② 只等 `exit`，**不等 `close`**：stdio 管道关闭远早于进程真正退出（实测 SIGTERM 后 ~10ms 就触发）；
+   *   ③ 超时（默认 3s）升级 SIGKILL；SIGKILL 后再给 1s 宽限，仍未退出就放弃等待——
+   *      配置保存绝不能因为一个退不掉的子进程而被无限挂住。
+   */
+  async stopAndWait(reason = 'plugin-disposed', timeoutMs = HELPER_STOP_TIMEOUT_MS): Promise<void> {
+    this.stop(reason);
+    const child = this.child;
+    if (!child) return;
+    await waitForChildExit(child, timeoutMs, () => {
+      this.logger.warn?.(`dsh-pet desktop helper 未在 ${timeoutMs}ms 内退出，升级 SIGKILL（${reason}）`);
+      try {
+        child.kill('SIGKILL');
+      } catch {
+        /* 已经退出了 */
+      }
+    });
   }
 
   private scheduleRestart(): void {
@@ -442,6 +494,37 @@ export class HelperProcess {
   private resolveMaxFailures(): number {
     return envPositiveInt(process.env.DSH_PET_RESTART_MAX_FAILURES, RESTART_MAX_FAILURES_DEFAULT);
   }
+}
+
+/**
+ * 等子进程真正退出（issue #64 的"停止要等干净"那一步）：
+ *   - 已经退出（exitCode/signalCode 有值）→ 立即 resolve，不挂监听；
+ *   - 只等 `exit`：`close` 只代表 stdio 管道关闭，远早于进程真正退出；
+ *   - 到 timeoutMs 调 onTimeout()（调用方升级 SIGKILL），再给 HELPER_STOP_GRACE_MS 宽限；
+ *   - 宽限到点仍未退出就 resolve——调用方（配置保存触发的重启）绝不能被无限挂住。
+ */
+function waitForChildExit(
+  child: import('node:child_process').ChildProcess,
+  timeoutMs: number,
+  onTimeout: () => void,
+): Promise<void> {
+  if (child.exitCode !== null || child.signalCode !== null) return Promise.resolve();
+  return new Promise((resolve) => {
+    let giveUpTimer: NodeJS.Timeout | undefined;
+    const done = (): void => {
+      clearTimeout(killTimer);
+      if (giveUpTimer) clearTimeout(giveUpTimer);
+      child.removeListener('exit', done);
+      resolve();
+    };
+    const killTimer = setTimeout(() => {
+      onTimeout();
+      giveUpTimer = setTimeout(done, HELPER_STOP_GRACE_MS);
+      giveUpTimer.unref?.();
+    }, timeoutMs);
+    killTimer.unref?.();
+    child.once('exit', done);
+  });
 }
 
 // ---------- 重启退避 / 熔断纯逻辑（可独立测试，不依赖 spawn） ----------

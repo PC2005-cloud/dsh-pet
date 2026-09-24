@@ -11,6 +11,7 @@
  */
 import { test, describe, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
+import { EventEmitter } from 'node:events';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -22,6 +23,7 @@ import {
   defaultElectronExe,
   hasGraphicalDisplay,
   helperRunIsStable,
+  helperSpawnEnv,
   restartBackoffDelayMs,
   resolveElectronPath,
   shouldCircuitBreak,
@@ -265,5 +267,105 @@ describe('HelperProcess —— 退避/熔断的**接线**（纯函数之外，�
     const tripped = logs.find((l) => l.includes('circuit breaker tripped'));
     assert.ok(tripped, '按用户设定的阈值应熔断');
     assert.match(tripped, /crashed 3 consecutive times/);
+  });
+});
+
+describe('helperSpawnEnv —— spawn 环境构造（issue #63：ELECTRON_RUN_AS_NODE 必须删键）', () => {
+  test('宿主环境带着污染 → 构造出的 env 里没有这个键', () => {
+    // 宿主（DSH Desktop）自己就是 Electron 应用，process.env 里可能带着它；透传下去会让 helper
+    // 以纯 Node 模式启动、require('electron') 直接 MODULE_NOT_FOUND（崩→重启→12 次熔断）
+    const saved = process.env.ELECTRON_RUN_AS_NODE;
+    process.env.ELECTRON_RUN_AS_NODE = '1';
+    try {
+      const env = helperSpawnEnv(1234);
+      assert.equal('ELECTRON_RUN_AS_NODE' in env, false, '必须删键：设空串会让 Electron 直接 abort');
+      assert.equal(env.DSH_PET_HOST_PID, '1234');
+    } finally {
+      if (saved === undefined) delete process.env.ELECTRON_RUN_AS_NODE;
+      else process.env.ELECTRON_RUN_AS_NODE = saved;
+    }
+  });
+
+  test('调用方在 extra 里显式给这个键 → 同样删掉（我们要的永远是真正的 Electron 主进程）', () => {
+    const env = helperSpawnEnv(7, { ELECTRON_RUN_AS_NODE: '1', DSH_PET_BRIDGE: '1' });
+    assert.equal('ELECTRON_RUN_AS_NODE' in env, false);
+    assert.equal(env.DSH_PET_BRIDGE, '1');
+    assert.equal(env.DSH_PET_HOST_PID, '7');
+  });
+
+  test('其余宿主环境变量照常继承、extra 覆盖同名键', () => {
+    const saved = process.env.DSH_PET_TEST_MARKER;
+    process.env.DSH_PET_TEST_MARKER = 'from-host';
+    try {
+      const env = helperSpawnEnv(1, { DSH_PET_TEST_MARKER: 'from-extra' });
+      assert.equal(env.DSH_PET_TEST_MARKER, 'from-extra');
+      assert.equal(helperSpawnEnv(1).DSH_PET_TEST_MARKER, 'from-host');
+    } finally {
+      if (saved === undefined) delete process.env.DSH_PET_TEST_MARKER;
+      else process.env.DSH_PET_TEST_MARKER = saved;
+    }
+  });
+});
+
+describe('HelperProcess.stopAndWait —— 停止要等进程真正退出（issue #64）', () => {
+  /** 假子进程：只需要 kill/exitCode/exit 事件这三样，避免测试里真 spawn（stdio 走 pipe） */
+  class FakeChild extends EventEmitter {
+    exitCode: number | null = null;
+    signalCode: NodeJS.Signals | null = null;
+    signals: string[] = [];
+    kill(signal?: string): boolean {
+      this.signals.push(signal ?? 'SIGTERM');
+      return true;
+    }
+    exit(): void {
+      this.exitCode = 0;
+      this.emit('exit', 0, null);
+    }
+  }
+
+  function fakeHelper(timeoutMs: number) {
+    const logs: string[] = [];
+    const hp = new HelperProcess({}, { warn: (m: unknown) => logs.push(String(m)) });
+    const fake = new FakeChild();
+    (hp as unknown as { child?: FakeChild }).child = fake;
+    return { fake, logs, stop: () => hp.stopAndWait('test', timeoutMs) };
+  }
+
+  test('正常退出：只发 SIGTERM、不升级，Promise 在 exit 时 resolve', async () => {
+    const { fake, stop } = fakeHelper(1000);
+    const p = stop();
+    setTimeout(() => fake.exit(), 10);
+    await p;
+    assert.deepEqual(fake.signals, ['SIGTERM']);
+  });
+
+  test('超时未退 → 升级 SIGKILL（不是无限等）', async () => {
+    const { fake, logs, stop } = fakeHelper(20);
+    const p = stop();
+    setTimeout(() => fake.exit(), 40); // 模拟"只在 SIGKILL 之后才退"
+    await p;
+    assert.deepEqual(fake.signals, ['SIGTERM', 'SIGKILL']);
+    assert.ok(
+      logs.some((l) => l.includes('SIGKILL')),
+      '升级动作要有日志',
+    );
+  });
+
+  test('连 SIGKILL 都不退 → 宽限期后仍 resolve（绝不挂住配置保存）', async () => {
+    const { stop } = fakeHelper(20);
+    const started = Date.now();
+    await stop(); // 全程没有 exit 事件
+    const spent = Date.now() - started;
+    assert.ok(spent >= 20, `至少等满超时再升级（实际 ${spent}ms）`);
+    assert.ok(spent < 3000, `应在宽限期内放弃等待，而不是无限挂住（实际 ${spent}ms）`);
+  });
+
+  test('已经退出的子进程 → 立即 resolve，不挂监听', async () => {
+    const { fake, stop } = fakeHelper(1000);
+    fake.exitCode = 0;
+    const started = Date.now();
+    await stop();
+    assert.ok(Date.now() - started < 50);
+    assert.deepEqual(fake.signals, ['SIGTERM']);
   });
 });

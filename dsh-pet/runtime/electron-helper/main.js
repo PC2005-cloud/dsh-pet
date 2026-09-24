@@ -27,8 +27,25 @@
  * 进程存亡（issue #56）：本进程的 stdout/stderr 是宿主给的管道，宿主一退出读端就消失（下一次写
  * 就是 EPIPE，而 Electron 默认处理器只会弹框且不退出）。故有「宿主存活」一节：管道守卫 +
  * 宿主 PID 探测，宿主没了就自己退——见那里的注释。
+ *
+ * 启动模式（issue #63）：若被以「纯 Node 模式」拉起（宿主透传了 ELECTRON_RUN_AS_NODE），内置
+ * electron 模块不会注册，下面的 require 会失败——报一句能定位原因的话再退出，别只留 MODULE_NOT_FOUND。
  */
-const { app, BrowserWindow, ipcMain, screen, shell, protocol } = require('electron');
+let electronApi;
+try {
+  electronApi = require('electron');
+} catch (error) {
+  process.stderr.write(
+    '[dsh-pet helper] 启动失败：本进程被以「纯 Node 模式」拉起（ELECTRON_RUN_AS_NODE=' +
+      JSON.stringify(process.env.ELECTRON_RUN_AS_NODE ?? null) +
+      '）。该变量必须在 spawn 前删除（见 src/host/helper-process.ts 的 helperSpawnEnv），' +
+      '运行期再删无效，设成空串会让 Electron 直接 abort。原始错误：' +
+      (error instanceof Error ? error.message.split('\n')[0] : String(error)) +
+      '\n',
+  );
+  process.exit(3);
+}
+const { app, BrowserWindow, ipcMain, screen, shell, protocol } = electronApi;
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 const { readFileSync, writeFileSync } = require('node:fs');

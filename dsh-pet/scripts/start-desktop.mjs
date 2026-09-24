@@ -57,6 +57,10 @@ const env = {
   // （helper 侧 host-liveness.js 每 2s kill(pid, 0) 一次，ESRCH 即自行退出；见 issue #56）
   DSH_PET_HOST_PID: String(process.pid),
 };
+// 删掉会劫持 Electron 启动模式的变量（issue #63）：终端/宿主里若带着 ELECTRON_RUN_AS_NODE，
+// Electron 会以纯 Node 模式启动，main.js 顶部 require('electron') 直接 MODULE_NOT_FOUND。
+// 必须**删键**，不能设空串（实测空串会让 Electron 直接 abort）。
+delete env.ELECTRON_RUN_AS_NODE;
 
 console.log(`[start-desktop] electron:   ${electron}`);
 console.log(`[start-desktop] config url: ${env.DSH_PET_CONFIG_URL}`);
