@@ -85,7 +85,7 @@ export async function generateChat(
     m.role === 'user'
       ? createUserMessage({
           content: [{ type: 'text', text: m.content }],
-          source: { kind: 'plugin', plugin: 'dsh-pet' },
+          source: { kind: 'user' },
         })
       : createAssistantMessage({
           content: [{ type: 'text', text: m.content }],
@@ -107,7 +107,7 @@ export async function generateChat(
       ...historyMessages,
       createUserMessage({
         content: [{ type: 'text', text: wantImage ? userText + imageInstruction(pool) : userText }],
-        source: { kind: 'plugin', plugin: 'dsh-pet' },
+        source: { kind: 'user' },
       }),
     ],
     system,

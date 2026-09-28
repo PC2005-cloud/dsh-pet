@@ -86,7 +86,7 @@ export async function generateWhisper(
     messages: [
       createUserMessage({
         content: [{ type: 'text', text: meme ? userTextWithMeme(meme) : USER_TEXT }],
-        source: { kind: 'plugin', plugin: 'dsh-pet' },
+        source: { kind: 'user' },
       }),
     ],
     system,
