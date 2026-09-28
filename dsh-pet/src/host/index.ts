@@ -676,9 +676,12 @@ export function apply(ctx: any): void {
 
     if (rest === 'turn-spend' || rest === 'turn-spend/debug') {
       if (method !== 'GET') return { kind: 'json', status: 405, obj: { error: 'method not allowed' } };
+      let enabled = true;
       let currency: 'CNY' | 'USD' = 'CNY';
       try {
-        currency = readAllConfig(configPaths).main.spendCurrency === 'USD' ? 'USD' : 'CNY';
+        const config = readAllConfig(configPaths).main;
+        enabled = config.spendEnabled !== false;
+        currency = config.spendCurrency === 'USD' ? 'USD' : 'CNY';
       } catch {
         /* 配置不可读时仍使用明确的默认人民币价，绝不混用币种。 */
       }
@@ -687,6 +690,7 @@ export function apply(ctx: any): void {
           kind: 'json',
           status: 200,
           obj: {
+            enabled,
             currency,
             updates: { pricing: pricing.status(), holidays: holidays.status() },
             pricing: pricing.snapshot(currency),
@@ -694,6 +698,13 @@ export function apply(ctx: any): void {
               Object.keys(pricing.snapshot(currency)).map((m) => [m, pricing.source(m, currency)]),
             ),
           },
+          headers: { 'cache-control': 'no-store' },
+        };
+      if (!enabled)
+        return {
+          kind: 'json',
+          status: 200,
+          obj: { enabled: false, scope: '', spend: null },
           headers: { 'cache-control': 'no-store' },
         };
       // 网页必须指定会话；桌面没有会话选择器，跟随最近开始的会话。

@@ -51,6 +51,9 @@ export const zh = {
   nameLabel: '名字',
   nameHint: '显示名：鼠标悬浮宠物时弹出，也会加进 AI 人设（你的名字是 X）。可重复，留空按宠物 id 处理。',
   balanceEnabled: '余额功能',
+  spendEnabled: '本轮消耗（估算）（目前仅支持 DeepSeek 官方 API）',
+  spendEnabledHint:
+    '保存后网页与桌面同步生效；关闭时收起消耗气泡，重新开启不会补播旧提示。提示由第一只启用余额的可见宠物显示。',
   spendCurrency: '本轮消耗（估算）币种',
   spendCurrencyHint: 'CNY 按官网人民币单价、USD 按官网美元单价估算。保存后网页与桌面同步生效，账户余额保持原币种。',
   balanceEnabledHint: '启用后该宠物触发余额动画并显示余额气泡。',
@@ -136,6 +139,9 @@ export const en = {
   nameHint:
     'Shown on hover and added to AI personas ("your name is X"). Duplicates allowed; empty falls back to the pet id.',
   balanceEnabled: 'Balance',
+  spendEnabled: 'Estimated turn cost (currently supports the official DeepSeek API only)',
+  spendEnabledHint:
+    'Save to apply on web and desktop. Disabling hides the bubble; enabling does not replay old results. Shown by the first visible pet with Balance enabled.',
   spendCurrency: 'Estimated turn cost currency',
   spendCurrencyHint:
     'CNY uses official yuan prices; USD uses official dollar prices. Save to apply to web and desktop. Account balance keeps its original currency.',
@@ -296,6 +302,7 @@ export function makePetConfigSection(rt: {
 
     // 系统通知总开关（全局：读写用户级配置 main-config.json 的 notificationsEnabled；即时生效）
     const [notifyEnabled, setNotifyEnabled] = useState(true);
+    const [spendEnabled, setSpendEnabled] = useState(true);
     const [spendCurrency, setSpendCurrency] = useState<'CNY' | 'USD'>('CNY');
     // 表情包配图开关（全局：写用户级配置；与「保存」一起提交，不做即时写入）
     const [whisperImage, setWhisperImage] = useState(false);
@@ -310,6 +317,7 @@ export function makePetConfigSection(rt: {
         .then((d) => {
           if (!alive || !d || !d.main) return;
           const m = d.main as Record<string, unknown>;
+          setSpendEnabled(m.spendEnabled !== false);
           setSpendCurrency(m.spendCurrency === 'USD' ? 'USD' : 'CNY');
           if (typeof m.notificationsEnabled === 'boolean') setNotifyEnabled(m.notificationsEnabled);
           if (typeof m.whisperImageEnabled === 'boolean') setWhisperImage(m.whisperImageEnabled);
@@ -337,6 +345,7 @@ export function makePetConfigSection(rt: {
           body: JSON.stringify({
             pets: pets,
             notificationsEnabled: v,
+            spendEnabled,
             spendCurrency,
             whisperImageEnabled: whisperImage,
             chatImageEnabled: chatImage,
@@ -418,6 +427,7 @@ export function makePetConfigSection(rt: {
         const body: Record<string, unknown> = {
           pets: pets,
           notificationsEnabled: notifyEnabled,
+          spendEnabled,
           spendCurrency,
           whisperImageEnabled: whisperImage,
           chatImageEnabled: chatImage,
@@ -450,6 +460,7 @@ export function makePetConfigSection(rt: {
         if (!res.ok) throw new Error('HTTP ' + res.status);
         const merged = (await res.json()) as Record<string, Record<string, unknown>>;
         const defs = (merged.main?.pets ?? []) as Pet[];
+        setSpendEnabled(merged.main?.spendEnabled !== false);
         setSpendCurrency(merged.main?.spendCurrency === 'USD' ? 'USD' : 'CNY');
         setPets(defs.map((p) => ({ ...p, position: { ...p.position } })));
         setSelId(defs[0]?.id ?? '');
@@ -545,12 +556,28 @@ export function makePetConfigSection(rt: {
           : null,
 
         h('label', {
+          style: { display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px', fontSize: '13px' },
+          children: [
+            h('input', {
+              type: 'checkbox',
+              checked: spendEnabled,
+              disabled: busy,
+              onChange: (e: ChangeEvent<HTMLInputElement>) => setSpendEnabled(e.target.checked),
+            }),
+            t('spendEnabled'),
+          ],
+        }),
+        h('p', {
+          style: { margin: 0, fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)' },
+          children: t('spendEnabledHint'),
+        }),
+        h('label', {
           style: { display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '8px', fontSize: '13px' },
           children: [
             t('spendCurrency'),
             h('select', {
               value: spendCurrency,
-              disabled: busy,
+              disabled: busy || !spendEnabled,
               onChange: (e: ChangeEvent<HTMLSelectElement>) =>
                 setSpendCurrency(e.target.value === 'USD' ? 'USD' : 'CNY'),
               style: { ...inputStyle, width: '180px' },

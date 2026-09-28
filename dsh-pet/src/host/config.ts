@@ -200,6 +200,7 @@ function topFieldValid(key: string, value: unknown): boolean {
       const n = Number(value);
       return Number.isFinite(n) && n >= 0;
     }
+    case 'spendEnabled':
     case 'notificationsEnabled':
       return typeof value === 'boolean';
     case 'whisperImageEnabled':
@@ -488,6 +489,8 @@ export function saveUserConfig(
     });
   }
   const ne = o.notificationsEnabled;
+  const spendEnabled = o.spendEnabled;
+  if (spendEnabled !== undefined && typeof spendEnabled !== 'boolean') return null;
   const spendCurrency = o.spendCurrency;
   if (spendCurrency !== undefined && spendCurrency !== 'CNY' && spendCurrency !== 'USD') return null;
   if (ne !== undefined && typeof ne !== 'boolean') return null;
@@ -497,6 +500,7 @@ export function saveUserConfig(
   if (cie !== undefined && typeof cie !== 'boolean') return null;
   // 白名单可编辑字段：pets 来自请求体、三个全局开关来自请求体（未传则不写）
   const outConfig: { pets: unknown[]; [key: string]: unknown } = { pets: out };
+  if (spendEnabled !== undefined) outConfig.spendEnabled = spendEnabled;
   if (spendCurrency !== undefined) outConfig.spendCurrency = spendCurrency;
   if (ne !== undefined) outConfig.notificationsEnabled = ne;
   if (wie !== undefined) outConfig.whisperImageEnabled = wie;
@@ -506,6 +510,7 @@ export function saveUserConfig(
   // 全局开关只在「请求体传了」时才算白名单（已由上方写入）；未传时走这里透传磁盘旧值——
   // 否则整包调用的调用方漏传一个开关，就会把用户既有设置悄悄抹成默认。
   const bodyOwned = new Set(['pets']);
+  if (spendEnabled !== undefined) bodyOwned.add('spendEnabled');
   if (spendCurrency !== undefined) bodyOwned.add('spendCurrency');
   if (ne !== undefined) bodyOwned.add('notificationsEnabled');
   if (wie !== undefined) bodyOwned.add('whisperImageEnabled');

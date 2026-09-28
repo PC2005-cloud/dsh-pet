@@ -79,7 +79,7 @@ dsh plugin --profile web add file:D:/path/to/dsh-pet
 - **朝向与落地**：全部动画可镜像（可朝左 / 朝右）；脚底线统一，宠物始终站在地面上
 - **流畅切换**：双缓冲交叉淡入，切换无空白帧
 - **余额展示**：按已用百分比分档播余额动画 + 头顶联想气泡（10 秒自动消失）；DeepSeek 显示账户余额，OpenCode Zen Go 显示最紧迫的一个额度窗口；**未登记余额接口的服务商改为弹文字说明**（不静默）；按宠物独立开关
-- **每轮消耗估算**：DeepSeek 官方对话完成后弹出桌宠头顶的独立白色半透明气泡（5 秒自动消失，鼠标移入即收起）；按本轮实际 token、模型与峰谷单价估算，Web 设置可选 **CNY / USD**，保存后网页与桌面同步使用对应币种的官方单价
+- **每轮消耗估算**：DeepSeek 官方对话完成后弹出桌宠头顶的独立白色半透明气泡（5 秒自动消失，鼠标移入即收起）；按本轮实际 token、模型与峰谷单价估算，Web 设置提供勾选开关（目前仅支持 DeepSeek 官方 API）及 **CNY / USD** 选择，保存后网页与桌面同步使用对应币种的官方单价
 - **碎碎念与对话**：碎碎念按周期自动生成一句（说话动画 + 气泡，也可手动触发）；对话在右键弹输入框与宠物聊天，记忆持久化（浏览器 / 桌面共享同一份）
 - **工作状态联动**：监听 DSH 会话事件，切「思考 / 工作 / 整理 / 等待 / 成功 / 出错」档位动画 + 常驻气泡；目标多轮任务只在真正收尾轮庆祝
 - **系统通知**：窗口失焦时弹系统 toast（对话完成 / 生成失败 / 输出截断 / 权限申请 / 用户选择）
@@ -111,14 +111,17 @@ dsh plugin --profile web add file:D:/path/to/dsh-pet
 - **DeepSeek 官方（`deepseek-official`）**：气泡显示账户余额（如 `余额 ¥8.79`）；余额按 ¥20 满额折算成已用百分比，分 6 档播放动画（钱袋满溢 → 金袋叮当 → 钱袋如常 → 数金皱眉 → 袋空如洗 → 分文不剩）
 - **OpenCode Zen Go（`opencode-go`）**：气泡显示 5h/周/月 三个额度窗口中最先告急的一个（如 `周额度已用 88%` / `2.5 天重置`），同样按已用百分比分档
 - **暂不支持的服务商**：未登记余额接口的服务商（如 `commandcode`）**不播档位动画，改为弹一句文字说明**——第一行「当前服务商暂不支持余额查询」，第二行报出当前 provider id（便于自查）；缺凭证 / 抓取失败同理（原因写在第二行）。自动轮询只在**原因变化**时弹一次（不反复打扰），手动 `/balance` 或桌面右键「查看余额」则每次都会弹
+- **本轮消耗提示**：Web 设置中的「本轮消耗（估算）（目前仅支持 DeepSeek 官方 API）」提供独立总开关；保存后网页与桌面同步，关闭不会关闭账户余额功能
 - **按宠物开关**：`pets[i].balanceEnabled`（必填布尔）控制该宠物是否触发余额动画/显示气泡
 - **所需凭据**：对应 provider 的 API key（`deepseek-official` → `DEEPSEEK_API_KEY`；`opencode-go` → `OPENCODE_GO_API_KEY`），在 DSH 凭据中配置后启用；未匹配的服务商不触发动画，改为弹上面的文字说明气泡
 
 ## ⚙️ 每轮对话消耗提示
+
+- **功能开关**：Web 设置 →「桌宠配置」勾选「本轮消耗（估算）（目前仅支持 DeepSeek 官方 API）」后保存，网页与桌面同步生效；默认开启，旧配置无需迁移。关闭后在下次轮询收起费用气泡，重新开启不补播旧提示；关闭时币种选择禁用但保留原值。此开关独立控制费用提示，不影响账户余额展示；仍由第一只启用余额的可见宠物承载气泡
 - **本轮消耗（估算）**：每轮 DSH 对话正常结束后，以桌宠头顶的独立白色半透明气泡显示 `本轮消耗（估算） / CNY x.xxxx` 或 `USD x.xxxx`；持续 **5 秒**，鼠标移到桌宠上立即收起。每端仅第一只启用余额的可见宠物显示；网页按当前会话隔离，桌面跟随最近开始的会话，切换网页会话或刷新不会重放旧提示
 - **估算币种**：Web 设置 →「桌宠配置」→「本轮消耗（估算）币种」选择 **CNY（人民币）/ USD（美元）**后保存（默认 CNY）。CNY 使用[官网中文人民币价](https://api-docs.deepseek.com/zh-cn/quick_start/pricing/)，USD 使用[官网英文美元价](https://api-docs.deepseek.com/quick_start/pricing/)；切换时整轮按对应价格结果展示，**不按汇率换算、不只替换货币标签**。设置同时作用于网页和桌面，账户余额仍显示接口返回的原币种
 - **估算口径**：累计本轮全部调用的未缓存输入、缓存写入、缓存命中和输出 token，按实际模型及各次请求开始时的峰谷价计算；高峰为北京时间周一至周五（不含中国节假日）09:00–12:00、14:00–18:00，其余半价。价格和节假日每次启动时更新，运行期间每 **6 小时**刷新；抓取失败保留最近有效缓存或已知内置数据；未知模型、其他服务商、缺失用量或异常中断不展示不完整金额，最终费用以官方账单为准
-- **配置与设置**：币种保存在 `$DSH_HOME/dsh-pet/main-config.json` 顶层 `spendCurrency`（`"CNY"` / `"USD"`）；默认配置在 `dsh-pet/assets/config.jsonc`，Web 设置入口在 `dsh-pet/src/client/settings.ts`，保存校验在 `dsh-pet/src/host/config.ts`
+- **配置与设置**：开关保存在 `$DSH_HOME/dsh-pet/main-config.json` 顶层 `spendEnabled`（布尔，默认 `true`），币种保存在 `$DSH_HOME/dsh-pet/main-config.json` 顶层 `spendCurrency`（`"CNY"` / `"USD"`）；默认配置在 `dsh-pet/assets/config.jsonc`，Web 设置入口在 `dsh-pet/src/client/settings.ts`，保存校验在 `dsh-pet/src/host/config.ts`
 - **价格与计费**：`dsh-pet/src/host/pricing-catalog.ts` 分别维护中英文官方价格，内置快照核对于 **2026-09-28**；`dsh-pet/src/host/turn-spend.ts` 按会话与回合累计双币种金额，Flash 旧别名使用现行 Flash 价，Pro 独立计价
 - **启动更新与缓存**：每次加载插件都立即重新请求 DeepSeek 中英文官网价格及北京时间当年、次年的节假日数据，不因已有缓存跳过更新；运行期间每 **6 小时**再次更新。`dsh-pet/src/host/holidays.ts` 使用 [holiday-cn](https://github.com/NateScarlet/holiday-cn) 整理的国务院公告日历（第三方数据源，保留公告来源链接），自动处理跨年；`dsh-pet/src/host/startup-data.ts` 将校验通过的结果保存到 `$DSH_HOME/dsh-pet/cache/pricing.json`、`holidays.json`。网络失败保留最近有效缓存，首次离线可用内置价格与 2026 年日历；未取得其他年份的日历时，不猜测工作日高峰费用
 - **两端展示**：`dsh-pet/src/shared/turn-spend.ts` 共用气泡样式与轮询；币种保存后下次轮询更新尚未消失的金额，不重放旧气泡、不延长显示时长

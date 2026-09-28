@@ -26,11 +26,13 @@ test('气泡首次不重放、5 秒隐藏、鼠标移动收起、卸载清理', 
   } as unknown as Document;
   let count = 1;
   let currency = 'CNY';
+  let enabled = true;
   globalThis.fetch = async () =>
     ({
       ok: true,
       json: async () => ({
         scope: 'A',
+        enabled,
         spend: {
           count,
           amount: currency === 'CNY' ? 0.01234 : 0.001851,
@@ -75,6 +77,21 @@ test('气泡首次不重放、5 秒隐藏、鼠标移动收起、卸载清理', 
   t.mock.timers.tick(1000);
   await flush();
   assert.equal(nodes[0].style.display, 'block');
+  enabled = false;
+  t.mock.timers.tick(1000);
+  await flush();
+  assert.equal(nodes[0].style.display, 'none', '关闭后收起正在展示的气泡');
+  count++;
+  t.mock.timers.tick(1000);
+  await flush();
+  enabled = true;
+  t.mock.timers.tick(1000);
+  await flush();
+  assert.equal(nodes[0].style.display, 'none', '重新开启不补播关闭期间的结果');
+  count++;
+  t.mock.timers.tick(1000);
+  await flush();
+  assert.equal(nodes[0].style.display, 'block', '开启后正常提示新轮次');
   listeners.get('pointermove')!();
   assert.equal(nodes[0].style.display, 'none');
   stop();

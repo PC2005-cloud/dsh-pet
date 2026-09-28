@@ -38,6 +38,12 @@ export function startSpendBubble(
       if (!res.ok) throw new Error('turn-spend HTTP ' + res.status);
       const data = await res.json();
       if (!alive) return;
+      if (data.enabled === false) {
+        hide();
+        baseline = undefined;
+        scope = undefined;
+        return;
+      }
       const count = Number(data.spend?.count ?? 0);
       if (scope !== data.scope) {
         hide();
