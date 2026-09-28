@@ -21,3 +21,4 @@ export * from './physics'; // 拖拽抛掷物理（弹簧跟手 + 甩抛 + 重�
 export * from './score'; // 点击积分（速度/大小 → 分数，纯逻辑）
 export * from './score-popup'; // 点击积分弹窗 + 粒子爆发（menu/chat 之后第三个 DOM 例外：渲染=两端共用同一份）
 export * from './work-status'; // 工作状态联动（DSH 会话事件 → 档位动画/气泡：档位常量 + reducer + 文案，浏览器消费）
+export * from './turn-spend'; // 费用气泡 DOM 与轮询：两端共用，独立于动画/余额气泡

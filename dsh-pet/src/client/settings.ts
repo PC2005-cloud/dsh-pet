@@ -51,6 +51,8 @@ export const zh = {
   nameLabel: '名字',
   nameHint: '显示名：鼠标悬浮宠物时弹出，也会加进 AI 人设（你的名字是 X）。可重复，留空按宠物 id 处理。',
   balanceEnabled: '余额功能',
+  spendCurrency: '本轮消耗（估算）币种',
+  spendCurrencyHint: 'CNY 按官网人民币单价、USD 按官网美元单价估算。保存后网页与桌面同步生效，账户余额保持原币种。',
   balanceEnabledHint: '启用后该宠物触发余额动画并显示余额气泡。',
   whisperEnabled: '碎碎念',
   whisperEnabledHint: '启用后该宠物按周期用 AI 生成一句话并播碎碎念动画（人设与周期在配置文件顶层）。',
@@ -134,6 +136,9 @@ export const en = {
   nameHint:
     'Shown on hover and added to AI personas ("your name is X"). Duplicates allowed; empty falls back to the pet id.',
   balanceEnabled: 'Balance',
+  spendCurrency: 'Estimated turn cost currency',
+  spendCurrencyHint:
+    'CNY uses official yuan prices; USD uses official dollar prices. Save to apply to web and desktop. Account balance keeps its original currency.',
   balanceEnabledHint: 'When enabled, this pet plays balance animations and shows the balance bubble.',
   whisperEnabled: 'Whisper',
   whisperEnabledHint:
@@ -291,6 +296,7 @@ export function makePetConfigSection(rt: {
 
     // 系统通知总开关（全局：读写用户级配置 main-config.json 的 notificationsEnabled；即时生效）
     const [notifyEnabled, setNotifyEnabled] = useState(true);
+    const [spendCurrency, setSpendCurrency] = useState<'CNY' | 'USD'>('CNY');
     // 表情包配图开关（全局：写用户级配置；与「保存」一起提交，不做即时写入）
     const [whisperImage, setWhisperImage] = useState(false);
     const [chatImage, setChatImage] = useState(false);
@@ -304,6 +310,7 @@ export function makePetConfigSection(rt: {
         .then((d) => {
           if (!alive || !d || !d.main) return;
           const m = d.main as Record<string, unknown>;
+          setSpendCurrency(m.spendCurrency === 'USD' ? 'USD' : 'CNY');
           if (typeof m.notificationsEnabled === 'boolean') setNotifyEnabled(m.notificationsEnabled);
           if (typeof m.whisperImageEnabled === 'boolean') setWhisperImage(m.whisperImageEnabled);
           if (typeof m.chatImageEnabled === 'boolean') setChatImage(m.chatImageEnabled);
@@ -330,6 +337,7 @@ export function makePetConfigSection(rt: {
           body: JSON.stringify({
             pets: pets,
             notificationsEnabled: v,
+            spendCurrency,
             whisperImageEnabled: whisperImage,
             chatImageEnabled: chatImage,
           }),
@@ -410,6 +418,7 @@ export function makePetConfigSection(rt: {
         const body: Record<string, unknown> = {
           pets: pets,
           notificationsEnabled: notifyEnabled,
+          spendCurrency,
           whisperImageEnabled: whisperImage,
           chatImageEnabled: chatImage,
         };
@@ -441,6 +450,7 @@ export function makePetConfigSection(rt: {
         if (!res.ok) throw new Error('HTTP ' + res.status);
         const merged = (await res.json()) as Record<string, Record<string, unknown>>;
         const defs = (merged.main?.pets ?? []) as Pet[];
+        setSpendCurrency(merged.main?.spendCurrency === 'USD' ? 'USD' : 'CNY');
         setPets(defs.map((p) => ({ ...p, position: { ...p.position } })));
         setSelId(defs[0]?.id ?? '');
         // 同一份成品交给容器拍平：编辑列表（裸实例）与渲染列表（含条目级字段）都由成品派生
@@ -533,6 +543,28 @@ export function makePetConfigSection(rt: {
               children: t('extraPetsHint').replace('{n}', String(extraCount)),
             })
           : null,
+
+        h('label', {
+          style: { display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '8px', fontSize: '13px' },
+          children: [
+            t('spendCurrency'),
+            h('select', {
+              value: spendCurrency,
+              disabled: busy,
+              onChange: (e: ChangeEvent<HTMLSelectElement>) =>
+                setSpendCurrency(e.target.value === 'USD' ? 'USD' : 'CNY'),
+              style: { ...inputStyle, width: '180px' },
+              children: [
+                h('option', { value: 'CNY', children: 'CNY — 人民币' }),
+                h('option', { value: 'USD', children: 'USD — US Dollar' }),
+              ],
+            }),
+            h('span', {
+              style: { fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)' },
+              children: t('spendCurrencyHint'),
+            }),
+          ],
+        }),
 
         // 宠物列表 + 添加
         h('div', {

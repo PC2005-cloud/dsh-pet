@@ -79,6 +79,14 @@ async function boot() {
     }
     for (const s of sprites) s.dispose();
     sprites = [new PetSprite(pet)];
+    if (pet.id === pets.find((p) => p.balanceEnabled)?.id) {
+      sprites[0].stopSpendBubble = S.startSpendBubble(
+        sprites[0].el,
+        BASE + '/turn-spend?desktop=1',
+        pet.size,
+        'pet-bubble',
+      );
+    }
     window.__dshPetDebug.configOk = true;
     window.__dshPetDebug.spriteCount = sprites.length;
     for (const s of sprites) s.playIdle();

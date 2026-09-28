@@ -192,6 +192,8 @@ function workStatusTextsValid(value: unknown): boolean {
 /** 顶层标量字段的合法性（非法与缺失同处理：取默认值 + 告警） */
 function topFieldValid(key: string, value: unknown): boolean {
   switch (key) {
+    case 'spendCurrency':
+      return value === 'CNY' || value === 'USD';
     case 'whisperPrompt':
       return typeof value === 'string' && value.length > 0;
     case 'chatMemoryRounds': {
@@ -486,6 +488,8 @@ export function saveUserConfig(
     });
   }
   const ne = o.notificationsEnabled;
+  const spendCurrency = o.spendCurrency;
+  if (spendCurrency !== undefined && spendCurrency !== 'CNY' && spendCurrency !== 'USD') return null;
   if (ne !== undefined && typeof ne !== 'boolean') return null;
   const wie = o.whisperImageEnabled;
   if (wie !== undefined && typeof wie !== 'boolean') return null;
@@ -493,6 +497,7 @@ export function saveUserConfig(
   if (cie !== undefined && typeof cie !== 'boolean') return null;
   // 白名单可编辑字段：pets 来自请求体、三个全局开关来自请求体（未传则不写）
   const outConfig: { pets: unknown[]; [key: string]: unknown } = { pets: out };
+  if (spendCurrency !== undefined) outConfig.spendCurrency = spendCurrency;
   if (ne !== undefined) outConfig.notificationsEnabled = ne;
   if (wie !== undefined) outConfig.whisperImageEnabled = wie;
   if (cie !== undefined) outConfig.chatImageEnabled = cie;
@@ -501,6 +506,7 @@ export function saveUserConfig(
   // 全局开关只在「请求体传了」时才算白名单（已由上方写入）；未传时走这里透传磁盘旧值——
   // 否则整包调用的调用方漏传一个开关，就会把用户既有设置悄悄抹成默认。
   const bodyOwned = new Set(['pets']);
+  if (spendCurrency !== undefined) bodyOwned.add('spendCurrency');
   if (ne !== undefined) bodyOwned.add('notificationsEnabled');
   if (wie !== undefined) bodyOwned.add('whisperImageEnabled');
   if (cie !== undefined) bodyOwned.add('chatImageEnabled');

@@ -20,14 +20,14 @@ export function makeFactory(): (require: (mod: string) => any) => any {
     const { jsx: h } = require('react/jsx-runtime');
 
     // 宠物页面（overlay）与配置设置页：组件各自独立文件，这里只组装 + 注册
-    const PetMulti = makePetUI({ h, useState, useEffect, useRef });
 
     const name = 'pet';
     // commandUi 写成服务依赖（与官方 client-ui-permission-presets 的写法一致）：
     // 让 cordis 等「/」命令入口服务就绪后才 apply 本插件，保证 /pet 装饰必然注册成功。
-    const inject = ['slots', 'locale', 'connection', 'remote', 'remote.commands', 'commandUi'];
+    const inject = ['slots', 'locale', 'connection', 'remote', 'remote.commands', 'commandUi', 'sessions'];
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- DSH 注入的 ctx（locale/slots/webServer 等 service 无静态类型）
     function apply(ctx: any) {
+      const PetMulti = makePetUI({ h, useState, useEffect, useRef, sessionList: ctx.sessions.list });
       // 本地化字典（设置页文案）
       ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'dsh-pet: dictionaries');
       const t = ctx.locale.bind(NS);

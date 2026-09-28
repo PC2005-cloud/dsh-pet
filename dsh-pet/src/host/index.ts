@@ -56,6 +56,9 @@ import { fileURLToPath } from 'node:url';
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths';
 import { credentialRef } from '@deepseek-ai/dsh-credentials';
 import { queryBalance } from './balance';
+import { createPricingManager } from './pricing-catalog';
+import { createHolidayManager, peakAt } from './holidays';
+import { createTurnSpendStore, type SpendSession, type SpendEvent } from './turn-spend';
 import { generateWhisper } from './whisper';
 import { generateChat, type ChatMemoryMessage } from './chat';
 import { pickMeme, readMemePool } from './memes';
@@ -235,6 +238,41 @@ export function apply(ctx: any): void {
   // 会话存**——task 曾是全局单值，写过一次就跟着此后所有会话活动一直显示（issue #59）。
   // 进程内内存态：重启回空闲；每次会话事件有实际状态变化才更新（签名比对防刷屏）。
   const workStatus = new WorkStatusStore();
+  const pricing = createPricingManager(join(userRoot, 'cache', 'pricing.json'));
+  const holidays = createHolidayManager(join(userRoot, 'cache', 'holidays.json'));
+  const turnSpend = createTurnSpendStore(pricing, (time) => peakAt(time, holidays.isHoliday));
+  let startupReady: Promise<unknown> = Promise.resolve();
+  ctx.effect(() => {
+    let active = true;
+    let ready = false;
+    startupReady = Promise.all([pricing.start(), holidays.start()]).then(() => {
+      ready = true;
+    });
+    const off = ctx.on('session/event', (session: SpendSession, event: SpendEvent) => {
+      if (
+        !['turn/start', 'turn/end', 'step/start', 'request/header', 'request/context', 'assistant/message'].includes(
+          event.type ?? '',
+        )
+      )
+        return;
+      if (ready) {
+        turnSpend.consume(session, event);
+        return;
+      }
+      // 仅首次刷新完成前延后结算；保存当时路由，避免等待期间 session 的模型发生变化。
+      const header = session.requestHeader?.();
+      const captured = { id: session.id, header: session.header, requestHeader: () => header };
+      void startupReady.then(() => {
+        if (active) turnSpend.consume(captured, event);
+      });
+    });
+    return () => {
+      off();
+      active = false;
+      pricing.dispose();
+      holidays.dispose();
+    };
+  }, 'dsh-pet: turn spend');
   // 系统通知帧队列（/notify 端点增量拉取）：host 监听 DSH 宿主事件生成通知帧
   // （帧契约与 shared/notify.ts 一致），浏览器 1s 轮询 /notify?since=<seq> 拉增量弹 toast。
   // 背景：DSH 0.1.5 删除浏览器侧 api.events.mux/host 事件流，改为 host 转发通道——
@@ -635,6 +673,42 @@ export function apply(ctx: any): void {
   const handlePetRoute = async (rawUrl: string, method: string, body?: string): Promise<RouteResult> => {
     const url = new URL(rawUrl, 'http://localhost');
     const rest = decodeURIComponent(url.pathname.slice(ROUTE_PREFIX.length + 1));
+
+    if (rest === 'turn-spend' || rest === 'turn-spend/debug') {
+      if (method !== 'GET') return { kind: 'json', status: 405, obj: { error: 'method not allowed' } };
+      let currency: 'CNY' | 'USD' = 'CNY';
+      try {
+        currency = readAllConfig(configPaths).main.spendCurrency === 'USD' ? 'USD' : 'CNY';
+      } catch {
+        /* 配置不可读时仍使用明确的默认人民币价，绝不混用币种。 */
+      }
+      if (rest === 'turn-spend/debug')
+        return {
+          kind: 'json',
+          status: 200,
+          obj: {
+            currency,
+            updates: { pricing: pricing.status(), holidays: holidays.status() },
+            pricing: pricing.snapshot(currency),
+            sources: Object.fromEntries(
+              Object.keys(pricing.snapshot(currency)).map((m) => [m, pricing.source(m, currency)]),
+            ),
+          },
+          headers: { 'cache-control': 'no-store' },
+        };
+      // 网页必须指定会话；桌面没有会话选择器，跟随最近开始的会话。
+      await startupReady;
+      const id =
+        url.searchParams.get('sessionId') ?? (url.searchParams.get('desktop') === '1' ? turnSpend.latestSession() : '');
+      if (!id)
+        return { kind: 'json', status: 200, obj: { scope: '', spend: null }, headers: { 'cache-control': 'no-store' } };
+      return {
+        kind: 'json',
+        status: 200,
+        obj: { scope: id, spend: turnSpend.get(id, currency) },
+        headers: { 'cache-control': 'no-store' },
+      };
+    }
 
     // 成品配置：/dsh-pet-7340/config（GET 读取合并成品 / PUT 保存用户层 / DELETE 恢复默认）
     if (rest === 'config') {

@@ -217,6 +217,7 @@ class PetSprite {
   }
 
   dispose() {
+    this.stopSpendBubble?.();
     this.ac.abort();
     if (this.bubbleTimer !== null) window.clearTimeout(this.bubbleTimer);
     if (this.whisperTimer !== null) window.clearTimeout(this.whisperTimer);
