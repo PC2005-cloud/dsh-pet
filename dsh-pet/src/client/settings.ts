@@ -12,8 +12,9 @@
  * 样式对齐官方设置页：max-width 720px、全走 --dsw-alias-* 语义 token（主题跟随）。
  */
 import { PET_DISPLAYS } from '../shared/config';
+import { DEFAULT_PHYSICS } from '../shared/physics';
 import { NOTIFY_ICONS, reloadNotifications, requestNotificationPermission } from './notify';
-import type { Corner, Pet, PetDisplay } from '../shared/types';
+import type { Corner, Pet, PetDisplay, PhysicsParams } from '../shared/types';
 import type { ChangeEvent, CSSProperties, Dispatch, FunctionComponent, SetStateAction } from 'react';
 import type * as ReactNS from 'react';
 import type { jsx } from 'react/jsx-runtime';
@@ -102,6 +103,22 @@ export const zh = {
   confineToggle: '抛掷锁定在当前屏幕',
   confineToggleHint:
     '多屏用户：甩出去的宠物只在松手时所在那块屏幕内弹（屏缝当墙，不飞到隔壁屏）；关掉则照常跨屏飞行。只影响桌面模式——浏览器 overlay 本来就只在视口内弹。',
+  physicsTitle: '物理（拖拽抛掷手感）',
+  physicsHint:
+    '全局，所有宠物共用；随「保存」写入用户配置（不做即时写入）。浏览器保存后即时生效，桌面端由保存重载宠物窗口后生效。',
+  'physics.gravity': '重力 gravity',
+  'physics.gravityHint': 'px/s²，越大落得越快；0 = 无重力（抛出去匀速直线飞）',
+  'physics.restitution': '弹性 restitution',
+  'physics.restitutionHint': '0~1，碰壁 / 落地反弹保留的速度比例（1 = 完全弹性，0 = 撞上即停）',
+  'physics.groundFriction': '地面摩擦 groundFriction',
+  'physics.groundFrictionHint': '/s，落地后水平速度的衰减率；0 = 冰面不减速',
+  'physics.throwPower': '总力度 throwPower',
+  'physics.throwPowerHint': '> 0，弹簧跟手与甩出初速的整体倍率（1 = 默认；越大越跟手、甩得越猛）',
+  physicsCeilingBounce: '顶部反弹 ceilingBounce',
+  physicsCeilingBounceHint: '关掉后抛掷可飞出屏幕顶部（重力仍会把它拉回来）',
+  physicsPetCollision: '宠物互撞 petCollision',
+  physicsPetCollisionHint: '飞行中的宠物撞到别的宠物按动量守恒弹开（质量 ∝ 尺寸²）',
+  invalidPhysics: '请检查物理参数：重力 / 地面摩擦 ≥ 0，弹性 0~1，总力度 > 0。',
   notifyGetPermission: '获取权限',
   notifyPermissionOk: '已获得通知权限，右下角出现测试通知。',
   notifyDenyUnsupported: '当前环境不支持系统通知（浏览器无 Notification API）。',
@@ -194,6 +211,25 @@ export const en = {
   chatImageToggle: 'Chat images',
   chatImageToggleHint:
     'Let the AI pick one meme from the pool that fits the current context (optional; mapping lives in the top-level `memes` config field). Tokens: every message carries the whole catalog — currently ~1.1k chars (~650 tokens, about 11x the whisper case) and growing with the number of images; turning this off appends nothing at all.',
+  physicsTitle: 'Physics (drag & throw feel)',
+  physicsHint:
+    'Global, shared by every pet; written to the user config on "Save" (never written immediately). Applies instantly in the browser; on the desktop it applies once Save reloads the pet windows.',
+  'physics.gravity': 'Gravity',
+  'physics.gravityHint': 'px/s² — the higher, the faster it falls; 0 = weightless (flies straight forever)',
+  'physics.restitution': 'Bounciness',
+  'physics.restitutionHint':
+    '0–1, speed kept when bouncing off a wall or the floor (1 = perfectly elastic, 0 = stops dead)',
+  'physics.groundFriction': 'Ground friction',
+  'physics.groundFrictionHint': 'per second, horizontal damping while on the ground; 0 = frictionless ice',
+  'physics.throwPower': 'Throw power',
+  'physics.throwPowerHint':
+    '> 0, overall multiplier for spring tracking and release speed (1 = default; higher = tighter tracking, harder throws)',
+  physicsCeilingBounce: 'Ceiling bounce',
+  physicsCeilingBounceHint:
+    'Turn this off to let a throw fly out through the top of the screen (gravity still pulls it back)',
+  physicsPetCollision: 'Pet collisions',
+  physicsPetCollisionHint: 'A flying pet bounces off the others with momentum conservation (mass ∝ size²)',
+  invalidPhysics: 'Check the physics values: gravity / ground friction ≥ 0, bounciness 0–1, throw power > 0.',
   notifyGetPermission: 'Get permission',
   notifyPermissionOk: 'Notification permission granted — a test notification was sent.',
   notifyDenyUnsupported: 'System notifications are not supported in this environment (no Notification API).',
@@ -360,6 +396,10 @@ export function makePetConfigSection(rt: {
     const [chatImage, setChatImage] = useState(false);
     // 抛掷锁定开关（全局：写用户级配置；与「保存」一起提交，不做即时写入）
     const [confineScreen, setConfineScreen] = useState(false);
+    // 物理参数（全局：拖拽抛掷手感，写用户级配置 main-config.jsonc 的 physics 段）。
+    // 与四个开关同一套语义：只改本地状态，随「保存」整包写入（不做即时写入）。
+    // 初值 = 成品 main.physics（用户层优先、缺省回落内置默认），拉取失败时用内置默认兜底。
+    const [physics, setPhysics] = useState<PhysicsParams>({ ...DEFAULT_PHYSICS });
     // 权限申请按钮的反馈（就地显示在按钮旁，与全局保存反馈分离）
     const [permMsg, setPermMsg] = useState<{ kind: 'ok' | 'err' | ''; text: string }>({ kind: '', text: '' });
     useEffect(() => {
@@ -374,6 +414,10 @@ export function makePetConfigSection(rt: {
           if (typeof m.whisperImageEnabled === 'boolean') setWhisperImage(m.whisperImageEnabled);
           if (typeof m.chatImageEnabled === 'boolean') setChatImage(m.chatImageEnabled);
           if (typeof m.confineToScreen === 'boolean') setConfineScreen(m.confineToScreen);
+          // physics 段：成品已按「内置默认 ← 用户层」整段填满，直接取用（缺子键再用默认兜底一次）
+          if (m.physics && typeof m.physics === 'object') {
+            setPhysics({ ...DEFAULT_PHYSICS, ...(m.physics as PhysicsParams) });
+          }
         })
         .catch(() => {
           /* 成品拉取失败时保持默认（通知开、配图关） */
@@ -441,6 +485,21 @@ export function makePetConfigSection(rt: {
           return false;
         }
       }
+      // 物理参数：与宿主 physicsValid 同一套规则（非法宿主会回 400，这里先就地给红字提示）
+      if (
+        !Number.isFinite(physics.gravity) ||
+        physics.gravity < 0 ||
+        !Number.isFinite(physics.restitution) ||
+        physics.restitution < 0 ||
+        physics.restitution > 1 ||
+        !Number.isFinite(physics.groundFriction) ||
+        physics.groundFriction < 0 ||
+        !Number.isFinite(physics.throwPower) ||
+        physics.throwPower <= 0
+      ) {
+        setMsg({ kind: 'err', text: t('invalidPhysics') });
+        return false;
+      }
       return true;
     };
 
@@ -461,6 +520,8 @@ export function makePetConfigSection(rt: {
           whisperImageEnabled: whisperImage,
           chatImageEnabled: chatImage,
           confineToScreen: confineScreen,
+          // 物理参数整段提交（白名单字段，未传即走宿主透传保留）：宿主用 physicsValid 整段校验
+          physics: physics,
         };
         // force === true（用户在损坏弹窗里点了确认）：带 ?force=1 才允许按白名单重建损坏文件
         const res = await fetch('/dsh-pet-7340/config' + (force === true ? '?force=1' : ''), {
@@ -560,6 +621,36 @@ export function makePetConfigSection(rt: {
         disabled: busy,
         onChange: (e: ChangeEvent<HTMLInputElement>) => setter(Number(e.target.value)),
         style: { width, ...inputStyle },
+      });
+
+    /** 物理参数的一格：标题 + 数字输入 + 一行说明（排版与全局开关一致，说明缩进对齐输入框） */
+    const physField = (key: 'gravity' | 'restitution' | 'groundFriction' | 'throwPower', step: string, min: string) =>
+      h('label', {
+        style: {
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '4px',
+          minWidth: 0,
+          fontSize: '13px',
+          color: 'var(--dsw-alias-label-primary)',
+        },
+        children: [
+          h('span', { children: t('physics.' + key) }),
+          h('input', {
+            type: 'number',
+            step,
+            min,
+            value: String(physics[key]),
+            disabled: busy,
+            onChange: (e: ChangeEvent<HTMLInputElement>) =>
+              setPhysics((p) => ({ ...p, [key]: Number(e.target.value) }) as PhysicsParams),
+            style: { width: '140px', ...inputStyle },
+          }),
+          h('span', {
+            style: { fontSize: '11px', color: 'var(--dsw-alias-label-tertiary)' },
+            children: t('physics.' + key + 'Hint'),
+          }),
+        ],
       });
 
     return h('section', {
@@ -889,6 +980,39 @@ export function makePetConfigSection(rt: {
             toggleCell('whisperImageToggle', whisperImage, busy, setWhisperImage),
             toggleCell('chatImageToggle', chatImage, busy, setChatImage),
             toggleCell('confineToggle', confineScreen, busy, setConfineScreen),
+          ],
+        }),
+
+        // 物理参数（拖拽抛掷手感，全局）：四个数字输入 + 两个开关，与上面四个开关同一套语义
+        // （只改本地状态，随「保存」整包写入；不做即时写入）。浏览器保存后即时生效；桌面端由
+        // 保存触发的 Helper 重启重新读取——physics 在 sprite 构造时只读一次。
+        h('div', {
+          style: { marginTop: '10px', fontSize: '13px', fontWeight: 500, color: 'var(--dsw-alias-label-primary)' },
+          children: t('physicsTitle'),
+        }),
+        h('p', {
+          style: { margin: 0, fontSize: '11px', color: 'var(--dsw-alias-label-tertiary)', lineHeight: '16px' },
+          children: t('physicsHint'),
+        }),
+        h('div', {
+          style: {
+            display: 'grid',
+            gridTemplateColumns: '1fr 1fr',
+            gap: '10px 16px',
+            marginTop: '4px',
+            alignItems: 'start',
+          },
+          children: [
+            physField('gravity', '50', '0'),
+            physField('restitution', '0.01', '0'),
+            physField('groundFriction', '0.1', '0'),
+            physField('throwPower', '0.05', '0.05'),
+            toggleCell('physicsCeilingBounce', physics.ceilingBounce, busy, (v) =>
+              setPhysics((p) => ({ ...p, ceilingBounce: v })),
+            ),
+            toggleCell('physicsPetCollision', physics.petCollision, busy, (v) =>
+              setPhysics((p) => ({ ...p, petCollision: v })),
+            ),
           ],
         }),
 

@@ -143,5 +143,19 @@ describe('flattenConfigPets —— 成品 → 渲染列表的唯一填充点', (
       /notificationsEnabled: notifyEnabled/.test(clientSettings),
       '「保存」的请求体必须带上通知开关（否则切了开关点保存也不生效）',
     );
+    // ⑧ 物理参数（设置页「物理」区）必须真的提交：physics 原先**不在白名单**里（只在 existing 里
+    //    透传），前端就算把输入框画出来、改了值，写盘时也会被丢弃。守卫两侧：
+    //    「保存」请求体必须带 physics；宿主必须用同一份 physicsValid 整段校验它。
+    //    取请求体字面量再找键（不写死 `physics: physics`：打包器会把同名简写压成 `physics,`）。
+    const saveBody = /const body: Record<string, unknown> = \{([\s\S]*?)\n {8}\};/.exec(clientSettings);
+    assert.ok(saveBody, '设置页必须有「保存」的请求体字面量');
+    assert.ok(
+      /(^|[^.\w])physics\b/.test(saveBody[1]),
+      '「保存」的请求体必须带上 physics（否则设置页改的物理参数不会落盘）',
+    );
+    assert.ok(
+      /physicsValid\(ph\)/.test(readSource('../host/config.ts')),
+      'saveUserConfig 必须用 physicsValid 校验 physics（与读取侧同一套规则）',
+    );
   });
 });

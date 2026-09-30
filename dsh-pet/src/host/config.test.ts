@@ -411,6 +411,46 @@ describe('saveUserConfig —— 抛掷锁定开关（白名单 + 透传保留）
   });
 });
 
+describe('saveUserConfig —— 物理参数 physics（白名单 + 透传保留）', () => {
+  const PHYS: Record<string, unknown> = BASE.physics;
+
+  test('整段随请求体写入（设置页「物理」区）', () => {
+    const out = saveOnce({ pets: PETS, physics: PHYS });
+    assert.deepEqual(out?.physics, PHYS, 'physics 必须按请求体整段写入');
+  });
+
+  test('未传时透传磁盘旧值；磁盘上也没有则不凭空造字段', () => {
+    const kept = saveOnce({ pets: PETS }, { pets: PETS, physics: { ...PHYS, gravity: 2000 } });
+    assert.deepEqual(kept?.physics, { ...PHYS, gravity: 2000 }, '未传 physics 时必须原样保留磁盘上的手改值');
+    assert.equal('physics' in (saveOnce({ pets: PETS }) ?? {}), false, '磁盘上也没有时不得凭空写入');
+  });
+
+  test('请求体覆盖磁盘旧值（与四个全局开关同一语义）', () => {
+    const out = saveOnce({ pets: PETS, physics: { ...PHYS, throwPower: 2 } }, { pets: PETS, physics: PHYS });
+    assert.equal((out?.physics as Record<string, unknown>).throwPower, 2);
+  });
+
+  test('非法值 → 整体拒绝（宿主回 400；与读取侧 physicsValid 同一套规则）', () => {
+    const bad: Array<[string, unknown]> = [
+      ['restitution > 1', { ...PHYS, restitution: 1.5 }],
+      ['restitution < 0', { ...PHYS, restitution: -0.1 }],
+      ['gravity 负数', { ...PHYS, gravity: -1 }],
+      ['groundFriction 负数', { ...PHYS, groundFriction: -1 }],
+      ['throwPower = 0', { ...PHYS, throwPower: 0 }],
+      ['gravity 非数字', { ...PHYS, gravity: 'fast' }],
+      [
+        '缺 ceilingBounce',
+        { gravity: 1400, restitution: 0.78, groundFriction: 2.5, throwPower: 1, petCollision: false },
+      ],
+      ['ceilingBounce 非布尔', { ...PHYS, ceilingBounce: 1 }],
+      ['physics 非对象', 'yes'],
+    ];
+    for (const [name, value] of bad) {
+      assert.equal(saveOnce({ pets: PETS, physics: value }), null, `${name} 必须被拒绝`);
+    }
+  });
+});
+
 describe('readAllConfig —— 抛掷锁定合并（缺失取默认 / 非法回退默认）', () => {
   test('内置默认有值 → 用户层没写时读得到', () => {
     const merged = readAllConfig(withBase({ confineToScreen: false }));
