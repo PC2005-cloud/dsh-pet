@@ -1541,9 +1541,9 @@ export function makePetUI(rt: {
 
     useEffect(() => {
       let alive = true;
-      /** 唯一填充点：host 成品聚合 → 渲染列表。初始加载与设置页保存/恢复默认后重载都走这里——
+      /** 唯一填充点：host 成品聚合 → 渲染列表。初始加载与设置页保存/同步后重载都走这里——
        *  条目级字段（动画池/权重/刷新周期/物理参数/工作状态文案）只由 flattenConfigPets 吹入，
-       *  容器不再自己拼任何字段（曾经的第二份补吹实现漏过 physics，导致新增/恢复默认后拖不动）。 */
+       *  容器不再自己拼任何字段（曾经的第二份补吹实现漏过 physics，导致新增/同步后拖不动）。 */
       const applyMerged = (merged: Record<string, Record<string, unknown>>): void => {
         const main = (merged as { main?: Record<string, unknown> } | null)?.main;
         // 形状校验：host 版本不匹配 / 响应体异常时显式抛错（初始加载报错，重载保留当前列表），
@@ -1574,8 +1574,8 @@ export function makePetUI(rt: {
           console.error('[dsh-pet] 配置加载失败', e); // 成品拉取失败：显式报错，不静默隐藏
         }
       })();
-      // 设置页保存/恢复默认后：host 已落盘，这里用权威成品重新拍平（传 merged 则直接用 PUT 的响应体，
-      // 不必再拉一次；缺省自行 GET——恢复默认等场景复用同一条路径）
+      // 设置页保存/同步后：host 已落盘，这里用权威成品重新拍平（传 merged 则直接用写接口的响应体，
+      // 不必再拉一次；缺省自行 GET——同步等场景复用同一条路径）
       petBridge.reload = (merged) => {
         void (async () => {
           try {

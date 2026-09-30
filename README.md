@@ -142,7 +142,7 @@ DSH 设置 → 「桌宠配置」：
 - **显示位置**（display）：web=仅浏览器 / desktop=仅桌面 / both=两者都显示 / none=都不显示
 - **余额功能**：勾选后该宠物才会触发余额动画并显示余额气泡（服务商未登记余额接口时改为弹文字说明气泡）
 - **多开**：添加/删除宠物，每只宠物独立 id、大小、位置
-- 点「保存」**即时生效**（无需刷新）；「恢复默认」回到 config.jsonc 默认
+- 点「保存」**即时生效**（无需刷新）；「同步」把包内 `config.jsonc` 的**原文**（含注释与全部高级字段）整份写入用户配置——既回到默认，又留下一份可直接编辑的完整配置
 
 ### 方式二：config.jsonc（单一来源）
 
@@ -156,11 +156,11 @@ DSH 设置 → 「桌宠配置」：
 
 - 每只宠物：`id`（标识）／ `size`（宽度 px）／ `balanceEnabled`（是否启用余额功能，必填布尔）／ `display`（web/desktop/both/none，必填，见上）／ `position`（corner 四角之一 + marginX/marginY 边距）
 - 余额刷新周期：`eventsRefreshSec.balance`（秒）——余额数据刷新与余额动画触发的间隔，启动时立即触发一次，之后按此周期循环（默认 1800）
-- 设置页的修改保存到用户层 `$DSH_HOME/dsh-pet/main-config.json`（**完整宠物列表**，覆盖包内默认）；「恢复默认」即清除用户层、回落 config.jsonc
+- 设置页的修改保存到用户层 `$DSH_HOME/dsh-pet/main-config.jsonc`（**完整宠物列表**，覆盖包内默认）；「同步」把包内 `config.jsonc` 原文整份写入该文件（等价于回落默认，但文件保留下来、可直接编辑）
 
 ### 方式三：手动编辑配置文件（高级，任意自由配置）
 
-用户层配置文件位于 `$DSH_HOME/dsh-pet/main-config.json`。**它和包内默认配置是同一套格式**——想改什么直接照着 `assets/config.jsonc` 的结构写即可，写错的字段/缺失的字段回落默认，无需（也无法）写完整份：
+用户层配置文件位于 `$DSH_HOME/dsh-pet/main-config.jsonc`。**它和包内默认配置是同一套格式**——想改什么直接照着 `assets/config.jsonc` 的结构写即可，写错的字段/缺失的字段回落默认，无需（也无法）写完整份。设置页「同步」可直接生成这份完整文件（原文复制包内 `config.jsonc`，注释齐全）：
 
 | 字段                   | 作用                                                                                    | 格式与默认一致即可         |
 | ---------------------- | --------------------------------------------------------------------------------------- | -------------------------- |
@@ -178,7 +178,7 @@ DSH 设置 → 「桌宠配置」：
 
 ```
 $DSH_HOME/dsh-pet/
-├─ main-config.json            ← 主宠物配置（现有，不动）
+├─ main-config.jsonc           ← 主宠物配置（现有，不动）
 ├─ main-animation/webm/*.webm  ← 主宠物素材（现有，只属于 main）
 └─ pet/
    ├─ pig-config.json          ← 额外宠物 pig 的配置（命名词干 = 种类名，实例 id 任意）
@@ -188,7 +188,7 @@ $DSH_HOME/dsh-pet/
 每只额外宠物 = 一个 `-config.json` + 一个 `-animation/` 目录，同前缀配对；扫描 `pet/` 自动发现，浏览器与桌面同时生效。一个 `-config.json` 定义**一个「种类」**（动画池 + 素材目录），`pets` 数组可放该种类的**任意多只实例**（共享动画池与素材）：
 
 ```jsonc
-// pet/pig-config.json —— 与 main-config.json 同构的完整配置
+// pet/pig-config.json —— 与 main-config.jsonc 同构的完整配置
 {
   "notificationsEnabled": true,
   "pets": [
@@ -217,7 +217,7 @@ $DSH_HOME/dsh-pet/
 - **动画池不回落全局**：`animations` / `animationWeights` 必须写全（缺失即配置错误）
 - 与主配置同构的约束：`pets` 每只字段完整合法、数组内 id 唯一、`animations` / `animationWeights` 结构校验同一套规则；`notificationsEnabled` / `eventsRefreshSec` 是全局属性，不归宠物文件管（写了忽略、不写不报错）
 - 配置非法 / 缺少 `-animation/` 目录 / 实例 id 与主宠物冲突 → 加载时显式报错并跳过（不影响其他宠物）
-- 设置页不列出文件宠物（改文件即生效，刷新可见；保存/恢复默认不会把它们写进 `main-config.json`）
+- 设置页不列出文件宠物（改文件即生效，刷新可见；保存/同步不会把它们写进 `main-config.jsonc`）
 - 余额档位动画按各宠物自己的 `events.balance`
 
 ## 运行效果

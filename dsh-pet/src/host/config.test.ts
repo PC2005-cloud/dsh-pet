@@ -10,11 +10,19 @@
  */
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 
-import { readAllConfig, saveUserConfig, type ConfigPaths } from './config.ts';
+import {
+  migrateUserConfig,
+  readAllConfig,
+  readUserConfig,
+  saveUserConfig,
+  syncUserConfigFromDefault,
+  userConfigUnparsable,
+  type ConfigPaths,
+} from './config.ts';
 
 /** 内置默认配置的完整最小形态（animations 整段必须合法——合并是整段替换/整段回退） */
 const BASE = {
@@ -78,7 +86,7 @@ function cases(suite: Suite): void {
   try {
     const paths: ConfigPaths = {
       defaultFile: join(dir, 'default.jsonc'),
-      userFile: join(dir, 'main-config.json'),
+      userFile: join(dir, 'main-config.jsonc'),
       petDir: join(dir, 'pet'), // 不存在 = 无文件宠物，scanPetFiles 兜底
     };
     writeFileSync(paths.defaultFile, JSON.stringify(BASE));
@@ -159,7 +167,7 @@ function withBase(baseExtra: Record<string, unknown>, overlay?: Record<string, u
   const dir = mkdtempSync(join(tmpdir(), 'dsh-pet-config-test-'));
   const paths: ConfigPaths = {
     defaultFile: join(dir, 'default.jsonc'),
-    userFile: join(dir, 'main-config.json'),
+    userFile: join(dir, 'main-config.jsonc'),
     petDir: join(dir, 'pet'),
   };
   writeFileSync(paths.defaultFile, JSON.stringify({ ...BASE, ...baseExtra }));
@@ -171,6 +179,163 @@ function withBase(baseExtra: Record<string, unknown>, overlay?: Record<string, u
 function saveOnce(body: Record<string, unknown>, existing?: Record<string, unknown>): Record<string, unknown> | null {
   return saveUserConfig(body, existing) as Record<string, unknown> | null;
 }
+
+/** 建一套路径：默认文件 = BASE；用户层原文由调用方给（可带注释） */
+function pathsWithUser(raw: string | null): { paths: ConfigPaths; dir: string } {
+  const dir = mkdtempSync(join(tmpdir(), 'dsh-pet-user-config-'));
+  const paths: ConfigPaths = {
+    defaultFile: join(dir, 'default.jsonc'),
+    userFile: join(dir, 'main-config.jsonc'),
+    legacyUserFile: join(dir, 'main-config.json'),
+    petDir: join(dir, 'pet'),
+  };
+  writeFileSync(paths.defaultFile, JSON.stringify(BASE));
+  if (raw !== null) writeFileSync(paths.userFile, raw);
+  return { paths, dir };
+}
+
+describe('migrateUserConfig —— 老用户 main-config.json → main-config.jsonc', () => {
+  /** 只在旧路径写一份用户层（模拟升级前的老用户） */
+  function legacyOnly(raw: string): { paths: ConfigPaths; dir: string } {
+    const { paths, dir } = pathsWithUser(null);
+    writeFileSync(paths.legacyUserFile as string, raw);
+    return { paths, dir };
+  }
+
+  test('旧文件存在、新文件不存在 → 重命名（内容一字不动），旧文件消失', () => {
+    const raw = '// 老用户的配置\n{\n  "physics": ' + JSON.stringify(BASE.physics) + '\n}\n';
+    const { paths, dir } = legacyOnly(raw);
+    try {
+      const logs: string[] = [];
+      assert.equal(
+        migrateUserConfig(paths, (m) => logs.push(m)),
+        true,
+      );
+      assert.equal(existsSync(paths.legacyUserFile as string), false, '旧文件应已重命名走');
+      assert.equal(readFileSync(paths.userFile, 'utf8'), raw, '新文件内容必须与旧文件逐字节一致');
+      assert.equal(logs.length, 1, '迁移应留一条日志');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('新文件已存在 → 什么都不做（绝不用旧文件覆盖新文件）', () => {
+    const { paths, dir } = pathsWithUser('{ "physics": ' + JSON.stringify(BASE.physics) + ' }\n');
+    try {
+      writeFileSync(paths.legacyUserFile as string, '{ "physics": { "gravity": 1 } }');
+      assert.equal(migrateUserConfig(paths), false);
+      assert.equal(existsSync(paths.legacyUserFile as string), true, '旧文件保持原样');
+      assert.equal(readUserConfig(paths)?.physics !== undefined, true, '生效的仍是新文件');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('旧文件不存在 → 什么都不做（首次使用）', () => {
+    const { paths, dir } = pathsWithUser(null);
+    try {
+      assert.equal(migrateUserConfig(paths), false);
+      assert.equal(existsSync(paths.userFile), false, '不凭空造文件');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('未迁移（迁移失败/未跑）时读取回落旧路径：配置照样生效', () => {
+    const { paths, dir } = legacyOnly('{ "physics": ' + JSON.stringify(BASE.physics) + ' }\n');
+    try {
+      assert.equal(readUserConfig(paths)?.physics !== undefined, true, '读回落旧 .json');
+      assert.equal(userConfigUnparsable(paths), false, '旧路径合法 → 不是损坏');
+      assert.deepEqual(readAllConfig(paths).main.physics, BASE.physics);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('userConfigUnparsable —— 保存前的损坏预检（损坏时必须弹窗，不许静默丢配置）', () => {
+  test('真损坏（语法错误）→ true：宿主据此回 409，不写盘', () => {
+    const { paths, dir } = pathsWithUser('{ "physics": { 这不是 JSON');
+    try {
+      assert.equal(userConfigUnparsable(paths), true);
+      assert.equal(readUserConfig(paths), undefined, '前置：损坏时确实读不出既有字段（白名单重建会丢内容）');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('带注释但合法（同步写入的原文）→ false：不是损坏，正常保存', () => {
+    const { paths, dir } = pathsWithUser('// 注释\n{\n  "physics": ' + JSON.stringify(BASE.physics) + '\n}\n');
+    try {
+      assert.equal(userConfigUnparsable(paths), false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('文件不存在 → false：首次保存没有东西可丢，不打扰用户', () => {
+    const { paths, dir } = pathsWithUser(null);
+    try {
+      assert.equal(userConfigUnparsable(paths), false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('readUserConfig —— 用户层读取必须容忍 JSONC 注释（保存丢字段的回归）', () => {
+  test('「同步」写入的带注释原文：readUserConfig 解析得出（严格 JSON.parse 会 undefined）', () => {
+    const { paths, dir } = pathsWithUser(
+      '// 顶部注释\n{\n  /* 块注释 */\n  "physics": ' + JSON.stringify(BASE.physics) + '\n}\n',
+    );
+    try {
+      assert.throws(() => JSON.parse(readFileSync(paths.userFile, 'utf8')), '前置：严格 JSON.parse 确实读不了');
+      const existing = readUserConfig(paths);
+      assert.ok(existing, '带注释的用户层必须能被 readUserConfig 解析');
+      assert.deepEqual(existing.physics, BASE.physics);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('带注释的用户层 + 保存：高级字段（animations/physics/memes）全部保留', () => {
+    const { paths, dir } = pathsWithUser(
+      '// 用户手改的配置\n{\n' +
+        '  "animations": ' +
+        JSON.stringify(BASE.animations) +
+        ',\n  "physics": ' +
+        JSON.stringify(BASE.physics) +
+        ',\n  "memes": { "可爱": "我改过的描述" }\n}\n',
+    );
+    try {
+      const out = saveUserConfig({ pets: PETS, notificationsEnabled: true }, readUserConfig(paths)) as Record<
+        string,
+        unknown
+      >;
+      assert.deepEqual(out.animations, BASE.animations, 'animations 不得在保存时丢失');
+      assert.deepEqual(out.physics, BASE.physics, 'physics 不得在保存时丢失');
+      assert.deepEqual(out.memes, { 可爱: '我改过的描述' }, '手写的 memes 不得在保存时丢失');
+      assert.equal(out.notificationsEnabled, true, '白名单字段仍以请求体为准');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('用户层不存在 / 损坏 → undefined（按无既有字段处理，不阻塞保存）', () => {
+    const missing = pathsWithUser(null);
+    try {
+      assert.equal(readUserConfig(missing.paths), undefined);
+    } finally {
+      rmSync(missing.dir, { recursive: true, force: true });
+    }
+    const broken = pathsWithUser('{ 这不是 JSON');
+    try {
+      assert.equal(readUserConfig(broken.paths), undefined);
+    } finally {
+      rmSync(broken.dir, { recursive: true, force: true });
+    }
+  });
+});
 
 const PETS = BASE.pets;
 
@@ -260,5 +425,65 @@ describe('readAllConfig —— 抛掷锁定合并（缺失取默认 / 非法回�
   test('用户层写了非法值 → 回退内置默认', () => {
     const merged = readAllConfig(withBase({ confineToScreen: true }, { confineToScreen: 'yes' }));
     assert.equal(merged.main.confineToScreen, true); // 回退默认 true
+  });
+});
+
+describe('syncUserConfigFromDefault —— 同步（内置默认原文写入用户层）', () => {
+  /** 默认文件写入给定原文；用户文件故意放在**尚不存在**的子目录里（验证父目录自建） */
+  function fixture(raw: string): { paths: ConfigPaths; dir: string } {
+    const dir = mkdtempSync(join(tmpdir(), 'dsh-pet-sync-test-'));
+    const paths: ConfigPaths = {
+      defaultFile: join(dir, 'default.jsonc'),
+      userFile: join(dir, 'dsh-pet', 'main-config.jsonc'),
+      petDir: join(dir, 'pet'),
+    };
+    writeFileSync(paths.defaultFile, raw);
+    return { paths, dir };
+  }
+
+  test('逐字节复制默认文件原文（注释一并保留）', () => {
+    const raw = '// 顶部注释\n{\n  "pets": []\n}\n';
+    const { paths, dir } = fixture(raw);
+    try {
+      syncUserConfigFromDefault(paths);
+      assert.equal(readFileSync(paths.userFile, 'utf8'), raw, '用户层必须是默认文件的原文（含注释）');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('用户目录不存在 → 自动创建（首次同步即可落盘）', () => {
+    const { paths, dir } = fixture(JSON.stringify(BASE, null, 2));
+    try {
+      assert.equal(existsSync(dirname(paths.userFile)), false, '前置：用户目录本不存在');
+      syncUserConfigFromDefault(paths);
+      assert.equal(existsSync(paths.userFile), true);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('同步后的成品 = 没有用户层（与「删除用户配置」等价）', () => {
+    const { paths, dir } = fixture(JSON.stringify(BASE, null, 2));
+    try {
+      const before = readAllConfig(paths); // 无用户层：纯内置默认
+      syncUserConfigFromDefault(paths);
+      // deepStrictEqual：值/结构必须完全一致。**不看键顺序**——用户层会走 mergePets 重建实例，
+      // 键序被规范化为 id 在前（纯外观差异；已用生产 assets/config.jsonc 实测确认值完全一致）。
+      assert.deepStrictEqual(readAllConfig(paths), before);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('默认文件缺失 → 抛错，且不得留下半个用户层文件（宿主回 500）', () => {
+    const { paths, dir } = fixture('{}');
+    try {
+      rmSync(paths.defaultFile, { force: true });
+      assert.throws(() => syncUserConfigFromDefault(paths));
+      assert.equal(existsSync(paths.userFile), false, '失败时不得写出用户层文件');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

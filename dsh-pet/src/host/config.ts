@@ -3,12 +3,15 @@
  *
  * 角色：
  *   - readAllConfig()：读取 内置默认（assets/config.jsonc，绝对正确）+ 用户主配置
- *     （main-config.json）+ 文件宠物（pet/<名>-config.json，一个文件一个条目），
+ *     （main-config.jsonc）+ 文件宠物（pet/<名>-config.json，一个文件一个条目），
  *     逐字段合并后返回 **绝对正确** 的完成品聚合：
  *       { main: {...}, test1: {...}, ... }
  *     每个条目都是对应配置文件的原文结构（字段名/位置/嵌套一律不动），且所有字段已填满。
- *   - saveUserConfig()：设置页写盘（PUT /config），白名单重建用户层 main-config.json；
+ *   - saveUserConfig()：设置页写盘（PUT /config），白名单重建用户层 main-config.jsonc；
  *     与读取分离——写的是「可编辑层」，文件宠物永不回写、不进此模式。
+ *   - syncUserConfigFromDefault()：设置页「同步」写盘（POST /config），把内置默认
+ *     （assets/config.jsonc 原文，含注释）整份写入用户层——既是「恢复默认」，又直接给出
+ *     一份可编辑的完整配置（不必再自己从包内复制）。合并结果与「没有用户层」等价。
  *
  * 合并规则（唯一规则）：
  *   - 内置默认配置是唯一默认值来源（「代码里的配置绝对正确」）；
@@ -25,8 +28,8 @@
  * 本模块是 host 自包含实现（不 import src/shared —— DSH 单文件加载约束）；
  * 浏览器/桌面侧的对应纯逻辑（把成品拍平成渲染列表）在 src/shared/config.ts。
  */
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 
 /** 位置角落白名单 */
 const CORNERS = ['top-left', 'top-right', 'bottom-left', 'bottom-right'] as const;
@@ -68,14 +71,76 @@ function readJsonc(path: string): Record<string, unknown> | undefined {
   }
 }
 
+/**
+ * 读磁盘上的用户层原对象（JSONC 容忍——与读取路径 readAllConfig 共用同一份解析器）。
+ *
+ * 写路径必须用它：`PUT /config` 的「透传保留」要把用户手改的高级字段（physics /
+ * whisperPrompt / animations / memes / ...）原样带回，而用户层可能是「同步」写入的
+ * **带 // 注释的 config.jsonc 原文**。那里若用严格 `JSON.parse`，解析必然抛错、又被
+ * catch 静默吞掉，existing 就成了 undefined —— 保存时白名单重建，高级字段全部丢失
+ * （这正是「保存把用户精调配置抹掉」那次老 bug 的复发路径）。
+ *
+ * 文件不存在 / 损坏 → undefined（调用方按「无既有字段」处理，不阻塞保存）。
+ */
+export function readUserConfig(paths: ConfigPaths): Record<string, unknown> | undefined {
+  const file = effectiveUserFile(paths);
+  return file ? readJsonc(file) : undefined;
+}
+
+/**
+ * 用户层**存在但解析不了**（真损坏：语法错误，连 JSONC 剥注释都救不回来）。
+ *
+ * 用途：`PUT /config`（保存）的损坏预检。保存是「白名单重建」，一旦 existing 读不出来，
+ * 文件里原有的内容（用户手写的 animations / physics / memes / ...）就会被整份丢掉——
+ * 而且全程静默。所以宿主这里**先不写盘**，回 409 让设置页弹窗（取消 = 不动文件；
+ * 确认 = 强行重建），绝不静默丢配置。
+ *
+ * 文件不存在 → false（没有东西可丢，正常首次保存）。
+ */
+export function userConfigUnparsable(paths: ConfigPaths): boolean {
+  const file = effectiveUserFile(paths);
+  return file !== undefined && readJsonc(file) === undefined;
+}
+
 /** 配置路径集（宿主组装好后传入，单一事实来源） */
 export interface ConfigPaths {
   /** 包内 assets/config.jsonc（内置默认，绝对正确） */
   defaultFile: string;
-  /** ~/.dsh/dsh-pet/main-config.json（用户主配置，可编辑层） */
+  /** ~/.dsh/dsh-pet/main-config.jsonc（用户主配置，可编辑层；JSONC——允许注释） */
   userFile: string;
+  /** 旧版路径 ~/.dsh/dsh-pet/main-config.json：读取回落 + 启动时迁移（见 migrateUserConfig） */
+  legacyUserFile?: string;
   /** ~/.dsh/dsh-pet/pet（文件宠物目录） */
   petDir: string;
+}
+
+/** 实际生效的用户层文件：优先 .jsonc；不存在则回落到旧的 .json（迁移前的老用户）；
+ *  两者都不存在 → undefined（首次使用，无用户层）。 */
+function effectiveUserFile(paths: ConfigPaths): string | undefined {
+  if (existsSync(paths.userFile)) return paths.userFile;
+  if (paths.legacyUserFile && existsSync(paths.legacyUserFile)) return paths.legacyUserFile;
+  return undefined;
+}
+
+/**
+ * 老用户一次性迁移：`main-config.json` → `main-config.jsonc`（**重命名**，内容一字不动）。
+ *
+ * 为什么改扩展名：用户层从「同步」起就是带 `//` 注释的 JSONC 原文，挂在 `.json` 名下名不副实
+ * （编辑器会当严格 JSON 报错）。改成 `.jsonc` 后与包内默认 `config.jsonc` 同名同格式。
+ *
+ * 语义：新文件已存在 → 什么都不做（绝不用旧文件覆盖新文件）；旧文件不存在 → 什么都不做；
+ * 重命名失败（占用/权限）→ 静默放过，读取侧对旧路径有回落，功能不受影响。
+ */
+export function migrateUserConfig(paths: ConfigPaths, log?: (message: string) => void): boolean {
+  const legacy = paths.legacyUserFile;
+  if (!legacy || !existsSync(legacy) || existsSync(paths.userFile)) return false;
+  try {
+    renameSync(legacy, paths.userFile);
+  } catch {
+    return false; // 迁移失败：读取侧回落旧路径，不影响使用
+  }
+  log?.(`用户配置已迁移到 JSONC：${legacy} → ${paths.userFile}`);
+  return true;
 }
 
 interface PetFileEntry {
@@ -390,12 +455,13 @@ export function readAllConfig(paths: ConfigPaths): Record<string, Record<string,
   const seenIds = new Set<string>();
   const out: Record<string, Record<string, unknown>> = {};
 
-  // main 条目：内置默认 ← main-config.json（可编辑层）
-  const mainOverlay = readJsonc(paths.userFile);
-  if (existsSync(paths.userFile) && !mainOverlay) {
-    warnOnce('file:' + paths.userFile, '用户主配置解析失败，已按无用户配置处理：' + paths.userFile);
+  // main 条目：内置默认 ← main-config.jsonc（可编辑层；迁移前的老用户回落到 main-config.json）
+  const userFile = effectiveUserFile(paths);
+  const mainOverlay = userFile ? readJsonc(userFile) : undefined;
+  if (userFile && !mainOverlay) {
+    warnOnce('file:' + userFile, '用户主配置解析失败，已按无用户配置处理：' + userFile);
   }
-  out.main = mergeEntry(base, mainOverlay, 'main-config.json', basePets, seenIds);
+  out.main = mergeEntry(base, mainOverlay, 'main-config.jsonc', basePets, seenIds);
 
   // 文件宠物条目：pet/<名>-config.json，一个文件一个条目（key = 文件名前缀 = 素材根）
   for (const file of scanPetFiles(paths.petDir)) {
@@ -433,7 +499,7 @@ export function findPetInstance(
 }
 
 /**
- * 保存用户层（PUT /config）：更新 main-config.json，接受可编辑字段（pets + 全局开关：
+ * 保存用户层（PUT /config）：更新 main-config.jsonc，接受可编辑字段（pets + 全局开关：
  * notificationsEnabled / whisperImageEnabled / chatImageEnabled / confineToScreen）。
  * 编辑语义：**非白名单顶层字段（physics / whisperPrompt / chatMemoryRounds / eventsRefreshSec /
  * memes 等）从 `existing`（当前磁盘上的用户文件原对象）原样透传保留**——
@@ -452,7 +518,7 @@ export function saveUserConfig(
     if (!p || typeof p !== 'object') return null;
     const pp = p as Record<string, unknown>;
     const id = String(pp.id ?? '');
-    // 有意过滤文件名非法字符（Windows 保留符 + 控制字符），防止配置值逃逸 main-config.json 路径
+    // 有意过滤文件名非法字符（Windows 保留符 + 控制字符），防止配置值逃逸 main-config.jsonc 路径
     if (!id || id.length > 64 || ID_FORBIDDEN.test(id)) return null;
     const size = Number(pp.size);
     if (!Number.isFinite(size) || size <= 0) return null;
@@ -518,4 +584,26 @@ export function saveUserConfig(
     }
   }
   return outConfig;
+}
+
+/**
+ * 同步用户层（POST /config，设置页「同步」）：把内置默认配置**原文**写入用户主配置文件。
+ *
+ * 为什么是"复制原文"而不是"删除用户层"（旧实现）：删掉之后用户手上没有配置文件，
+ * 想手改高级字段（physics / whisperPrompt / animations / memes / ...）就得自己从包内
+ * assets/config.jsonc 复制一份——这一步是死的、每次都要做。这里直接把那份文件（含全部
+ * 中文注释、全部字段）落到用户配置路径上：既等价于恢复默认（合并结果 = 内置默认），
+ * 又让用户拿到一份开箱可编辑的完整配置。
+ *
+ * 注释无害：读取侧统一走 readJsonc（stripJsonc 剥注释），带注释写入照样能读。
+ *
+ * 注意（调用方要在 UI 上讲清楚）：文件一旦生成即成为**显式覆盖层**——用户层写了什么就
+ * 覆盖内置默认的对应字段，所以插件升级改了内置默认后，这个文件里的旧值仍会继续生效。
+ *
+ * 默认文件缺失/目录不可写 → 直接抛（宿主回 500）：绝不静默留下半个配置文件。
+ */
+export function syncUserConfigFromDefault(paths: ConfigPaths): void {
+  const raw = readFileSync(paths.defaultFile, 'utf8');
+  mkdirSync(dirname(paths.userFile), { recursive: true });
+  writeFileSync(paths.userFile, raw, 'utf8');
 }

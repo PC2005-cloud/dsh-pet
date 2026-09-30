@@ -3,10 +3,10 @@
  *
  * - 多开：管理多个桌宠，每个宠物独立 id/name/size/位置（corner + marginX/Y）
  * - 数据流：设置页持有「main 条目宠物列表」→ 保存时全量 PUT /dsh-pet-7340/config
- *   （写用户层 main-config.json = 可编辑层，文件宠物永不回写）
+ *   （写用户层 main-config.jsonc = 可编辑层，文件宠物永不回写）
  * - 数据入口：配置由 host readAllConfig 合并为**成品**（GET /dsh-pet-7340/config），
  *   设置页只读 main 条目（可编辑）+ 统计文件宠物条数，不做任何校验
- * - 即时生效：保存/恢复默认后用 host 返回的**成品聚合**调用 petBridge.reload，
+ * - 即时生效：保存/同步后用 host 返回的**成品聚合**调用 petBridge.reload，
  *   容器走同一份 flattenConfigPets 重新渲染，无需刷新页面（设置页不自己拼任何条目级字段）
  *
  * 样式对齐官方设置页：max-width 720px、全走 --dsw-alias-* 语义 token（主题跟随）。
@@ -71,9 +71,14 @@ export const zh = {
   marginX: '水平偏移',
   marginY: '垂直偏移',
   save: '保存',
-  reset: '恢复默认',
-  confirmReset: '确定恢复默认吗？将删除整个用户配置（含自定义的动画池与播放权重）。',
-  resetHint: '「重置」会删除整个用户配置（含自定义的动画池与播放权重），不只是宠物列表。',
+  sync: '同步',
+  confirmSync: '确定同步吗？将用项目内置的默认配置（完整字段 + 注释）覆盖用户配置，当前的自定义内容会丢失。',
+  corruptTitle: '用户配置已损坏，未保存',
+  corruptConfirm: '强行保存',
+  corruptBody:
+    '用户配置文件解析不了（内容已损坏，不是合法 JSON/JSONC）：{path}。继续保存会按白名单重建这个文件——它里面现有的内容（animations / physics / memes 等自定义字段）会全部丢失。取消 = 不动文件（先去把配置改回合法再保存）；确认 = 强行保存（丢弃文件里现有的内容）。',
+  syncHint:
+    '「同步」会把项目内置的默认配置（含注释与全部高级字段）写入用户配置文件，覆盖当前自定义内容；之后可直接编辑该文件。注意两点：① 文件一旦生成即为显式覆盖层——插件升级后内置默认的变化不会自动生效（除非再次同步或删除该文件）；② 在本页点「保存」会按白名单重写该文件（字段值保留，但注释会被去掉）。',
   configMeta: '高级配置（文件）',
   configMetaHint: '用户配置可覆盖宠物列表 / 动画池 / 播放权重，修改后刷新或重启生效；默认配置为完整参考。',
   defaultConfig: '默认配置（只读，完整参考）',
@@ -106,7 +111,7 @@ export const zh = {
   storageTitle: '卸载与存储',
   storageHint: '插件在本机落下的全部位置。删缓存不影响使用（会自动重下/重建）；删「插件用户数据」会丢配置与对话记忆。',
   'storage.userData':
-    '插件用户数据：自定义配置 main-config.json、对话记忆 memory.json、自定义动画素材 main-animation/、文件宠物 pet/',
+    '插件用户数据：自定义配置 main-config.jsonc、对话记忆 memory.json、自定义动画素材 main-animation/、文件宠物 pet/',
   'storage.electron': '桌面宠物用的 Electron 运行时（体积较大；删除后下次启用桌面模式会自动重新下载）',
   'storage.desktopCache': '桌面宠物窗口的缓存与主屏缩放缓存（可删，会自动重建）',
   'storage.electronCache': 'Electron 安装包下载缓存（可删，需要时会重新下载）',
@@ -116,7 +121,7 @@ export const zh = {
   uninstallStep1: '1. 先退出 DSH（桌面宠物随之退出）；不要在桌宠运行时删除上面的文件。',
   uninstallStep2: '2. 卸载插件本体（终端执行，会同时从 profile 的 bundle 层移除）：',
   uninstallStep3:
-    '3. 按需删除上面的位置：缓存类删了无影响；「插件用户数据」删了会丢配置与对话记忆（想保留就先备份其中的 main-config.json）。',
+    '3. 按需删除上面的位置：缓存类删了无影响；「插件用户数据」删了会丢配置与对话记忆（想保留就先备份其中的 main-config.jsonc）。',
   uninstallCmd: 'dsh plugin --profile {profile} remove dsh-pet',
 };
 
@@ -158,10 +163,15 @@ export const en = {
   marginX: 'Horizontal offset',
   marginY: 'Vertical offset',
   save: 'Save',
-  reset: 'Reset to default',
-  confirmReset: 'Reset to default? This deletes the whole user config (including custom animation pools & weights).',
-  resetHint:
-    '"Reset" deletes the whole user config (including custom animation pools & weights), not just the pet list.',
+  sync: 'Sync',
+  confirmSync:
+    'Sync? This overwrites the user config with the bundled default config (all fields + comments); current customizations are lost.',
+  corruptTitle: 'User config is corrupted — not saved',
+  corruptConfirm: 'Save anyway',
+  corruptBody:
+    'The user config file cannot be parsed (corrupted, not valid JSON/JSONC): {path}. Saving now rebuilds it from the whitelist — everything currently in that file (animations / physics / memes …) will be lost. Cancel = leave the file untouched (fix it and save again); Confirm = save anyway (discard what is in the file).',
+  syncHint:
+    '"Sync" writes the bundled default config (comments + every advanced field included) to the user config file, overwriting your current customizations; the file is then directly editable. Two caveats: (1) once created, that file is an explicit override layer — later changes to the bundled defaults will not take effect automatically (until you sync again or delete the file); (2) clicking "Save" on this page rewrites the file from a whitelist — field values are kept, comments are dropped.',
   configMeta: 'Advanced (files)',
   configMetaHint:
     'User config may override pets / animation pools / weights — refresh or restart to apply. The default config is the complete reference.',
@@ -195,7 +205,7 @@ export const en = {
   storageHint:
     'Every location this plugin writes to. Deleting cache folders is harmless (they re-download / rebuild); deleting "plugin user data" loses your config and chat memory.',
   'storage.userData':
-    'Plugin user data: custom config main-config.json, chat memory memory.json, custom animation assets main-animation/, file pets pet/',
+    'Plugin user data: custom config main-config.jsonc, chat memory memory.json, custom animation assets main-animation/, file pets pet/',
   'storage.electron':
     'Electron runtime used by the desktop pet (large; re-downloaded automatically the next time desktop mode starts)',
   'storage.desktopCache':
@@ -208,7 +218,7 @@ export const en = {
     '1. Quit DSH first (the desktop pet exits with it); do not delete these files while the pet is running.',
   uninstallStep2: '2. Remove the plugin itself (run in a terminal; this also drops it from the profile bundle layer):',
   uninstallStep3:
-    '3. Delete the locations above as needed: cache folders are harmless; deleting "plugin user data" loses your config and chat memory (back up main-config.json first if you want to keep it).',
+    '3. Delete the locations above as needed: cache folders are harmless; deleting "plugin user data" loses your config and chat memory (back up main-config.jsonc first if you want to keep it).',
   uninstallCmd: 'dsh plugin --profile {profile} remove dsh-pet',
 };
 
@@ -314,8 +324,13 @@ export function makePetConfigSection(rt: {
     const [selId, setSelId] = useState<string>(initPets[0]?.id ?? '');
     const [busy, setBusy] = useState(false);
     const [msg, setMsg] = useState<{ kind: 'ok' | 'err' | ''; text: string }>({ kind: '', text: '' });
-    // 确认弹窗（仿官方弹窗：遮罩 + 居中卡片 + 双按钮）
-    const [confirm, setConfirm] = useState<null | 'remove' | 'reset'>(null);
+    // 确认/提示弹窗（仿官方弹窗：遮罩 + 居中卡片 + 双按钮）：
+    //   remove  —— 删除宠物
+    //   sync    —— 同步（说明会用内置默认整份覆盖）
+    //   corrupt —— 保存时发现用户配置**已损坏**（解析不了）：取消 = 不动文件，确认 = 强行白名单重建
+    const [dialog, setDialog] = useState<
+      null | { kind: 'remove' } | { kind: 'sync' } | { kind: 'corrupt'; path: string }
+    >(null);
     // 配置文件地址与存储位置清单（「高级配置」「卸载与存储」区块；读取失败仅缺省不显示，不影响表单）
     const [paths, setPaths] = useState<null | {
       user: string;
@@ -333,7 +348,7 @@ export function makePetConfigSection(rt: {
         .catch(() => console.warn('[dsh-pet] 读取配置文件路径失败'));
     }, []);
 
-    // 系统通知总开关（全局：读写用户级配置 main-config.json 的 notificationsEnabled；即时生效）
+    // 系统通知总开关（全局：读写用户级配置 main-config.jsonc 的 notificationsEnabled；即时生效）
     const [notifyEnabled, setNotifyEnabled] = useState(true);
     // 表情包配图开关（全局：写用户级配置；与「保存」一起提交，不做即时写入）
     const [whisperImage, setWhisperImage] = useState(false);
@@ -420,7 +435,7 @@ export function makePetConfigSection(rt: {
       setPermMsg({ kind: 'ok', text: t('notifyPermissionOk') });
     };
 
-    // 当前选中的宠物对象（表单数据源）；selId 由 add/remove/reset 同步维护，列表非空时恒有效
+    // 当前选中的宠物对象（表单数据源）；selId 由 add/remove/sync 同步维护，列表非空时恒有效
     const cur = pets.find((p) => p.id === selId) ?? null;
 
     // 更新选中的宠物：size 走顶层；position 子字段整体替换
@@ -448,7 +463,11 @@ export function makePetConfigSection(rt: {
       return true;
     };
 
-    const save = async () => {
+    // force 只认严格 true：**绝不能**写成 `force ? ...`——保存按钮现在是包一层再调 save，
+    // 但历史上是把这个 handler 直接交给 React 的 onClick，于是 React 把 MouseEvent 当第一个
+    // 实参传进来 → 真值 → 每次都拼上 ?force=1 → 宿主的损坏预检被绕过 →
+    // 静默白名单重建、字段全丢、永不弹窗（真实事故，已由源码守卫钉住）。
+    const save = async (force = false) => {
       const isOk = validated();
       if (!isOk) return;
       setBusy(true);
@@ -462,11 +481,23 @@ export function makePetConfigSection(rt: {
           chatImageEnabled: chatImage,
           confineToScreen: confineScreen,
         };
-        const res = await fetch('/dsh-pet-7340/config', {
+        // force === true（用户在损坏弹窗里点了确认）：带 ?force=1 才允许按白名单重建损坏文件
+        const res = await fetch('/dsh-pet-7340/config' + (force === true ? '?force=1' : ''), {
           method: 'PUT',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify(body),
         });
+        // 409 = 宿主损坏预检拦下（用户配置解析不了，白名单重建会把文件里剩下的内容整份丢掉）：
+        // 这里**不写盘**，弹窗让用户决定（取消 = 不动文件 / 确认 = 强行重建）
+        if (res.status === 409) {
+          // 路径取宿主回的真实写入路径（meta 拉取失败时也不至于空着）
+          const info = (await res.json().catch(() => null)) as { userFile?: unknown } | null;
+          setDialog({
+            kind: 'corrupt',
+            path: typeof info?.userFile === 'string' ? info.userFile : (paths?.user ?? ''),
+          });
+          return;
+        }
         if (!res.ok) throw new Error('HTTP ' + res.status);
         // 同上：PUT 响应即成品聚合，容器据此重新拍平（新增/删除宠物、改大小位置都走这条路）
         petBridge.reload((await res.json()) as Record<string, Record<string, unknown>>);
@@ -478,15 +509,16 @@ export function makePetConfigSection(rt: {
       }
     };
 
-    const reset = () => setConfirm('reset');
+    const sync = () => setDialog({ kind: 'sync' });
 
-    const doReset = async () => {
+    const doSync = async () => {
       setBusy(true);
       setMsg({ kind: '', text: '' });
       try {
-        // 删除用户层：DELETE 的响应体同样是成品聚合（此时 main 条目 = 内置默认宠物列表），
-        // 与保存走同一条路——不再"删完再拉一次"，也就没有中间失败态
-        const res = await fetch('/dsh-pet-7340/config', { method: 'DELETE' });
+        // 同步用户层：POST 把内置默认配置（原文，含注释）整份写入用户配置，响应体同样是成品聚合
+        // （此时 main 条目 = 内置默认宠物列表），与保存走同一条路——不再"改完再拉一次"，
+        // 也就没有中间失败态
+        const res = await fetch('/dsh-pet-7340/config', { method: 'POST' });
         if (!res.ok) throw new Error('HTTP ' + res.status);
         const merged = (await res.json()) as Record<string, Record<string, unknown>>;
         const defs = (merged.main?.pets ?? []) as Pet[];
@@ -528,7 +560,7 @@ export function makePetConfigSection(rt: {
         setMsg({ kind: 'err', text: t('atLeastOne') });
         return;
       }
-      setConfirm('remove');
+      setDialog({ kind: 'remove' });
     };
 
     const doRemove = () => {
@@ -917,7 +949,7 @@ export function makePetConfigSection(rt: {
             h('button', {
               type: 'button',
               disabled: busy,
-              onClick: save,
+              onClick: () => void save(),
               style: {
                 border: '1px solid var(--dsw-alias-button-info-fill)',
                 background: 'var(--dsw-alias-button-info-fill)',
@@ -933,7 +965,7 @@ export function makePetConfigSection(rt: {
             h('button', {
               type: 'button',
               disabled: busy,
-              onClick: reset,
+              onClick: sync,
               style: {
                 border: '1px solid var(--dsw-alias-border-l2)',
                 background: 'transparent',
@@ -944,7 +976,7 @@ export function makePetConfigSection(rt: {
                 cursor: 'pointer',
                 opacity: busy ? 0.5 : 1,
               },
-              children: t('reset'),
+              children: t('sync'),
             }),
             msg.text
               ? h('span', {
@@ -960,10 +992,10 @@ export function makePetConfigSection(rt: {
           ],
         }),
 
-        // 重置的副作用提示（DELETE 会清掉整个用户配置，含高级自定义）
+        // 同步的副作用提示（POST 会用内置默认整份覆盖用户配置，含高级自定义）
         h('p', {
           style: { margin: 0, fontSize: '11px', color: 'var(--dsw-alias-label-tertiary)', lineHeight: '16px' },
-          children: t('resetHint'),
+          children: t('syncHint'),
         }),
 
         // 高级配置（文件地址）：供高级用户直接编辑配置文件自定义
@@ -1070,8 +1102,8 @@ export function makePetConfigSection(rt: {
             })
           : null,
 
-        // 确认弹窗（仿官方弹窗视觉：遮罩 + 居中卡片 + 双按钮）
-        confirm
+        // 确认/提示弹窗（仿官方弹窗视觉：遮罩 + 居中卡片 + 双按钮）
+        dialog
           ? h('div', {
               style: {
                 position: 'fixed',
@@ -1082,7 +1114,7 @@ export function makePetConfigSection(rt: {
                 justifyContent: 'center',
                 background: 'rgba(0, 0, 0, 0.45)',
               },
-              onClick: () => setConfirm(null),
+              onClick: () => setDialog(null),
               children: h('div', {
                 style: {
                   width: '340px',
@@ -1100,18 +1132,23 @@ export function makePetConfigSection(rt: {
                 children: [
                   h('div', {
                     style: { fontSize: '14px', fontWeight: 500, color: 'var(--dsw-alias-label-primary)' },
-                    children: t('confirmTitle'),
+                    children: dialog.kind === 'corrupt' ? t('corruptTitle') : t('confirmTitle'),
                   }),
                   h('div', {
                     style: { fontSize: '13px', lineHeight: '20px', color: 'var(--dsw-alias-label-secondary)' },
-                    children: confirm === 'remove' ? t('confirmRemove').replace('{id}', selId) : t('confirmReset'),
+                    children:
+                      dialog.kind === 'remove'
+                        ? t('confirmRemove').replace('{id}', selId)
+                        : dialog.kind === 'corrupt'
+                          ? t('corruptBody').replace('{path}', dialog.path)
+                          : t('confirmSync'),
                   }),
                   h('div', {
                     style: { display: 'flex', gap: '8px', justifyContent: 'flex-end' },
                     children: [
                       h('button', {
                         type: 'button',
-                        onClick: () => setConfirm(null),
+                        onClick: () => setDialog(null),
                         style: {
                           border: '1px solid var(--dsw-alias-border-l2)',
                           background: 'transparent',
@@ -1126,23 +1163,16 @@ export function makePetConfigSection(rt: {
                       h('button', {
                         type: 'button',
                         onClick: () => {
-                          const k = confirm;
-                          setConfirm(null);
-                          if (k === 'remove') doRemove();
-                          else void doReset();
+                          const d = dialog;
+                          setDialog(null);
+                          if (d.kind === 'remove') doRemove();
+                          else if (d.kind === 'corrupt')
+                            void save(true); // 确认：带 ?force=1 强行重建
+                          else void doSync();
                         },
                         style:
-                          confirm === 'remove'
+                          dialog.kind === 'sync'
                             ? {
-                                border: '1px solid var(--dsw-alias-state-error-secondary)',
-                                background: 'transparent',
-                                color: 'var(--dsw-alias-state-error-primary)',
-                                borderRadius: '8px',
-                                padding: '4px 14px',
-                                fontSize: '12px',
-                                cursor: 'pointer',
-                              }
-                            : {
                                 border: '1px solid var(--dsw-alias-button-info-fill)',
                                 background: 'var(--dsw-alias-button-info-fill)',
                                 color: '#fff',
@@ -1150,8 +1180,22 @@ export function makePetConfigSection(rt: {
                                 padding: '4px 14px',
                                 fontSize: '12px',
                                 cursor: 'pointer',
+                              }
+                            : {
+                                border: '1px solid var(--dsw-alias-state-error-secondary)',
+                                background: 'transparent',
+                                color: 'var(--dsw-alias-state-error-primary)',
+                                borderRadius: '8px',
+                                padding: '4px 14px',
+                                fontSize: '12px',
+                                cursor: 'pointer',
                               },
-                        children: confirm === 'remove' ? t('remove') : t('reset'),
+                        children:
+                          dialog.kind === 'remove'
+                            ? t('remove')
+                            : dialog.kind === 'corrupt'
+                              ? t('corruptConfirm')
+                              : t('sync'),
                       }),
                     ],
                   }),

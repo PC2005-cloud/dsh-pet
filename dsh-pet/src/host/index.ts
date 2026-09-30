@@ -15,10 +15,11 @@
  * 路由：
  *   /dsh-pet-7340/config             → 合并后的**成品配置**（{ main:{...}, test1:{...}, ... }，
  *                                每条目字段已填满；浏览器/桌面/设置页的唯一配置入口）
- *                                GET 读取成品；PUT 保存用户层（白名单重建 main-config.json）、
- *                                DELETE 删除用户层（恢复内置默认）——两个写接口的**响应体都是
- *                                保存后的成品聚合**，设置页即时生效直接拍平这份响应，
- *                                客户端不再有第二份"补吹条目级字段"的实现
+ *                                GET 读取成品；PUT 保存用户层（白名单重建 main-config.jsonc）、
+ *                                POST 同步用户层（把内置默认 config.jsonc **原文**整份写入，
+ *                                含注释与全部高级字段；合并结果与「没有用户层」等价）——
+ *                                两个写接口的**响应体都是保存后的成品聚合**，设置页即时生效
+ *                                直接拍平这份响应，客户端不再有第二份"补吹条目级字段"的实现
  *   /dsh-pet-7340/config/meta         → 配置文件与素材目录路径 + 全部存储位置清单
  *                                       （设置页「高级配置」「卸载与存储」展示用）
  *   /dsh-pet-7340/thumb/<素材根>/<动画名>.webm|.mov  → 素材按宠物归属（.mov 为 macOS 定制，扩展名取决于
@@ -48,7 +49,7 @@
  *             依赖可解析后替换为 DSH 官方类型。
  */
 import { createReadStream, existsSync, fstatSync } from 'node:fs';
-import { readFile, mkdir, rm, writeFile } from 'node:fs/promises';
+import { readFile, mkdir, writeFile } from 'node:fs/promises';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { homedir } from 'node:os';
 import { join, normalize, resolve, sep } from 'node:path';
@@ -63,8 +64,12 @@ import {
   findPetInstance,
   flattenPetList,
   ID_FORBIDDEN,
+  migrateUserConfig,
   readAllConfig,
+  readUserConfig,
   saveUserConfig,
+  syncUserConfigFromDefault,
+  userConfigUnparsable,
   type ConfigPaths,
 } from './config';
 import {
@@ -215,15 +220,22 @@ export function apply(ctx: any): void {
   // 用户数据根：配置与用户素材统一收敛于此（扩展包按 <插件id> 各自建目录）
   const dshHome = resolveDshHome();
   const userRoot = join(dshHome, 'dsh-pet');
-  // 用户主配置（可编辑层）与文件宠物目录；配置读取/合并统一走 readAllConfig（./config）
-  const userConfigPath = join(userRoot, 'main-config.json');
+  // 用户主配置（可编辑层）与文件宠物目录；配置读取/合并统一走 readAllConfig（./config）。
+  // 主配置是 **JSONC**（main-config.jsonc）——与包内默认 config.jsonc 同名同格式：
+  // 「同步」写进去的就是带注释的原文，扩展名如实反映内容（旧版 main-config.json 只读回落 + 启动迁移）
+  const userConfigPath = join(userRoot, 'main-config.jsonc');
+  const legacyUserConfigPath = join(userRoot, 'main-config.json');
   const petConfigDir = join(userRoot, 'pet');
   // 配置路径集（readAllConfig 的唯一输入：内置默认 + 用户主配置 + 文件宠物目录）
   const configPaths: ConfigPaths = {
     defaultFile: join(PACKAGE_ROOT, 'assets', 'config.jsonc'),
     userFile: userConfigPath,
+    legacyUserFile: legacyUserConfigPath,
     petDir: petConfigDir,
   };
+  // 老用户一次性迁移：main-config.json → main-config.jsonc（重命名，内容一字不动；
+  // 新文件已存在则不动旧文件）。失败不影响运行——读取侧对旧路径有回落。
+  migrateUserConfig(configPaths, (msg) => console.log('[dsh-pet] ' + msg));
   // 用户动画目录（thumb 播放时优先于包内素材；webm 放 main-animation/webm/，mov（macOS 定制）放 main-animation/mov/）
   const thumbUserRoot = join(userRoot, 'main-animation');
   // 手动触发计数：/balance 命令 +1，两边（浏览器/桌面）同样的 1s 轮询检测变化后刷新余额（进程内内存态，重启归零）
@@ -636,7 +648,7 @@ export function apply(ctx: any): void {
     const url = new URL(rawUrl, 'http://localhost');
     const rest = decodeURIComponent(url.pathname.slice(ROUTE_PREFIX.length + 1));
 
-    // 成品配置：/dsh-pet-7340/config（GET 读取合并成品 / PUT 保存用户层 / DELETE 恢复默认）
+    // 成品配置：/dsh-pet-7340/config（GET 读取合并成品 / PUT 保存用户层 / POST 同步内置默认）
     if (rest === 'config') {
       if (method === 'GET') {
         // 唯一配置入口：readAllConfig 返回绝对正确的完成品聚合（{ main:{...}, test1:{...} }），
@@ -651,13 +663,11 @@ export function apply(ctx: any): void {
         try {
           const parsed = JSON.parse(body ?? '');
           // 透传保留：读当前磁盘上的用户文件原对象，把非白名单顶层字段（physics/whisperPrompt/
-          // chatMemoryRounds/...）带回给 saveUserConfig——设置页保存不再抹掉用户手改的精调配置
-          let existing: Record<string, unknown> | undefined;
-          try {
-            existing = JSON.parse(await readFile(userConfigPath, 'utf8')) as Record<string, unknown>;
-          } catch {
-            /* 文件不存在/损坏：视为无既有用户字段，不阻塞保存 */
-          }
+          // chatMemoryRounds/...）带回给 saveUserConfig——设置页保存不再抹掉用户手改的精调配置。
+          // **必须走 JSONC 容忍解析器**（readUserConfig）：用户层可能是「同步」写入的带 // 注释
+          // 的 config.jsonc 原文，用严格 JSON.parse 会在这里抛错并被吞掉 → existing 变 undefined
+          // → 白名单重建 → 用户的高级字段全丢（老 bug 的复发路径，已由守卫测试钉住）。
+          const existing = readUserConfig(configPaths);
           const clean = saveUserConfig(parsed, existing);
           if (!clean) {
             return {
@@ -667,6 +677,16 @@ export function apply(ctx: any): void {
                 error:
                   'invalid pet config: expected { pets:[{name?,id,size,balanceEnabled,display,position:{corner,marginX,marginY}}] }（display 为 web/desktop/both/none 之一；可选顶层 notificationsEnabled / whisperImageEnabled / chatImageEnabled 布尔）',
               },
+            };
+          }
+          // 损坏预检：用户层存在但连 JSONC 都解析不了（真损坏）→ **先不写盘**。
+          // 保存是白名单重建，existing 读不出来就等于把文件里剩下的内容整份丢掉，而且静默——
+          // 所以回 409 让设置页弹窗（取消 = 不动文件；确认 = 带 ?force=1 强行重建）。
+          if (url.searchParams.get('force') !== '1' && userConfigUnparsable(configPaths)) {
+            return {
+              kind: 'json',
+              status: 409,
+              obj: { error: 'user config is unparsable', needConfirm: true, userFile: userConfigPath },
             };
           }
           await mkdir(userRoot, { recursive: true });
@@ -680,13 +700,17 @@ export function apply(ctx: any): void {
           return { kind: 'json', status: 400, obj: { error: 'invalid JSON body' } };
         }
       }
-      if (method === 'DELETE') {
+      if (method === 'POST') {
+        // 同步：把内置默认配置（assets/config.jsonc 原文，含注释）整份写入用户配置——
+        // 既是「恢复默认」（合并结果 = 内置默认），又给用户留下一份可直接编辑的完整配置，
+        // 不必再自己从包内复制一份（见 config.ts 的 syncUserConfigFromDefault）。
         try {
-          await rm(userConfigPath, { force: true });
-        } catch {
-          /* 不存在也视为成功 */
+          syncUserConfigFromDefault(configPaths);
+        } catch (e) {
+          // 默认文件缺失 / 用户目录不可写：显式 500，绝不静默留下半个配置文件
+          return { kind: 'json', status: 500, obj: { error: e instanceof Error ? e.message : String(e) } };
         }
-        void syncDesktop(); // 恢复默认配置：重解析桌面宠物并重启 Helper（异步，不阻塞响应）
+        void syncDesktop(); // 配置变了：重解析桌面宠物并重启 Helper（异步，不阻塞响应）
         return { kind: 'json', status: 200, obj: readAllConfig(configPaths) };
       }
       return { kind: 'json', status: 405, obj: { error: 'method not allowed' } };

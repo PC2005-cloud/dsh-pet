@@ -3,7 +3,7 @@
  *
  * 背景：animations / animationWeights / eventsRefreshSec / physics / confineToScreen / workStatusTexts 这六个条目级字段
  * 必须由 flattenConfigPets 从「条目」吹进每只实例。客户端曾经还有第二份手抄的填充——设置页保存后把
- * 可编辑的裸实例列表回推给容器时"补吹"一遍——它漏掉了 physics：新增宠物或恢复默认后该实例的
+ * 可编辑的裸实例列表回推给容器时"补吹"一遍——它漏掉了 physics：新增宠物或同步后该实例的
  * physics 是 undefined，拖拽跟手第一帧读 cfg.physics.throwPower 直接抛错（表现为宠物完全拖不动）。
  * 现在设置页改用 host 写接口返回的成品聚合重新拍平，第二份实现已删除（见 petBridge.reload）。
  * 本文件把这条不变式钉住：
@@ -43,7 +43,7 @@ describe('flattenConfigPets —— 成品 → 渲染列表的唯一填充点', (
     try {
       const merged = readAllConfig({
         defaultFile: fileURLToPath(new URL('../../assets/config.jsonc', import.meta.url)),
-        userFile: join(dir, 'main-config.json'), // 不存在：只测内置默认
+        userFile: join(dir, 'main-config.jsonc'), // 不存在：只测内置默认
         petDir: join(dir, 'pet'), // 不存在：不掺文件宠物
       });
       const pets = flattenConfigPets(merged);
@@ -95,12 +95,39 @@ describe('flattenConfigPets —— 成品 → 渲染列表的唯一填充点', (
     }
     // ② 容器必须经 flattenConfigPets 拿条目级字段
     assert.ok(/flattenConfigPets/.test(clientPet), '容器必须用 flattenConfigPets 拍平成品聚合');
-    // ③ host 的 GET / PUT / DELETE /config 都返回成品聚合——设置页拿写接口的响应直接拍平，不自己拼字段
+    // ③ host 的 GET / PUT / POST /config 都返回成品聚合——设置页拿写接口的响应直接拍平，不自己拼字段
     const returns = host.match(/obj: readAllConfig\(configPaths\)/g) ?? [];
-    assert.equal(returns.length, 3, 'GET / PUT / DELETE /config 都应返回成品聚合（obj: readAllConfig(configPaths)）');
+    assert.equal(returns.length, 3, 'GET / PUT / POST /config 都应返回成品聚合（obj: readAllConfig(configPaths)）');
     assert.ok(
       !/obj: \{ ok: true \}/.test(host),
       'config 写接口不得再返回 { ok: true }：响应体必须是成品聚合（设置页即时生效靠它拍平）',
+    );
+    // ④ 保存的「透传保留」必须用 JSONC 容忍解析器读用户层：用户层可能是「同步」写入的
+    //    **带 // 注释的 config.jsonc 原文**，严格 JSON.parse 会抛错并被 catch 吞掉 →
+    //    existing 变 undefined → 白名单重建 → 用户手改的高级字段（animations/physics/memes…）
+    //    全部丢失。这是曾经修过、又被「同步」带回来的回归，必须钉住。
+    assert.ok(/readUserConfig\(configPaths\)/.test(host), 'PUT /config 必须用 readUserConfig 读用户层（JSONC 容忍）');
+    assert.ok(
+      !/JSON\.parse\(await readFile\(userConfigPath/.test(host),
+      '不得用严格 JSON.parse 读用户层：带注释的配置会解析失败，保存时静默丢掉全部高级字段',
+    );
+    // ⑤ 保存前必须有损坏预检：用户层解析不了时**先不写盘**，回 409 让设置页弹窗
+    //    （取消 = 不动文件 / 确认 = 强行重建）。没有它就会出现"损坏 → 静默白名单重建 → 配置全丢"。
+    assert.ok(
+      /userConfigUnparsable\(configPaths\)/.test(host),
+      'PUT /config 必须先做损坏预检（userConfigUnparsable），损坏时回 409 而不是静默重建',
+    );
+    // ⑥ 前端不得把带默认参数的 handler **直接**交给 React：`onClick: save` 会让 React 把
+    //    MouseEvent 当第一个实参传进去 → save(force) 里的 force 成了真值 → 每次保存都拼
+    //    ?force=1 → 宿主的损坏预检被绕过 → 静默白名单重建、字段全丢、永不弹窗（真实事故）。
+    //    所以：onClick 必须包一层，且 force 只认严格 true。
+    assert.ok(
+      !/onClick:\s*save\b/.test(clientSettings),
+      '保存按钮必须写 onClick: () => void save()：直接把 save 交给 React 会把 MouseEvent 当 force',
+    );
+    assert.ok(
+      /force === true \? '\?force=1'/.test(clientSettings),
+      'force 必须严格比较 true（真值判断会让任何实参都开启强行覆盖）',
     );
   });
 });

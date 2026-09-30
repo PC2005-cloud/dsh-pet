@@ -97,7 +97,7 @@ macOS 的 Safari/WKWebView 下透明动画需用 `.mov` 素材，三步：
 
 | 配置项                         | 说明                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 设置页「桌宠配置」             | DSH 设置 → 桌宠配置：图形化编辑**大小 / 位置 / 边距**，支持**多开**（添加/删除宠物，每只独立配置）；三个全局开关也在设置页——系统通知（切换即时生效）、碎碎念配图 / 对话配图（随「保存」一起写入）；保存**即时生效**，恢复默认回落 config.jsonc                                                                                                                                                                        |
+| 设置页「桌宠配置」             | DSH 设置 → 桌宠配置：图形化编辑**大小 / 位置 / 边距**，支持**多开**（添加/删除宠物，每只独立配置）；全局开关也在设置页——系统通知（切换即时生效）、碎碎念配图 / 对话配图 / 抛掷锁定（随「保存」一起写入）；保存**即时生效**，「同步」把项目内置的 `config.jsonc`（原文，含注释与全部高级字段）整份写入用户配置，既是恢复默认又留下一份可直接编辑的完整配置                                                             |
 | `pets`（config.jsonc）         | 默认宠物列表：`[{ "id", "name", "size", "balanceEnabled", "whisperEnabled", "workStatusEnabled", "display", "position": { "corner", "marginX", "marginY" } }]`；`display` 为 web/desktop/both/none（必填，缺失即配置错误）；`whisperEnabled` / `workStatusEnabled` = 碎碎念 / 工作状态气泡开关（默认 false）；多只即多开，`display` 含 desktop 的宠物出现在桌面窗口（与浏览器同屏渲染），首只为「添加宠物」的默认模板 |
 | `whisperPrompt`                | 碎碎念与对话共用的**人设系统提示词**（全局，所有宠物共用；种类文件顶层可覆盖）：默认「你是主人桌面上的Q版蓝发小女仆……20 字以内」；实际发出的 system = 它 + 一句「你的名字是“<宠物名>”。」                                                                                                                                                                                                                             |
 | `chatMemoryRounds`             | 每次对话请求携带的最近历史轮数（默认 5；1 轮 = 1 问 1 答）：`memory.json` **全存不删**，此值只决定截取多少进上下文                                                                                                                                                                                                                                                                                                    |
@@ -107,18 +107,18 @@ macOS 的 Safari/WKWebView 下透明动画需用 `.mov` 素材，三步：
 | `notificationsEnabled`         | 系统通知总开关（布尔，默认开）：对话完成 / 生成失败 / 输出截断 / 权限申请 / 用户选择，在窗口失焦时弹系统级通知（桌面右下角）                                                                                                                                                                                                                                                                                          |
 | `physics`（0.2.5）             | 拖拽抛掷物理参数（全局，所有宠物共用）：`gravity` 重力 / `restitution` 碰壁恢复系数（0~1）/ `groundFriction` 地面摩擦 / `ceilingBounce` 顶部反弹 / `throwPower` 总力度 / `petCollision` 多宠物碰撞开关；缺省取内置默认（1400 / 0.78 / 2.5 / true / 1.0 / false）；`gravity=0` 为无重力，`petCollision=true` 开启多宠物碰撞                                                                                            |
 
-> 说明：插件安装即用，配置均为可选；设置页保存的用户覆盖写入 `$DSH_HOME/dsh-pet/main-config.json`（用户层，优先于包内默认）。
+> 说明：插件安装即用，配置均为可选；设置页保存的用户覆盖写入 `$DSH_HOME/dsh-pet/main-config.jsonc`（用户层，优先于包内默认）。
 
 ### 📄 高级自定义（直接编辑配置文件）
 
 用户数据统一收敛在 `$DSH_HOME/dsh-pet/`：
 
-| 层                   | 路径                                 | 作用                                                                                                  |
-| -------------------- | ------------------------------------ | ----------------------------------------------------------------------------------------------------- |
-| 默认配置（只读）     | 包内 `assets/config.jsonc`           | 完整结构参考：宠物列表 / 动画池（idle/turn/drag/clicks/moves/categories）/ 播放权重                   |
-| 用户配置             | `$DSH_HOME/dsh-pet/main-config.json` | 覆盖片段：可整体覆盖 `pets` / `animations` / `animationWeights`，缺省字段回落默认                     |
-| 对话记忆（自动生成） | `$DSH_HOME/dsh-pet/memory.json`      | 对话历史（user/assistant 正文，**全存不删**；每次请求只取最近 `chatMemoryRounds` 轮）。删掉即清空记忆 |
-| 用户动画（可选）     | `$DSH_HOME/dsh-pet/main-animation/`  | 放入 `.webm`（VP9-Alpha）即可作为动画播放，**优先于包内素材**（放 `main-animation/webm/` 子目录）     |
+| 层                   | 路径                                  | 作用                                                                                                  |
+| -------------------- | ------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| 默认配置（只读）     | 包内 `assets/config.jsonc`            | 完整结构参考：宠物列表 / 动画池（idle/turn/drag/clicks/moves/categories）/ 播放权重                   |
+| 用户配置             | `$DSH_HOME/dsh-pet/main-config.jsonc` | 覆盖片段：可整体覆盖 `pets` / `animations` / `animationWeights`，缺省字段回落默认                     |
+| 对话记忆（自动生成） | `$DSH_HOME/dsh-pet/memory.json`       | 对话历史（user/assistant 正文，**全存不删**；每次请求只取最近 `chatMemoryRounds` 轮）。删掉即清空记忆 |
+| 用户动画（可选）     | `$DSH_HOME/dsh-pet/main-animation/`   | 放入 `.webm`（VP9-Alpha）即可作为动画播放，**优先于包内素材**（放 `main-animation/webm/` 子目录）     |
 
 - 设置页底部「高级配置」显示这些路径；「卸载与存储」列出插件的全部存储位置与卸载命令
 - 自定义动画：把 `xxx.webm` 放进 `main-animation/webm/`，在动画池/分类里写 `"xxx"`，**刷新页面**即可（无需重启 DSH）
@@ -129,7 +129,7 @@ macOS 的 Safari/WKWebView 下透明动画需用 `.mov` 素材，三步：
 
 ### 🐾 额外宠物（pet pack）——添加新「种类」
 
-默认只能调整主宠物（`config.jsonc` / `main-config.json` 的 `pets`）。要添加**全新种类的宠物**（独立动画池 + 自己的素材），在用户数据根下建 `pet/` 目录：
+默认只能调整主宠物（`config.jsonc` / `main-config.jsonc` 的 `pets`）。要添加**全新种类的宠物**（独立动画池 + 自己的素材），在用户数据根下建 `pet/` 目录：
 
 ```
 $DSH_HOME/dsh-pet/pet/
@@ -141,10 +141,10 @@ $DSH_HOME/dsh-pet/pet/
 
 每只额外宠物 = 一个 `-config.json`（配置）+ 一个 `-animation/` 目录（素材），同前缀配对，扫描 `pet/` 自动发现（浏览器与桌面同时生效，无需重启）。
 
-配置文件**与 `main-config.json` / `config.jsonc` 完全同构**——直接复制一份 main 配置、换成自己的动画池，就是一只新宠物。一个 `-config.json` 定义**一个「种类」**（动画池 + 素材目录），`pets` 数组可放该种类的**任意多只实例**（每只独立 size/位置，共享动画池与素材）：
+配置文件**与 `main-config.jsonc` / `config.jsonc` 完全同构**——直接复制一份 main 配置、换成自己的动画池，就是一只新宠物。一个 `-config.json` 定义**一个「种类」**（动画池 + 素材目录），`pets` 数组可放该种类的**任意多只实例**（每只独立 size/位置，共享动画池与素材）：
 
 ```jsonc
-// pet/pig-config.json —— 与 main-config.json 同构的完整配置；animations / animationWeights 必填（不回落全局）
+// pet/pig-config.json —— 与 main-config.jsonc 同构的完整配置；animations / animationWeights 必填（不回落全局）
 {
   "notificationsEnabled": true,
   "pets": [
@@ -186,7 +186,7 @@ $DSH_HOME/dsh-pet/pet/
 - `pets` 数组非空、每只字段（id/size/balanceEnabled/display/position）完整合法、数组内 id 唯一——**id 随意写、数量随意**，与主配置完全一致
 - `notificationsEnabled` / `eventsRefreshSec` 是**全局属性**，不归宠物文件管：写了忽略、不写不报错
 - 配置非法 / 缺少 `-animation/` 目录 / 实例 id 与主宠物冲突 → 加载时显式报错并跳过该宠物（不影响其他宠物）
-- 设置页**不列出**文件宠物（改文件即生效，刷新可见）；设置页保存/恢复默认不会把它们写进 `main-config.json`
+- 设置页**不列出**文件宠物（改文件即生效，刷新可见）；设置页保存/同步不会把它们写进 `main-config.jsonc`
 - 添加/修改/删除 → 刷新页面（浏览器）或重启 Helper（桌面）生效
 
 ## 🗑️ 卸载
@@ -197,13 +197,13 @@ dsh plugin --profile web remove dsh-pet
 
 插件在本机落下的全部位置（设置页「卸载与存储」区块也列出这些，且路径按你的机器实时解析）：
 
-- `$DSH_HOME/dsh-pet/` —— 插件用户数据：自定义配置 `main-config.json`、对话记忆 `memory.json`、自定义动画素材 `main-animation/`、文件宠物 `pet/`
+- `$DSH_HOME/dsh-pet/` —— 插件用户数据：自定义配置 `main-config.jsonc`、对话记忆 `memory.json`、自定义动画素材 `main-animation/`、文件宠物 `pet/`
 - `$DSH_HOME/electron/` —— 桌面宠物用的 Electron 运行时（体积较大；删除后下次启用桌面模式会自动重新下载）
 - `%APPDATA%\dsh-pet-electron-helper\` —— 桌面宠物窗口缓存与主屏缩放缓存（macOS：`~/Library/Application Support/`；Linux：`$XDG_CONFIG_HOME` 或 `~/.config/`；可删，会自动重建）
 - `%LOCALAPPDATA%\electron\Cache\` —— Electron 安装包下载缓存（macOS：`~/Library/Caches/electron`；Linux：`$XDG_CACHE_HOME` 或 `~/.cache/`；可删，需要时会重新下载）
 - 插件本体 —— 由 DSH 管理，用上面的命令移除，不要手删
 
-删之前先退出 DSH（桌面宠物随之退出）。缓存类删了无影响；`$DSH_HOME/dsh-pet/` 删了会丢配置与对话记忆（想保留就先备份 `main-config.json`）。
+删之前先退出 DSH（桌面宠物随之退出）。缓存类删了无影响；`$DSH_HOME/dsh-pet/` 删了会丢配置与对话记忆（想保留就先备份 `main-config.jsonc`）。
 
 ## 🖥️ 运行效果
 
