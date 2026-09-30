@@ -1029,7 +1029,7 @@ class PetSprite {
     e.preventDefault();
     this.stopThrow(); // 菜单弹出前停住飞行中的宠物
     this.stopMove(); // 菜单悬停期间宠物不漫游
-    // 桌面专属工具根项（打开网站 / 查看余额 / 碎碎念 / 对话 / 回到初始位置）+ 共享菜单树（动作→分类→具体动画）
+    // 桌面专属工具根项（打开网站 / 查看余额 / 碎碎念 / 对话 / 回到初始位置 / 重载配置）+ 共享菜单树（动作→分类→具体动画）
     // 碎碎念/对话项无条件显示：手动触发不受 whisperEnabled 限制（该字段只影响自动周期轮询）
     const tools = [{ label: '打开网站', action: 'open-site' }];
     if (this.pet.balanceEnabled) tools.push({ label: '查看余额', action: 'show-balance' });
@@ -1037,6 +1037,9 @@ class PetSprite {
       { label: '碎碎念', action: 'whisper' },
       { label: '对话', action: 'chat' },
       { label: '回到初始位置', action: 'home' },
+      // 改配置文件后免去回设置页点保存：请宿主重启桌面 Helper（全部桌面宠物窗口按最新配置重建）。
+      // 放在最后：它是"重新加载"这类维护动作，与上面几个宠物互动项语义不同。
+      { label: '重载配置', action: 'reload' },
     );
     const tree = tools.concat(S.buildMenuTree(this.animations));
     if (!tree.length) return;
@@ -1082,6 +1085,10 @@ class PetSprite {
     }
     if (leaf.action === 'home') {
       this.goHome(); // 停漫游/移动，清会话位置，回配置角落
+      return;
+    }
+    if (leaf.action === 'reload') {
+      this.reloadDesktop(); // 请宿主重启桌面 Helper：全部桌面宠物窗口按最新配置重建
       return;
     }
     if (!leaf.anim) return;
@@ -1193,6 +1200,19 @@ class PetSprite {
     this.stopMove();
     this.customPos = null;
     this.position();
+  }
+
+  // 「重载配置」菜单：请宿主重启桌面 Helper —— 与设置页「保存」**同一条**重启路径
+  // （宿主 POST /reload → syncDesktop：串行队列 + 等旧进程真正退出再起新的）。
+  // 为什么不在渲染端就地重拉配置：① 每只宠物一个窗口是宿主按 DSH_PET_PETS 建的，
+  // 就地重拉改不了宠物数量/display/size；② 本页的余额/工作状态等全局轮询是一次性启动的
+  // （events.js 的 loopsStarted 门控），就地重建 sprite 会漏启新循环或留下旧定时器。
+  // 本请求由**即将被重启的这个进程**发出：响应可能永远不回（宿主杀进程时回调地址已失效），
+  // 故不 await、不重试，失败只记日志——重载本身就是把本进程换掉。
+  reloadDesktop() {
+    fetch(BASE + '/reload', { method: 'POST' }).catch((e) => {
+      console.warn('[dsh-pet] 重载配置请求失败（宿主不可达？）', e);
+    });
   }
 
   renderBubble() {

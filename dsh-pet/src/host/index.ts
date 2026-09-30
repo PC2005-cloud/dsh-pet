@@ -20,6 +20,9 @@
  *                                含注释与全部高级字段；合并结果与「没有用户层」等价）——
  *                                两个写接口的**响应体都是保存后的成品聚合**，设置页即时生效
  *                                直接拍平这份响应，客户端不再有第二份"补吹条目级字段"的实现
+ *   /dsh-pet-7340/reload              → 桌面端「重载配置」（右键菜单，POST）：重启桌面 Helper，全部桌面
+ *                                宠物窗口按最新配置重建（改配置文件后不必回设置页点保存）；与保存走
+ *                                **同一条**重启路径（syncDesktop），宠物数量/display/size 变化同样生效
  *   /dsh-pet-7340/config/meta         → 配置文件与素材目录路径 + 全部存储位置清单
  *                                       （设置页「高级配置」「卸载与存储」展示用）
  *   /dsh-pet-7340/thumb/<素材根>/<动画名>.webm|.mov  → 素材按宠物归属（.mov 为 macOS 定制，扩展名取决于
@@ -714,6 +717,17 @@ export function apply(ctx: any): void {
         return { kind: 'json', status: 200, obj: readAllConfig(configPaths) };
       }
       return { kind: 'json', status: 405, obj: { error: 'method not allowed' } };
+    }
+
+    // 桌面端「重载配置」（右键菜单 → POST /reload）：重启桌面 Helper，全部桌面宠物窗口按最新配置重建。
+    // 与保存走**同一条**重启路径（syncDesktop：串行队列 + 等旧进程真正退出再起新的），
+    // 所以宠物数量 / display / size 的变化同样生效——渲染端就地重拉配置做不到这几项
+    // （每只宠物一个窗口，是宿主启动时按 DSH_PET_PETS 建的）。
+    // 注意：发起者就是**即将被重启的那个 helper**，本响应不保证送达，因此不 await 重启、立刻回 200。
+    if (rest === 'reload') {
+      if (method !== 'POST') return { kind: 'json', status: 405, obj: { error: 'method not allowed' } };
+      void syncDesktop();
+      return { kind: 'json', status: 200, obj: { reloading: true } };
     }
 
     // 配置文件路径 + 存储位置清单（设置页「高级配置」与「卸载与存储」展示用）

@@ -80,7 +80,8 @@ export const zh = {
   syncHint:
     '「同步」会把项目内置的默认配置（含注释与全部高级字段）写入用户配置文件，覆盖当前自定义内容；之后可直接编辑该文件。注意两点：① 文件一旦生成即为显式覆盖层——插件升级后内置默认的变化不会自动生效（除非再次同步或删除该文件）；② 在本页点「保存」会按白名单重写该文件（字段值保留，但注释会被去掉）。',
   configMeta: '高级配置（文件）',
-  configMetaHint: '用户配置可覆盖宠物列表 / 动画池 / 播放权重，修改后刷新或重启生效；默认配置为完整参考。',
+  configMetaHint:
+    '用户配置可覆盖宠物列表 / 动画池 / 播放权重，修改后刷新或重启生效：浏览器端刷新页面，桌面端右键宠物 →「重载配置」（重载全部桌面宠物窗口）；默认配置为完整参考。',
   defaultConfig: '默认配置（只读，完整参考）',
   userConfig: '用户配置（自定义覆盖）',
   animationDir: '动画素材目录（可自定义/扩充动画）',
@@ -89,7 +90,7 @@ export const zh = {
   invalid: '请检查输入：大小需为正数，边距可为任意数字。',
   busy: '保存中…',
   extraPetsHint:
-    '另 {n} 只额外宠物由 pet/ 目录文件定义（<名>-config.json + <名>-animation/），它们不在此列表——改文件即生效，刷新可见。',
+    '另 {n} 只额外宠物由 pet/ 目录文件定义（<名>-config.json + <名>-animation/），它们不在此列表——改文件后浏览器刷新页面、桌面端右键「重载配置」即可生效。',
   notifyToggle: '系统通知',
   notifyToggleHint: '对话完成 / 生成失败 / 权限申请 / 用户选择，在窗口失焦时弹出系统级通知（桌面右下角）。',
   whisperImageToggle: '碎碎念配图',
@@ -174,7 +175,7 @@ export const en = {
     '"Sync" writes the bundled default config (comments + every advanced field included) to the user config file, overwriting your current customizations; the file is then directly editable. Two caveats: (1) once created, that file is an explicit override layer — later changes to the bundled defaults will not take effect automatically (until you sync again or delete the file); (2) clicking "Save" on this page rewrites the file from a whitelist — field values are kept, comments are dropped.',
   configMeta: 'Advanced (files)',
   configMetaHint:
-    'User config may override pets / animation pools / weights — refresh or restart to apply. The default config is the complete reference.',
+    'User config may override pets / animation pools / weights — refresh or restart to apply: refresh the page in the browser, or right-click a desktop pet → "Reload config" (rebuilds every desktop pet window). The default config is the complete reference.',
   defaultConfig: 'Default config (read-only, complete reference)',
   userConfig: 'User config (custom overrides)',
   animationDir: 'Animation assets dir (add/customize animations here)',
@@ -183,7 +184,7 @@ export const en = {
   invalid: 'Check your input: size must be positive; margins can be any number.',
   busy: 'Saving…',
   extraPetsHint:
-    '{n} extra pet(s) are file-defined in the pet/ directory (<name>-config.json + <name>-animation/). They are not in this list — edit the files, then refresh.',
+    '{n} extra pet(s) are file-defined in the pet/ directory (<name>-config.json + <name>-animation/). They are not in this list — after editing the files, refresh the page (browser) or right-click a desktop pet → "Reload config".',
   notifyToggle: 'System notifications',
   notifyToggleHint:
     'OS-level toasts (bottom-right of the desktop) for conversation completion, failures, permission requests, and questions — only while this window is unfocused.',
