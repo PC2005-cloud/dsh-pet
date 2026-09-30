@@ -334,12 +334,18 @@ export const throwStep = (
  *
  * 与「把屏缝当墙」相反：屏缝两侧都有屏，恒放行——DPI 一致时的跨屏弹跳手感一点不减。
  * 单块屏时探测点恒无邻屏、恒反弹，与 throwStep 逐位一致（有单测钉住）。
+ *
+ * lockScreen ≥ 0 = **锁定在该屏**（配置根字段 confineToScreen 开启时由桌面端传入）：边界恒取
+ * space.bounds[lockScreen]，两条轴的邻屏探测一律跳过——屏缝与空洞一样当墙，甩出去只在本屏内弹、
+ * 不会飞到隔壁显示器。浏览器 overlay 只有一块屏（视口），该开关在那里天然无效果。
+ * 索引越界（飞行途中拔掉显示器导致屏数变少）即退回不锁定，免得拿一块不存在的屏当边界。
  */
 export const throwStepRegion = (
   s: ThrowState,
   dtRaw: number,
   space: ThrowSpace,
   physics: PhysicsParams = DEFAULT_PHYSICS,
+  lockScreen = -1,
 ): ThrowState & { screen: number; bounced: boolean; atRest: boolean } => {
   const dt = Math.min(Math.max(dtRaw, 0), MAX_STEP_DT);
   let { x, y, vx, vy } = s;
@@ -350,21 +356,25 @@ export const throwStepRegion = (
 
   const h = (space.size * 9) / 16;
   let bounced = false;
+  // 锁定屏（confineToScreen）：索引越界（飞行途中拔掉显示器导致屏数变少）即视为不锁定
+  const locked = Number.isInteger(lockScreen) && lockScreen >= 0 && lockScreen < space.areas.length;
+  /** 该用哪块屏的 AABB / 工作区 / 面板：锁定时恒为锁定屏，否则取身体中心所在屏 */
+  const pick = (i: number): number => (locked ? lockScreen : i);
 
   // ---- 横向：边界来自身体中心所在屏，放行与否看缝外同高度处有没有像素 ----
   let cur = screenOfBox(space, x, y);
-  let b = space.bounds[cur];
-  let a = space.areas[cur];
-  const pa = space.panels[cur] || a;
+  let b = space.bounds[pick(cur)];
+  let a = space.areas[pick(cur)];
+  const pa = space.panels[pick(cur)] || a;
   const cy = y + h / 2;
   if (x < b.minX) {
-    if (indexAtPoint(space.panels, pa.x - 1, cy) < 0) {
+    if (locked || indexAtPoint(space.panels, pa.x - 1, cy) < 0) {
       x = b.minX;
       vx = Math.abs(vx) * physics.restitution;
       bounced = true;
     }
   } else if (x > b.maxX) {
-    if (indexAtPoint(space.panels, rectRight(pa), cy) < 0) {
+    if (locked || indexAtPoint(space.panels, rectRight(pa), cy) < 0) {
       x = b.maxX;
       vx = -Math.abs(vx) * physics.restitution;
       bounced = true;
@@ -373,20 +383,20 @@ export const throwStepRegion = (
 
   // ---- 纵向（横向若被夹回，身体中心可能已换屏，重新定位）----
   cur = screenOfBox(space, x, y);
-  b = space.bounds[cur];
-  a = space.areas[cur];
-  const pa2 = space.panels[cur] || a;
+  b = space.bounds[pick(cur)];
+  a = space.areas[pick(cur)];
+  const pa2 = space.panels[pick(cur)] || a;
   const cx = x + space.size / 2;
   if (y < b.minY) {
     // ceilingBounce=false：顶部无边界，不夹不弹——宠物飞出屏幕顶部，靠重力落回
-    if (physics.ceilingBounce && indexAtPoint(space.panels, cx, pa2.y - 1) < 0) {
+    if (physics.ceilingBounce && (locked || indexAtPoint(space.panels, cx, pa2.y - 1) < 0)) {
       y = b.minY;
       vy = Math.abs(vy) * physics.restitution;
       bounced = true;
     }
   } else if (y >= b.maxY) {
     // 下方还有一块屏（上下排布的桌面）⇒ 不当地面，继续往下掉
-    if (indexAtPoint(space.panels, cx, rectBottom(pa2)) < 0) {
+    if (locked || indexAtPoint(space.panels, cx, rectBottom(pa2)) < 0) {
       y = b.maxY;
       vx *= Math.max(0, 1 - physics.groundFriction * dt);
       if (Math.abs(vy) < REST_VY) vy = 0;
@@ -395,7 +405,7 @@ export const throwStepRegion = (
     }
   }
 
-  cur = screenOfBox(space, x, y);
+  cur = pick(screenOfBox(space, x, y));
   b = space.bounds[cur];
   const speed = Math.hypot(vx, vy);
   const atRest =

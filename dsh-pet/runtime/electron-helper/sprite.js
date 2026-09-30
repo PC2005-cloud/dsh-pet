@@ -51,6 +51,9 @@ class PetSprite {
     this.weights = pet.animationWeights || cfg.animationWeights;
     // 拖拽抛掷物理参数（顶层全局；拍平已吹入实例，兜底回全局/默认）
     this.physics = pet.physics || config.physics || S.DEFAULT_PHYSICS;
+    // 抛掷锁定在当前屏幕（根字段；拍平已吹入实例，兜底回主条目/默认）：
+    // true = 甩出去只在松手时所在那块屏内弹（屏缝当墙），false = 照常跨屏飞行
+    this.confineToScreen = pet.confineToScreen === true || config.confineToScreen === true;
     // 素材根按 assetRoot（文件宠物 = 配置文件前缀，多实例共享同一素材目录）或宠物 id 回落
     this.assetBase = BASE + '/thumb/' + encodeURIComponent(pet.assetRoot || pet.id) + '/';
     this.front = 0; // 0 = A, 1 = B
@@ -627,6 +630,9 @@ class PetSprite {
     this.stopDragFollow();
     this.stopMove();
     // 边界 = 显示器工作区**并集**：空洞是墙（宠物再也飞不进不可见区域），屏缝不是墙（跨屏弹跳照旧）
+    // confineToScreen 开启时改为锁定**松手这一刻所在的那块屏**：屏缝同样当墙，只在目标屏内弹。
+    // 锁定屏在抛掷开始时定下、飞行途中不重取；relayout 改了屏数时由 throwStepRegion 退回不锁定。
+    const lockScreen = this.confineToScreen ? S.screenOfBox(this.throwSpaceOf(), px, py) : -1;
     const token = ++this.throwToken;
     let state = { x: px, y: py, vx, vy };
     let last = performance.now();
@@ -639,7 +645,7 @@ class PetSprite {
       const fallingVy = state.vy; // 本帧积分前的竖直速度（正=下落）：即落地冲击速度
       // 每帧重取：显示器变化时 relayout() 会让缓存失效，res.screen 必须与这一份对应
       const sp = this.throwSpaceOf();
-      const res = S.throwStepRegion(state, dt, sp, this.physics);
+      const res = S.throwStepRegion(state, dt, sp, this.physics, lockScreen);
       state = { x: res.x, y: res.y, vx: res.vx, vy: res.vy };
       this.throwState = state;
       // 上报飞行状态（节流 ~30ms）：主进程 broker 汇聚后广播，其它窗口用它做跨窗碰撞检测；

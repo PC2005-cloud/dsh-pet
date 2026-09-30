@@ -40,17 +40,19 @@ const SIDE_ALLOW = (HIT_BOX.x0 / 640) * SIZE; // 144.375
 
 const SPACE = throwSpace({ areas: AREAS, size: SIZE, sideAllow: SIDE_ALLOW });
 
-/** 抛掷步进跑到静止（或到步数上限），返回终态。dt 固定 1/60。space 默认用双屏布局，可覆盖 */
+/** 抛掷步进跑到静止（或到步数上限），返回终态。dt 固定 1/60。space 默认用双屏布局，可覆盖。
+ *  lockScreen ≥ 0 = 锁定该屏（配置根字段 confineToScreen 开启时桌面端的行为）。 */
 function settle(
   start: { x: number; y: number; vx: number; vy: number },
   physics: PhysicsParams = DEFAULT_PHYSICS,
   maxSteps = 4000,
   space: ReturnType<typeof throwSpace> = SPACE,
+  lockScreen = -1,
 ): { x: number; y: number; vx: number; vy: number; screen: number; steps: number } {
   let s = { ...start };
   let screen = screenOfBox(space, start.x, start.y);
   for (let i = 0; i < maxSteps; i++) {
-    const r = throwStepRegion(s, 1 / 60, space, physics);
+    const r = throwStepRegion(s, 1 / 60, space, physics, lockScreen);
     s = { x: r.x, y: r.y, vx: r.vx, vy: r.vy };
     screen = r.screen;
     if (r.atRest) return { ...s, screen, steps: i + 1 };
@@ -346,5 +348,66 @@ describe('anchorPixel / planMove —— 角落与漫游不进空洞', () => {
     };
     assert.ok(planMove({ ...base, dir: 1 }));
     assert.equal(planMove({ ...base, cx: 100, dir: -1 }), null);
+  });
+});
+
+describe('throwStepRegion —— confineToScreen：锁定屏后屏缝也当墙', () => {
+  // 起点取「屏缘内 1px + 朝缝初速」：一步就会越界，最能看清放行 / 反弹的分叉
+  const overMainEdge = { x: SPACE.bounds[0].maxX - 1, y: 300, vx: 900, vy: 0 };
+  const overSideEdge = { x: SPACE.bounds[1].minX + 1, y: 300, vx: -900, vy: 0 };
+
+  test('未锁定：缝外有屏 ⇒ 原样放行（现状不变）', () => {
+    const right = throwStepRegion(overMainEdge, 1 / 60, SPACE, DEFAULT_PHYSICS);
+    assert.ok(right.x > SPACE.bounds[0].maxX, `应越过主屏右缘：x=${right.x}`);
+    assert.ok(right.vx > 0, `横向速度不得反向：vx=${right.vx}`);
+    const left = throwStepRegion(overSideEdge, 1 / 60, SPACE, DEFAULT_PHYSICS);
+    assert.ok(left.x < SPACE.bounds[1].minX, `应越过副屏左缘：x=${left.x}`);
+    assert.ok(left.vx < 0, `横向速度不得反向：vx=${left.vx}`);
+  });
+
+  test('锁定主屏：同一初速被主屏右缘弹回，屏幕归属不变', () => {
+    const r = throwStepRegion(overMainEdge, 1 / 60, SPACE, DEFAULT_PHYSICS, 0);
+    assert.equal(r.x, SPACE.bounds[0].maxX);
+    assert.ok(r.vx < 0, `横向速度应反向：vx=${r.vx}`);
+    assert.equal(r.screen, 0);
+    assert.equal(r.bounced, true);
+  });
+
+  test('锁定副屏：副屏左缘同样当墙（飞不回主屏）', () => {
+    const r = throwStepRegion(overSideEdge, 1 / 60, SPACE, DEFAULT_PHYSICS, 1);
+    assert.equal(r.x, SPACE.bounds[1].minX);
+    assert.ok(r.vx > 0, `横向速度应反向：vx=${r.vx}`);
+    assert.equal(r.screen, 1);
+  });
+
+  test('锁定索引越界（飞行途中拔掉显示器）→ 退回不锁定', () => {
+    const r = throwStepRegion(overMainEdge, 1 / 60, SPACE, DEFAULT_PHYSICS, 2);
+    assert.ok(r.x > SPACE.bounds[0].maxX, `越界索引不得当墙：x=${r.x}`);
+    assert.ok(r.vx > 0);
+  });
+
+  test('单块屏：锁定与不锁定逐位一致（锁定对单屏无副作用）', () => {
+    const only = [{ x: 0, y: 0, width: 1920, height: 1080 }];
+    const space = throwSpace({ areas: only, size: SIZE, sideAllow: SIDE_ALLOW });
+    let a = { x: 300, y: 200, vx: 1700, vy: -900 };
+    let b = { ...a };
+    for (let i = 0; i < 600; i++) {
+      const ra = throwStepRegion(a, 1 / 60, space, DEFAULT_PHYSICS);
+      const rb = throwStepRegion(b, 1 / 60, space, DEFAULT_PHYSICS, 0);
+      assert.equal(rb.x, ra.x, `step ${i} x`);
+      assert.equal(rb.y, ra.y, `step ${i} y`);
+      assert.equal(rb.vx, ra.vx, `step ${i} vx`);
+      assert.equal(rb.vy, ra.vy, `step ${i} vy`);
+      a = { x: ra.x, y: ra.y, vx: ra.vx, vy: ra.vy };
+      b = { x: rb.x, y: rb.y, vx: rb.vx, vy: rb.vy };
+      if (ra.atRest) break;
+    }
+  });
+
+  test('锁定主屏：全力向右甩，全程不越过屏缝且落点可见', () => {
+    const end = settle({ x: 2000, y: 300, vx: 3000, vy: 0 }, DEFAULT_PHYSICS, 4000, SPACE, 0);
+    assert.ok(end.x <= SPACE.bounds[0].maxX + 1e-6, `不得越过主屏右缘：x=${end.x}`);
+    assert.equal(end.screen, 0);
+    assert.ok(bodyVisible(end.x, end.y), `落点必须可见：${end.x},${end.y}`);
   });
 });
