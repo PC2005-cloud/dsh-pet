@@ -204,6 +204,8 @@ function topFieldValid(key: string, value: unknown): boolean {
       return typeof value === 'boolean';
     case 'chatImageEnabled':
       return typeof value === 'boolean';
+    case 'confineToScreen':
+      return typeof value === 'boolean';
     case 'animations':
       return animationsValid(value);
     case 'animationWeights':
@@ -432,7 +434,7 @@ export function findPetInstance(
 
 /**
  * 保存用户层（PUT /config）：更新 main-config.json，接受可编辑字段（pets + 全局开关：
- * notificationsEnabled / whisperImageEnabled / chatImageEnabled）。
+ * notificationsEnabled / whisperImageEnabled / chatImageEnabled / confineToScreen）。
  * 编辑语义：**非白名单顶层字段（physics / whisperPrompt / chatMemoryRounds / eventsRefreshSec /
  * memes 等）从 `existing`（当前磁盘上的用户文件原对象）原样透传保留**——
  * 用户手动编辑的精调配置不会被设置页保存抹掉（旧实现是纯白名单重建，会整体覆盖丢失）。
@@ -491,11 +493,14 @@ export function saveUserConfig(
   if (wie !== undefined && typeof wie !== 'boolean') return null;
   const cie = o.chatImageEnabled;
   if (cie !== undefined && typeof cie !== 'boolean') return null;
-  // 白名单可编辑字段：pets 来自请求体、三个全局开关来自请求体（未传则不写）
+  const cts = o.confineToScreen;
+  if (cts !== undefined && typeof cts !== 'boolean') return null;
+  // 白名单可编辑字段：pets 来自请求体、四个全局开关来自请求体（未传则不写）
   const outConfig: { pets: unknown[]; [key: string]: unknown } = { pets: out };
   if (ne !== undefined) outConfig.notificationsEnabled = ne;
   if (wie !== undefined) outConfig.whisperImageEnabled = wie;
   if (cie !== undefined) outConfig.chatImageEnabled = cie;
+  if (cts !== undefined) outConfig.confineToScreen = cts;
   // 透传保留：请求体未携带的顶层字段，从 existing（磁盘现有用户文件）原样带回——
   // 设置页只提交 pets(+全局开关)，手改的 physics/whisperPrompt/memes/... 借此保住。
   // 全局开关只在「请求体传了」时才算白名单（已由上方写入）；未传时走这里透传磁盘旧值——
@@ -504,6 +509,7 @@ export function saveUserConfig(
   if (ne !== undefined) bodyOwned.add('notificationsEnabled');
   if (wie !== undefined) bodyOwned.add('whisperImageEnabled');
   if (cie !== undefined) bodyOwned.add('chatImageEnabled');
+  if (cts !== undefined) bodyOwned.add('confineToScreen');
   if (existing && typeof existing === 'object') {
     for (const key of Object.keys(existing)) {
       if (bodyOwned.has(key)) continue; // 白名单字段由请求体决定

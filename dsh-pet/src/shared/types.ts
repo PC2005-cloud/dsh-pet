@@ -70,9 +70,9 @@ export interface Animations {
 }
 
 /** 一只宠物（与 jsonc pets[i] 同形，position 嵌套）。
- *  可选段（animations / animationWeights / extra / assetRoot / eventsRefreshSec / physics）为渲染期派生或
+ *  可选段（animations / animationWeights / extra / assetRoot / eventsRefreshSec / physics / confineToScreen）为渲染期派生或
  *  「文件定义宠物」专用：
- *  - animations / animationWeights / eventsRefreshSec / physics：所属条目的条目级字段，由配置合并
+ *  - animations / animationWeights / eventsRefreshSec / physics / confineToScreen：所属条目的条目级字段，由配置合并
  *    （host readAllConfig / 客户端 flattenConfigPets）在拍平时吹进每只实例——多实例共享；
  *  - extra: true 标记该宠物由 pet/ 目录文件定义：设置页不可编辑、保存时排除，
  *    由拍平逻辑统一打标，**永不出现在持久化配置里**；
@@ -106,6 +106,8 @@ export interface Pet {
   eventsRefreshSec?: Record<string, number>;
   /** 条目级：拖拽抛掷物理参数（全局共用；host 合并已填默认，拍平时吹入） */
   physics?: PhysicsParams;
+  /** 条目级：拖拽抛掷是否锁定在当前屏幕（host 合并已填默认，拍平时吹入） */
+  confineToScreen?: boolean;
   /** 条目级：工作状态气泡文案（二维数组，外层索引 = workStatus 档位 0..5，内层每档可多句随机抽；
    *  host 合并已填默认，拍平时吹入；整字段缺失 = 不弹工作状态文本，只播动画） */
   workStatusTexts?: string[][];
@@ -136,6 +138,10 @@ export interface ClientConfig {
   whisperImageEnabled: boolean;
   /** 对话配图开关：true=对话时把表情包清单交模型按语境选 1 张（可不选）；false=纯文本 */
   chatImageEnabled: boolean;
+  /** 拖拽抛掷是否锁定在当前屏幕：true=甩出去只在松手时所在那块屏内弹（屏缝当墙）；
+   *  false=跨屏飞行（现状）。根字段（不属于 physics：它不改手感，只改「被允许去哪」），
+   *  条目级，缺失即配置错误 */
+  confineToScreen: boolean;
   pets: Pet[];
   animations: Animations;
   animationWeights: Weights;

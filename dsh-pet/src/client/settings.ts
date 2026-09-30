@@ -93,6 +93,9 @@ export const zh = {
   chatImageToggle: '对话配图',
   chatImageToggleHint:
     '对话时由 AI 按当前语境从表情包池挑一张配图（可不挑；图片映射在配置文件顶层 memes）。token：每条消息都要把整张清单附进请求，当前约 1.1k 字符（≈650 token，约碎碎念配图的 11 倍），并随图片数量线性增长；关掉则一个字符都不附。',
+  confineToggle: '抛掷锁定在当前屏幕',
+  confineToggleHint:
+    '多屏用户：甩出去的宠物只在松手时所在那块屏幕内弹（屏缝当墙，不飞到隔壁屏）；关掉则照常跨屏飞行。只影响桌面模式——浏览器 overlay 本来就只在视口内弹。',
   notifyGetPermission: '获取权限',
   notifyPermissionOk: '已获得通知权限，右下角出现测试通知。',
   notifyDenyUnsupported: '当前环境不支持系统通知（浏览器无 Notification API）。',
@@ -294,6 +297,8 @@ export function makePetConfigSection(rt: {
     // 表情包配图开关（全局：写用户级配置；与「保存」一起提交，不做即时写入）
     const [whisperImage, setWhisperImage] = useState(false);
     const [chatImage, setChatImage] = useState(false);
+    // 抛掷锁定开关（全局：写用户级配置；与「保存」一起提交，不做即时写入）
+    const [confineScreen, setConfineScreen] = useState(false);
     // 权限申请按钮的反馈（就地显示在按钮旁，与全局保存反馈分离）
     const [permMsg, setPermMsg] = useState<{ kind: 'ok' | 'err' | ''; text: string }>({ kind: '', text: '' });
     useEffect(() => {
@@ -307,6 +312,7 @@ export function makePetConfigSection(rt: {
           if (typeof m.notificationsEnabled === 'boolean') setNotifyEnabled(m.notificationsEnabled);
           if (typeof m.whisperImageEnabled === 'boolean') setWhisperImage(m.whisperImageEnabled);
           if (typeof m.chatImageEnabled === 'boolean') setChatImage(m.chatImageEnabled);
+          if (typeof m.confineToScreen === 'boolean') setConfineScreen(m.confineToScreen);
         })
         .catch(() => {
           /* 成品拉取失败时保持默认（通知开、配图关） */
@@ -332,6 +338,7 @@ export function makePetConfigSection(rt: {
             notificationsEnabled: v,
             whisperImageEnabled: whisperImage,
             chatImageEnabled: chatImage,
+            confineToScreen: confineScreen,
           }),
         });
         if (!res.ok) throw new Error('HTTP ' + res.status);
@@ -412,6 +419,7 @@ export function makePetConfigSection(rt: {
           notificationsEnabled: notifyEnabled,
           whisperImageEnabled: whisperImage,
           chatImageEnabled: chatImage,
+          confineToScreen: confineScreen,
         };
         const res = await fetch('/dsh-pet-7340/config', {
           method: 'PUT',
@@ -835,11 +843,12 @@ export function makePetConfigSection(rt: {
           ],
         }),
 
-        // 表情包配图开关（全局，随「保存」写入用户级配置；不即时写入——不改变正在进行的渲染）
+        // 全局开关（表情包配图 / 抛掷锁定，随「保存」写入用户级配置；不即时写入——不改变正在进行的渲染）
         ...(
           [
             ['whisperImageToggle', whisperImage, setWhisperImage] as const,
             ['chatImageToggle', chatImage, setChatImage] as const,
+            ['confineToggle', confineScreen, setConfineScreen] as const,
           ] as const
         ).map(([label, value, setter]) =>
           h('label', {

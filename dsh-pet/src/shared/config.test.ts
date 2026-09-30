@@ -1,7 +1,7 @@
 /**
  * 成品 → 渲染列表的契约测试：条目级字段只有**一处**填充点（flattenConfigPets）。
  *
- * 背景：animations / animationWeights / eventsRefreshSec / physics / workStatusTexts 这五个条目级字段
+ * 背景：animations / animationWeights / eventsRefreshSec / physics / confineToScreen / workStatusTexts 这六个条目级字段
  * 必须由 flattenConfigPets 从「条目」吹进每只实例。客户端曾经还有第二份手抄的填充——设置页保存后把
  * 可编辑的裸实例列表回推给容器时"补吹"一遍——它漏掉了 physics：新增宠物或恢复默认后该实例的
  * physics 是 undefined，拖拽跟手第一帧读 cfg.physics.throwPower 直接抛错（表现为宠物完全拖不动）。
@@ -30,6 +30,7 @@ const ENTRY_FIELDS: Array<keyof Pet> = [
   'animationWeights',
   'eventsRefreshSec',
   'physics',
+  'confineToScreen',
   'workStatusTexts',
 ];
 

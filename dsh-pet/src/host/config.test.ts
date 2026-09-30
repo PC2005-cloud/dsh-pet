@@ -222,3 +222,43 @@ describe('readAllConfig —— 表情包开关合并（缺失取默认 / 非法�
     assert.equal(merged.main.whisperImageEnabled, true); // 回退默认 true
   });
 });
+
+describe('saveUserConfig —— 抛掷锁定开关（白名单 + 透传保留）', () => {
+  test('随请求体写入', () => {
+    const out = saveOnce({ pets: PETS, confineToScreen: true });
+    assert.equal(out?.confineToScreen, true);
+  });
+
+  test('未传时不写入（不凭空造字段）', () => {
+    const out = saveOnce({ pets: PETS });
+    assert.equal('confineToScreen' in (out ?? {}), false);
+  });
+
+  test('传非布尔 → 整体拒绝（宿主回 400）', () => {
+    assert.equal(saveOnce({ pets: PETS, confineToScreen: 'yes' }), null);
+  });
+
+  test('请求体的值覆盖磁盘旧值；未传时透传磁盘旧值', () => {
+    const overwritten = saveOnce({ pets: PETS, confineToScreen: true }, { pets: PETS, confineToScreen: false });
+    assert.equal(overwritten?.confineToScreen, true); // 请求体优先
+    const kept = saveOnce({ pets: PETS }, { pets: PETS, confineToScreen: true });
+    assert.equal(kept?.confineToScreen, true); // 未传的旧值仍透传保留
+  });
+});
+
+describe('readAllConfig —— 抛掷锁定合并（缺失取默认 / 非法回退默认）', () => {
+  test('内置默认有值 → 用户层没写时读得到', () => {
+    const merged = readAllConfig(withBase({ confineToScreen: false }));
+    assert.equal(merged.main.confineToScreen, false);
+  });
+
+  test('用户层写了 true → 覆盖内置默认', () => {
+    const merged = readAllConfig(withBase({ confineToScreen: false }, { confineToScreen: true }));
+    assert.equal(merged.main.confineToScreen, true);
+  });
+
+  test('用户层写了非法值 → 回退内置默认', () => {
+    const merged = readAllConfig(withBase({ confineToScreen: true }, { confineToScreen: 'yes' }));
+    assert.equal(merged.main.confineToScreen, true); // 回退默认 true
+  });
+});
