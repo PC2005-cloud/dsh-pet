@@ -265,6 +265,47 @@ export function makePetConfigSection(rt: {
     }
   };
 
+  /** 全局开关的一格（2×2 网格单元）：勾选框 + 标题在上，描述在下。
+   *  label 为文案键：标题 = t(label)，描述 = t(label + 'Hint')；描述左缩进 24px 与标题同列对齐
+   *  （勾选框 16px + 间距 8px）。label 元素包住整格，点标题或描述都能切换。 */
+  const toggleCell = (
+    label: string,
+    value: boolean,
+    disabled: boolean,
+    onToggle: (v: boolean) => void,
+  ): ReturnType<typeof h> =>
+    h('label', {
+      key: label,
+      style: {
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '4px',
+        minWidth: 0,
+        fontSize: '13px',
+        color: 'var(--dsw-alias-label-primary)',
+        cursor: 'pointer',
+      },
+      children: [
+        h('span', {
+          style: { display: 'flex', gap: '8px', alignItems: 'center' },
+          children: [
+            h('input', {
+              type: 'checkbox',
+              checked: value,
+              disabled,
+              onChange: (e: ChangeEvent<HTMLInputElement>) => onToggle(e.target.checked),
+              style: { width: '16px', height: '16px', accentColor: 'var(--dsw-alias-state-business-primary)' },
+            }),
+            h('span', { children: t(label) }),
+          ],
+        }),
+        h('span', {
+          style: { fontSize: '11px', color: 'var(--dsw-alias-label-tertiary)', paddingLeft: '24px' },
+          children: t(label + 'Hint'),
+        }),
+      ],
+    });
+
   return function PetConfigSection() {
     const initPets = petBridge.current.filter((p) => !p.extra);
     // 文件定义宠物数量（pet/ 目录，不在本编辑列表；仅展示提示）
@@ -817,66 +858,23 @@ export function makePetConfigSection(rt: {
               children: t('emptyPets'),
             }),
 
-        // 系统通知总开关（全局，写入用户级配置；即时生效，不归属单个宠物）
-        h('label', {
+        // 四个全局开关：2×2 网格，每格「勾选框 + 标题」在上、描述在下。
+        // 系统通知即时生效（改完立刻重读引擎）；其余三个随「保存」写入用户级配置——不即时写入，不改变正在进行的渲染。
+        h('div', {
           style: {
-            display: 'flex',
-            gap: '8px',
-            alignItems: 'center',
+            display: 'grid',
+            gridTemplateColumns: '1fr 1fr',
+            gap: '10px 16px',
             marginTop: '8px',
-            fontSize: '13px',
-            color: 'var(--dsw-alias-label-primary)',
+            alignItems: 'start',
           },
           children: [
-            h('input', {
-              type: 'checkbox',
-              checked: notifyEnabled,
-              disabled: busy,
-              onChange: (e: ChangeEvent<HTMLInputElement>) => void toggleNotify(e.target.checked),
-              style: { width: '16px', height: '16px', accentColor: 'var(--dsw-alias-state-business-primary)' },
-            }),
-            h('span', { children: t('notifyToggle') }),
-            h('span', {
-              style: { fontSize: '11px', color: 'var(--dsw-alias-label-tertiary)' },
-              children: t('notifyToggleHint'),
-            }),
+            toggleCell('notifyToggle', notifyEnabled, busy, (v) => void toggleNotify(v)),
+            toggleCell('whisperImageToggle', whisperImage, busy, setWhisperImage),
+            toggleCell('chatImageToggle', chatImage, busy, setChatImage),
+            toggleCell('confineToggle', confineScreen, busy, setConfineScreen),
           ],
         }),
-
-        // 全局开关（表情包配图 / 抛掷锁定，随「保存」写入用户级配置；不即时写入——不改变正在进行的渲染）
-        ...(
-          [
-            ['whisperImageToggle', whisperImage, setWhisperImage] as const,
-            ['chatImageToggle', chatImage, setChatImage] as const,
-            ['confineToggle', confineScreen, setConfineScreen] as const,
-          ] as const
-        ).map(([label, value, setter]) =>
-          h('label', {
-            key: label,
-            style: {
-              display: 'flex',
-              gap: '8px',
-              alignItems: 'center',
-              marginTop: '8px',
-              fontSize: '13px',
-              color: 'var(--dsw-alias-label-primary)',
-            },
-            children: [
-              h('input', {
-                type: 'checkbox',
-                checked: value,
-                disabled: busy,
-                onChange: (e: ChangeEvent<HTMLInputElement>) => setter(e.target.checked),
-                style: { width: '16px', height: '16px', accentColor: 'var(--dsw-alias-state-business-primary)' },
-              }),
-              h('span', { children: t(label) }),
-              h('span', {
-                style: { fontSize: '11px', color: 'var(--dsw-alias-label-tertiary)' },
-                children: t(label + 'Hint'),
-              }),
-            ],
-          }),
-        ),
 
         // 权限获取按钮 + 反馈（独立一行，样式对齐设置页现有按钮）
         h('div', {
