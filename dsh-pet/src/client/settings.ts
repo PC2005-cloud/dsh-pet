@@ -349,7 +349,11 @@ export function makePetConfigSection(rt: {
         .catch(() => console.warn('[dsh-pet] 读取配置文件路径失败'));
     }, []);
 
-    // 系统通知总开关（全局：读写用户级配置 main-config.jsonc 的 notificationsEnabled；即时生效）
+    // 系统通知总开关（全局：写用户级配置 main-config.jsonc 的 notificationsEnabled）。
+    // 与其余三个全局开关**完全同构**：切换只改本地 UI 状态，随「保存」一起整包写入。
+    // 为什么不做即时写入：PUT /config 会触发宿主重启桌面 Helper（全部桌面宠物窗口重建——
+    // 拖拽落点清空、宠物跳回配置角落），于是"改个通知开关，桌面被重置"，与其它开关行为不一致。
+    // 引擎重读放在 save() 成功之后（reloadNotifications）：保存后即时生效，无需刷新页面。
     const [notifyEnabled, setNotifyEnabled] = useState(true);
     // 表情包配图开关（全局：写用户级配置；与「保存」一起提交，不做即时写入）
     const [whisperImage, setWhisperImage] = useState(false);
@@ -379,36 +383,12 @@ export function makePetConfigSection(rt: {
       };
     }, []);
 
+    // 切换系统通知：与配图/抛掷锁定开关同构——只改本地状态（开启时顺带借这次用户手势申请权限），
+    // 配置在点「保存」时整包写入；保存成功后由 save() 调 reloadNotifications() 让引擎即时重读。
     const toggleNotify = async (v: boolean) => {
-      setBusy(true);
-      setMsg({ kind: '', text: '' });
-      try {
-        // 开启时先借用户手势申请系统通知权限（无手势的自动申请可能被浏览器静默压制）
-        if (v) await requestNotificationPermission();
-        // 与保存同构：整包写用户级配置（pets + 全部全局开关），避免开关写入被 sanitize 拒绝
-        // 携带配图开关的当前 UI 值：整包写入下漏传即等于把它们重置掉
-        const res = await fetch('/dsh-pet-7340/config', {
-          method: 'PUT',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({
-            pets: pets,
-            notificationsEnabled: v,
-            whisperImageEnabled: whisperImage,
-            chatImageEnabled: chatImage,
-            confineToScreen: confineScreen,
-          }),
-        });
-        if (!res.ok) throw new Error('HTTP ' + res.status);
-        // host 的 PUT 响应体就是保存后的成品聚合：直接交给容器拍平（无第二份字段填充，也不再拉一次）
-        petBridge.reload((await res.json()) as Record<string, Record<string, unknown>>);
-        setNotifyEnabled(v);
-        void reloadNotifications(); // 引擎重读开关：即时生效，无需刷新页面
-        setMsg({ kind: 'ok', text: t('saved') });
-      } catch {
-        setMsg({ kind: 'err', text: t('loadError') });
-      } finally {
-        setBusy(false);
-      }
+      setNotifyEnabled(v);
+      // 开启时借用户手势申请系统通知权限（无手势的自动申请可能被浏览器静默压制）
+      if (v) await requestNotificationPermission();
     };
 
     const grantNotifyPermission = async () => {
@@ -502,6 +482,7 @@ export function makePetConfigSection(rt: {
         if (!res.ok) throw new Error('HTTP ' + res.status);
         // 同上：PUT 响应即成品聚合，容器据此重新拍平（新增/删除宠物、改大小位置都走这条路）
         petBridge.reload((await res.json()) as Record<string, Record<string, unknown>>);
+        void reloadNotifications(); // 通知引擎重读开关：保存后即时生效，无需刷新页面
         setMsg({ kind: 'ok', text: t('saved') });
       } catch {
         setMsg({ kind: 'err', text: t('loadError') });
@@ -892,7 +873,9 @@ export function makePetConfigSection(rt: {
             }),
 
         // 四个全局开关：2×2 网格，每格「勾选框 + 标题」在上、描述在下。
-        // 系统通知即时生效（改完立刻重读引擎）；其余三个随「保存」写入用户级配置——不即时写入，不改变正在进行的渲染。
+        // 四个开关行为**一致**：切换只改本地状态，随「保存」整包写入用户级配置——不做即时写入
+        // （即时写盘会触发宿主重启桌面 Helper，把全部桌面宠物窗口重建一遍）。系统通知额外在保存后
+        // 由 save() 调 reloadNotifications() 让通知引擎即时重读。
         h('div', {
           style: {
             display: 'grid',

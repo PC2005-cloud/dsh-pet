@@ -129,5 +129,19 @@ describe('flattenConfigPets —— 成品 → 渲染列表的唯一填充点', (
       /force === true \? '\?force=1'/.test(clientSettings),
       'force 必须严格比较 true（真值判断会让任何实参都开启强行覆盖）',
     );
+    // ⑦ 系统通知开关必须与其余三个全局开关**同构**：只改本地状态、随「保存」写入。
+    //    它曾经是唯一即时写盘的开关（toggleNotify 里直接 PUT /config），而 PUT /config 会让宿主
+    //    重启桌面 Helper（全部桌面宠物窗口重建：拖拽落点清空、宠物跳回配置角落）——于是
+    //    "改个通知开关，桌面被重置"，与其它开关行为不一致（真实反馈）。写盘只允许出现在 save() 里。
+    const toggle = /const toggleNotify = async[\s\S]*?\n {4}\};/.exec(clientSettings);
+    assert.ok(toggle, '设置页必须有 toggleNotify（系统通知开关）');
+    assert.ok(
+      !/fetch\(|method: 'PUT'/.test(toggle[0]),
+      '系统通知开关不得即时写盘：切换只改本地状态，随「保存」写入（否则会重启桌面 Helper）',
+    );
+    assert.ok(
+      /notificationsEnabled: notifyEnabled/.test(clientSettings),
+      '「保存」的请求体必须带上通知开关（否则切了开关点保存也不生效）',
+    );
   });
 });
