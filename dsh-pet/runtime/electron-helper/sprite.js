@@ -110,7 +110,8 @@ class PetSprite {
     this.broadcastBaseline = false;
     this.prevBroadcastTs = 0;
     // 工作状态联动（DSH 会话状态）：容器 1s 轮询 /work-status 递增 workTick → 本宠物按档位播动画+气泡。
-    // 气泡优先级 work > whisper > balance；workStatusEnabled 未启用时完全免疫（与浏览器一致）
+    // 气泡单槽优先级 终态任务 > whisper > balance > 非终态任务（见 renderBubble）；
+    // workStatusEnabled 未启用时完全免疫（与浏览器一致）
     this.workOn = false;
     this.workTimer = null;
     this.workText = null;
@@ -1195,72 +1196,67 @@ class PetSprite {
   }
 
   renderBubble() {
-    // 气泡优先级：工作状态 > 碎碎念 > 余额（工作状态是 DSH 真实状态，最要紧；三者都关时隐藏）
+    // 气泡单槽：同一时刻只显示一个（优先级：终态任务 > 碎碎念/对话 > 余额 > 非终态任务）。
+    // 为什么终态任务不让位：完成/失败气泡只活 10s，被事件顶掉就彻底看不到了；非终态任务气泡
+    // 常驻（不设自动收起），让位 10s 零损失。与浏览器 src/client/pet.ts 的单槽优先级同一套。
     // 工作气泡与碎碎念同款弹窗样式：宽度自适应 + 自动换行（is-whisper：正常 white-space、宽随内容）
     // 配图标记交给 CSS：带图时取消 min-width（样式在 shared 的 MEME_BUBBLE_CSS，两端同一份）。
     // 图片 URL 与视频同规则：传 BASE 前缀（桌面是 file:// 页面，必须绝对地址）
-    const whisperImg = this.whisperOn ? S.createMemeImage(this.whisperImage, BASE) : null;
+    const workOn = !!(this.workOn && this.workText);
+    const whisperOn = !!(this.whisperOn && this.whisperView);
+    const balanceOn = !!(this.bubbleOn && this.balanceView);
+    const workTerminal = this.workState === 'success' || this.workState === 'error';
+    const slot =
+      workTerminal && workOn ? 'work' : whisperOn ? 'whisper' : balanceOn ? 'balance' : workOn ? 'work' : 'none';
+    const whisperImg = slot === 'whisper' ? S.createMemeImage(this.whisperImage, BASE) : null;
     this.bubble.classList.toggle(
       'is-whisper',
       // 余额「文字说明」（不可用状态）同样要换行变体：默认 nowrap 会把长文案顶出宠物宽度
-      this.workOn || (this.whisperOn && !!this.whisperView) || (this.bubbleOn && this.balanceWrap),
+      slot === 'whisper' || slot === 'work' || (slot === 'balance' && this.balanceWrap),
     );
     this.bubble.classList.toggle(S.MEME_BUBBLE_CLASS, !!whisperImg);
-    if (this.workOn) {
-      // 工作状态气泡：workOn 期间占位（文本缺失时隐藏，绝不让更弱的碎碎念/余额气泡反超）
-      if (!this.workText) {
-        this.bubble.classList.remove('is-on');
-        window.__dshPetDebug.lastBubbleTitle = '';
-        return;
-      }
-      this.bubble.innerHTML = '';
+    if (slot === 'none') {
+      // 三者都没有可显示的内容：隐藏（不占位，也就不会挡住任何一层）
+      this.bubble.classList.remove('is-on');
+      window.__dshPetDebug.lastBubbleTitle = '';
+      return;
+    }
+    this.bubble.innerHTML = '';
+    if (slot === 'work') {
       const line = document.createElement('div');
       line.className = 'pet-bub-row';
       line.textContent = this.workText;
       this.bubble.appendChild(line);
-      this.bubble.classList.add('is-on');
-      window.__dshPetDebug.lastBubbleTitle = this.bubble.textContent.slice(0, 60);
-      return;
-    }
-    if (this.whisperOn && this.whisperView) {
-      this.bubble.innerHTML = '';
+    } else if (slot === 'whisper') {
       // 配图（shared 生成的 <img> + 共用样式）：先看图再读话，符合"配图"的阅读顺序
       if (whisperImg) this.bubble.appendChild(whisperImg);
       const line = document.createElement('div');
       line.className = 'pet-bub-row';
       line.textContent = this.whisperView[0]?.text ?? '';
       this.bubble.appendChild(line);
-      this.bubble.classList.add('is-on');
-      window.__dshPetDebug.lastBubbleTitle = this.bubble.textContent.slice(0, 60);
-      return;
-    }
-    if (!this.bubbleOn || !this.balanceView) {
-      this.bubble.classList.remove('is-on');
-      window.__dshPetDebug.lastBubbleTitle = '';
-      return;
-    }
-    this.bubble.innerHTML = '';
-    const rows = this.balanceView;
-    const hasTier = rows.some((r) => r.role === 'tier');
-    if (hasTier) {
-      // deepseek 余额单行：余额（峰/谷）¥x — 档位字着色
-      const line = document.createElement('div');
-      line.className = 'pet-bub-row';
-      for (const r of rows) {
-        const span = document.createElement('span');
-        if (r.role === 'tier') span.className = 'pet-bub-tier pet-bub-tier-' + r.tier;
-        span.textContent = r.text;
-        line.appendChild(span);
-      }
-      this.bubble.appendChild(line);
     } else {
-      for (const r of rows) {
-        const div = document.createElement('div');
-        if (r.role === 'error') div.className = 'pet-bub-err';
-        else if (r.role === 'sub') div.className = 'pet-bub-row pet-bub-sub';
-        else div.className = 'pet-bub-row';
-        div.textContent = r.text;
-        this.bubble.appendChild(div);
+      const rows = this.balanceView;
+      const hasTier = rows.some((r) => r.role === 'tier');
+      if (hasTier) {
+        // deepseek 余额单行：余额（峰/谷）¥x — 档位字着色
+        const line = document.createElement('div');
+        line.className = 'pet-bub-row';
+        for (const r of rows) {
+          const span = document.createElement('span');
+          if (r.role === 'tier') span.className = 'pet-bub-tier pet-bub-tier-' + r.tier;
+          span.textContent = r.text;
+          line.appendChild(span);
+        }
+        this.bubble.appendChild(line);
+      } else {
+        for (const r of rows) {
+          const div = document.createElement('div');
+          if (r.role === 'error') div.className = 'pet-bub-err';
+          else if (r.role === 'sub') div.className = 'pet-bub-row pet-bub-sub';
+          else div.className = 'pet-bub-row';
+          div.textContent = r.text;
+          this.bubble.appendChild(div);
+        }
       }
     }
     this.bubble.classList.add('is-on');

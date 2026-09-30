@@ -165,13 +165,13 @@ export function makePetUI(rt: {
     // 余额气泡显隐（事件触发时显示，10s 后定时自动消失）
     const [bubbleOn, setBubbleOn] = useState(false);
     const bubbleTimerRef = useRef<number | null>(null);
-    // 碎碎念气泡（独立于余额气泡：文本气泡与余额行气泡互不干扰，各自 10s 显隐）
+    // 碎碎念气泡（显隐定时器与余额气泡各自独立：10s 各自计时互不干扰；渲染走单槽优先级）
     const [whisperBubbleOn, setWhisperBubbleOn] = useState(false);
     const whisperBubbleTimerRef = useRef<number | null>(null);
     // 碎碎念当前文本（本宠物独立生成的句子）+ 配图名称（开启配图时由 host 随机抽定，随文本一起来）
     const [whisperText, setWhisperText] = useState<string | null>(null);
     const [whisperImage, setWhisperImage] = useState<string | undefined>(undefined);
-    // 工作状态气泡：DSH 会话状态联动（workStatusEnabled 开启时）——文本气泡独立于碎碎念，10s 显隐
+    // 工作状态气泡：DSH 会话状态联动（workStatusEnabled 开启时）——终态 10s 自动收起、非终态常驻
     const [workBubbleOn, setWorkBubbleOn] = useState(false);
     const workBubbleTimerRef = useRef<number | null>(null);
     const [workText, setWorkText] = useState<string | null>(null);
@@ -1431,6 +1431,28 @@ export function makePetUI(rt: {
           };
         })()
       : {};
+    // ---- 气泡单槽（同一时刻只渲染一个）----
+    // 三种气泡共用同一套定位 CSS（bubble.ts 的 .dsh-pet-bubble：同一个 left/bottom/z-index），
+    // 同时渲染只会叠在同一个坐标上互相遮盖——所以这里按优先级挑一个出来渲染，其余不挂载。
+    // 优先级：终态任务 > 碎碎念/对话 > 余额 > 非终态任务。
+    // 为什么终态任务不让位：完成/失败气泡只活 10s，被事件顶掉就彻底看不到了；非终态任务气泡
+    // 常驻（不设自动收起），让位 10s 零损失。与桌面端 sprite.js 的 renderBubble 同一套优先级。
+    const workTerminal = workStatus?.state === 'success' || workStatus?.state === 'error';
+    const bubbleNode = (() => {
+      if (workTerminal && workBubbleOn && workText && cfg.workStatusEnabled) {
+        return h(WhisperBubble, { text: workText, on: workBubbleOn });
+      }
+      if (whisperBubbleOn && whisperText) {
+        return h(WhisperBubble, { text: whisperText, image: whisperImage, on: whisperBubbleOn });
+      }
+      if (bubbleOn && balance && cfg.balanceEnabled) {
+        return h(BalanceBubble, { state: balance, on: bubbleOn });
+      }
+      if (workBubbleOn && workText && cfg.workStatusEnabled) {
+        return h(WhisperBubble, { text: workText, on: workBubbleOn });
+      }
+      return null;
+    })();
     const commonVideoProps = { muted: true, playsInline: true, autoPlay: true, title: cfg.name };
     const hitProps = {
       className: 'dsh-pet-hit',
@@ -1458,17 +1480,11 @@ export function makePetUI(rt: {
         rootStyle,
       ),
       children: [
-        // 余额气泡（仅启用余额功能的宠物渲染；显示与否由 bubbleOn 控制）。
-        // 注意：不可用状态（不支持/缺凭证/失败）**同样渲染**——它是文字说明气泡的唯一展示通道；
-        // 这里若再要求 balance.ok，未登记余额接口的服务商就完全没有任何反馈（本改动的起因）。
-        balance && cfg.balanceEnabled ? h(BalanceBubble, { state: balance, on: bubbleOn }) : null,
-        // 碎碎念/对话气泡：**不受 whisperEnabled 限制**（该字段只关自动周期轮询的触发，
-        // 见上头 useEffect 的 319 行门控）；whisperText 只由 triggerWhisper 设置——
-        // 自动轮询被门控后不会触发，所以这里任何说话气泡（碎碎念/对话回复）都照常渲染。
-        // image 为该次配图（碎碎念/对话配图开关开启时由 host 抽定/模型选定）
-        whisperText ? h(WhisperBubble, { text: whisperText, image: whisperImage, on: whisperBubbleOn }) : null,
-        // 工作状态气泡（仅启用工作状态联动的宠物渲染；文本 = 任务详情优先，状态文案兜底）
-        workText && cfg.workStatusEnabled ? h(WhisperBubble, { text: workText, on: workBubbleOn }) : null,
+        // 气泡单槽（优先级见上）：余额「不可用」文字说明同样走这条通道——它只要求 balanceEnabled，
+        // 不再要求 balance.ok（否则未登记余额接口的服务商完全没有反馈，这是该气泡的起因）；
+        // 碎碎念/对话气泡**不受 whisperEnabled 限制**（该字段只关自动周期轮询的触发，见上头
+        // useEffect 的门控）；whisperText 只由 triggerWhisper 设置，所以说话气泡照常渲染。
+        bubbleNode,
         h('div', {
           ref: stageRef,
           className: 'dsh-pet-stage',
