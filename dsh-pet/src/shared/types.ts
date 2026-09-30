@@ -89,11 +89,11 @@ export interface Pet {
   /** 是否启用余额功能：true=触发余额动画+显示余额气泡；false=该宠物完全禁用余额。缺失即配置错误 */
   balanceEnabled: boolean;
   /** 是否启用碎碎念：true=按 eventsRefreshSec.whisper 周期生成一句话并播碎碎念动画；false=禁用。
-   *  缺失默认 false（默认关闭：碎碎念每次生成会调用当前对话的模型，本地 LLM 单并发时
-   *  会顶掉正在跑的任务的 KV cache，见 config.jsonc 注释） */
+   *  缺失默认 true（内置默认开启：碎碎念每次生成会调用当前对话的模型，本地 LLM 单并发时
+   *  会顶掉正在跑的任务的 KV cache，见 config.jsonc 注释——不需要的宠物请显式写 false） */
   whisperEnabled: boolean;
   /** 是否启用工作状态联动：true=监听 DSH 会话事件（tool/call 等），按 animations.events.workStatus
-   *  数组切档位动画 + 气泡；false=禁用（默认）。监听不调用模型，无 KV cache 风险 */
+   *  数组切档位动画 + 气泡；false=禁用。缺失默认 true（内置默认开启）。监听不调用模型，无 KV cache 风险 */
   workStatusEnabled: boolean;
   /** 显示位置（web/desktop/both/none，必填）：缺失即配置错误，代码不做兜底 */
   display: PetDisplay;
