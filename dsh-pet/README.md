@@ -19,10 +19,13 @@
 ## 🚀 快速开始（安装插件）
 
 ```sh
-dsh plugin --profile web add dsh-pet
+# --profile 填你实际在用的那个：桌面应用（Electron 版）→ desktop；dsh web → web
+dsh plugin --profile desktop add dsh-pet
 ```
 
-重启 `dsh web`，宠物出现在界面右上角（默认配置角落，可在设置页修改）——全部透明动画开箱即用，无需任何生成流程。
+装完**重开桌面应用**（`dsh web` 用户则重启 `dsh web`）才生效。宠物出现在界面右上角（默认配置角落，可在设置页修改）——全部透明动画开箱即用，无需任何生成流程。
+
+> ⚠️ **刚发布不到 24 小时装不上？** DSH 自带的 pnpm 11 默认有 24 小时「最小发布年龄」（`minimumReleaseAge`）隔离：它会跳过最新版、解析到更旧的版本，而旧版本的 peer 对不上当前 DSH，插件管理会提示「与 DSH x 不兼容」。显式钉住版本即可：`dsh plugin --profile desktop add dsh-pet@<最新版本>`（或等满 24 小时）。另外，从 GitHub 地址安装必须写子目录：`'github:PC2005-cloud/dsh-pet#path:/dsh-pet'`（仓库根目录不是包）。
 
 > 💡 单一格式（默认 `.webm`）：浏览器 Chrome/Edge/Firefox 与桌面模式（Electron=Chromium）直接透明播放；Safari 不认 webm alpha（黑底），macOS 需要改用 `.mov`，见下方「🖥️ macOS 使用 mov」。
 
@@ -192,7 +195,8 @@ $DSH_HOME/dsh-pet/pet/
 ## 🗑️ 卸载
 
 ```sh
-dsh plugin --profile web remove dsh-pet
+# --profile 填你安装时用的那个：桌面应用 desktop、dsh web → web
+dsh plugin --profile desktop remove dsh-pet
 ```
 
 插件在本机落下的全部位置（设置页「卸载与存储」区块也列出这些，且路径按你的机器实时解析）：
