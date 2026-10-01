@@ -451,6 +451,94 @@ describe('saveUserConfig —— 物理参数 physics（白名单 + 透传保留�
   });
 });
 
+describe('saveUserConfig —— 碎碎念 / 对话模型（白名单 + 透传保留）', () => {
+  const WM = { provider: 'deepseek', model: 'deepseek-chat' };
+  const CM = { provider: 'opencode', model: 'big-model' };
+
+  test('整段随请求体写入（设置页「AI 模型」两个下拉框）', () => {
+    const out = saveOnce({ pets: PETS, whisperModel: WM, chatModel: CM });
+    assert.deepEqual(out?.whisperModel, WM, 'whisperModel 必须按请求体写入');
+    assert.deepEqual(out?.chatModel, CM, 'chatModel 必须按请求体写入');
+  });
+
+  test('留空（跟随当前对话）也是合法值，照常落盘', () => {
+    const empty = { provider: '', model: '' };
+    const out = saveOnce({ pets: PETS, whisperModel: empty, chatModel: empty });
+    assert.deepEqual(out?.whisperModel, empty);
+    assert.deepEqual(out?.chatModel, empty);
+  });
+
+  test('未传时透传磁盘旧值；磁盘上也没有则不凭空造字段', () => {
+    const kept = saveOnce({ pets: PETS }, { pets: PETS, whisperModel: WM, chatModel: CM });
+    assert.deepEqual(kept?.whisperModel, WM, '未传时必须原样保留磁盘上的手改值');
+    assert.deepEqual(kept?.chatModel, CM);
+    const fresh = saveOnce({ pets: PETS }) ?? {};
+    assert.equal('whisperModel' in fresh, false, '磁盘上也没有时不得凭空写入');
+    assert.equal('chatModel' in fresh, false);
+  });
+
+  test('请求体覆盖磁盘旧值（与四个全局开关同一语义）', () => {
+    const out = saveOnce({ pets: PETS, whisperModel: WM }, { pets: PETS, whisperModel: CM });
+    assert.deepEqual(out?.whisperModel, WM);
+  });
+
+  test('落盘时归一化：两侧空白 trim，请求体多带的键不写进用户层', () => {
+    const out = saveOnce({
+      pets: PETS,
+      whisperModel: { provider: ' deepseek ', model: ' deepseek-chat ', reasoningEffort: 'high' },
+    });
+    assert.deepEqual(out?.whisperModel, WM, '只保留 provider/model 两个 trim 过的字符串');
+  });
+
+  test('非法值 → 整体拒绝（宿主回 400；与读取侧 modelSelectionValid 同一套规则）', () => {
+    const bad: Array<[string, unknown]> = [
+      ['只填服务商', { provider: 'deepseek', model: '' }],
+      ['只填模型', { provider: '', model: 'deepseek-chat' }],
+      ['缺 model 字段', { provider: 'deepseek' }],
+      ['provider 非字符串', { provider: 1, model: 'deepseek-chat' }],
+      ['model 非字符串', { provider: 'deepseek', model: null }],
+      ['字符串', 'deepseek/deepseek-chat'],
+      ['数组', ['deepseek', 'deepseek-chat']],
+      ['null', null],
+    ];
+    for (const [name, value] of bad) {
+      assert.equal(saveOnce({ pets: PETS, whisperModel: value }), null, `whisperModel ${name} 必须被拒绝`);
+      assert.equal(saveOnce({ pets: PETS, chatModel: value }), null, `chatModel ${name} 必须被拒绝`);
+    }
+  });
+});
+
+describe('readAllConfig —— 模型选择合并（缺失取默认 / 非法回退默认）', () => {
+  const WM = { provider: 'deepseek', model: 'deepseek-chat' };
+
+  test('内置默认有值 → 用户层没写时读得到（默认 = 都空 = 跟随当前对话）', () => {
+    const merged = readAllConfig(withBase({ whisperModel: WM, chatModel: WM }));
+    assert.deepEqual(merged.main.whisperModel, WM);
+    assert.deepEqual(merged.main.chatModel, WM);
+  });
+
+  test('用户层写了 → 覆盖内置默认', () => {
+    const merged = readAllConfig(
+      withBase({ whisperModel: WM }, { whisperModel: { provider: 'opencode', model: 'big-model' } }),
+    );
+    assert.deepEqual(merged.main.whisperModel, { provider: 'opencode', model: 'big-model' });
+  });
+
+  test('用户层写了非法值 → 回退内置默认（只填一半 / 非字符串 / 非对象）', () => {
+    const bad: unknown[] = [
+      { provider: 'deepseek', model: '' },
+      { provider: '', model: 'deepseek-chat' },
+      { provider: 1, model: 'deepseek-chat' },
+      'deepseek/deepseek-chat',
+      ['deepseek', 'deepseek-chat'],
+    ];
+    for (const value of bad) {
+      const merged = readAllConfig(withBase({ whisperModel: WM }, { whisperModel: value }));
+      assert.deepEqual(merged.main.whisperModel, WM, `${JSON.stringify(value)} 应回退内置默认`);
+    }
+  });
+});
+
 describe('readAllConfig —— 抛掷锁定合并（缺失取默认 / 非法回退默认）', () => {
   test('内置默认有值 → 用户层没写时读得到', () => {
     const merged = readAllConfig(withBase({ confineToScreen: false }));

@@ -70,9 +70,9 @@ export interface Animations {
 }
 
 /** 一只宠物（与 jsonc pets[i] 同形，position 嵌套）。
- *  可选段（animations / animationWeights / extra / assetRoot / eventsRefreshSec / physics / confineToScreen）为渲染期派生或
- *  「文件定义宠物」专用：
- *  - animations / animationWeights / eventsRefreshSec / physics / confineToScreen：所属条目的条目级字段，由配置合并
+ *  可选段（animations / animationWeights / extra / assetRoot / eventsRefreshSec / physics / confineToScreen /
+ *  workStatusTexts / whisperModel / chatModel）为渲染期派生或「文件定义宠物」专用：
+ *  - animations / animationWeights / eventsRefreshSec / physics / confineToScreen / whisperModel / chatModel：所属条目的条目级字段，由配置合并
  *    （host readAllConfig / 客户端 flattenConfigPets）在拍平时吹进每只实例——多实例共享；
  *  - extra: true 标记该宠物由 pet/ 目录文件定义：设置页不可编辑、保存时排除，
  *    由拍平逻辑统一打标，**永不出现在持久化配置里**；
@@ -111,6 +111,20 @@ export interface Pet {
   /** 条目级：工作状态气泡文案（二维数组，外层索引 = workStatus 档位 0..5，内层每档可多句随机抽；
    *  host 合并已填默认，拍平时吹入；整字段缺失 = 不弹工作状态文本，只播动画） */
   workStatusTexts?: string[][];
+  /** 条目级：碎碎念单独指定的服务商 + 模型（host 合并已填默认，拍平时吹入；
+   *  provider 与 model 都为空 = 跟随当前对话的模型） */
+  whisperModel?: ModelSelection;
+  /** 条目级：对话单独指定的服务商 + 模型（同上，都为空 = 跟随当前对话的模型） */
+  chatModel?: ModelSelection;
+}
+
+/** 一处「服务商 + 模型」选择（config.jsonc 的 whisperModel / chatModel 段）。
+ *  provider 与 model **要么都为空（= 跟随当前对话的模型）要么都非空**——只填一半是配置错误。 */
+export interface ModelSelection {
+  /** 服务商路由 id（与 DSH 模型选择器同一命名空间） */
+  provider: string;
+  /** 该服务商下的模型 id */
+  model: string;
 }
 
 /** config.jsonc 的 physics 段：拖拽抛掷手感参数（全局，所有宠物共用）。
@@ -147,6 +161,10 @@ export interface ClientConfig {
   animationWeights: Weights;
   /** 拖拽抛掷物理参数（全局，所有宠物共用；host 合并已填默认） */
   physics: PhysicsParams;
+  /** 碎碎念用的服务商 + 模型（条目级，host 合并已填默认；两者都为空 = 跟随当前对话的模型） */
+  whisperModel: ModelSelection;
+  /** 对话用的服务商 + 模型（条目级，host 合并已填默认；两者都为空 = 跟随当前对话的模型） */
+  chatModel: ModelSelection;
   /** 事件刷新周期（秒）：事件名 → 间隔；balance = 余额数据刷新 + 动画触发间隔 */
   eventsRefreshSec: Record<string, number>;
 }

@@ -25,6 +25,8 @@
  *                                **同一条**重启路径（syncDesktop），宠物数量/display/size 变化同样生效
  *   /dsh-pet-7340/config/meta         → 配置文件与素材目录路径 + 全部存储位置清单
  *                                       （设置页「高级配置」「卸载与存储」展示用）
+ *   /dsh-pet-7340/models              → 可选「服务商 + 模型」清单（设置页「AI 模型」下拉框数据源；
+ *                                       与 DSH 模型选择器同源，取宿主 llm 服务的 listProviders/listModels）
  *   /dsh-pet-7340/thumb/<素材根>/<动画名>.webm|.mov  → 素材按宠物归属（.mov 为 macOS 定制，扩展名取决于
  *       客户端播放常量 ANIMATION_EXT；本路由固定双扩展名兜底）：
  *       文件宠物 = $DSH_HOME/dsh-pet/pet/<素材根>-animation/（只查自己的，绝不回落）；
@@ -62,6 +64,7 @@ import { credentialRef } from '@deepseek-ai/dsh-credentials';
 import { queryBalance } from './balance';
 import { generateWhisper } from './whisper';
 import { generateChat, type ChatMemoryMessage } from './chat';
+import { configuredModel } from './model-selection';
 import { pickMeme, readMemePool } from './memes';
 import {
   findPetInstance,
@@ -390,7 +393,8 @@ export function apply(ctx: any): void {
     // 配图：全局开关关闭 / 池为空 / 池内图片全缺失 → 纯文本（不报错，退化为原行为）
     const meme =
       conf.whisperImageEnabled === true ? pickMeme(readMemePool(conf.memes, PACKAGE_ROOT_ASSETS)) : undefined;
-    const result = await generateWhisper(ctx, system, meme);
+    // 模型：条目配置的 whisperModel 优先（留空 = 不指定）；生成侧失败会回落到当前对话的模型重试一次
+    const result = await generateWhisper(ctx, system, meme, configuredModel(conf, 'whisperModel'));
     if (!result.ok) {
       return { ok: false, reason: result.reason, message: result.message };
     }
@@ -421,7 +425,8 @@ export function apply(ctx: any): void {
       const bucket = (mem[bucketKey] ??= {});
       const entry = (bucket[petId] ??= { messages: [] });
       const list = entry.messages.slice().slice(-rounds * 2);
-      const generated = await generateChat(ctx, system, list, text, pool);
+      // 模型：条目配置的 chatModel 优先（留空 = 不指定）；生成侧失败会回落到当前对话的模型重试一次
+      const generated = await generateChat(ctx, system, list, text, pool, configuredModel(conf, 'chatModel'));
       if (!generated.ok) return generated;
       const now = Date.now();
       entry.messages.push({ role: 'user', content: text, ts: now });
@@ -751,6 +756,50 @@ export function apply(ctx: any): void {
           profile: profileNameFrom(PACKAGE_ROOT) ?? '',
         },
       };
+    }
+
+    // 可选模型清单（设置页「AI 模型」两个下拉框的数据源）：与 DSH 自己的模型选择器**同源**——
+    // 都来自宿主 llm 服务：listProviders = 已注册的实时服务商路由，listModels(provider) = 该路由下的模型。
+    // 只读、无副作用；某个服务商列模型失败（适配器不支持 / 网络）只让它空着，不拖垮整张清单。
+    // 服务商路由一个都没注册时回落到 listConfigurableProviders（适配器声明可配置的路由），
+    // 免得下拉框空着——那种路由调用失败会由生成侧的回落兜住。
+    if (rest === 'models') {
+      if (method !== 'GET') return { kind: 'json', status: 405, obj: { error: 'method not allowed' } };
+      try {
+        const llm = ctx.llm as
+          | {
+              listProviders?: () => Array<{ id?: unknown; name?: unknown }>;
+              listConfigurableProviders?: () => Array<{ provider?: unknown; displayName?: unknown }>;
+              listModels?: (provider: string) => Promise<Array<{ id?: unknown; name?: unknown }>>;
+            }
+          | undefined;
+        const named = (id: unknown, name: unknown): { id: string; name: string } => {
+          const pid = String(id ?? '');
+          return { id: pid, name: String(name ?? '') || pid };
+        };
+        let providers = (typeof llm?.listProviders === 'function' ? llm.listProviders() : []).map((p) =>
+          named(p?.id, p?.name),
+        );
+        if (providers.length === 0 && typeof llm?.listConfigurableProviders === 'function') {
+          providers = llm.listConfigurableProviders().map((p) => named(p?.provider, p?.displayName));
+        }
+        providers = providers.filter((p) => p.id);
+        const catalog = await Promise.all(
+          providers.map(async (p) => {
+            let models: Array<{ id: string; name: string }> = [];
+            try {
+              const list = await llm?.listModels?.(p.id);
+              models = (Array.isArray(list) ? list : []).map((m) => named(m?.id, m?.name)).filter((m) => m.id);
+            } catch {
+              /* 单个服务商列不出模型：留空即可（下拉框里该服务商只有「跟随当前对话」可选） */
+            }
+            return { ...p, models };
+          }),
+        );
+        return { kind: 'json', status: 200, obj: { providers: catalog } };
+      } catch (e) {
+        return { kind: 'json', status: 500, obj: { error: e instanceof Error ? e.message : String(e) } };
+      }
     }
 
     // 余额查询（浏览器/桌面共用；结果由 host 侧完成全部抓取与校验，两端都不接触 key）

@@ -77,8 +77,9 @@ export function makeFactory(): (require: (mod: string) => any) => any {
         yield ctx.slots.register({ name: 'shell.overlay', id: 'pet', order: 1000 }, () => h(PetMulti, {}));
       });
 
-      // 设置页：「桌宠配置」（大小/位置，保存即时生效）
-      const PetConfigSection = makePetConfigSection({ h, useState, useEffect, t });
+      // 设置页：「桌宠配置」（大小/位置/模型，保存即时生效）。
+      // useRef 用于「AI 模型」单下拉选择器（浮层定位与外部点击判定），与宠物页面同一份注入。
+      const PetConfigSection = makePetConfigSection({ h, useState, useEffect, useRef, t });
       ctx.slots.inject('settings.section', function* () {
         yield ctx.slots.register(
           { name: 'settings.section', id: 'pet-config', order: 30, label: () => t('nav'), inject: () => ({ t }) },

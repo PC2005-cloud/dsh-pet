@@ -1,12 +1,14 @@
 /**
- * 对话生成（host 半侧）：用 DSH 的 LLM 统一抽象层（ctx.llm）按当前对话用的
- * provider/model 生成一句回复。与碎碎念（generateWhisper）同构，区别是：
+ * 对话生成（host 半侧）：用 DSH 的 LLM 统一抽象层（ctx.llm）按条目配置的 chatModel
+ * （留空 = 当前对话用的 provider/model）生成一句回复。与碎碎念（generateWhisper）同构，区别是：
  *  - 输入带历史对话（memory.json 截取的最近 N 轮），历史以 user/assistant 消息进入请求；
  *  - user 消息 = 用户刚输入的话（不是"随便叨叨"指令）；
  *  - 回复放宽到 256 token（对话比碎碎念可说得稍多），超时放宽到 60s。
  *
  * 设计：
- *  - provider/model 直接取 agentDefaultModel.currentSelection()（与余额/碎碎念同源）；
+ *  - provider/model：条目配置的 chatModel 优先（留空 = 不指定），失败回落到
+ *    agentDefaultModel.currentSelection()（当前对话的模型，与余额/碎碎念同源）重试一次——
+ *    候选链见 model-selection.ts；
  *  - system = 用户配置的 whisperPrompt（人设：碎碎念与对话共用同一人设）；
  *  - reasoningEffort: 'off' —— 仅当模型声明支持 reasoning effort（含 "off"）时传，
  *    关闭深度思考：闲聊对话不需要推理。无 reasoning 元数据的模型（如
@@ -25,6 +27,7 @@
 import { BlockAssembler, createAssistantMessage, createUserMessage, ReasoningEffortId } from '@deepseek-ai/dsh-llm';
 import { supportsReasoningOff } from './llm-reasoning';
 import { extractChatImage, memeCatalog, type MemeEntry } from './memes';
+import { modelCandidates, modelLabel, type ModelRef } from './model-selection';
 
 /** 生成失败原因（与 shared/whisper.ts 的 WhisperState 失败分支同构） */
 export type ChatGenerateResult =
@@ -57,6 +60,7 @@ function imageInstruction(pool: MemeEntry[]): string {
  * @param history 最近记忆（按时间正序；user/assistant 交替）
  * @param userText 用户刚输入的话
  * @param pool 表情包候选池（开启对话配图时传入；空/缺省 = 纯文本，指令与解析都不介入）
+ * @param preferred 条目配置单独指定的模型（chatModel）；缺省 / 留空 = 只用当前对话的模型
  * @returns 回复文本（+ 命中池内的配图名），或结构化失败（provider 缺失 / 生成错误）
  */
 export async function generateChat(
@@ -65,21 +69,44 @@ export async function generateChat(
   history: ChatMemoryMessage[],
   userText: string,
   pool: MemeEntry[] = [],
+  preferred?: ModelRef,
 ): Promise<ChatGenerateResult> {
-  let sel: { provider: string; model: string };
-  try {
-    sel = ctx.agentDefaultModel.currentSelection();
-  } catch {
-    return { ok: false, reason: 'provider-missing', message: '当前对话未配置模型' };
-  }
-  if (!sel?.provider || !sel?.model) {
+  // 候选链：配置的模型优先 → 当前对话的模型兜底（chatModel 留空时链上只有后者，与旧版逐字一致）
+  const candidates = modelCandidates(ctx, preferred);
+  if (candidates.length === 0) {
     return { ok: false, reason: 'provider-missing', message: '当前对话未配置模型' };
   }
   const llm = (ctx as { llm?: { stream(o: unknown): AsyncIterable<unknown> } }).llm;
   if (!llm || typeof llm.stream !== 'function') {
     return { ok: false, reason: 'generate-error', message: 'LLM 服务不可用' };
   }
+  // 依次尝试：配置的模型失败（凭据被删 / 模型下架 / 该服务商没配 key）时**回落到当前对话的模型
+  // 重试一次**，仍失败才抛出失败原因——最后一次是用户当前真正在用的模型，报错更有意义。
+  let last: ChatGenerateResult = { ok: false, reason: 'generate-error', message: '模型未返回文本' };
+  for (const [i, sel] of candidates.entries()) {
+    const result = await generateWith(ctx, llm, sel, system, history, userText, pool);
+    if (result.ok) return result;
+    last = result;
+    // 回落要留痕：配的模型没生效时能在日志里看到原因（否则"我明明配了 A，怎么还是用 B"没法查）
+    if (i + 1 < candidates.length) {
+      console.warn(
+        `dsh-pet: 对话用 ${modelLabel(sel)} 生成失败（${result.message ?? result.reason}），回落到 ${modelLabel(candidates[i + 1])}`,
+      );
+    }
+  }
+  return last;
+}
 
+/** 用**一个**确定的 provider/model 跑一次对话生成（候选链的一环；失败原样返回结构化原因，不吞） */
+async function generateWith(
+  ctx: { llm?: unknown },
+  llm: { stream(o: unknown): AsyncIterable<unknown> },
+  sel: ModelRef,
+  system: string,
+  history: ChatMemoryMessage[],
+  userText: string,
+  pool: MemeEntry[],
+): Promise<ChatGenerateResult> {
   // 历史 → dsh-llm 消息：user 经 createUserMessage（plugin 来源），assistant 经 createAssistantMessage
   const historyMessages = history.map((m) =>
     m.role === 'user'

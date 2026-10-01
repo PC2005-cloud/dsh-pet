@@ -33,7 +33,7 @@ const CN_PET = '测试宠';
 type Result = { status: number; body: string };
 
 let dir = '';
-let call: (url: string) => Promise<Result> = () => Promise.reject(new Error('未初始化'));
+let call: (url: string, method?: string) => Promise<Result> = () => Promise.reject(new Error('未初始化'));
 let savedHome: string | undefined;
 let savedElectron: string | undefined;
 
@@ -91,14 +91,38 @@ before(() => {
     logger: { warn: () => {}, info: () => {}, debug: () => {}, error: () => {} },
     agentDefaultModel: { currentSelection: () => undefined },
     credentials: { resolve: async () => undefined },
+    // 模型清单路由的数据源（与 DSH 模型选择器同源的宿主 llm 服务）：一个正常服务商 +
+    // 一个列不出模型的服务商（验证单点失败不拖垮整张清单）
+    llm: {
+      listProviders: () => [
+        { id: 'deepseek', name: 'DeepSeek' },
+        { id: 'broken', name: 'Broken' },
+      ],
+      listModels: async (provider: string) => {
+        if (provider === 'broken') throw new Error('adapter does not list models');
+        return [{ id: 'deepseek-chat', name: 'DeepSeek Chat' }];
+      },
+    },
   });
   assert.ok(handler, 'apply() 应注册 /dsh-pet-7340 prefix handler'); // 注册失败则整份测试无意义
 
-  call = (url: string) =>
+  call = (url: string, method = 'GET') =>
     new Promise<Result>((done) => {
       const res = new FakeRes();
       res.on('finish', () => done({ status: res.status, body: Buffer.concat(res.chunks).toString('utf8') }));
-      void handler?.({ method: 'GET', url, on: noop }, res);
+      // 请求桩：只服务无 body 的请求——'end' 必须回调，否则 host 对 PUT/POST 的 readBody
+      // 永远等不到结束事件，调用方直接挂死（本文件只测无 body 的端点）
+      void handler?.(
+        {
+          method,
+          url,
+          on: (event: string, cb: () => void) => {
+            if (event === 'end') queueMicrotask(cb);
+            return undefined;
+          },
+        },
+        res,
+      );
     });
 });
 
@@ -108,6 +132,33 @@ after(() => {
   if (savedElectron === undefined) delete process.env.DSH_PET_ELECTRON_PATH;
   else process.env.DSH_PET_ELECTRON_PATH = savedElectron;
   rmSync(dir, { recursive: true, force: true });
+});
+
+describe('/models 路由 —— 设置页「AI 模型」下拉框的数据源', () => {
+  test('每个服务商连同它名下的模型一起返回（与 DSH 模型选择器同源）', async () => {
+    const r = await call('/dsh-pet-7340/models');
+    assert.equal(r.status, 200);
+    const body = JSON.parse(r.body) as {
+      providers: Array<{ id: string; name: string; models: Array<{ id: string; name: string }> }>;
+    };
+    assert.deepEqual(body.providers[0], {
+      id: 'deepseek',
+      name: 'DeepSeek',
+      models: [{ id: 'deepseek-chat', name: 'DeepSeek Chat' }],
+    });
+  });
+
+  test('单个服务商列不出模型 → 只让它空着，不拖垮整张清单', async () => {
+    const r = await call('/dsh-pet-7340/models');
+    const body = JSON.parse(r.body) as { providers: Array<{ id: string; models: unknown[] }> };
+    assert.equal(body.providers.length, 2, '一个服务商列不出模型不得让整个清单变空');
+    assert.deepEqual(body.providers[1].models, []);
+  });
+
+  test('非 GET → 405（只读端点）', async () => {
+    const r = await call('/dsh-pet-7340/models', 'POST');
+    assert.equal(r.status, 405);
+  });
 });
 
 describe('thumb 路由 —— 合法路径照常（修复不得误杀）', () => {

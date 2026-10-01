@@ -242,6 +242,16 @@ function physicsValid(value: unknown): boolean {
   );
 }
 
+/** whisperModel / chatModel 段校验：{ provider, model } 两个字符串，
+ *  **要么都留空（= 跟随当前对话的模型）要么都非空**——只填一半（选了服务商没选模型，或反之）
+ *  会拼出"用 A 家的模型名去问 B 家"这种必然失败的组合，按非法处理（告警 + 取默认）。 */
+function modelSelectionValid(value: unknown): boolean {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const m = value as Record<string, unknown>;
+  if (typeof m.provider !== 'string' || typeof m.model !== 'string') return false;
+  return (m.provider.trim() === '') === (m.model.trim() === '');
+}
+
 /** workStatusTexts 段校验：二维数组——外层每项都是非空字符串数组（档位文案，每档可多句随机）；空数组不可用 */
 function workStatusTextsValid(value: unknown): boolean {
   if (!Array.isArray(value) || value.length === 0) return false;
@@ -277,6 +287,9 @@ function topFieldValid(key: string, value: unknown): boolean {
       return weightsValid(value);
     case 'physics':
       return physicsValid(value);
+    case 'whisperModel':
+    case 'chatModel':
+      return modelSelectionValid(value);
     case 'workStatusTexts':
       return workStatusTextsValid(value);
     default:
@@ -500,7 +513,8 @@ export function findPetInstance(
 
 /**
  * 保存用户层（PUT /config）：更新 main-config.jsonc，接受可编辑字段（pets + 全局开关：
- * notificationsEnabled / whisperImageEnabled / chatImageEnabled / confineToScreen + physics）。
+ * notificationsEnabled / whisperImageEnabled / chatImageEnabled / confineToScreen + physics
+ * + whisperModel / chatModel）。
  * 编辑语义：**非白名单顶层字段（whisperPrompt / chatMemoryRounds / eventsRefreshSec /
  * memes 等）从 `existing`（当前磁盘上的用户文件原对象）原样透传保留**——
  * 用户手动编辑的精调配置不会被设置页保存抹掉（旧实现是纯白名单重建，会整体覆盖丢失）。
@@ -567,6 +581,17 @@ export function saveUserConfig(
   // 传了就按白名单写入；没传则走下面的透传保留（用户手改的值原样不动）。
   const ph = o.physics;
   if (ph !== undefined && !physicsValid(ph)) return null;
+  // whisperModel / chatModel（碎碎念 / 对话各自的服务商 + 模型；设置页两个下拉框写的就是它们）：
+  // 与 physics 同一套语义——传了就整段校验后进白名单，没传则走下面的透传保留。
+  // 落盘时归一化成 { provider, model } 两个 trim 过的字符串（请求体多带的键不写进用户层）。
+  const wm = o.whisperModel;
+  if (wm !== undefined && !modelSelectionValid(wm)) return null;
+  const cm = o.chatModel;
+  if (cm !== undefined && !modelSelectionValid(cm)) return null;
+  const cleanModel = (v: Record<string, unknown>): { provider: string; model: string } => ({
+    provider: String(v.provider).trim(),
+    model: String(v.model).trim(),
+  });
   // 白名单可编辑字段：pets 来自请求体、四个全局开关与 physics 来自请求体（未传则不写）
   const outConfig: { pets: unknown[]; [key: string]: unknown } = { pets: out };
   if (ne !== undefined) outConfig.notificationsEnabled = ne;
@@ -574,6 +599,8 @@ export function saveUserConfig(
   if (cie !== undefined) outConfig.chatImageEnabled = cie;
   if (cts !== undefined) outConfig.confineToScreen = cts;
   if (ph !== undefined) outConfig.physics = ph;
+  if (wm !== undefined) outConfig.whisperModel = cleanModel(wm as Record<string, unknown>);
+  if (cm !== undefined) outConfig.chatModel = cleanModel(cm as Record<string, unknown>);
   // 透传保留：请求体未携带的顶层字段，从 existing（磁盘现有用户文件）原样带回——
   // 设置页只提交 pets(+全局开关+physics)，手改的 whisperPrompt/chatMemoryRounds/memes/... 借此保住。
   // 白名单字段只在「请求体传了」时才算白名单（已由上方写入）；未传时走这里透传磁盘旧值——
@@ -584,6 +611,8 @@ export function saveUserConfig(
   if (cie !== undefined) bodyOwned.add('chatImageEnabled');
   if (cts !== undefined) bodyOwned.add('confineToScreen');
   if (ph !== undefined) bodyOwned.add('physics');
+  if (wm !== undefined) bodyOwned.add('whisperModel');
+  if (cm !== undefined) bodyOwned.add('chatModel');
   if (existing && typeof existing === 'object') {
     for (const key of Object.keys(existing)) {
       if (bodyOwned.has(key)) continue; // 白名单字段由请求体决定

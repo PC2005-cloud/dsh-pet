@@ -1,10 +1,12 @@
 /**
- * 碎碎念生成（host 半侧）：用 DSH 的 LLM 统一抽象层（ctx.llm）按当前对话用的
- * provider/model 生成一句话。与余额不同：不自己拼各服务商端点、不碰凭证——
+ * 碎碎念生成（host 半侧）：用 DSH 的 LLM 统一抽象层（ctx.llm）按条目配置的 whisperModel
+ * （留空 = 当前对话用的 provider/model）生成一句话。与余额不同：不自己拼各服务商端点、不碰凭证——
  * ctx.llm 已接管适配器路由/模型解析/凭据，天然与对话页完全一致。
  *
  * 设计：
- * - provider/model 直接取 agentDefaultModel.currentSelection()（与余额同源）；
+ * - provider/model：条目配置的 whisperModel 优先（留空 = 不指定），失败回落到
+ *   agentDefaultModel.currentSelection()（当前对话的模型，与余额同源）重试一次——
+ *   候选链见 model-selection.ts；
  * - system = 用户配置的 whisperPrompt（人设），user = 一个极简的"说句话"请求；
  * - 配图（可选）：开启 whisperImageEnabled 时，由调用方从表情包池随机抽一张传入，
  *   把该图描述注入 user 指令，让这句话配合画面说——随机而非让模型选：
@@ -19,6 +21,7 @@
 
 import { BlockAssembler, createUserMessage, ReasoningEffortId } from '@deepseek-ai/dsh-llm';
 import { supportsReasoningOff } from './llm-reasoning';
+import { modelCandidates, modelLabel, type ModelRef } from './model-selection';
 
 /** 生成失败原因（与 shared/whisper.ts 的 WhisperState 失败分支同构） */
 export type WhisperGenerateResult =
@@ -48,25 +51,23 @@ function userTextWithMeme(meme: { name: string; desc: string }): string {
 }
 
 /**
- * 用当前对话的 provider/model 生成一句碎碎念。
+ * 用指定（或当前对话的）provider/model 生成一句碎碎念。
  * @param ctx 宿主上下文（注入 agentDefaultModel / llm）
  * @param system 人设提示词（whisperPrompt）
  * @param meme 配图（开启配图时传入；缺省 = 纯文本碎碎念）。生成成功时原样带回，
  *             客户端据此展示图片（host 不判断模型是否真的贴合）
+ * @param preferred 条目配置单独指定的模型（whisperModel）；缺省 / 留空 = 只用当前对话的模型
  * @returns 生成的文本（+ 配图），或结构化失败（provider 缺失 / 生成错误）
  */
 export async function generateWhisper(
   ctx: { agentDefaultModel: { currentSelection(): { provider: string; model: string } }; llm?: unknown },
   system: string,
   meme?: { name: string; desc: string },
+  preferred?: ModelRef,
 ): Promise<WhisperGenerateResult> {
-  let sel: { provider: string; model: string };
-  try {
-    sel = ctx.agentDefaultModel.currentSelection();
-  } catch {
-    return { ok: false, reason: 'provider-missing', message: '当前对话未配置模型' };
-  }
-  if (!sel?.provider || !sel?.model) {
+  // 候选链：配置的模型优先 → 当前对话的模型兜底（whisperModel 留空时链上只有后者，与旧版逐字一致）
+  const candidates = modelCandidates(ctx, preferred);
+  if (candidates.length === 0) {
     return { ok: false, reason: 'provider-missing', message: '当前对话未配置模型' };
   }
   // ctx.llm 是核心服务但保持防御：缺失时显式失败（静默跳过由上层决定）
@@ -74,7 +75,31 @@ export async function generateWhisper(
   if (!llm || typeof llm.stream !== 'function') {
     return { ok: false, reason: 'generate-error', message: 'LLM 服务不可用' };
   }
+  // 依次尝试：配置的模型失败（凭据被删 / 模型下架 / 该服务商没配 key）时**回落到当前对话的模型
+  // 重试一次**，仍失败才抛出失败原因——最后一次是用户当前真正在用的模型，报错更有意义。
+  let last: WhisperGenerateResult = { ok: false, reason: 'generate-error', message: '模型未返回文本' };
+  for (const [i, sel] of candidates.entries()) {
+    const result = await generateWith(ctx, llm, sel, system, meme);
+    if (result.ok) return result;
+    last = result;
+    // 回落要留痕：配的模型没生效时能在日志里看到原因（否则"我明明配了 A，怎么还是用 B"没法查）
+    if (i + 1 < candidates.length) {
+      console.warn(
+        `dsh-pet: 碎碎念用 ${modelLabel(sel)} 生成失败（${result.message ?? result.reason}），回落到 ${modelLabel(candidates[i + 1])}`,
+      );
+    }
+  }
+  return last;
+}
 
+/** 用**一个**确定的 provider/model 跑一次生成（候选链的一环；失败原样返回结构化原因，不吞） */
+async function generateWith(
+  ctx: { llm?: unknown },
+  llm: { stream(o: unknown): AsyncIterable<unknown> },
+  sel: ModelRef,
+  system: string,
+  meme?: { name: string; desc: string },
+): Promise<WhisperGenerateResult> {
   const deadline = AbortSignal.timeout(TIMEOUT_MS);
   // 仅当模型声明支持 reasoning effort（含 "off"）时才传，否则省略：
   // 无 reasoning 元数据的模型（如 reasoningEfforts: false）显式传 off 会被

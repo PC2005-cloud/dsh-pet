@@ -14,7 +14,7 @@
 import { PET_DISPLAYS } from '../shared/config';
 import { DEFAULT_PHYSICS } from '../shared/physics';
 import { NOTIFY_ICONS, reloadNotifications, requestNotificationPermission } from './notify';
-import type { Corner, Pet, PetDisplay, PhysicsParams } from '../shared/types';
+import type { Corner, ModelSelection, Pet, PetDisplay, PhysicsParams } from '../shared/types';
 import type { ChangeEvent, CSSProperties, Dispatch, FunctionComponent, SetStateAction } from 'react';
 import type * as ReactNS from 'react';
 import type { jsx } from 'react/jsx-runtime';
@@ -35,6 +35,74 @@ export const petBridge: {
 
 /** 字典命名空间 */
 export const NS = 'pet.config';
+
+/** 一处「服务商 + 模型」是否合法：**要么都留空（= 跟随当前对话）要么都非空**。
+ *  与宿主 config.ts 的 modelSelectionValid 同一套规则（非法宿主回 400，这里先就地给红字提示）。 */
+const modelPairValid = (m: ModelSelection): boolean => (m.provider.trim() === '') === (m.model.trim() === '');
+
+/** 候选清单里的一组：一个服务商 + 它名下的模型（GET /models 的响应形态） */
+interface ModelCatalogGroup {
+  id: string;
+  name: string;
+  models: Array<{ id: string; name: string }>;
+}
+
+/**
+ * 设置页内联 CSS（只服务「AI 模型」单下拉选择器）。
+ *
+ * 为什么要有 CSS 而不是全用行内 style：hover / focus-visible / 箭头旋转这些**伪类与过渡**
+ * 行内样式表达不了，而这个选择器是照 DSH 对话框右下角的模型选择器做的——触发器要有 hover、
+ * 浮层要有阴影与滚动，只能落到样式表。注入方式与宠物页面同一套（data-plugin-css 去重，
+ * 官方插件标准做法）。
+ *
+ * 类名统一 dsh-pet-mp__ 前缀（mp = model picker），不会撞到 DSH 自己的类名。
+ */
+const SETTINGS_CSS = [
+  // 触发器：与设置页其它控件同款描边，右侧箭头表示可展开
+  '.dsh-pet-mp{position:relative;min-width:0;display:flex;flex-direction:column;gap:4px}',
+  '.dsh-pet-mp__trigger{display:flex;align-items:center;gap:6px;width:100%;max-width:340px;height:28px;padding:0 8px;border:1px solid var(--dsw-alias-border-l2);border-radius:8px;background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);font-size:13px;line-height:20px;text-align:left;cursor:pointer;outline:none}',
+  '.dsh-pet-mp__trigger:hover:not(:disabled){border-color:var(--dsw-alias-state-business-primary)}',
+  '.dsh-pet-mp__trigger:focus-visible{border-color:var(--dsw-alias-state-business-primary);box-shadow:0 0 0 2px var(--dsw-focus-ring-color,var(--dsw-alias-state-business-primary))}',
+  '.dsh-pet-mp__trigger:disabled{color:var(--dsw-alias-label-dimmed);cursor:default}',
+  '.dsh-pet-mp__label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}',
+  '.dsh-pet-mp__sub{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;flex-shrink:1000;color:var(--dsw-alias-label-caption,var(--dsw-alias-label-tertiary))}',
+  '.dsh-pet-mp__chevron{flex:none;margin-left:auto;color:var(--dsw-alias-label-caption,var(--dsw-alias-label-tertiary));transition:transform .12s}',
+  '.dsh-pet-mp__chevron.is-open{transform:rotate(180deg)}',
+  // 浮层：position:fixed（与 DSH 一致——脱离设置页的滚动容器，不被 overflow 裁掉）
+  // 浮层：position:fixed（与 DSH 一致——脱离设置页的滚动容器，不被 overflow 裁掉）；
+  // z-index 取与插件右键菜单同一档（2147483000），保证压得住 DSH 自己的层叠上下文
+  '.dsh-pet-mp__panel{position:fixed;z-index:2147483000;display:flex;flex-direction:column;gap:4px;padding:4px;overflow:hidden;border:1px solid var(--dsw-alias-border-l1);border-radius:var(--dsw-radius-md,10px);background:var(--dsw-alias-bg-layer-1);box-shadow:var(--dsw-elevation-prominent,0 8px 30px rgba(0,0,0,.35));color:var(--dsw-alias-label-primary)}',
+  '.dsh-pet-mp__search{box-sizing:border-box;width:100%;height:28px;padding:0 8px;border:1px solid var(--dsw-alias-border-l2);border-radius:8px;background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);font-size:13px;outline:none}',
+  '.dsh-pet-mp__search:focus{border-color:var(--dsw-alias-state-business-primary)}',
+  '.dsh-pet-mp__list{display:flex;flex-direction:column;min-height:0;overflow-y:auto;scrollbar-width:thin}',
+  '.dsh-pet-mp__group{padding:6px 8px 2px;font-size:11px;line-height:16px;color:var(--dsw-alias-label-tertiary)}',
+  '.dsh-pet-mp__item{display:flex;align-items:center;gap:8px;width:100%;padding:6px 8px;border:none;border-radius:var(--dsw-radius-sm,6px);background:transparent;color:inherit;font-size:13px;line-height:20px;text-align:left;cursor:pointer}',
+  '.dsh-pet-mp__item:hover:not(:disabled),.dsh-pet-mp__item.is-active{background:var(--dsw-alias-interactive-bg-hover)}',
+  '.dsh-pet-mp__item[aria-checked="true"]{color:var(--dsw-alias-state-business-primary)}',
+  '.dsh-pet-mp__item:disabled{color:var(--dsw-alias-label-dimmed);cursor:default}',
+  '.dsh-pet-mp__name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}',
+  '.dsh-pet-mp__check{flex:none;margin-left:auto}',
+  '.dsh-pet-mp__status{padding:8px;font-size:12px;line-height:18px;color:var(--dsw-alias-label-tertiary)}',
+].join('\n');
+
+const settingsCssTag = 'dsh-pet/settings.css';
+/** 注入设置页 CSS（只注入一次；与宠物页面 injectCss 同一套 data-plugin-css 去重） */
+function injectSettingsCss(): void {
+  if (typeof document === 'undefined') return;
+  if (document.querySelector('style[data-plugin-css="' + settingsCssTag + '"]') !== null) return;
+  const tag = document.createElement('style');
+  tag.dataset.plugin = 'dsh-pet';
+  tag.dataset.pluginCss = settingsCssTag;
+  tag.textContent = SETTINGS_CSS;
+  document.head.appendChild(tag);
+}
+
+/** 选择器浮层里的一行：跟随当前对话 / 服务商分组头 / 模型 / 该服务商没有可用模型 */
+type ModelRow =
+  | { kind: 'follow'; key: string }
+  | { kind: 'group'; key: string; name: string }
+  | { kind: 'none'; key: string }
+  | { kind: 'model'; key: string; provider: string; model: { id: string; name: string } };
 
 export const zh = {
   nav: '桌宠配置',
@@ -119,6 +187,22 @@ export const zh = {
   physicsPetCollision: '宠物互撞 petCollision',
   physicsPetCollisionHint: '飞行中的宠物撞到别的宠物按动量守恒弹开（质量 ∝ 尺寸²）',
   invalidPhysics: '请检查物理参数：重力 / 地面摩擦 ≥ 0，弹性 0~1，总力度 > 0。',
+  modelTitle: 'AI 模型（碎碎念 / 对话）',
+  modelHint:
+    '碎碎念与对话各自用哪个模型；选「跟随当前对话」= 用你当前对话正在用的那个模型（默认）。选项与 DSH 的模型选择器同源，由宿主实时提供。',
+  modelFollow: '跟随当前对话',
+  modelSearch: '搜索模型…',
+  modelEmpty: '没有匹配的模型。',
+  modelNoModels: '没有可用的模型。',
+  modelLoading: '正在刷新模型列表…',
+  modelTriggerAria: '选择模型，当前 {model}',
+  modelUnknown: '（当前配置，不在列表中）',
+  modelNone: '该服务商没有可用模型',
+  whisperModelLabel: '碎碎念模型',
+  chatModelLabel: '对话模型',
+  modelFieldHint: '选「跟随当前对话」= 用当前对话的模型；指定了但调用失败会自动回落到当前对话的模型重试一次。',
+  invalidModel: '请检查模型设置：服务商与模型要么都选，要么都留空（跟随当前对话）。',
+  modelCatalogFailed: '模型列表加载失败（刷新页面可重试）；当前配置值仍会原样保留。',
   notifyGetPermission: '获取权限',
   notifyPermissionOk: '已获得通知权限，右下角出现测试通知。',
   notifyDenyUnsupported: '当前环境不支持系统通知（浏览器无 Notification API）。',
@@ -233,6 +317,25 @@ export const en = {
   physicsPetCollision: 'Pet collisions',
   physicsPetCollisionHint: 'A flying pet bounces off the others with momentum conservation (mass ∝ size²)',
   invalidPhysics: 'Check the physics values: gravity / ground friction ≥ 0, bounciness 0–1, throw power > 0.',
+  modelTitle: 'AI models (whisper / chat)',
+  modelHint:
+    'Which model each of whisper and chat uses; "Follow current conversation" uses the model your current conversation is on (default). The options come from the same source as the DSH model picker, served live by the host.',
+  modelFollow: 'Follow current conversation',
+  modelSearch: 'Search models…',
+  modelEmpty: 'No matching models.',
+  modelNoModels: 'No models available.',
+  modelLoading: 'Refreshing model list…',
+  modelTriggerAria: 'Select model, current {model}',
+  modelUnknown: ' (current config, not in the list)',
+  modelNone: 'No models available for this provider',
+  whisperModelLabel: 'Whisper model',
+  chatModelLabel: 'Chat model',
+  modelFieldHint:
+    '"Follow current conversation" uses the conversation model; if a chosen model fails, the plugin falls back to the conversation model and retries once.',
+  invalidModel:
+    'Check the model settings: pick both a provider and a model, or leave both empty (follow the current conversation).',
+  modelCatalogFailed:
+    'Failed to load the model list (refresh the page to retry); your current values are kept as they are.',
   notifyGetPermission: 'Get permission',
   notifyPermissionOk: 'Notification permission granted — a test notification was sent.',
   notifyDenyUnsupported: 'System notifications are not supported in this environment (no Notification API).',
@@ -274,6 +377,8 @@ export const en = {
  *                  用于手写 React 元素，如 `h('button', { onClick, children: '保存' })`
  * @param rt.useState react 的 useState hook——管理页面内可变状态
  *                  （宠物列表 / 选中项 / 忙碌 / 保存消息），值变化时自动重渲染
+ * @param rt.useRef react 的 useRef hook——「AI 模型」单下拉选择器用它拿触发器/浮层节点
+ *                  （浮层定位与"点外面关闭"判定），与宠物页面同一份注入
  * @param rt.t      locale 绑定到本插件的翻译函数（ctx.locale.bind(NS)）——
  *                  取中英文文案，如 `t('nav')` → '桌宠配置' / 'Pet Config'
  * @returns PetConfigSection 组件：即整个「桌宠配置」设置页
@@ -284,9 +389,13 @@ export function makePetConfigSection(rt: {
   useState: <T>(init: T) => [T, Dispatch<SetStateAction<T>>];
   // 用 React 命名空间类型而非 typeof：type-only import 的 hook 无法进入声明导出（TS4078）
   useEffect: (effect: ReactNS.EffectCallback, deps?: ReactNS.DependencyList) => void;
+  useRef: <T>(initial: T) => ReactNS.MutableRefObject<T>;
   t: (key: string) => string;
 }): FunctionComponent<{ close?: () => void }> {
-  const { h, useState, useEffect, t } = rt;
+  const { h, useState, useEffect, useRef, t } = rt;
+
+  // 设置页样式（只有模型选择器用得上：hover/焦点环/箭头旋转这些伪类行内样式表达不了）
+  injectSettingsCss();
 
   const CORNERS: Corner[] = ['top-left', 'top-right', 'bottom-left', 'bottom-right'];
   const cornerLabel = (c: Corner): string => t('corner.' + c);
@@ -356,6 +465,275 @@ export function makePetConfigSection(rt: {
       ],
     });
 
+  /**
+   * 「模型」单下拉选择器（碎碎念 / 对话各一个实例）——照 DSH 对话框右下角的模型选择器写：
+   * 一个触发器按钮（当前模型 + 服务商小字 + 箭头）→ 点开一个浮层：搜索框 + 按服务商分组的
+   * 模型清单（选中项打勾），最上面一项是「跟随当前对话」。
+   *
+   * 与 DSH 那份的对应关系：
+   *  - 触发器 aria-haspopup/aria-expanded、浮层 role=menu、分组头 + role=menuitemradio[aria-checked]、
+   *    搜索 role=searchbox —— 无障碍语义一致；
+   *  - 浮层 position:fixed（脱离设置页滚动容器，不被 overflow 裁掉）+ 外部点击 / Esc 关闭 + 滚动跟随；
+   *  - 搜索是**大小写不敏感的有序子序列**匹配（DSH 同款：输入 dsc 能命中 DeepSeek Chat）；
+   *  - 数据来自 GET /models（宿主 llm 服务），与 DSH 模型选择器同一份来源。
+   *
+   * 为什么不用两个 <select>：DSH 自己就是"一个按钮 → 一个浮层里的分组清单"，两个下拉框既占地方，
+   * 又容易留下"选了服务商没选模型"的非法组合。这里也**不再提供**"手填模型 id"的退路：
+   * 列不出模型的服务商本来也没法调用，列出来只会诱人踩坑。
+   *
+   * 定义在工厂作用域（而非 PetConfigSection 内）：组件类型必须跨渲染稳定，否则每次渲染都会
+   * 重新挂载，浮层状态（打开/搜索词/高亮）会当场丢失。
+   */
+  const ModelPicker: FunctionComponent<{
+    label: string;
+    value: ModelSelection;
+    disabled: boolean;
+    catalog: ModelCatalogGroup[] | null;
+    failed: boolean;
+    onChange: (v: ModelSelection) => void;
+  }> = (props) => {
+    const [open, setOpen] = useState(false);
+    const [query, setQuery] = useState('');
+    // 高亮行（键盘 ↑↓ 走的就是它；只停在可选项上）
+    const [active, setActive] = useState(0);
+    // 浮层位置：打开时按触发器实测一次，空间不够就翻到上方（DSH 也是实测 + 视口钳制）
+    const [pos, setPos] = useState<null | {
+      left: number;
+      top?: number;
+      bottom?: number;
+      width: number;
+      maxHeight: number;
+    }>(null);
+    const rootRef = useRef<HTMLDivElement | null>(null);
+    const panelRef = useRef<HTMLDivElement | null>(null);
+
+    const groups = props.catalog ?? [];
+    const group = groups.find((g) => g.id === props.value.provider);
+    const picked = group?.models.find((m) => m.id === props.value.model);
+    const isFollow = props.value.provider === '';
+    const triggerLabel = isFollow ? t('modelFollow') : (picked?.name ?? props.value.model);
+    // 当前配置不在清单里（服务商下线 / 模型下架）时如实标注，绝不显示成别的模型
+    const triggerSub = isFollow ? '' : (group?.name ?? props.value.provider + t('modelUnknown'));
+
+    // 搜索：大小写不敏感的有序子序列（与 DSH 同款语义）
+    const q = query.trim().toLowerCase();
+    const hit = (text: string): boolean => {
+      if (q === '') return true;
+      let i = 0;
+      for (const ch of text.toLowerCase()) {
+        if (ch === q[i]) i += 1;
+        if (i >= q.length) return true;
+      }
+      return false;
+    };
+    // 行清单：跟随当前对话（只在没搜索词时出现，它不是模型）+ 服务商分组头 + 该组命中的模型
+    const rows: ModelRow[] = [];
+    if (q === '') rows.push({ kind: 'follow', key: '__follow' });
+    for (const g of groups) {
+      const models = g.models.filter((m) => hit(m.name + ' ' + m.id));
+      if (models.length === 0 && !(q === '' && g.models.length === 0)) continue;
+      rows.push({ kind: 'group', key: g.id, name: g.name });
+      if (models.length === 0) {
+        rows.push({ kind: 'none', key: g.id + '/__none' });
+        continue;
+      }
+      for (const m of models) rows.push({ kind: 'model', key: g.id + '/' + m.id, provider: g.id, model: m });
+    }
+    // 可选项（分组头 / 提示行不参与键盘走动）
+    const selectable = rows.map((r, i) => (r.kind === 'group' || r.kind === 'none' ? -1 : i)).filter((i) => i >= 0);
+
+    const commit = (v: ModelSelection): void => {
+      props.onChange(v);
+      setOpen(false);
+      setQuery('');
+    };
+    const pick = (row: ModelRow | undefined): void => {
+      if (!row) return;
+      if (row.kind === 'follow') commit({ provider: '', model: '' });
+      else if (row.kind === 'model') commit({ provider: row.provider, model: row.model.id });
+    };
+    const step = (dir: number): void => {
+      if (selectable.length === 0) return;
+      const at = selectable.indexOf(active);
+      const next = selectable[at < 0 ? 0 : (at + dir + selectable.length) % selectable.length];
+      setActive(next);
+      panelRef.current?.querySelector('[data-row="' + next + '"]')?.scrollIntoView({ block: 'nearest' });
+    };
+
+    useEffect(() => {
+      if (!open) return;
+      const el = rootRef.current;
+      // 定位 + 关闭时机：与 DSH 一致——浮层脱离文档流实测定位，滚动/缩放跟着走，点外面或 Esc 关
+      const place = (): void => {
+        if (!el) return;
+        const r = el.getBoundingClientRect();
+        const below = window.innerHeight - r.bottom - 12;
+        const above = r.top - 12;
+        const width = Math.min(Math.max(r.width, 240), Math.max(200, Math.min(420, window.innerWidth - 16)));
+        const left = Math.max(8, Math.min(r.left, window.innerWidth - width - 8));
+        const up = below < 240 && above > below;
+        setPos(
+          up
+            ? { left, bottom: window.innerHeight - r.top + 4, width, maxHeight: Math.min(360, above) }
+            : { left, top: r.bottom + 4, width, maxHeight: Math.min(360, below) },
+        );
+      };
+      place();
+      // 打开即聚焦搜索框（DSH 同样把焦点交给搜索）
+      panelRef.current?.querySelector('input')?.focus();
+      const onDown = (e: MouseEvent): void => {
+        const target = e.target as Node | null;
+        if (target && (rootRef.current?.contains(target) === true || panelRef.current?.contains(target) === true)) {
+          return;
+        }
+        setOpen(false);
+      };
+      const onKey = (e: KeyboardEvent): void => {
+        if (e.key === 'Escape') setOpen(false);
+      };
+      document.addEventListener('mousedown', onDown, true);
+      document.addEventListener('keydown', onKey, true);
+      window.addEventListener('scroll', place, true);
+      window.addEventListener('resize', place);
+      return () => {
+        document.removeEventListener('mousedown', onDown, true);
+        document.removeEventListener('keydown', onKey, true);
+        window.removeEventListener('scroll', place, true);
+        window.removeEventListener('resize', place);
+      };
+    }, [open]);
+
+    const toggle = (): void => {
+      if (props.disabled) return;
+      if (!open) {
+        setQuery('');
+        // 打开时高亮停在当前选择上（DSH 打开菜单也是先定位到已选项）
+        const at = rows.findIndex(
+          (r) => r.kind === 'model' && r.provider === props.value.provider && r.model.id === props.value.model,
+        );
+        setActive(at >= 0 ? at : 0);
+      }
+      setOpen(!open);
+    };
+
+    const searchRow = h('input', {
+      key: 'search',
+      type: 'text',
+      className: 'dsh-pet-mp__search',
+      role: 'searchbox',
+      placeholder: t('modelSearch'),
+      'aria-label': t('modelSearch'),
+      value: query,
+      disabled: props.disabled,
+      onChange: (e: ChangeEvent<HTMLInputElement>) => {
+        setQuery(e.target.value);
+        setActive(selectable.length > 0 ? selectable[0] : 0);
+      },
+      onKeyDown: (e: ReactNS.KeyboardEvent<HTMLInputElement>) => {
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          step(1);
+        } else if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          step(-1);
+        } else if (e.key === 'Enter') {
+          e.preventDefault();
+          pick(rows[active]);
+        }
+      },
+    });
+
+    const rowNode = (row: ModelRow, index: number): ReturnType<typeof h> => {
+      if (row.kind === 'group') {
+        return h('div', { key: row.key, className: 'dsh-pet-mp__group', children: row.name });
+      }
+      if (row.kind === 'none') {
+        return h('div', { key: row.key, className: 'dsh-pet-mp__status', children: t('modelNone') });
+      }
+      const checked =
+        row.kind === 'follow' ? isFollow : props.value.provider === row.provider && props.value.model === row.model.id;
+      return h('button', {
+        key: row.key,
+        type: 'button',
+        role: 'menuitemradio',
+        'aria-checked': checked,
+        'data-row': index,
+        className: 'dsh-pet-mp__item' + (index === active ? ' is-active' : ''),
+        disabled: props.disabled,
+        onClick: () => pick(row),
+        onMouseMove: () => setActive(index),
+        children: [
+          h('span', {
+            key: 'n',
+            className: 'dsh-pet-mp__name',
+            children: row.kind === 'follow' ? t('modelFollow') : row.model.name,
+          }),
+          h('span', { key: 'c', className: 'dsh-pet-mp__check', children: checked ? '✓' : '' }),
+        ],
+      });
+    };
+
+    return h('div', {
+      ref: rootRef,
+      className: 'dsh-pet-mp',
+      children: [
+        h('button', {
+          key: 'trigger',
+          type: 'button',
+          className: 'dsh-pet-mp__trigger',
+          disabled: props.disabled,
+          'aria-haspopup': 'menu',
+          'aria-expanded': open,
+          'aria-label': t('modelTriggerAria').replace('{model}', triggerLabel),
+          onClick: toggle,
+          children: [
+            h('span', { key: 'l', className: 'dsh-pet-mp__label', children: triggerLabel }),
+            triggerSub ? h('span', { key: 's', className: 'dsh-pet-mp__sub', children: triggerSub }) : null,
+            h('span', { key: 'c', className: 'dsh-pet-mp__chevron' + (open ? ' is-open' : ''), children: '▾' }),
+          ],
+        }),
+        open && pos
+          ? h('div', {
+              key: 'panel',
+              ref: panelRef,
+              className: 'dsh-pet-mp__panel',
+              role: 'menu',
+              'aria-label': props.label,
+              style: {
+                left: pos.left + 'px',
+                top: pos.top === undefined ? undefined : pos.top + 'px',
+                bottom: pos.bottom === undefined ? undefined : pos.bottom + 'px',
+                width: pos.width + 'px',
+                maxHeight: pos.maxHeight + 'px',
+              },
+              children: [
+                searchRow,
+                props.catalog === null
+                  ? h('div', {
+                      key: 'loading',
+                      className: 'dsh-pet-mp__status',
+                      children: props.failed ? t('modelCatalogFailed') : t('modelLoading'),
+                    })
+                  : rows.length === 0
+                    ? h('div', {
+                        key: 'empty',
+                        className: 'dsh-pet-mp__status',
+                        role: 'status',
+                        children: groups.length === 0 ? t('modelNoModels') : t('modelEmpty'),
+                      })
+                    : h('div', {
+                        key: 'list',
+                        className: 'dsh-pet-mp__list',
+                        role: 'group',
+                        children: rows.map(rowNode),
+                      }),
+              ],
+            })
+          : null,
+      ],
+    });
+  };
+
   return function PetConfigSection() {
     const initPets = petBridge.current.filter((p) => !p.extra);
     // 文件定义宠物数量（pet/ 目录，不在本编辑列表；仅展示提示）
@@ -403,6 +781,14 @@ export function makePetConfigSection(rt: {
     // 与四个开关同一套语义：只改本地状态，随「保存」整包写入（不做即时写入）。
     // 初值 = 成品 main.physics（用户层优先、缺省回落内置默认），拉取失败时用内置默认兜底。
     const [physics, setPhysics] = useState<PhysicsParams>({ ...DEFAULT_PHYSICS });
+    // AI 模型（条目级：碎碎念 / 对话各自的服务商 + 模型，两者都留空 = 跟随当前对话的模型）。
+    // 与四个全局开关同一套语义：只改本地状态，随「保存」整包写入（不做即时写入）。
+    const [whisperModel, setWhisperModel] = useState<ModelSelection>({ provider: '', model: '' });
+    const [chatModel, setChatModel] = useState<ModelSelection>({ provider: '', model: '' });
+    // 候选清单（GET /models：宿主 llm 服务的实时服务商 + 各自模型，与 DSH 的模型选择器同源）。
+    // null = 还没拉到（下拉框只剩「跟随当前对话」）；拉失败置 catalogErr 显示一行提示。
+    const [catalog, setCatalog] = useState<ModelCatalogGroup[] | null>(null);
+    const [catalogErr, setCatalogErr] = useState(false);
     // 权限申请按钮的反馈（就地显示在按钮旁，与全局保存反馈分离）
     const [permMsg, setPermMsg] = useState<{ kind: 'ok' | 'err' | ''; text: string }>({ kind: '', text: '' });
     useEffect(() => {
@@ -421,9 +807,36 @@ export function makePetConfigSection(rt: {
           if (m.physics && typeof m.physics === 'object') {
             setPhysics({ ...DEFAULT_PHYSICS, ...(m.physics as PhysicsParams) });
           }
+          // 模型选择：成品同样已填满（内置默认 = 两者都空 = 跟随当前对话），读得出就原样上屏
+          const wm = m.whisperModel as Partial<ModelSelection> | undefined;
+          if (wm && typeof wm.provider === 'string' && typeof wm.model === 'string') {
+            setWhisperModel({ provider: wm.provider, model: wm.model });
+          }
+          const cm = m.chatModel as Partial<ModelSelection> | undefined;
+          if (cm && typeof cm.provider === 'string' && typeof cm.model === 'string') {
+            setChatModel({ provider: cm.provider, model: cm.model });
+          }
         })
         .catch(() => {
           /* 成品拉取失败时保持默认（通知开、配图关） */
+        });
+      return () => {
+        alive = false;
+      };
+    }, []);
+
+    // 候选模型清单：一次性拉取（下拉框数据源）。失败只提示、不阻塞——已有配置值照常显示与保存。
+    useEffect(() => {
+      let alive = true;
+      fetch('/dsh-pet-7340/models')
+        .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
+        .then((d) => {
+          if (!alive) return;
+          if (d && Array.isArray(d.providers)) setCatalog(d.providers as ModelCatalogGroup[]);
+          else setCatalogErr(true);
+        })
+        .catch(() => {
+          if (alive) setCatalogErr(true);
         });
       return () => {
         alive = false;
@@ -503,6 +916,11 @@ export function makePetConfigSection(rt: {
         setMsg({ kind: 'err', text: t('invalidPhysics') });
         return false;
       }
+      // 模型选择：与宿主 modelSelectionValid 同一套规则——只填一半（选了服务商没选模型，或反之）非法
+      if (!modelPairValid(whisperModel) || !modelPairValid(chatModel)) {
+        setMsg({ kind: 'err', text: t('invalidModel') });
+        return false;
+      }
       return true;
     };
 
@@ -525,6 +943,10 @@ export function makePetConfigSection(rt: {
           confineToScreen: confineScreen,
           // 物理参数整段提交（白名单字段，未传即走宿主透传保留）：宿主用 physicsValid 整段校验
           physics: physics,
+          // 碎碎念 / 对话的模型（条目级白名单字段，同上）：宿主用 modelSelectionValid 整段校验，
+          // 两者都空 = 跟随当前对话的模型
+          whisperModel: whisperModel,
+          chatModel: chatModel,
         };
         // force === true（用户在损坏弹窗里点了确认）：带 ?force=1 才允许按白名单重建损坏文件
         const res = await fetch('/dsh-pet-7340/config' + (force === true ? '?force=1' : ''), {
@@ -655,6 +1077,30 @@ export function makePetConfigSection(rt: {
           }),
         ],
       });
+
+    /** 「AI 模型」的一格：标题 + 单下拉选择器（碎碎念 / 对话各一格；说明在整段下面统一给一行） */
+    const modelCell = (
+      key: 'whisperModel' | 'chatModel',
+      value: ModelSelection,
+      setter: (v: ModelSelection) => void,
+    ) => {
+      const label = t(key === 'whisperModel' ? 'whisperModelLabel' : 'chatModelLabel');
+      return h('div', {
+        key,
+        style: {
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '4px',
+          minWidth: 0,
+          fontSize: '13px',
+          color: 'var(--dsw-alias-label-primary)',
+        },
+        children: [
+          h('span', { children: label }),
+          h(ModelPicker, { label, value, disabled: busy, catalog, failed: catalogErr, onChange: setter }),
+        ],
+      });
+    };
 
     return h('section', {
       style: {
@@ -984,6 +1430,45 @@ export function makePetConfigSection(rt: {
             toggleCell('chatImageToggle', chatImage, busy, setChatImage),
             toggleCell('confineToggle', confineScreen, busy, setConfineScreen),
           ],
+        }),
+
+        // AI 模型（碎碎念 / 对话各自的服务商 + 模型，条目级）：与上面四个开关同一套语义——
+        // 只改本地状态，随「保存」整包写入。host 侧生成时优先用它，失败自动回落到当前对话的模型。
+        h('div', {
+          style: { marginTop: '10px', fontSize: '13px', fontWeight: 500, color: 'var(--dsw-alias-label-primary)' },
+          children: t('modelTitle'),
+        }),
+        h('p', {
+          style: { margin: 0, fontSize: '11px', color: 'var(--dsw-alias-label-tertiary)', lineHeight: '16px' },
+          children: t('modelHint'),
+        }),
+        catalogErr
+          ? h('p', {
+              style: {
+                margin: 0,
+                fontSize: '11px',
+                color: 'var(--dsw-alias-state-error-primary)',
+                lineHeight: '16px',
+              },
+              children: t('modelCatalogFailed'),
+            })
+          : null,
+        h('div', {
+          style: {
+            display: 'grid',
+            gridTemplateColumns: '1fr 1fr',
+            gap: '10px 16px',
+            marginTop: '4px',
+            alignItems: 'start',
+          },
+          children: [
+            modelCell('whisperModel', whisperModel, setWhisperModel),
+            modelCell('chatModel', chatModel, setChatModel),
+          ],
+        }),
+        h('p', {
+          style: { margin: 0, fontSize: '11px', color: 'var(--dsw-alias-label-tertiary)', lineHeight: '16px' },
+          children: t('modelFieldHint'),
         }),
 
         // 物理参数（拖拽抛掷手感，全局）：四个数字输入 + 两个开关，与上面四个开关同一套语义
