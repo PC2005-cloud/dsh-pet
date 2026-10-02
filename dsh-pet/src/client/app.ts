@@ -5,6 +5,7 @@ import { makePetUI } from './pet';
 import { makePetConfigSection, NS, zh, en, petBridge } from './settings';
 import { initNotify } from './notify';
 import { installCommandFaces, type CommandFace, type CommandUiLike } from './command-faces';
+import { installSectionNavIcon } from './nav-icon';
 import type * as ReactNS from 'react';
 import type * as PrimitivesNS from '@deepseek-ai/dsh-client-ui-primitives';
 
@@ -28,6 +29,30 @@ export function makeFactory(): (require: (mod: string) => any) => any {
       primitives = require('@deepseek-ai/dsh-client-ui-primitives');
     } catch (error) {
       console.warn('[dsh-pet] 图标模块不可用：' + (error instanceof Error ? error.message : String(error)));
+    }
+
+    // react-dom 同样是平台种子模块（见 dsh-web-frontend 打包产物里的 staticModules 表）。
+    // 这里只用它把图标组件**同步**渲成 SVG 源码，供设置页导航的 CSS mask 用；
+    // 取不到就退化成「那一行仍是齿轮」，绝不让整个插件加载失败。
+    let renderIconSvg: ((icon: ReactNS.ComponentType<PrimitivesNS.IconProps>) => string) | undefined;
+    try {
+      const { createRoot } = require('react-dom/client');
+      const { flushSync } = require('react-dom');
+      renderIconSvg = (icon) => {
+        const holder = document.createElement('div');
+        const root = createRoot(holder);
+        try {
+          // flushSync：React 18 的 root.render 是异步调度，不同步刷一次就拿不到 DOM
+          flushSync(() => root.render(h(icon, { size: 16 })));
+          return holder.innerHTML;
+        } finally {
+          root.unmount();
+        }
+      };
+    } catch (error) {
+      console.warn(
+        '[dsh-pet] 图标渲染器不可用（react-dom 缺失）：' + (error instanceof Error ? error.message : String(error)),
+      );
     }
 
     // 宠物页面（overlay）与配置设置页：组件各自独立文件，这里只组装 + 注册
@@ -103,6 +128,19 @@ export function makeFactory(): (require: (mod: string) => any) => any {
           ]),
         );
       }, 'dsh-pet: command faces');
+
+      // 设置面板导航里「桌宠配置」那一行的图标：DSH 的 navIcon 是按分区 id 硬编码的
+      // 白名单 + 兜底齿轮，slot 契约里也没有图标位 —— 只能在 DOM 层补。
+      // 依据与降级策略见 nav-icon.ts 的模块注释。
+      ctx.effect(() => {
+        const renderIcon = renderIconSvg;
+        const icon = primitives?.IconSlidersTwoOutlineMedium;
+        if (renderIcon === undefined || icon === undefined) {
+          console.warn('[dsh-pet] 设置页导航图标不可用（那一行仍是齿轮）');
+          return () => {};
+        }
+        return installSectionNavIcon({ label: () => t('nav'), renderSvg: () => renderIcon(icon) });
+      }, 'dsh-pet: settings nav icon');
 
       // 宠物 overlay（多开：容器渲染多个 PetCard）
       ctx.slots.inject('shell.overlay', function* () {
