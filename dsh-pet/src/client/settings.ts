@@ -107,6 +107,10 @@ type ModelRow =
 export const zh = {
   nav: '桌宠配置',
   intro: '管理多个桌宠：每个宠物可独立设置大小与位置（保存后即时生效）。',
+  // 「/」命令菜单里的行标题（图标由 app.ts 经 command-faces.ts 补上）
+  'cmd.chat': '对话',
+  'cmd.pet': '桌宠',
+  'cmd.balance': '余额',
   petsLabel: '宠物列表',
   add: '添加宠物',
   remove: '删除',
@@ -230,6 +234,10 @@ export const zh = {
 export const en = {
   nav: 'Pet Config',
   intro: 'Manage multiple pets: each pet has its own size and position (applies instantly after saving).',
+  // Row titles in the "/" command menu (icons are added by app.ts)
+  'cmd.chat': 'Chat',
+  'cmd.pet': 'Pet',
+  'cmd.balance': 'Balance',
   petsLabel: 'Pets',
   add: 'Add pet',
   remove: 'Remove',

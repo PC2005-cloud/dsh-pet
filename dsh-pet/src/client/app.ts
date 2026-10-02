@@ -4,7 +4,9 @@
 import { makePetUI } from './pet';
 import { makePetConfigSection, NS, zh, en, petBridge } from './settings';
 import { initNotify } from './notify';
+import { installCommandFaces, type CommandFace, type CommandUiLike } from './command-faces';
 import type * as ReactNS from 'react';
+import type * as PrimitivesNS from '@deepseek-ai/dsh-client-ui-primitives';
 
 /**
  * 返回 DSH 插件 factory：`(require) => module`。
@@ -18,6 +20,15 @@ export function makeFactory(): (require: (mod: string) => any) => any {
     const react: typeof ReactNS = require('react');
     const { useEffect, useRef, useState } = react;
     const { jsx: h } = require('react/jsx-runtime');
+
+    // 平台种子模块（DSH web 前端壳提供，与 react / cordis 并列）：取不到就退化成
+    // 「命令没图标」，绝不让整个插件加载失败。
+    let primitives: typeof PrimitivesNS | undefined;
+    try {
+      primitives = require('@deepseek-ai/dsh-client-ui-primitives');
+    } catch (error) {
+      console.warn('[dsh-pet] 图标模块不可用：' + (error instanceof Error ? error.message : String(error)));
+    }
 
     // 宠物页面（overlay）与配置设置页：组件各自独立文件，这里只组装 + 注册
     const PetMulti = makePetUI({ h, useState, useEffect, useRef });
@@ -67,6 +78,31 @@ export function makeFactory(): (require: (mod: string) => any) => any {
           },
         });
       }, 'dsh-pet: /pet picker');
+
+      // /chat /pet /balance 在「/」菜单里的行标题与图标。
+      // DSH 没有给宿主命令配图标的官方入口，这里包装 commandUi.candidates 补上 label + icon；
+      // 三个命令的宿主侧能力（命令日志 / 手输参数 / input.hint / SDK 可见性）全部不受影响。
+      // 依据与降级策略见 command-faces.ts 的模块注释。
+      ctx.effect(() => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- DSH 注入服务无静态类型
+        const commandUi = (ctx as any).get?.('commandUi') as CommandUiLike | undefined;
+        const icons = primitives;
+        if (commandUi === undefined || icons === undefined) {
+          console.warn('[dsh-pet] 命令图标不可用（命令本身仍可用，只是没有图标）');
+          return () => {};
+        }
+        return installCommandFaces(
+          commandUi,
+          new Map<string, CommandFace>([
+            // 对话气泡：94 个内置图标里唯一的纯对话气泡
+            ['chat', { label: () => t('cmd.chat'), icon: icons.IconQueueOutlineRegular }],
+            // 双人形：多只桌宠里挑一只
+            ['pet', { label: () => t('cmd.pet'), icon: icons.IconUsersOutlineRegular }],
+            // 仪表盘：额度 / 用量
+            ['balance', { label: () => t('cmd.balance'), icon: icons.IconGaugeOutlineRegular }],
+          ]),
+        );
+      }, 'dsh-pet: command faces');
 
       // 宠物 overlay（多开：容器渲染多个 PetCard）
       ctx.slots.inject('shell.overlay', function* () {
