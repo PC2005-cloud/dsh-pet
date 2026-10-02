@@ -731,7 +731,9 @@
           <div class="card-body">
             <div class="card-desc">
               模拟宿主侧其他插件（如巡检类插件）调用 <span class="mono">POST /broadcast</span>：
-              <b>不生成内容</b>，只把给定的文本搬运到桌宠气泡。配图只接受<b>包内表情包名</b>。
+              <b>不生成内容</b>，只把给定的文本搬运到桌宠气泡。配图只接受<b>该桌宠条目表情包池内</b>的名字
+              （图片归属按条目分：<span class="mono">pet/&lt;素材根&gt;-memes/</span> 独占 → 用户
+              <span class="mono">memes/</span> → 包内 <span class="mono">assets/memes/</span>）。
             </div>
             <div class="field" style="margin-top:10px">
               <label for="bc-text">要说的话</label>
@@ -739,7 +741,7 @@
             </div>
             <div class="field">
               <label for="bc-image">配图名</label>
-              <input id="bc-image" type="text" placeholder="留空则不配图，例如：可爱">
+              <input id="bc-image" type="text" placeholder="留空则不配图；名字须在该宠物条目的池内（pet pack 只看自己的 -memes/）">
               <select id="bc-pet" style="width:auto"></select>
             </div>
             <div class="field">
@@ -959,10 +961,19 @@
     /**
      * 表情包名 → 图片地址。
      * 注意：宿主在 say 叶子里存的 image 是**表情包名**（如「可爱」），不是 URL；
-     * 拼法必须与两端共用逻辑一致：`<前缀>/pic/memes/<名称>.png`（名称含中文要编码）。
      * 直接把 name 当 src 用会被解析成相对路径 → 裂图。
+     *
+     * 拼法与两端共用逻辑一致：`<前缀>/pic/memes/<素材根>/<名称>.png`（素材根与名称都要编码）。
+     * 素材根 = 该宠物所属条目（= `/config` 的顶层键）——图片归属与动画同一套：
+     * `pet/<素材根>-memes/` 独占 → 用户 `memes/` → 包内 `assets/memes/`。
+     * **必须带素材根**：pet pack 的表情包目录是独占的，用旧的两段形式（= main 的回落链）
+     * 取不到它的图，只会裂图。素材根缺省/空白时才退回两段形式（包内表情包照常显示）。
      */
-    const memeUrl = (name) => PREFIX + "/pic/memes/" + encodeURIComponent(String(name)) + ".png";
+    const memeUrl = (name, assetRoot) => {
+      const root = String(assetRoot == null ? "" : assetRoot).trim();
+      const prefix = root ? "/pic/memes/" + encodeURIComponent(root) : "/pic/memes";
+      return PREFIX + prefix + "/" + encodeURIComponent(String(name)) + ".png";
+    };
     const hhmmss = (t) => new Date(t).toLocaleTimeString("zh-CN", { hour12: false });
 
     // ── 提示条 ──
@@ -1123,7 +1134,7 @@
       if (path.startsWith("pets.") && path.endsWith(".say")) {
         // 取 id：剥掉 "pets." 前缀与 ".say" 后缀（不按 '.' 切分）
         const pid = path.slice("pets.".length, path.length - ".say".length);
-        if (pid === S.petId) renderSay(leaf.data);
+        if (pid === S.petId) renderSay(leaf.data, pid);
         if (pid === S.chatPetId && opt.initial !== true) maybeChatReply(leaf.data);
       }
     }
@@ -1164,7 +1175,7 @@
     // 说话气泡
     // ═══════════════════════════════════════════════════════════════
 
-    function renderSay(data) {
+    function renderSay(data, petId) {
       const b = $("say-bubble");
       b.innerHTML = "";
       if (!data || typeof data.text !== "string" || !data.text) {
@@ -1179,7 +1190,8 @@
       b.appendChild(document.createTextNode(data.text));
       if (typeof data.image === "string" && data.image) {
         const img = el("img", "meme");
-        img.src = memeUrl(data.image);            // ← image 是名称，须经 memeUrl 拼地址
+        // image 是名称，须经 memeUrl 拼地址；素材根取该宠物所属条目（配图归属按条目分）
+        img.src = memeUrl(data.image, assetRootOf(petId));
         img.alt = data.image;
         img.onerror = () => img.remove();
         b.appendChild(img);
@@ -1393,6 +1405,17 @@
       return S.pets.find((p) => p.id === S.petId) || null;
     }
 
+    /**
+     * 宠物 id → 素材根（= 它所属的条目名，也就是 `/config` 的顶层键）。
+     * 表情包地址要带素材根，理由与动画池一样：归属按**条目**分，
+     * pet pack 的 `pet/<素材根>-memes/` 是独占目录，不带素材根就取不到它的图。
+     * 找不到该宠物时返回空串（memeUrl 会退回包内的两段形式）。
+     */
+    function assetRootOf(petId) {
+      const p = S.pets.find((x) => x.id === petId);
+      return p ? p.entry : "";
+    }
+
     function renderPetIdentity() {
       const p = currentPet();
       const name = p ? p.name : S.petId;
@@ -1422,9 +1445,9 @@
       const leaf = s && s.pets && s.pets[petId] && s.pets[petId].say;
       if (leaf) {
         S.baseline["pets." + petId + ".say"] = leaf.counter;
-        renderSay(leaf.data);
+        renderSay(leaf.data, petId);
       } else {
-        renderSay(null);
+        renderSay(null, petId);
       }
     }
 
@@ -1522,7 +1545,7 @@
         const leaf = s.body && s.body.pets && s.body.pets[S.chatPetId] && s.body.pets[S.chatPetId].say;
         if (leaf && leaf.counter !== S.baseline["pets." + S.chatPetId + ".say"]) {
           S.baseline["pets." + S.chatPetId + ".say"] = leaf.counter;
-          if (S.chatPetId === S.petId) renderSay(leaf.data);
+          if (S.chatPetId === S.petId) renderSay(leaf.data, S.chatPetId);
           maybeChatReply(leaf.data);
         }
       }
@@ -1820,8 +1843,14 @@
       renderPetIdentity();
       // 用最近一次快照立刻显示这只宠物此刻说的话（否则要等它下次变化才渲染）
       showSayFor(S.petId);
+      // 点播卡片默认跟随「当前桌宠」（它自己的下拉框可再单独改），然后重填名字列表
+      const animSel = $("anim-pet");
+      if (animSel) animSel.value = S.petId;
       fillAnimSelect(); // 动画池是按条目分的：换宠物要换下拉框
     });
+
+    // 点播卡片自己的宠物下拉：换宠物同样要换名字列表（池按条目分，主宠物与 pet pack 完全不同）
+    $("anim-pet").addEventListener("change", fillAnimSelect);
 
     $("chat-pet-select").addEventListener("change", (e) => {
       S.chatPetId = e.target.value;
@@ -1845,7 +1874,7 @@
       const leaf = s.body && s.body.pets && s.body.pets[S.petId] && s.body.pets[S.petId].say;
       if (leaf) {
         S.baseline["pets." + S.petId + ".say"] = leaf.counter;
-        renderSay(leaf.data);
+        renderSay(leaf.data, S.petId);
       }
     });
 
@@ -1904,9 +1933,21 @@
       return out;
     }
 
-    /** 当前选中宠物所属条目的动画池（用于点播下拉框） */
+    /**
+     * 点播卡片自己的目标宠物 —— 取 `#anim-pet` 的值，缺省回落页面级「当前桌宠」。
+     * 为什么不能用 currentPet()：那个看的是 `S.petId`（顶部「当前桌宠」），
+     * 而点播卡片有**自己的**宠物下拉；两者不一致时列表会列出别只宠物的名字，
+     * 点了必然 unknown-animation（池是按条目分的，主宠物与 pet pack 完全不同）。
+     */
+    function animPet() {
+      const sel = $("anim-pet");
+      const id = (sel && sel.value) || S.petId;
+      return S.pets.find((p) => p.id === id) || null;
+    }
+
+    /** 点播卡片目标宠物所属条目的动画池（用于点播下拉框） */
     function currentAnimations() {
-      const p = currentPet();
+      const p = animPet();
       const entry = p && S.cfg ? S.cfg[p.entry] : null;
       return entry && entry.animations ? entry.animations : null;
     }
@@ -1969,7 +2010,7 @@
         const leaf = s.body && s.body.pets && s.body.pets[petId] && s.body.pets[petId].say;
         if (leaf) {
           S.baseline["pets." + petId + ".say"] = leaf.counter;
-          if (petId === S.petId) renderSay(leaf.data);
+          if (petId === S.petId) renderSay(leaf.data, petId);
         }
       } else {
         const why = (r.body && r.body.message) || (r.body && r.body.reason) || r.error || "HTTP " + r.status;

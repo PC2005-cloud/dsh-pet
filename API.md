@@ -71,7 +71,8 @@ curl -s -X POST "$BASE/broadcast?pet=main" \
      -d '{"text":"巡检完毕，一切正常"}'
 curl -s $BASE/state   # → pets.main.say.data.text
 
-# 让它播一段动画（名字取自 GET /config 里该宠物的 animations）
+# 让它播一段动画（名字取自 GET /config 里**该宠物所属条目**的 animations：
+#  main 条目的宠物用 main 的池，pet/<名>-config.json 的种类各用自己的池）
 curl -s -X POST "$BASE/anim?pet=main" \
      -H 'content-type: application/json' \
      -d '{"name":"东张西望"}'
