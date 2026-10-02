@@ -1,0 +1,1954 @@
+<!doctype html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>桌宠控制台</title>
+  <style>
+    :root {
+      --bg: #f6f7f9;
+      --panel: #ffffff;
+      --side: #fbfbfd;
+      --text: #1c2024;
+      --muted: #6b7280;
+      --faint: #9aa3af;
+      --border: #e5e7eb;
+      --border-strong: #d3d8de;
+      --accent: #4f46e5;
+      --accent-soft: #eef0ff;
+      --ok: #15803d;
+      --ok-soft: #eaf7ee;
+      --warn: #b45309;
+      --warn-soft: #fdf5e6;
+      --bad: #b91c1c;
+      --bad-soft: #fdeeee;
+      --code: #f7f8fa;
+      --radius: 10px;
+      --shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 1px 3px rgba(16, 24, 40, 0.06);
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body { height: 100%; }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: "Segoe UI", "Microsoft YaHei", system-ui, -apple-system, sans-serif;
+      font-size: 14px;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .app {
+      display: grid;
+      grid-template-columns: 212px minmax(0, 1fr) 296px;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    .app.no-log { grid-template-columns: 212px minmax(0, 1fr) 0; }
+
+    /* ── 侧栏 ── */
+    .sidebar {
+      background: var(--side);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      padding: 16px 16px 14px;
+      font-weight: 650;
+      font-size: 15px;
+      letter-spacing: 0.2px;
+    }
+
+    .brand .logo {
+      width: 26px; height: 26px;
+      border-radius: 8px;
+      background: linear-gradient(135deg, #6366f1, #4f46e5);
+      display: grid; place-items: center;
+      color: #fff; font-size: 14px; flex: 0 0 auto;
+    }
+
+    .nav { padding: 4px 10px; display: flex; flex-direction: column; gap: 2px; }
+
+    .nav button {
+      display: flex; align-items: center; gap: 9px;
+      width: 100%;
+      border: 0; background: transparent;
+      padding: 8px 10px;
+      border-radius: 8px;
+      font: inherit; color: var(--text);
+      text-align: left; cursor: pointer;
+    }
+
+    .nav button:hover { background: #f0f1f5; }
+
+    .nav button.active {
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-weight: 600;
+    }
+
+    .nav .ico { width: 16px; text-align: center; flex: 0 0 auto; opacity: .9; }
+
+    .nav .badge {
+      margin-left: auto;
+      background: var(--accent); color: #fff;
+      font-size: 11px; line-height: 1;
+      padding: 3px 6px; border-radius: 99px;
+      font-weight: 600;
+    }
+
+    .nav .badge:empty { display: none; }
+
+    .side-foot {
+      margin-top: auto;
+      padding: 12px;
+      border-top: 1px solid var(--border);
+      display: flex; flex-direction: column; gap: 9px;
+    }
+
+    .conn {
+      display: flex; align-items: center; gap: 7px;
+      font-size: 12.5px; color: var(--muted);
+    }
+
+    .dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: #c4c8ce; flex: 0 0 auto;
+      transition: background .2s;
+    }
+
+    .dot.on { background: #22c55e; box-shadow: 0 0 0 3px rgba(34, 197, 94, .16); }
+    .dot.off { background: #ef4444; box-shadow: 0 0 0 3px rgba(239, 68, 68, .14); }
+
+    .port-row { display: flex; align-items: center; gap: 6px; }
+    .port-row label { font-size: 12px; color: var(--muted); white-space: nowrap; }
+    .port-row input { width: 66px; }
+
+    /* ── 控件 ── */
+    input, select, textarea, button {
+      font: inherit;
+      color: var(--text);
+    }
+
+    input[type="text"], input[type="number"], select, textarea {
+      background: var(--panel);
+      border: 1px solid var(--border-strong);
+      border-radius: 7px;
+      padding: 6px 9px;
+      font-size: 13px;
+      width: 100%;
+      min-width: 0;
+    }
+
+    input:focus, select:focus, textarea:focus {
+      outline: 2px solid var(--accent-soft);
+      border-color: var(--accent);
+    }
+
+    textarea { resize: vertical; line-height: 1.55; }
+
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+      background: var(--panel);
+      border: 1px solid var(--border-strong);
+      border-radius: 7px;
+      padding: 6px 12px;
+      font-size: 13px;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background .12s, border-color .12s, color .12s;
+    }
+
+    .btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); background: #fcfcff; }
+    .btn:disabled { opacity: .5; cursor: not-allowed; }
+
+    .btn.primary {
+      background: var(--accent); border-color: var(--accent); color: #fff;
+    }
+
+    .btn.primary:hover:not(:disabled) { background: #4338ca; color: #fff; }
+
+    .btn.ghost { border-color: transparent; background: transparent; color: var(--muted); }
+    .btn.ghost:hover:not(:disabled) { background: #f0f1f5; color: var(--text); }
+
+    .btn.danger:hover:not(:disabled) { border-color: var(--bad); color: var(--bad); }
+
+    .btn.sm { padding: 3px 8px; font-size: 12px; border-radius: 6px; }
+
+    label.chk {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-size: 13px; color: var(--text); cursor: pointer; user-select: none;
+    }
+
+    label.chk input { width: auto; }
+
+    /* ── 主区 ── */
+    .content { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+
+    .topbar {
+      display: flex; align-items: center; gap: 12px;
+      padding: 13px 20px;
+      background: var(--panel);
+      border-bottom: 1px solid var(--border);
+      flex: 0 0 auto;
+    }
+
+    .topbar h1 { margin: 0; font-size: 15.5px; font-weight: 650; }
+
+    .topbar .sub { color: var(--faint); font-size: 12.5px; }
+
+    .topbar .spacer { flex: 1; }
+
+    .view { display: none; padding: 18px 20px 40px; overflow: auto; flex: 1; min-height: 0; }
+    .view.active { display: block; }
+
+    /* ── 卡片 ── */
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }
+
+    .card + .card { margin-top: 16px; }
+
+    .card-head {
+      display: flex; align-items: center; gap: 10px;
+      padding: 11px 15px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .card-head h2 { margin: 0; font-size: 13.5px; font-weight: 650; }
+    .card-head .hint { font-size: 12px; color: var(--faint); margin-left: auto; }
+    .card-body { padding: 15px; }
+
+    /* ── 桌宠 hero ── */
+    .hero {
+      display: flex; gap: 18px; align-items: flex-start;
+      padding: 18px;
+    }
+
+    .avatar {
+      width: 92px; height: 92px; flex: 0 0 auto;
+      border-radius: 16px;
+      background: linear-gradient(150deg, #eef0ff, #f7f8ff);
+      border: 1px solid var(--border);
+      display: grid; place-items: center;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .avatar .fallback { font-size: 34px; font-weight: 700; color: var(--accent); }
+
+    .pet-meta { min-width: 0; flex: 1; }
+
+    .pet-name {
+      display: flex; align-items: center; gap: 9px;
+      font-size: 17px; font-weight: 650; margin-bottom: 2px;
+    }
+
+    .pet-id { font-size: 12px; color: var(--faint); font-family: ui-monospace, Consolas, monospace; }
+
+    .bubble-wrap { margin-top: 12px; }
+
+    .bubble {
+      position: relative;
+      display: inline-block;
+      max-width: 100%;
+      background: var(--accent-soft);
+      border: 1px solid #dfe2ff;
+      color: #232a5c;
+      border-radius: 12px 12px 12px 4px;
+      padding: 10px 13px;
+      font-size: 14px;
+      line-height: 1.55;
+      word-break: break-word;
+      white-space: pre-wrap;
+    }
+
+    .bubble.empty {
+      background: #f7f8fa; border-color: var(--border);
+      color: var(--faint); font-style: italic;
+    }
+
+    .bubble .meme {
+      display: block; margin-top: 9px;
+      max-width: 148px; max-height: 148px;
+      width: auto; height: auto;
+      border-radius: 8px;
+      border: 1px solid rgba(0, 0, 0, .06);
+    }
+
+    .bubble-time { font-size: 11.5px; color: var(--faint); margin-top: 5px; }
+
+    .hero-actions { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+
+    /* ── 状态网格 ── */
+    .grid3 {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(232px, 1fr));
+      gap: 14px;
+      margin-top: 16px;
+    }
+
+    .grid3 .card { margin-top: 0; }
+
+    .stat-big { font-size: 21px; font-weight: 650; letter-spacing: -.2px; }
+    .stat-sub { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+
+    .status-line { display: flex; align-items: center; gap: 9px; }
+
+    .pill {
+      display: inline-flex; align-items: center; gap: 5px;
+      font-size: 12px; font-weight: 600;
+      padding: 3px 9px; border-radius: 99px;
+      border: 1px solid transparent;
+    }
+
+    .pill.gray { background: #f2f3f5; color: var(--muted); border-color: var(--border); }
+    .pill.indigo { background: var(--accent-soft); color: var(--accent); border-color: #dfe2ff; }
+    .pill.blue { background: #eaf2fe; color: #1d4ed8; border-color: #d6e4fd; }
+    .pill.cyan { background: #e8f7f8; color: #0e7490; border-color: #cfedf0; }
+    .pill.amber { background: var(--warn-soft); color: var(--warn); border-color: #f6e3c0; }
+    .pill.green { background: var(--ok-soft); color: var(--ok); border-color: #cfe9d8; }
+    .pill.red { background: var(--bad-soft); color: var(--bad); border-color: #f3d2d2; }
+
+    .task-text {
+      font-size: 12.5px; color: var(--muted);
+      margin-top: 8px; word-break: break-word;
+      max-height: 54px; overflow: auto;
+    }
+
+    /* ── 余额 ── */
+    .bal-amount { font-size: 23px; font-weight: 650; letter-spacing: -.3px; }
+    .bal-cur { font-size: 13px; color: var(--muted); font-weight: 500; margin-left: 3px; }
+
+    .meter { margin-top: 11px; }
+    .meter-top { display: flex; justify-content: space-between; font-size: 12.5px; margin-bottom: 4px; }
+    .meter-top .k { color: var(--muted); }
+    .meter-top .v { font-variant-numeric: tabular-nums; font-weight: 600; }
+
+    .bar { height: 7px; border-radius: 99px; background: #eef0f3; overflow: hidden; }
+    .bar > i { display: block; height: 100%; border-radius: 99px; background: var(--accent); transition: width .35s; }
+    .bar > i.warn { background: #f59e0b; }
+    .bar > i.bad { background: #ef4444; }
+
+    .kv { display: flex; justify-content: space-between; gap: 10px; font-size: 13px; padding: 4px 0; }
+    .kv .k { color: var(--muted); }
+    .kv .v { font-variant-numeric: tabular-nums; }
+
+    .divider { height: 1px; background: var(--border); margin: 10px 0; }
+
+    /* ── 通知流 ── */
+    .feed { display: flex; flex-direction: column; gap: 8px; max-height: 230px; overflow: auto; }
+
+    .feed-item {
+      display: flex; gap: 9px; align-items: flex-start;
+      padding: 8px 10px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: #fcfcfd;
+    }
+
+    .feed-item .fi-ico { flex: 0 0 auto; line-height: 1.4; }
+    .feed-item .fi-body { min-width: 0; flex: 1; }
+    .feed-item .fi-title { font-size: 13px; font-weight: 600; }
+    .feed-item .fi-text { font-size: 12.5px; color: var(--muted); word-break: break-word; }
+    .feed-item .fi-time { font-size: 11px; color: var(--faint); white-space: nowrap; }
+
+    /* ── 叶子/原始状态 ── */
+    .leaf-list { display: flex; flex-direction: column; gap: 6px; }
+
+    .leaf {
+      display: grid;
+      grid-template-columns: minmax(140px, 190px) minmax(0, 1fr) auto;
+      gap: 10px; align-items: baseline;
+      padding: 7px 10px;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      background: #fcfcfd;
+      font-size: 12.5px;
+    }
+
+    .leaf .p { font-family: ui-monospace, Consolas, monospace; word-break: break-all; }
+    .leaf .d { font-family: ui-monospace, Consolas, monospace; color: var(--muted); word-break: break-all; font-size: 11.5px; }
+    .leaf .c { font-variant-numeric: tabular-nums; color: var(--faint); font-size: 11.5px; white-space: nowrap; }
+
+    .leaf.changed { border-color: var(--accent); background: #fafaff; }
+    .leaf.changed .d { color: var(--accent); }
+    .leaf.changed .c { color: var(--accent); font-weight: 600; }
+
+    .leaf .flash {
+      display: inline-block;
+      font-size: 10.5px; font-weight: 700;
+      color: var(--accent); margin-left: 6px;
+    }
+
+    /* ── 对话 ── */
+    .chat-wrap { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+
+    .chat-head {
+      display: flex; align-items: center; gap: 10px;
+      padding-bottom: 12px; flex: 0 0 auto;
+    }
+
+    .chat-head select { width: auto; min-width: 150px; }
+
+    .messages {
+      flex: 1; min-height: 260px; overflow: auto;
+      display: flex; flex-direction: column; gap: 12px;
+      padding: 4px 2px 8px;
+    }
+
+    .msg { display: flex; gap: 9px; max-width: 78%; }
+    .msg.me { align-self: flex-end; flex-direction: row-reverse; }
+
+    .msg .who {
+      width: 28px; height: 28px; border-radius: 8px; flex: 0 0 auto;
+      display: grid; place-items: center;
+      font-size: 11.5px; font-weight: 700;
+      background: #f0f1f5; color: var(--muted);
+    }
+
+    .msg.pet .who { background: var(--accent-soft); color: var(--accent); }
+
+    .msg .bubble2 {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 8px 12px;
+      font-size: 13.5px;
+      line-height: 1.6;
+      word-break: break-word;
+      white-space: pre-wrap;
+      box-shadow: var(--shadow);
+    }
+
+    .msg.me .bubble2 {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+    }
+
+    .msg .ts { font-size: 11px; color: var(--faint); margin-top: 4px; }
+
+    .composer { flex: 0 0 auto; padding-top: 12px; border-top: 1px solid var(--border); }
+    .composer-row { display: flex; gap: 8px; align-items: flex-end; margin-top: 8px; }
+    .composer textarea { min-height: 44px; max-height: 140px; }
+
+    .typing { display: inline-flex; gap: 4px; align-items: center; color: var(--faint); font-size: 12.5px; }
+    .typing i {
+      width: 5px; height: 5px; border-radius: 50%; background: var(--faint);
+      animation: bounce 1.1s infinite;
+    }
+    .typing i:nth-child(2) { animation-delay: .15s; }
+    .typing i:nth-child(3) { animation-delay: .3s; }
+    @keyframes bounce { 0%,60%,100% { transform: translateY(0); opacity: .5; } 30% { transform: translateY(-4px); opacity: 1; } }
+
+    /* ── 设置 ── */
+    .pet-rows { display: flex; flex-direction: column; gap: 12px; }
+
+    .pet-row {
+      border: 1px solid var(--border);
+      border-radius: 9px;
+      padding: 12px;
+      background: #fcfcfd;
+    }
+
+    .pet-row-top { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+    .pet-row-top .idx {
+      width: 22px; height: 22px; border-radius: 6px; flex: 0 0 auto;
+      background: var(--accent-soft); color: var(--accent);
+      display: grid; place-items: center; font-size: 11.5px; font-weight: 700;
+    }
+
+    .fields {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
+      gap: 10px;
+    }
+
+    .field label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 3px; }
+
+    .toggles { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 11px; }
+
+    .switches {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+      gap: 11px;
+    }
+
+    .chip-list { display: flex; flex-wrap: wrap; gap: 6px; }
+
+    .chip {
+      font-size: 12px; padding: 3px 9px; border-radius: 99px;
+      background: #f2f3f5; border: 1px solid var(--border); color: var(--muted);
+    }
+
+    .provider-block + .provider-block { margin-top: 12px; }
+    .provider-name { font-size: 13px; font-weight: 650; margin-bottom: 6px; }
+
+    .path-row {
+      display: grid; grid-template-columns: 104px minmax(0, 1fr);
+      gap: 10px; align-items: baseline;
+      padding: 6px 0; border-bottom: 1px dashed var(--border);
+      font-size: 12.5px;
+    }
+
+    .path-row:last-child { border-bottom: 0; }
+    .path-row .k { color: var(--muted); }
+    .path-row .v { font-family: ui-monospace, Consolas, monospace; word-break: break-all; }
+
+    /* ── 活动日志 ── */
+    .logpanel {
+      background: var(--side);
+      border-left: 1px solid var(--border);
+      display: flex; flex-direction: column;
+      min-height: 0; overflow: hidden;
+    }
+
+    .app.no-log .logpanel { display: none; }
+
+    .log-head {
+      display: flex; align-items: center; gap: 8px;
+      padding: 13px 14px 11px;
+      font-size: 13px; font-weight: 650;
+      border-bottom: 1px solid var(--border);
+      flex: 0 0 auto;
+    }
+
+    .log-head .count { font-size: 11.5px; color: var(--faint); font-weight: 500; margin-left: auto; }
+
+    .log-body { overflow: auto; padding: 8px; display: flex; flex-direction: column; gap: 5px; }
+
+    .log-item {
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      background: var(--panel);
+      padding: 6px 8px;
+      font-size: 11.5px;
+    }
+
+    .log-item .l1 { display: flex; align-items: center; gap: 6px; }
+
+    .log-item .m {
+      font-weight: 700; font-size: 10px; letter-spacing: .4px;
+      padding: 1px 5px; border-radius: 4px;
+      background: #eef0f3; color: var(--muted);
+    }
+
+    .log-item .m.POST { background: var(--ok-soft); color: var(--ok); }
+    .log-item .m.PUT { background: var(--warn-soft); color: var(--warn); }
+
+    .log-item .u { font-family: ui-monospace, Consolas, monospace; word-break: break-all; flex: 1; }
+    .log-item .s { font-variant-numeric: tabular-nums; color: var(--muted); white-space: nowrap; }
+    .log-item .s.ok { color: var(--ok); font-weight: 600; }
+    .log-item .s.bad { color: var(--bad); font-weight: 600; }
+    .log-item .err { color: var(--bad); margin-top: 3px; word-break: break-word; }
+
+    /* ── 杂项 ── */
+    .empty-note { color: var(--faint); font-size: 13px; font-style: italic; }
+
+    .toast-wrap {
+      position: fixed; right: 18px; bottom: 18px;
+      display: flex; flex-direction: column; gap: 8px;
+      z-index: 50; pointer-events: none;
+    }
+
+    .toast {
+      background: #1f2530; color: #fff;
+      border-radius: 8px; padding: 9px 13px;
+      font-size: 13px; max-width: 340px;
+      box-shadow: 0 8px 24px rgba(16, 24, 40, .18);
+      animation: slidein .18s ease-out;
+      word-break: break-word;
+    }
+
+    .toast.bad { background: #7f1d1d; }
+    .toast.ok { background: #14532d; }
+
+    @keyframes slidein { from { transform: translateY(6px); opacity: 0; } to { transform: none; opacity: 1; } }
+
+    pre.code {
+      margin: 0; background: var(--code);
+      border: 1px solid var(--border); border-radius: 7px;
+      padding: 10px; font-size: 12px; line-height: 1.5;
+      font-family: ui-monospace, Consolas, monospace;
+      overflow: auto; max-height: 320px;
+      white-space: pre-wrap; word-break: break-word;
+    }
+
+    details.raw > summary {
+      cursor: pointer; font-size: 13px; color: var(--muted);
+      padding: 4px 0; user-select: none;
+    }
+
+    details.raw[open] > summary { margin-bottom: 8px; }
+
+    /* 窄屏：日志面板收起，侧栏变窄 */
+    @media (max-width: 1180px) {
+      .app { grid-template-columns: 190px minmax(0, 1fr); }
+      .logpanel { display: none; }
+      .app.show-log { grid-template-columns: 190px minmax(0, 1fr); }
+      .app.show-log .logpanel {
+        display: flex; position: fixed; right: 0; top: 0; bottom: 0;
+        width: 296px; z-index: 40; box-shadow: -8px 0 24px rgba(16,24,40,.10);
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="app" id="app">
+    <!-- ══ 侧栏 ══ -->
+    <aside class="sidebar">
+      <div class="brand">
+        <span class="logo">🐟</span>
+        <span>桌宠控制台</span>
+      </div>
+
+      <nav class="nav">
+        <button type="button" data-view="overview" class="active">
+          <span class="ico">🏠</span><span>桌宠总览</span>
+        </button>
+        <button type="button" data-view="chat">
+          <span class="ico">💬</span><span>对话</span>
+          <span class="badge" id="nav-chat-badge"></span>
+        </button>
+        <button type="button" data-view="settings">
+          <span class="ico">⚙️</span><span>设置</span>
+        </button>
+      </nav>
+
+      <div class="side-foot">
+        <div class="conn">
+          <span class="dot" id="conn-dot"></span>
+          <span id="conn-label">连接中…</span>
+        </div>
+        <div class="port-row">
+          <label for="port">宿主端口</label>
+          <input id="port" type="number" min="1" max="65535" value="3080">
+          <button type="button" class="btn sm" id="apply-port">应用</button>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ══ 主区 ══ -->
+    <div class="content">
+      <header class="topbar">
+        <h1 id="view-title">桌宠总览</h1>
+        <span class="sub" id="view-sub"></span>
+        <span class="spacer"></span>
+        <button type="button" class="btn sm" id="toggle-log">活动日志</button>
+        <button type="button" class="btn sm" id="refresh-all">刷新</button>
+      </header>
+
+      <!-- ── 总览 ── -->
+      <section class="view active" id="view-overview">
+        <div class="card">
+          <div class="hero">
+            <div class="avatar" id="pet-avatar">
+              <span class="fallback" id="avatar-fallback">?</span>
+            </div>
+            <div class="pet-meta">
+              <div class="pet-name">
+                <span id="pet-name">桌宠</span>
+                <select id="pet-select" style="width:auto"></select>
+              </div>
+              <div class="pet-id" id="pet-id"></div>
+
+              <div class="bubble-wrap">
+                <div class="bubble empty" id="say-bubble">还没有说过话</div>
+                <div class="bubble-time" id="say-time"></div>
+              </div>
+
+              <div class="hero-actions">
+                <button type="button" class="btn primary" id="btn-whisper">让它说句话</button>
+                <button type="button" class="btn" id="btn-balance">刷新余额</button>
+                <button type="button" class="btn" id="btn-chat-jump">去对话</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid3">
+          <!-- 工作状态 -->
+          <div class="card">
+            <div class="card-head">
+              <h2>工作状态</h2>
+              <span class="hint">随 DSH 会话变化</span>
+            </div>
+            <div class="card-body">
+              <div class="status-line">
+                <span class="pill gray" id="work-pill">空闲</span>
+              </div>
+              <div class="task-text" id="work-task">—</div>
+            </div>
+          </div>
+
+          <!-- 余额 -->
+          <div class="card">
+            <div class="card-head">
+              <h2>余额钱包</h2>
+              <span class="hint" id="bal-age"></span>
+            </div>
+            <div class="card-body" id="bal-body">
+              <div class="empty-note">还没有数据</div>
+            </div>
+          </div>
+
+          <!-- 通知 -->
+          <div class="card">
+            <div class="card-head">
+              <h2>系统通知</h2>
+              <span class="hint">回合结束 / 权限 / 提问</span>
+            </div>
+            <div class="card-body">
+              <div class="feed" id="notify-feed">
+                <div class="empty-note">还没有通知</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 第三方投喂：这就是 issue #76 的场景——控制台扮演"别的插件"，把外部文本送进气泡 -->
+        <div class="card">
+          <div class="card-head">
+            <h2>第三方投喂</h2>
+            <span class="hint">以"外部插件"身份写一句话进气泡</span>
+          </div>
+          <div class="card-body">
+            <div class="card-desc">
+              模拟宿主侧其他插件（如巡检类插件）调用 <span class="mono">POST /broadcast</span>：
+              <b>不生成内容</b>，只把给定的文本搬运到桌宠气泡。配图只接受<b>包内表情包名</b>。
+            </div>
+            <div class="field" style="margin-top:10px">
+              <label for="bc-text">要说的话</label>
+              <input id="bc-text" type="text" value="巡检完毕，一切正常" style="flex:1;min-width:220px">
+            </div>
+            <div class="field">
+              <label for="bc-image">配图名</label>
+              <input id="bc-image" type="text" placeholder="留空则不配图，例如：可爱">
+              <select id="bc-pet" style="width:auto"></select>
+            </div>
+            <div class="field">
+              <button type="button" class="btn primary" id="bc-send">投喂</button>
+              <span class="hint" id="bc-result"></span>
+            </div>
+            <div class="note" style="margin-top:8px">
+              内容与频率由调用方自己负责：<b>不设长度限制，也不限频</b>。
+            </div>
+          </div>
+        </div>
+
+        <!-- 原始状态 -->
+        <div class="card">
+          <div class="card-head">
+            <h2>实时状态</h2>
+            <span class="hint" id="leaf-hint">每秒轮询一次，只有内容变了才刷新</span>
+          </div>
+          <div class="card-body">
+            <div class="leaf-list" id="leaf-list">
+              <div class="empty-note">等待第一次轮询…</div>
+            </div>
+            <details class="raw" style="margin-top:12px">
+              <summary>查看原始 JSON</summary>
+              <pre class="code" id="state-json">—</pre>
+            </details>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── 对话 ── -->
+      <section class="view" id="view-chat">
+        <div class="card" style="display:flex;flex-direction:column">
+          <div class="card-head">
+            <h2>与桌宠对话</h2>
+            <span class="hint" id="chat-rounds"></span>
+          </div>
+          <div class="card-body chat-wrap">
+            <div class="chat-head">
+              <select id="chat-pet-select"></select>
+              <button type="button" class="btn sm" id="chat-reload">刷新历史</button>
+              <span class="spacer" style="flex:1"></span>
+              <button type="button" class="btn sm ghost" id="chat-clear">清空显示</button>
+            </div>
+
+            <div class="messages" id="messages"></div>
+
+            <div class="composer">
+              <div class="typing" id="typing" style="visibility:hidden">
+                <i></i><i></i><i></i><span>桌宠正在想…</span>
+              </div>
+              <div class="composer-row">
+                <textarea id="chat-input" rows="2" placeholder="说点什么…（Enter 发送，Shift+Enter 换行）"></textarea>
+                <button type="button" class="btn primary" id="chat-send">发送</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── 设置 ── -->
+      <section class="view" id="view-settings">
+        <div class="card">
+          <div class="card-head">
+            <h2>桌宠</h2>
+            <span class="hint">改完点下面的保存</span>
+          </div>
+          <div class="card-body">
+            <div class="pet-rows" id="pet-rows">
+              <div class="empty-note">加载中…</div>
+            </div>
+            <div style="display:flex;gap:8px;margin-top:13px;flex-wrap:wrap">
+              <button type="button" class="btn sm" id="pet-add">+ 添加一只</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><h2>全局开关</h2></div>
+          <div class="card-body">
+            <div class="switches">
+              <label class="chk"><input type="checkbox" id="sw-notifications"> 系统通知</label>
+              <label class="chk"><input type="checkbox" id="sw-whisper-image"> 碎碎念配图</label>
+              <label class="chk"><input type="checkbox" id="sw-chat-image"> 对话配图</label>
+              <label class="chk"><input type="checkbox" id="sw-confine"> 限制在屏幕内</label>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <h2>保存与生效</h2>
+            <span class="hint">会真的写盘</span>
+          </div>
+          <div class="card-body">
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button type="button" class="btn primary" id="cfg-save">保存配置</button>
+              <button type="button" class="btn" id="cfg-reload">重载桌面端</button>
+              <button type="button" class="btn danger" id="cfg-default">恢复默认</button>
+              <button type="button" class="btn ghost" id="cfg-refresh">放弃修改并重新读取</button>
+            </div>
+            <div class="divider"></div>
+            <div style="display:flex;gap:16px;flex-wrap:wrap">
+              <label class="chk"><input type="checkbox" id="cfg-force"> 保存时强制覆盖（用户配置文件损坏时使用）</label>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <h2>可用模型</h2>
+            <span class="hint">与 DSH 自己的模型选择器同源</span>
+          </div>
+          <div class="card-body" id="models-body">
+            <button type="button" class="btn sm" id="models-load">加载模型清单</button>
+            <!-- 注意：结果写进 #models-list，不能清 #models-body —— 否则会把上面这个按钮一起清掉，只能加载一次 -->
+            <div id="models-list" style="margin-top:10px"></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <h2>存储位置</h2>
+            <span class="hint">配置文件与数据落在哪</span>
+          </div>
+          <div class="card-body" id="meta-body">
+            <button type="button" class="btn sm" id="meta-load">加载路径清单</button>
+            <!-- 同上：结果写进 #meta-list，保留触发按钮 -->
+            <div id="meta-list" style="margin-top:10px"></div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- ══ 活动日志 ══ -->
+    <aside class="logpanel">
+      <div class="log-head">
+        <span>活动日志</span>
+        <span class="count" id="log-count">0</span>
+        <button type="button" class="btn sm ghost" id="log-clear">清空</button>
+      </div>
+      <div class="log-body" id="log-body">
+        <div class="empty-note" style="padding:8px">这里会显示控制台发出的每个请求</div>
+      </div>
+    </aside>
+  </div>
+
+  <div class="toast-wrap" id="toasts"></div>
+
+  <script>
+    "use strict";
+
+    // ═══════════════════════════════════════════════════════════════
+    // 这个页面扮演一个**第三方消费方**：它只用 /dsh-pet-7340 下那套
+    // 公开 HTTP 接口，自己轮询状态、自己比对 counter、自己维护界面。
+    // 界面上不出现"端点"这类词——接口是它内部的实现手段。
+    // ═══════════════════════════════════════════════════════════════
+
+    const PREFIX = "/dsh-pet-7340";
+    const POLL_MS = 1000;
+
+    const S = {
+      port: 3080,
+      connected: null,     // null=未知 true/false
+      pets: [],            // [{ id, name, entry }]
+      petId: "main",
+      chatPetId: "main",
+      baseline: {},        // 叶子路径 → 上次见到的 counter（首拉只记基线，不渲染）
+      firstPoll: true,
+      polls: 0,            // 轮询次数（活动日志有上限，计数另记）
+      say: null,           // { text, image }
+      sayAt: 0,
+      sayCounter: 0,
+      notes: [],           // 客户端自己攒的通知历史（host 侧只有一个槽位）
+      chat: [],
+      awaiting: false,
+      activity: [],
+      timers: {},
+    };
+
+    const $ = (id) => document.getElementById(id);
+    const el = (tag, cls, text) => {
+      const n = document.createElement(tag);
+      if (cls) n.className = cls;
+      if (text !== undefined) n.textContent = text;
+      return n;
+    };
+    const enc = (p) => String(p).split("/").map(encodeURIComponent).join("/");
+    /**
+     * 表情包名 → 图片地址。
+     * 注意：宿主在 say 叶子里存的 image 是**表情包名**（如「可爱」），不是 URL；
+     * 拼法必须与两端共用逻辑一致：`<前缀>/pic/memes/<名称>.png`（名称含中文要编码）。
+     * 直接把 name 当 src 用会被解析成相对路径 → 裂图。
+     */
+    const memeUrl = (name) => PREFIX + "/pic/memes/" + encodeURIComponent(String(name)) + ".png";
+    const hhmmss = (t) => new Date(t).toLocaleTimeString("zh-CN", { hour12: false });
+
+    // ── 提示条 ──
+    function toast(msg, kind) {
+      const t = el("div", "toast" + (kind ? " " + kind : ""), msg);
+      $("toasts").appendChild(t);
+      setTimeout(() => {
+        t.style.transition = "opacity .2s";
+        t.style.opacity = "0";
+        setTimeout(() => t.remove(), 220);
+      }, 3200);
+    }
+
+    // ── 活动日志（只记录，不参与业务） ──
+    function logActivity(method, path, res) {
+      S.activity.unshift({
+        method,
+        path,
+        status: res.status,
+        ms: res.ms,
+        err: res.error || (res.body && res.body.proxyError) || (res.body && res.body.error) || "",
+        at: Date.now(),
+      });
+      if (S.activity.length > 60) S.activity.length = 60;
+      renderActivity();
+    }
+
+    function renderActivity() {
+      $("log-count").textContent = S.activity.length;
+      const box = $("log-body");
+      box.innerHTML = "";
+      if (!S.activity.length) {
+        box.appendChild(el("div", "empty-note", "这里会显示控制台发出的每个请求"));
+        box.firstChild.style.padding = "8px";
+        return;
+      }
+      for (const a of S.activity) {
+        const item = el("div", "log-item");
+        const l1 = el("div", "l1");
+        l1.appendChild(el("span", "m " + a.method, a.method));
+        l1.appendChild(el("span", "u", a.path));
+        const st = el("span", "s " + (a.status >= 200 && a.status < 300 ? "ok" : "bad"),
+          a.status ? a.status + " · " + a.ms + "ms" : "失败");
+        l1.appendChild(st);
+        item.appendChild(l1);
+        if (a.err) item.appendChild(el("div", "err", a.err));
+        box.appendChild(item);
+      }
+    }
+
+    // ── 请求层（永不抛） ──
+    async function api(method, path, opts = {}) {
+      const url = PREFIX + path;
+      const t0 = performance.now();
+      const init = { method, cache: "no-store" };
+      if (opts.body !== undefined) {
+        init.headers = { "content-type": "application/json" };
+        init.body = JSON.stringify(opts.body);
+      }
+      let out;
+      try {
+        const res = await fetch(url, init);
+        const ms = Math.round(performance.now() - t0);
+        out = { ok: res.ok, status: res.status, ms };
+        if (opts.raw) {
+          out.contentType = res.headers.get("content-type") || "";
+        } else {
+          const text = await res.text();
+          out.text = text;
+          try { out.body = JSON.parse(text); } catch { out.body = undefined; }
+        }
+      } catch (e) {
+        out = { ok: false, status: 0, ms: Math.round(performance.now() - t0), error: "请求没能发出去：" + e.message };
+      }
+      logActivity(method, url, out);
+      return out;
+    }
+
+    const GET = (p, o) => api("GET", p, o);
+    const POST = (p, o = {}) => api("POST", p, { body: {}, ...o });
+    const PUT = (p, o) => api("PUT", p, o);
+
+    // ═══════════════════════════════════════════════════════════════
+    // 状态轮询：整页唯一的数据来源
+    // ═══════════════════════════════════════════════════════════════
+
+    /**
+     * 把 S 拍平成 [路径, 叶子] —— 路径是**不透明键**，只做字符串拼接，
+     * 绝不按 '.' 切分（宠物 id 可以含点号，切分必然出错）。
+     */
+    function walkLeaves(s) {
+      const out = [];
+      const sections = (s && s.sections) || {};
+      for (const name of Object.keys(sections)) {
+        const leaf = sections[name];
+        if (leaf && typeof leaf.counter === "number") out.push(["sections." + name, leaf]);
+      }
+      const pets = (s && s.pets) || {};
+      for (const pid of Object.keys(pets)) {
+        const leaves = pets[pid] || {};
+        for (const name of Object.keys(leaves)) {
+          const leaf = leaves[name];
+          if (leaf && typeof leaf.counter === "number") out.push(["pets." + pid + "." + name, leaf]);
+        }
+      }
+      return out;
+    }
+
+    async function poll() {
+      S.polls++;
+      const r = await GET("/state");
+      setConnected(r.status === 200);
+
+      if (r.status !== 200 || !r.body) {
+        if (r.status === 0 || r.status >= 500) {
+          renderLeaves(null, r);
+        }
+        return;
+      }
+      const s = r.body;
+      S.lastState = s;
+      $("state-json").textContent = JSON.stringify(s, null, 2);
+
+      const leaves = walkLeaves(s);
+
+      // 首拉只记基线、不渲染（否则刷新页面会把旧气泡/旧通知重放一遍）
+      if (S.firstPoll) {
+        for (const [p, leaf] of leaves) S.baseline[p] = leaf.counter;
+        S.firstPoll = false;
+        renderLeaves(leaves, r, {});
+        // 首拉也要把当前状态显示出来
+        applyLeaf(s.sections.balance, "sections.balance");
+        applyLeaf(s.sections.workStatus, "sections.workStatus");
+        applyLeaf(s.sections.notify, "sections.notify", { replay: false });
+        for (const [p, leaf] of leaves) {
+          if (p.startsWith("pets.") && p.endsWith(".say")) applyLeaf(leaf, p, { initial: true });
+        }
+        await loadPets();
+        return;
+      }
+
+      const changed = {};
+      for (const [p, leaf] of leaves) {
+        if (S.baseline[p] === leaf.counter) continue;
+        S.baseline[p] = leaf.counter;
+        changed[p] = leaf;
+        applyLeaf(leaf, p);
+      }
+      renderLeaves(leaves, r, changed);
+    }
+
+    /** 一个叶子变了 → 更新对应界面（路径当不透明键：用前后缀切片取宠物 id） */
+    function applyLeaf(leaf, path, opt = {}) {
+      if (!leaf) return;
+      if (path === "sections.balance") return renderBalance(leaf.data);
+      if (path === "sections.workStatus") return renderWork(leaf.data);
+      if (path === "sections.notify") return pushNotify(leaf.data, opt);
+      if (path.startsWith("pets.") && path.endsWith(".say")) {
+        // 取 id：剥掉 "pets." 前缀与 ".say" 后缀（不按 '.' 切分）
+        const pid = path.slice("pets.".length, path.length - ".say".length);
+        if (pid === S.petId) renderSay(leaf.data);
+        if (pid === S.chatPetId && opt.initial !== true) maybeChatReply(leaf.data);
+      }
+    }
+
+    function setConnected(ok) {
+      if (S.connected === ok) return;
+      S.connected = ok;
+      const dot = $("conn-dot");
+      dot.className = "dot " + (ok ? "on" : "off");
+      $("conn-label").textContent = ok ? "已连接 · " + S.port : "未连接";
+      if (!ok) toast("连不上桌宠宿主——确认 DSH 在跑、端口填对", "bad");
+    }
+
+    // ── 实时状态（叶子表） ──
+    function renderLeaves(leaves, res, changed = {}) {
+      const box = $("leaf-list");
+      box.innerHTML = "";
+      if (!leaves) {
+        box.appendChild(el("div", "empty-note",
+          res && res.error ? res.error : "拿不到状态（宿主未响应）"));
+        $("leaf-hint").textContent = "未连接";
+        return;
+      }
+      $("leaf-hint").textContent = "每秒轮询一次 · 共 " + leaves.length + " 个状态位";
+      for (const [p, leaf] of leaves) {
+        const isChanged = changed[p] !== undefined;
+        const row = el("div", "leaf" + (isChanged ? " changed" : ""));
+        const pn = el("span", "p", p);
+        if (isChanged) pn.appendChild(el("span", "flash", "变了"));
+        row.appendChild(pn);
+        row.appendChild(el("span", "d", leaf.data === null ? "null" : JSON.stringify(leaf.data)));
+        row.appendChild(el("span", "c", String(leaf.counter).slice(-7)));
+        box.appendChild(row);
+      }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // 说话气泡
+    // ═══════════════════════════════════════════════════════════════
+
+    function renderSay(data) {
+      const b = $("say-bubble");
+      b.innerHTML = "";
+      if (!data || typeof data.text !== "string" || !data.text) {
+        b.className = "bubble empty";
+        b.textContent = "还没有说过话";
+        $("say-time").textContent = "";
+        return;
+      }
+      S.say = data;
+      S.sayAt = Date.now();
+      b.className = "bubble";
+      b.appendChild(document.createTextNode(data.text));
+      if (typeof data.image === "string" && data.image) {
+        const img = el("img", "meme");
+        img.src = memeUrl(data.image);            // ← image 是名称，须经 memeUrl 拼地址
+        img.alt = data.image;
+        img.onerror = () => img.remove();
+        b.appendChild(img);
+      }
+      $("say-time").textContent = hhmmss(S.sayAt);
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // 工作状态
+    // ═══════════════════════════════════════════════════════════════
+
+    const WORK = {
+      thinking: ["思考中", "indigo"],
+      working: ["工作中", "blue"],
+      result: ["整理中", "cyan"],
+      waiting: ["等待你", "amber"],
+      success: ["完成", "green"],
+      error: ["出错", "red"],
+    };
+
+    function renderWork(data) {
+      const pill = $("work-pill");
+      const st = data && data.state;
+      const m = st && WORK[st] ? WORK[st] : null;
+      pill.className = "pill " + (m ? m[1] : "gray");
+      pill.textContent = m ? m[0] : "空闲";
+      const task = data && typeof data.task === "string" && data.task ? data.task : "";
+      $("work-task").textContent = task || "—";
+      $("work-task").style.color = task ? "" : "var(--faint)";
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // 余额
+    // ═══════════════════════════════════════════════════════════════
+
+    function pctClass(v) { return v >= 90 ? "bad" : v >= 70 ? "warn" : ""; }
+
+    function renderBalance(data) {
+      const box = $("bal-body");
+      box.innerHTML = "";
+      if (!data) {
+        box.appendChild(el("div", "empty-note", "还没有数据"));
+        return;
+      }
+      if (data.ok !== true) {
+        const reason = { unsupported: "该服务商不支持查询余额", "credential-missing": "缺少凭证", "fetch-error": "抓取失败" }[data.reason] || "不可用";
+        const wrap = el("div");
+        wrap.appendChild(el("span", "pill red", reason));
+        if (data.message) {
+          const t = el("div", "stat-sub", data.message);
+          t.style.marginTop = "8px";
+          t.style.wordBreak = "break-word";
+          wrap.appendChild(t);
+        }
+        box.appendChild(wrap);
+        const prov = el("div", "stat-sub", "服务商：" + (data.provider || "unknown"));
+        prov.style.marginTop = "8px";
+        box.appendChild(prov);
+        $("bal-age").textContent = data.manual ? "手动刷新" : "";
+        return;
+      }
+
+      // 注意：/state 里是**宿主原始形状** —— 金额/用量都在内层 data 里
+      // （{ ok, provider, kind, manual?, data: { total, ... } }），
+      // 不是客户端 shared 那套拍平后的 BalanceView。
+      const d = data.data && typeof data.data === "object" ? data.data : {};
+
+      if (data.kind === "deepseek") {
+        const head = el("div");
+        head.appendChild(el("span", "bal-amount", d.total ?? "—"));
+        head.appendChild(el("span", "bal-cur", d.currency || ""));
+        box.appendChild(head);
+        const rows = el("div");
+        rows.style.marginTop = "10px";
+        if (d.granted) rows.appendChild(kv("赠送", d.granted));
+        if (d.toppedUp) rows.appendChild(kv("充值", d.toppedUp));
+        if (rows.childElementCount) box.appendChild(rows);
+      } else if (data.kind === "opencode") {
+        for (const [label, v, reset] of [
+          ["滚动窗口", d.rolling, d.rollingResetsAt],
+          ["本周", d.weekly, d.weeklyResetsAt],
+          ["本月", d.monthly, d.monthlyResetsAt],
+        ]) {
+          const n = Number(v);
+          if (!Number.isFinite(n)) continue;
+          const m = el("div", "meter");
+          const top = el("div", "meter-top");
+          top.appendChild(el("span", "k", label + (reset ? " · " + shortReset(reset) : "")));
+          top.appendChild(el("span", "v", Math.round(n) + "%"));
+          m.appendChild(top);
+          const bar = el("div", "bar");
+          const fill = el("i", pctClass(n));
+          fill.style.width = Math.max(0, Math.min(100, n)) + "%";
+          bar.appendChild(fill);
+          m.appendChild(bar);
+          box.appendChild(m);
+        }
+      } else {
+        box.appendChild(el("div", "empty-note", "认不出的余额类型"));
+      }
+
+      const prov = el("div", "stat-sub", "服务商：" + (data.provider || "unknown"));
+      prov.style.marginTop = "10px";
+      box.appendChild(prov);
+      $("bal-age").textContent = data.manual ? "本次为手动刷新" : "";
+    }
+
+    function kv(k, v) {
+      const r = el("div", "kv");
+      r.appendChild(el("span", "k", k));
+      r.appendChild(el("span", "v", String(v)));
+      return r;
+    }
+
+    function shortReset(iso) {
+      const d = new Date(iso);
+      if (isNaN(d)) return "";
+      return d.toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false });
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // 通知（host 只有一个槽位，客户端自己攒历史）
+    // ═══════════════════════════════════════════════════════════════
+
+    const NOTIFY_ICON = {
+      "session/event": "✅",
+      "approval/requested": "🔐",
+      "question/requested": "❓",
+      "host/agent-error": "⚠️",
+    };
+
+    function notifyText(frame) {
+      if (!frame || !frame.type) return null;
+      if (frame.type === "session/event") {
+        const reason = frame.event && frame.event.data && frame.event.data.reason;
+        const kind = reason && reason.kind;
+        if (kind === "completed") return { t: "对话完成", b: "", i: "✅" };
+        if (kind === "error") return { t: "生成失败", b: (reason.error && reason.error.message) || "", i: "❌" };
+        if (kind === "max-tokens") return { t: "输出被截断", b: "已达到输出 token 上限", i: "✂️" };
+        return null;                                   // aborted 等不弹
+      }
+      if (frame.type === "approval/requested") {
+        return { t: "正在申请权限", b: (frame.toolName ? "工具「" + frame.toolName + "」" : "") + (frame.reason ? "：" + frame.reason : ""), i: "🔐" };
+      }
+      if (frame.type === "question/requested") {
+        const q = frame.questions && frame.questions[0] && frame.questions[0].question;
+        return { t: "模型在等你回答", b: q || "", i: "❓" };
+      }
+      if (frame.type === "host/agent-error") {
+        return { t: "生成失败", b: frame.message || "", i: "⚠️" };
+      }
+      return null;
+    }
+
+    function pushNotify(frame, opt = {}) {
+      const info = notifyText(frame);
+      if (!info) return;
+      // 同一个 counter 的重复渲染（首拉/编辑后重读）不该重复入列
+      const key = JSON.stringify(frame);
+      const last = S.notes[0];
+      if (last && last.key === key) return;
+      S.notes.unshift({ ...info, key, at: Date.now() });
+      if (S.notes.length > 20) S.notes.length = 20;
+      renderNotes();
+    }
+
+    function renderNotes() {
+      const box = $("notify-feed");
+      box.innerHTML = "";
+      if (!S.notes.length) {
+        box.appendChild(el("div", "empty-note", "还没有通知"));
+        return;
+      }
+      for (const n of S.notes) {
+        const item = el("div", "feed-item");
+        item.appendChild(el("span", "fi-ico", n.i));
+        const b = el("div", "fi-body");
+        b.appendChild(el("div", "fi-title", n.t));
+        if (n.b) b.appendChild(el("div", "fi-text", n.b));
+        item.appendChild(b);
+        item.appendChild(el("span", "fi-time", hhmmss(n.at)));
+        box.appendChild(item);
+      }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // 桌宠列表
+    // ═══════════════════════════════════════════════════════════════
+
+    async function loadPets() {
+      const r = await GET("/config");
+      if (r.status !== 200 || !r.body) return;
+      S.cfg = r.body;
+      const pets = [];
+      for (const [entry, conf] of Object.entries(r.body)) {
+        if (!conf || !Array.isArray(conf.pets)) continue;
+        for (const p of conf.pets) {
+          if (p && p.id) pets.push({ id: String(p.id), name: String(p.name || p.id), entry, conf: p });
+        }
+      }
+      S.pets = pets;
+      if (!pets.some((p) => p.id === S.petId)) S.petId = pets.length ? pets[0].id : "main";
+      if (!pets.some((p) => p.id === S.chatPetId)) S.chatPetId = S.petId;
+      renderPetIdentity();
+      fillPetSelects();
+      renderSettingsPets();
+    }
+
+    function currentPet() {
+      return S.pets.find((p) => p.id === S.petId) || null;
+    }
+
+    function renderPetIdentity() {
+      const p = currentPet();
+      const name = p ? p.name : S.petId;
+      $("pet-name").textContent = name;
+      $("pet-id").textContent = "id: " + (p ? p.id : S.petId) + (p ? " · 条目 " + p.entry : "");
+
+      // 头像用包内表情包（同一套接口提供的静态资源）。
+      // 注意：这里会清空 .avatar，所以兜底元素必须**现建**，不能去查一个已经被清掉的节点。
+      const av = $("pet-avatar");
+      const showFallback = () => {
+        av.innerHTML = "";
+        av.appendChild(el("span", "fallback", name ? name.slice(0, 1) : "?"));
+      };
+      av.innerHTML = "";
+      const img = el("img");
+      img.alt = name;
+      img.src = memeUrl("可爱");
+      img.onerror = showFallback;
+      av.appendChild(img);
+
+      document.title = name + " · 桌宠控制台";
+    }
+
+    /** 从最近一次状态快照里取某只宠物此刻说的话（切宠物时用，不必干等下一次轮询） */
+    function showSayFor(petId) {
+      const s = S.lastState;
+      const leaf = s && s.pets && s.pets[petId] && s.pets[petId].say;
+      if (leaf) {
+        S.baseline["pets." + petId + ".say"] = leaf.counter;
+        renderSay(leaf.data);
+      } else {
+        renderSay(null);
+      }
+    }
+
+    function fillPetSelects() {
+      for (const id of ["pet-select", "chat-pet-select", "bc-pet"]) {
+        const sel = $(id);
+        sel.innerHTML = "";
+        for (const p of S.pets) {
+          const o = el("option", null, p.name + "（" + p.id + "）");
+          o.value = p.id;
+          sel.appendChild(o);
+        }
+        if (!S.pets.length) {
+          const o = el("option", null, S.petId);
+          o.value = S.petId;
+          sel.appendChild(o);
+        }
+        sel.value = id === "chat-pet-select" ? S.chatPetId : S.petId;
+      }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // 对话
+    // ═══════════════════════════════════════════════════════════════
+
+    async function loadChat() {
+      const r = await GET("/chat?pet=" + encodeURIComponent(S.chatPetId));
+      if (r.status !== 200 || !r.body || !r.body.ok) {
+        $("chat-rounds").textContent = r.status ? "读取失败" : "未连接";
+        return;
+      }
+      S.chat = (r.body.messages || []).map((m) => ({ role: m.role, text: m.content, ts: m.ts }));
+      $("chat-rounds").textContent = "保留最近 " + r.body.rounds + " 轮";
+      renderChat();
+    }
+
+    function renderChat() {
+      const box = $("messages");
+      box.innerHTML = "";
+      if (!S.chat.length) {
+        box.appendChild(el("div", "empty-note", "还没有对话记录，说点什么吧"));
+        return;
+      }
+      for (const m of S.chat) {
+        const isMe = m.role === "user";
+        const wrap = el("div", "msg " + (isMe ? "me" : "pet"));
+        wrap.appendChild(el("div", "who", isMe ? "我" : "宠"));
+        const col = el("div");
+        col.appendChild(el("div", "bubble2", m.text));
+        col.appendChild(el("div", "ts", m.ts ? hhmmss(m.ts) : ""));
+        wrap.appendChild(col);
+        box.appendChild(wrap);
+      }
+      box.scrollTop = box.scrollHeight;
+    }
+
+    /** 桌宠说话了：如果刚才是我们发的消息，就当成回复接进对话 */
+    function maybeChatReply(data) {
+      if (!data || typeof data.text !== "string" || !data.text) return;
+      if (!S.awaiting) return;
+      S.awaiting = false;
+      $("typing").style.visibility = "hidden";
+      S.chat.push({ role: "assistant", text: data.text, ts: Date.now() });
+      renderChat();
+    }
+
+    async function sendChat() {
+      const ta = $("chat-input");
+      const text = ta.value.trim();
+      if (!text) return;
+      if (text.length > 2000) { toast("消息太长（限 2000 字）", "bad"); return; }
+
+      const btn = $("chat-send");
+      btn.disabled = true;
+      S.awaiting = true;
+      S.chat.push({ role: "user", text, ts: Date.now() });
+      renderChat();
+      ta.value = "";
+      $("typing").style.visibility = "visible";
+
+      // 动作接口只回 {ok}，回复从 /state 的 pets.<id>.say 拿
+      const r = await POST("/chat?pet=" + encodeURIComponent(S.chatPetId), { body: { text } });
+
+      if (!r.ok) {
+        // 失败：把乐观插入的那条撤掉，并说明原因
+        S.awaiting = false;
+        $("typing").style.visibility = "hidden";
+        S.chat.pop();
+        renderChat();
+        const why = (r.body && r.body.message) || (r.body && r.body.reason) || r.error || ("HTTP " + r.status);
+        toast("发送失败：" + why, "bad");
+      } else {
+        // 立刻补拉一拍，0 延迟拿回复（replies 也走轮询，这里只是不等那 1 秒）
+        const s = await GET("/state");
+        const leaf = s.body && s.body.pets && s.body.pets[S.chatPetId] && s.body.pets[S.chatPetId].say;
+        if (leaf && leaf.counter !== S.baseline["pets." + S.chatPetId + ".say"]) {
+          S.baseline["pets." + S.chatPetId + ".say"] = leaf.counter;
+          if (S.chatPetId === S.petId) renderSay(leaf.data);
+          maybeChatReply(leaf.data);
+        }
+      }
+      btn.disabled = false;
+      ta.focus();
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // 设置
+    // ═══════════════════════════════════════════════════════════════
+
+    const CORNERS = [
+      ["bottom-right", "右下"],
+      ["bottom-left", "左下"],
+      ["top-right", "右上"],
+      ["top-left", "左上"],
+    ];
+    const DISPLAYS = [
+      ["both", "浏览器 + 桌面"],
+      ["web", "仅浏览器"],
+      ["desktop", "仅桌面"],
+      ["none", "都不显示"],
+    ];
+
+    /** 草稿 = 界面上正在编辑的宠物列表（保存前的本地状态） */
+    let draft = null;
+
+    function renderSettingsPets() {
+      const box = $("pet-rows");
+      box.innerHTML = "";
+
+      if (!draft) {
+        // 从配置初始化草稿
+        draft = S.pets.map((p) => ({
+          id: p.id,
+          name: p.name,
+          size: Number(p.conf.size) || 462,
+          display: String(p.conf.display || "both"),
+          balanceEnabled: p.conf.balanceEnabled === true,
+          whisperEnabled: p.conf.whisperEnabled !== false,
+          workStatusEnabled: p.conf.workStatusEnabled !== false,
+          corner: (p.conf.position && p.conf.position.corner) || "bottom-right",
+          marginX: Number(p.conf.position && p.conf.position.marginX) || 0,
+          marginY: Number(p.conf.position && p.conf.position.marginY) || 0,
+        }));
+      }
+
+      if (!draft.length) {
+        box.appendChild(el("div", "empty-note", "没有桌宠——点下面的按钮加一只"));
+      }
+
+      draft.forEach((p, i) => {
+        const row = el("div", "pet-row");
+
+        const top = el("div", "pet-row-top");
+        top.appendChild(el("span", "idx", String(i + 1)));
+        const nm = el("div");
+        nm.style.fontWeight = "600";
+        nm.style.fontSize = "13.5px";
+        nm.textContent = p.name || p.id || "（未命名）";
+        top.appendChild(nm);
+        const sp = el("span");
+        sp.style.flex = "1";
+        top.appendChild(sp);
+        const del = el("button", "btn sm danger", "移除");
+        del.type = "button";
+        del.addEventListener("click", () => {
+          draft.splice(i, 1);
+          renderSettingsPets();
+        });
+        top.appendChild(del);
+        row.appendChild(top);
+
+        const fields = el("div", "fields");
+        fields.appendChild(field("显示名", textInput(p.name, (v) => { p.name = v; })));
+        fields.appendChild(field("id", textInput(p.id, (v) => { p.id = v; })));
+        fields.appendChild(field("尺寸", numInput(p.size, (v) => { p.size = v; })));
+        fields.appendChild(field("显示位置", selectInput(DISPLAYS, p.display, (v) => { p.display = v; })));
+        fields.appendChild(field("停靠角", selectInput(CORNERS, p.corner, (v) => { p.corner = v; })));
+        fields.appendChild(field("横向边距", numInput(p.marginX, (v) => { p.marginX = v; })));
+        fields.appendChild(field("纵向边距", numInput(p.marginY, (v) => { p.marginY = v; })));
+        row.appendChild(fields);
+
+        const toggles = el("div", "toggles");
+        toggles.appendChild(chk("余额", p.balanceEnabled, (v) => { p.balanceEnabled = v; }));
+        toggles.appendChild(chk("碎碎念", p.whisperEnabled, (v) => { p.whisperEnabled = v; }));
+        toggles.appendChild(chk("工作状态联动", p.workStatusEnabled, (v) => { p.workStatusEnabled = v; }));
+        row.appendChild(toggles);
+
+        box.appendChild(row);
+      });
+
+      // 全局开关从 main 条目读
+      const main = S.cfg && S.cfg.main ? S.cfg.main : {};
+      $("sw-notifications").checked = main.notificationsEnabled !== false;
+      $("sw-whisper-image").checked = main.whisperImageEnabled !== false;
+      $("sw-chat-image").checked = main.chatImageEnabled !== false;
+      $("sw-confine").checked = main.confineToScreen === true;
+    }
+
+    function field(label, control) {
+      const w = el("div", "field");
+      w.appendChild(el("label", null, label));
+      w.appendChild(control);
+      return w;
+    }
+
+    function textInput(value, onChange) {
+      const i = el("input");
+      i.type = "text";
+      i.value = value ?? "";
+      i.addEventListener("input", () => onChange(i.value));
+      return i;
+    }
+
+    function numInput(value, onChange) {
+      const i = el("input");
+      i.type = "number";
+      i.value = value ?? 0;
+      i.addEventListener("input", () => onChange(Number(i.value)));
+      return i;
+    }
+
+    function selectInput(pairs, value, onChange) {
+      const s = el("select");
+      for (const [v, label] of pairs) {
+        const o = el("option", null, label);
+        o.value = v;
+        s.appendChild(o);
+      }
+      s.value = value;
+      s.addEventListener("change", () => onChange(s.value));
+      return s;
+    }
+
+    function chk(label, checked, onChange) {
+      const l = el("label", "chk");
+      const i = el("input");
+      i.type = "checkbox";
+      i.checked = !!checked;
+      i.addEventListener("change", () => onChange(i.checked));
+      l.appendChild(i);
+      l.appendChild(document.createTextNode(" " + label));
+      return l;
+    }
+
+    async function saveConfig() {
+      if (!draft || !draft.length) { toast("至少要有一只桌宠", "bad"); return; }
+      const body = {
+        pets: draft.map((p) => ({
+          id: String(p.id || "").trim(),
+          name: String(p.name || "").trim(),
+          size: Number(p.size),
+          balanceEnabled: !!p.balanceEnabled,
+          whisperEnabled: !!p.whisperEnabled,
+          workStatusEnabled: !!p.workStatusEnabled,
+          display: p.display,
+          position: { corner: p.corner, marginX: Number(p.marginX), marginY: Number(p.marginY) },
+        })),
+        notificationsEnabled: $("sw-notifications").checked,
+        whisperImageEnabled: $("sw-whisper-image").checked,
+        chatImageEnabled: $("sw-chat-image").checked,
+        confineToScreen: $("sw-confine").checked,
+      };
+      const force = $("cfg-force").checked ? "?force=1" : "";
+      const r = await PUT("/config" + force, { body });
+
+      if (r.status === 200) {
+        toast("配置已保存，桌面端会自动重建", "ok");
+        draft = null;
+        S.cfg = r.body;
+        await loadPets();
+      } else if (r.status === 409) {
+        toast("用户配置文件已损坏，需要勾选「强制覆盖」再保存", "bad");
+        $("cfg-force").checked = true;
+      } else {
+        toast("保存失败：" + ((r.body && r.body.error) || r.error || ("HTTP " + r.status)), "bad");
+      }
+    }
+
+    async function loadModels() {
+      const box = $("models-list");
+      const r = await GET("/models");
+      box.innerHTML = "";
+      if (r.status !== 200 || !r.body) {
+        box.appendChild(el("div", "empty-note", "读取失败：" + (r.error || ("HTTP " + r.status))));
+        return;
+      }
+      const provs = r.body.providers || [];
+      if (!provs.length) {
+        box.appendChild(el("div", "empty-note", "没有已注册的服务商"));
+        return;
+      }
+      for (const p of provs) {
+        const blk = el("div", "provider-block");
+        blk.appendChild(el("div", "provider-name", (p.name || p.id) + "  ·  " + (p.models ? p.models.length : 0) + " 个模型"));
+        const list = el("div", "chip-list");
+        if (p.models && p.models.length) {
+          for (const m of p.models) list.appendChild(el("span", "chip", m.name || m.id));
+        } else {
+          list.appendChild(el("span", "empty-note", "列不出模型"));
+        }
+        blk.appendChild(list);
+        box.appendChild(blk);
+      }
+    }
+
+    async function loadMeta() {
+      const box = $("meta-list");
+      const r = await GET("/config/meta");
+      box.innerHTML = "";
+      if (r.status !== 200 || !r.body) {
+        box.appendChild(el("div", "empty-note", "读取失败：" + (r.error || ("HTTP " + r.status))));
+        return;
+      }
+      const m = r.body;
+      const rows = [
+        ["用户配置", m.user],
+        ["内置默认", m.default],
+        ["动画目录", m.animations],
+        ["卸载 profile", m.profile || "（未识别）"],
+      ];
+      for (const [k, v] of rows) {
+        const row = el("div", "path-row");
+        row.appendChild(el("span", "k", k));
+        row.appendChild(el("span", "v", String(v ?? "—")));
+        box.appendChild(row);
+      }
+      if (Array.isArray(m.storage) && m.storage.length) {
+        for (const s of m.storage) {
+          const row = el("div", "path-row");
+          row.appendChild(el("span", "k", s.label || s.name || "存储"));
+          row.appendChild(el("span", "v", String(s.path || "")));
+          box.appendChild(row);
+        }
+      }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // 视图切换
+    // ═══════════════════════════════════════════════════════════════
+
+    const TITLES = { overview: "桌宠总览", chat: "对话", settings: "设置" };
+
+    async function showView(v) {
+      document.querySelectorAll(".nav button").forEach((b) => b.classList.toggle("active", b.dataset.view === v));
+      document.querySelectorAll(".view").forEach((s) => s.classList.toggle("active", s.id === "view-" + v));
+      $("view-title").textContent = TITLES[v] || "";
+      $("view-sub").textContent =
+        v === "overview" ? "这些数据来自宿主每秒发布的状态" :
+        v === "chat" ? "回复会同时出现在桌宠气泡里" :
+        v === "settings" ? "改动会写入用户配置文件" : "";
+      if (v === "chat") { await loadChat(); $("chat-input").focus(); }
+      if (v === "settings") { if (!draft) renderSettingsPets(); }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // 事件绑定
+    // ═══════════════════════════════════════════════════════════════
+
+    document.querySelectorAll(".nav button").forEach((b) => {
+      b.addEventListener("click", () => void showView(b.dataset.view));
+    });
+
+    $("toggle-log").addEventListener("click", () => {
+      $("app").classList.toggle("show-log");
+      $("app").classList.toggle("no-log");
+    });
+
+    $("log-clear").addEventListener("click", () => {
+      S.activity = [];
+      renderActivity();
+    });
+
+    $("apply-port").addEventListener("click", async () => {
+      const p = Number($("port").value);
+      if (!Number.isInteger(p) || p <= 0 || p > 65535) { toast("端口要是 1–65535 的整数", "bad"); return; }
+      S.port = p;
+      try { await fetch("/__target?port=" + p, { cache: "no-store" }); } catch { /* 无代理时忽略 */ }
+      S.firstPoll = true;
+      S.connected = null;
+      await poll();
+    });
+
+    $("refresh-all").addEventListener("click", async () => {
+      S.firstPoll = true;
+      await poll();
+      await loadPets();
+      if ($("view-chat").classList.contains("active")) await loadChat();
+      toast("已刷新", "ok");
+    });
+
+    $("pet-select").addEventListener("change", (e) => {
+      S.petId = e.target.value;
+      renderPetIdentity();
+      // 用最近一次快照立刻显示这只宠物此刻说的话（否则要等它下次变化才渲染）
+      showSayFor(S.petId);
+    });
+
+    $("chat-pet-select").addEventListener("change", (e) => {
+      S.chatPetId = e.target.value;
+      void loadChat();
+    });
+
+    $("btn-whisper").addEventListener("click", async () => {
+      const b = $("btn-whisper");
+      b.disabled = true;
+      b.textContent = "生成中…";
+      const r = await POST("/whisper?pet=" + encodeURIComponent(S.petId));
+      b.disabled = false;
+      b.textContent = "让它说句话";
+      if (r.ok && r.body && r.body.ok === false) {
+        toast("这次没生成出来（" + (r.body.reason || "未知") + "）", "bad");
+        return;
+      }
+      if (!r.ok) { toast("请求失败：" + (r.error || ("HTTP " + r.status)), "bad"); return; }
+      // 立刻补拉一拍，不用等下一次轮询
+      const s = await GET("/state");
+      const leaf = s.body && s.body.pets && s.body.pets[S.petId] && s.body.pets[S.petId].say;
+      if (leaf) {
+        S.baseline["pets." + S.petId + ".say"] = leaf.counter;
+        renderSay(leaf.data);
+      }
+    });
+
+    $("btn-balance").addEventListener("click", async () => {
+      const b = $("btn-balance");
+      b.disabled = true;
+      b.textContent = "查询中…";
+      await POST("/balance");
+      b.disabled = false;
+      b.textContent = "刷新余额";
+      const s = await GET("/state");
+      const leaf = s.body && s.body.sections && s.body.sections.balance;
+      if (leaf) {
+        S.baseline["sections.balance"] = leaf.counter;
+        renderBalance(leaf.data);
+      }
+    });
+
+    $("btn-chat-jump").addEventListener("click", () => {
+      S.chatPetId = S.petId;
+      fillPetSelects();
+      void showView("chat");
+    });
+
+    // 第三方投喂：以"外部插件"的身份把文本写进气泡（issue #76 的场景）
+    $("bc-send").addEventListener("click", async () => {
+      const petId = $("bc-pet").value || S.petId;
+      const text = $("bc-text").value;
+      const image = $("bc-image").value.trim();
+      const res = $("bc-result");
+      res.textContent = "投喂中…";
+      const r = await POST("/broadcast?pet=" + encodeURIComponent(petId), {
+        body: image ? { text, image } : { text },
+      });
+      if (r.status === 200 && r.body && r.body.ok) {
+        res.textContent = "已投喂 · " + r.ms + "ms";
+        // 动作端点不回数据：立刻补拉一拍 /state，0 延迟看到气泡
+        const s = await GET("/state");
+        const leaf = s.body && s.body.pets && s.body.pets[petId] && s.body.pets[petId].say;
+        if (leaf) {
+          S.baseline["pets." + petId + ".say"] = leaf.counter;
+          if (petId === S.petId) renderSay(leaf.data);
+        }
+      } else {
+        const why = (r.body && r.body.message) || (r.body && r.body.reason) || r.error || "HTTP " + r.status;
+        res.textContent = "被拒：" + why;
+      }
+    });
+
+    $("chat-send").addEventListener("click", () => void sendChat());
+    $("chat-input").addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        void sendChat();
+      }
+    });
+    $("chat-reload").addEventListener("click", () => void loadChat());
+    $("chat-clear").addEventListener("click", () => {
+      S.chat = [];
+      renderChat();
+      toast("只是清空了显示，宿主的记忆还在", "ok");
+    });
+
+    $("pet-add").addEventListener("click", () => {
+      if (!draft) draft = [];
+      draft.push({
+        id: "pet" + (draft.length + 1),
+        name: "新桌宠",
+        size: 462,
+        display: "both",
+        balanceEnabled: false,
+        whisperEnabled: true,
+        workStatusEnabled: true,
+        corner: "bottom-right",
+        marginX: 24,
+        marginY: 24,
+      });
+      renderSettingsPets();
+    });
+
+    $("cfg-save").addEventListener("click", () => void saveConfig());
+
+    $("cfg-refresh").addEventListener("click", async () => {
+      draft = null;
+      await loadPets();
+      renderSettingsPets();
+      toast("已重新读取", "ok");
+    });
+
+    $("cfg-reload").addEventListener("click", async () => {
+      if (!confirm("重启桌面端？桌面上的桌宠窗口会消失并重建。")) return;
+      const r = await POST("/reload");
+      toast(r.ok ? "已通知桌面端重载" : "重载请求失败", r.ok ? "ok" : "bad");
+    });
+
+    $("cfg-default").addEventListener("click", async () => {
+      if (!confirm("用内置默认配置整份覆盖你的用户配置文件？当前改动会全部丢失。")) return;
+      const r = await POST("/config");
+      if (r.status === 200) {
+        toast("已恢复默认", "ok");
+        draft = null;
+        await loadPets();
+        renderSettingsPets();
+      } else {
+        toast("恢复失败：" + ((r.body && r.body.error) || r.error || ("HTTP " + r.status)), "bad");
+      }
+    });
+
+    $("models-load").addEventListener("click", () => void loadModels());
+    $("meta-load").addEventListener("click", () => void loadMeta());
+
+    // ═══════════════════════════════════════════════════════════════
+    // 启动
+    // ═══════════════════════════════════════════════════════════════
+
+    (async () => {
+      renderActivity();
+      // 代理会把当前转发的端口告诉我们（直连模式没有这个端点，忽略即可）
+      try {
+        const res = await fetch("/__target", { cache: "no-store" });
+        const info = await res.json();
+        if (info && info.port) { S.port = info.port; $("port").value = info.port; }
+      } catch { /* 没有代理 */ }
+
+      await poll();
+      // 每秒轮询：整页唯一的数据来源
+      S.timers.poll = setInterval(() => { void poll(); }, POLL_MS);
+      // 余额/通知的时间显示每 30 秒刷新一次
+      S.timers.age = setInterval(() => {
+        if (S.sayAt) $("say-time").textContent = hhmmss(S.sayAt);
+      }, 30000);
+    })();
+  </script>
+</body>
+
+</html>
