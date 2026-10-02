@@ -70,6 +70,10 @@ const keep = [
   // 用这个数组**覆盖** package.json 的 files，所以"只在 package.json 里加一行"是无效的，必须加在这里
   'assets/memes',
   'assets/config.jsonc',
+  // 插件图标（DSH 插件管理页显示）：package.json 顶层 icon 字段指向这张图。
+  // 与 memes 同理——本数组会覆盖 package.json 的 files，漏掉它则 npm 包里没有这张图，
+  // 读取方 dsh-app-boot 的 iconOf 找不到文件会抛错，图标退回默认插画
+  'assets/logo.png',
   'scripts/ensure-electron.mjs',
   'cordis.patch.yml',
 ];

@@ -2,6 +2,7 @@
   "name": "dsh-pet",
   "version": "0.3.1",
   "description": "吃白饭的蓝色大肥鱼，赖在 DeepSeek Harness 里不走了。平时爱玩魔方、爱吃各种零食、偶尔打个盹，闲不住就在桌面上溜达两圈，被你拖来甩去也照旧赖着；你忙起来它跟着忙前忙后，也会帮你打理余额钱包，闲下来爱碎碎念，还乐意陪你唠两句。",
+  "icon": "assets/logo.png",
   "keywords": [
     "dsh",
     "dsh-plugin",
@@ -25,6 +26,7 @@
     "=============== dsh-pet 包清单说明 ===============",
     "type: module —— 本包是 ESM",
     "main: lib/index.js —— 宿主半侧入口（Cordis 插件：name/inject/apply）",
+    "icon —— 插件图标（DSH 插件管理页显示）：相对 package.json 的图片路径，只认 svg/png/jpg/jpeg/webp，≤256 KiB，realpath 后必须留在包目录内；读取方是 dsh-app-boot 的 iconOf，会内联成 base64 data URL 塞进 meta.icon",
     "exports['./client'] —— 浏览器半侧入口，DSH 模块系统按它提供 /plugins/dsh-pet/client.js",
     "dsh.bundle.patch —— 声明本包是 bundle，patch 文件是 cordis.patch.yml（安装后自动进层栈）",
     "dsh.client —— 声明浏览器半侧的注入依赖和平台（web）",
@@ -59,6 +61,7 @@
     "assets/pic",
     "assets/memes",
     "assets/config.jsonc",
+    "assets/logo.png",
     "scripts/ensure-electron.mjs",
     "cordis.patch.yml"
   ],
