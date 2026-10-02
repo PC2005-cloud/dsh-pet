@@ -33,7 +33,8 @@ const CN_PET = '测试宠';
 type Result = { status: number; body: string };
 
 let dir = '';
-let call: (url: string, method?: string) => Promise<Result> = () => Promise.reject(new Error('未初始化'));
+let call: (url: string, method?: string, body?: string) => Promise<Result> = () =>
+  Promise.reject(new Error('未初始化'));
 let savedHome: string | undefined;
 let savedElectron: string | undefined;
 /** apply() 注册的全部 effect 释放函数（after 里调用：否则常驻定时器会让测试进程不退出） */
@@ -114,18 +115,19 @@ before(() => {
   });
   assert.ok(handler, 'apply() 应注册 /dsh-pet-7340 prefix handler'); // 注册失败则整份测试无意义
 
-  call = (url: string, method = 'GET') =>
+  call = (url: string, method = 'GET', body?: string) =>
     new Promise<Result>((done) => {
       const res = new FakeRes();
       res.on('finish', () => done({ status: res.status, body: Buffer.concat(res.chunks).toString('utf8') }));
-      // 请求桩：只服务无 body 的请求——'end' 必须回调，否则 host 对 PUT/POST 的 readBody
-      // 永远等不到结束事件，调用方直接挂死（本文件只测无 body 的端点）
+      // 请求桩：'end' 必须回调，否则 host 对 PUT/POST 的 readBody 永远等不到结束事件，
+      // 调用方直接挂死。带 body 时先发 'data' 再发 'end'（readBody 两个事件都等）。
       void handler?.(
         {
           method,
           url,
-          on: (event: string, cb: () => void) => {
-            if (event === 'end') queueMicrotask(cb);
+          on: (event: string, cb: (chunk?: Buffer) => void) => {
+            if (event === 'data' && body !== undefined) queueMicrotask(() => cb(Buffer.from(body, 'utf8')));
+            if (event === 'end') queueMicrotask(() => cb());
             return undefined;
           },
         },
@@ -225,12 +227,18 @@ describe('/state + /balance —— 轮询统一状态与余额动作端点', () 
 describe('轮询统一后删掉的旧端点 —— 不得复活', () => {
   // 这些端点改造前各有独立的客户端轮询循环；全部并入 GET /state 后删除。
   // 保留这条守卫是为了防止"顺手又加回一个 /xxx 轮询端点"（那正是这次要消灭的东西）。
-  for (const path of ['/dsh-pet-7340/broadcast', '/dsh-pet-7340/work-status', '/dsh-pet-7340/notify']) {
+  // 注意 /broadcast 不在此列：它以**新的语义**回来了（POST 写入端点，见下方专门的分组），
+  // 这里的守卫只要求它不再是一个 GET 读端点。
+  for (const path of ['/dsh-pet-7340/work-status', '/dsh-pet-7340/notify']) {
     test(`${path} 已删除（GET 不再是端点）`, async () => {
       const r = await call(path);
       assert.notEqual(r.status, 200, `${path} 应已并入 /state`);
     });
   }
+
+  test('/broadcast 的 GET 读端点已删除（数据只有 /state 一个出口）', async () => {
+    assert.equal((await call('/dsh-pet-7340/broadcast')).status, 405);
+  });
 
   test('/whisper 只接受 POST（读端点已删，GET 不再返回文本）', async () => {
     assert.equal((await call('/dsh-pet-7340/whisper?pet=main', 'GET')).status, 405);
@@ -239,6 +247,43 @@ describe('轮询统一后删掉的旧端点 —— 不得复活', () => {
   test('/whisper/trigger 已删除（手动碎碎念并入 POST /whisper）', async () => {
     const r = await call('/dsh-pet-7340/whisper/trigger?pet=main');
     assert.notEqual(r.status, 200);
+  });
+});
+
+describe('/broadcast —— 第三方投喂（POST 写入端点，issue #76）', () => {
+  // 覆盖范围说明：本文件在源码形态下 PACKAGE_ROOT 解析为 <pkg>/src，包内 assets 不可达，
+  // 因此 readAllConfig 必然抛错——"成功写进 pets.<id>.say"那条路径在这里测不了。
+  // 校验规则（宠物存在/配图在池内）由 broadcast.test.ts 的决策层单测覆盖；
+  // 这里只钉路由层的行为契约：方法、JSON 解析、短路顺序、配置不可达时的显式失败。
+
+  test('POST 空文本 → HTTP 200 + ok:false/bad-request（不读配置就能判定的失败先短路）', async () => {
+    const r = await call('/dsh-pet-7340/broadcast?pet=main', 'POST', JSON.stringify({ text: '   ' }));
+    assert.equal(r.status, 200, '业务失败走 200 + ok:false，与 /chat 同一口径');
+    const body = JSON.parse(r.body) as { ok: boolean; reason: string };
+    assert.equal(body.ok, false);
+    assert.equal(body.reason, 'bad-request', '空文本必须在读配置之前就被拦下');
+  });
+
+  test('text 非字符串（数字/对象/缺字段）→ 同样 bad-request', async () => {
+    for (const payload of [{ text: 123 }, { text: {} }, { text: null }, {}]) {
+      const r = await call('/dsh-pet-7340/broadcast?pet=main', 'POST', JSON.stringify(payload));
+      assert.equal(r.status, 200);
+      assert.equal((JSON.parse(r.body) as { reason: string }).reason, 'bad-request', JSON.stringify(payload));
+    }
+  });
+
+  test('请求体不是合法 JSON → 400（与 /config 的解析失败同一处理）', async () => {
+    const r = await call('/dsh-pet-7340/broadcast?pet=main', 'POST', '{ 不是 json');
+    assert.equal(r.status, 400);
+    assert.match(r.body, /invalid JSON body/);
+  });
+
+  test('配置不可达时不静默：显式 ok:false/generate-error（不假装投喂成功）', async () => {
+    const r = await call('/dsh-pet-7340/broadcast?pet=main', 'POST', JSON.stringify({ text: '该喝水了' }));
+    assert.equal(r.status, 200);
+    const body = JSON.parse(r.body) as { ok: boolean; reason: string };
+    assert.equal(body.ok, false, '读不到配置绝不能回 ok:true——否则调用方以为气泡已投喂');
+    assert.equal(body.reason, 'generate-error');
   });
 });
 

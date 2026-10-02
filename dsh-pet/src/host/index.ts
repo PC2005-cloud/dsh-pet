@@ -38,6 +38,8 @@
  *                                       只读、纯内存、零副作用（绝不在这里触发外部调用/模型生成）。
  *   /dsh-pet-7340/balance              → 余额刷新（POST 动作端点，写 S；数据从 /state 读）
  *   /dsh-pet-7340/whisper              → 让某只宠物立即说一句（POST 动作端点，写 S 的 pets.<id>.say）
+ *   /dsh-pet-7340/broadcast            → 第三方投喂：把外部给定的文本写进气泡（POST 动作端点，写 S 的
+ *                                       pets.<id>.say；不生成、只搬运，供宿主侧其他插件集成）
  *   /dsh-pet-7340/chat                 → 对话与记忆（GET 最近窗口 / POST 对话并写 memory.json；
  *                                       POST 只回 {ok}，回复同样写 S 的 pets.<id>.say）
  *   /dsh-pet-7340/font|pic             → 字体 / 通知图标素材
@@ -69,6 +71,7 @@ import { generateWhisper } from './whisper';
 import { generateChat, type ChatMemoryMessage } from './chat';
 import { configuredModel } from './model-selection';
 import { pickMeme, readMemePool } from './memes';
+import { decideBroadcast, normalizeBroadcastText } from './broadcast';
 import {
   findPetInstance,
   flattenPetList,
@@ -889,6 +892,51 @@ export function apply(ctx: any): void {
         const ok = await publishWhisper(petId);
         return { kind: 'json', status: 200, obj: ok ? { ok: true } : { ok: false, reason: 'generate-error' } };
       } catch (e) {
+        return {
+          kind: 'json',
+          status: 200,
+          obj: { ok: false, reason: 'generate-error', message: e instanceof Error ? e.message : String(e) },
+        };
+      }
+    }
+
+    // 第三方投喂：/dsh-pet-7340/broadcast?pet=<id>（POST = 把一段**外部给定的**文本写进桌宠气泡）
+    // 与 /whisper 的区别：这个**不生成**，调用方自己给文本——宿主侧其他插件（女仆巡检等）
+    // 想说自己的话时用它，桌宠就成了那套人格的"实体"（见 issue #76）。
+    // 写入 S 的 pets.<id>.say —— 与碎碎念/对话回复**同一个叶子**，两端 1s 内自动显示，前端零改动。
+    // 动作端点，只回 {ok}；文本本身从 /state 读。
+    // 校验（不通过一律 HTTP 200 + ok:false，与 /chat 的失败口径一致）：
+    //   text 必填、trim 后非空（**不设长度限制，也不限频**：内容与频率由调用方自己负责）；
+    //   pet 缺省 = 当前桌宠（resolveActivePetId），须真实存在；
+    //   image 只认**包内表情包名**（池内命中即用其规范名），杜绝第三方注入外部地址。
+    if (rest === 'broadcast') {
+      if (method !== 'POST') return { kind: 'json', status: 405, obj: { error: 'method not allowed' } };
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(body ?? 'null');
+      } catch {
+        return { kind: 'json', status: 400, obj: { error: 'invalid JSON body' } };
+      }
+      const o = parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : {};
+      // 空文本不需要读配置就能判定：先短路，别为一个必然失败的请求去碰磁盘
+      if (!normalizeBroadcastText(o.text)) {
+        return { kind: 'json', status: 200, obj: { ok: false, reason: 'bad-request', message: 'text 为空' } };
+      }
+      try {
+        const cfg = readAllConfig(configPaths);
+        const d = decideBroadcast({
+          cfg,
+          requested: String(url.searchParams.get('pet') ?? ''),
+          active: resolveActivePetId(),
+          text: o.text,
+          image: o.image,
+          assetsRoot: PACKAGE_ROOT_ASSETS,
+        });
+        if (!d.ok) return { kind: 'json', status: 200, obj: { ok: false, reason: d.reason, message: d.message } };
+        state.writePet(d.petId, 'say', d.image ? { text: d.text, image: d.image } : { text: d.text });
+        return { kind: 'json', status: 200, obj: { ok: true } };
+      } catch (e) {
+        // 配置读取失败等（安装损坏）→ 显式失败，不静默
         return {
           kind: 'json',
           status: 200,
