@@ -5,8 +5,8 @@
  * （0.1.1 时代的契约，dsh-pet 的 shared/notify.ts 帧映射正是按它写的），改用
  * `ctx.remote.$on('approval/request')` 等回调订阅——事件名与帧形状都变了。
  * 为不依赖 DSH 版本间变化的事件 API，这里改为 host 侧直接监听 DSH 宿主事件，
- * 生成**与 shared/notify.ts 完全同契约**的通知帧（帧形状零改动），经
- * `/dsh-pet-7340/notify` 增量端点给浏览器轮询（与 work-status 同族）。
+ * 生成**与 shared/notify.ts 完全同契约**的通知帧（帧形状零改动），写进 S 的
+ * sections.notify，浏览器统一轮询 /state 后弹 toast（与其余叶子同族；单槽，后到覆盖先到）。
  *
  * 事件源（全部来自 `session/event` 宿主事件 + `agent/error` 宿主事件）：
  *   - turn/end（completed → 对话完成 / error → 生成失败 / max-tokens → 输出截断；

@@ -19,8 +19,8 @@ import { Writable } from 'node:stream';
 
 import { apply } from './index.ts';
 
-/** /work-status 快照（与 WorkStatusSnapshot 同构） */
-type Snapshot = { state: string | null; task: string | null; ts: number };
+/** 工作状态快照（= S 里 sections.workStatus 的 data；ts 已由叶子 counter 取代，不再出现） */
+type Snapshot = { state: string | null; task: string | null };
 type Listener = (session: unknown, event: unknown) => void;
 /** 一个插件的测试实例：发事件 + 读快照 + 收尾 */
 type Harness = {
@@ -91,8 +91,15 @@ function setup(): Harness {
     snapshot: () =>
       new Promise<Snapshot>((done) => {
         const res = new FakeRes();
-        res.on('finish', () => done(JSON.parse(Buffer.concat(res.chunks).toString('utf8')) as Snapshot));
-        void handler?.({ method: 'GET', url: '/dsh-pet-7340/work-status', on: noop }, res);
+        res.on('finish', () => {
+          // 快照现在住在 S 的 sections.workStatus 叶子里（/work-status 端点已删）：
+          // 读它同时也是对"事件 → 写 S → /state 可读"这条新链路的端到端验证。
+          const body = JSON.parse(Buffer.concat(res.chunks).toString('utf8')) as {
+            sections?: { workStatus?: { data?: Snapshot | null } };
+          };
+          done(body.sections?.workStatus?.data ?? { state: null, task: null });
+        });
+        void handler?.({ method: 'GET', url: '/dsh-pet-7340/state', on: noop }, res);
       }),
     dispose: () => {
       // 插件收尾：清掉待执行的定时器（终态清理 60s；余额周期刷新是常驻的）——

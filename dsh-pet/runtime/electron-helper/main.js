@@ -71,7 +71,7 @@ const DPI_MARK = 'dsh-pet-primary-scale:';
 // ---------- 宿主存活（issue #56）：管道断开 / 父进程消失 → 自己退出 ----------
 //
 // 【为什么必须自己退】宿主退出后，它在 helper 的 stdout/stderr 上握着的管道读端一起关闭；helper
-// 下一次写（bridge 协议行 —— 渲染端每秒至少一条 /broadcast 轮询）拿到 EPIPE。未处理的 'error'
+// 下一次写（bridge 协议行 —— 渲染端每秒至少一条 /state 轮询）拿到 EPIPE。未处理的 'error'
 // 事件 = 未捕获异常，而 Electron 主进程自带的处理器只弹一个模态框、**且不退出**
 // （lib/browser/init.ts 原文注释："Don't quit on fatal error"）—— 桌宠就此卡死、进程赖着不走。
 // 真机实测（宿主存活、只切断 stdout 管道）：那次写之后主线程彻底停住，14 秒里一次心跳都没有，

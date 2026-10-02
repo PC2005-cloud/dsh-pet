@@ -95,21 +95,15 @@ class PetSprite {
     this.balanceView = null;
     this.balanceWrap = false; // true = 当前余额气泡是不可用的「文字说明」（多行，需换行变体）
     this.prevTick = 0;
-    // 碎碎念（每只独立：自己轮询 /whisper?pet=<id>、自己的文本/配图与触发）
+    // 说话（碎碎念 / 命令气泡 / 对话回复三合一）：文本/配图由容器统一轮询 /state 后经
+    // showWhisper 送进来，本精灵不再自己轮询（改造前的 whisperLoopTimer / broadcastLoopTimer 已删）
     this.whisperOn = false;
     this.whisperTimer = null;
     this.whisperView = null;
     this.whisperText = '';
     // 配图名称（配置 memes 的键；whisperImageEnabled 开启时由 host 随机抽定，随文本一起来）
     this.whisperImage = '';
-    this.whisperBaseline = false;
-    this.prevWhisperTs = 0;
-    this.whisperLoopTimer = null;
-    // 命令触发气泡（/chat 命令）：1s 轻轮询 /broadcast，ts 变化即弹气泡（与碎碎念周期独立，不受开关门控）
-    this.broadcastLoopTimer = null;
-    this.broadcastBaseline = false;
-    this.prevBroadcastTs = 0;
-    // 工作状态联动（DSH 会话状态）：容器 1s 轮询 /work-status 递增 workTick → 本宠物按档位播动画+气泡。
+    // 工作状态联动（DSH 会话状态）：容器 1s 轮询 /state 递增 workTick → 本宠物按档位播动画+气泡。
     // 气泡单槽优先级 终态任务 > whisper > balance > 非终态任务（见 renderBubble）；
     // workStatusEnabled 未启用时完全免疫（与浏览器一致）
     this.workOn = false;
@@ -224,8 +218,6 @@ class PetSprite {
     this.ac.abort();
     if (this.bubbleTimer !== null) window.clearTimeout(this.bubbleTimer);
     if (this.whisperTimer !== null) window.clearTimeout(this.whisperTimer);
-    if (this.whisperLoopTimer !== null) window.clearTimeout(this.whisperLoopTimer);
-    if (this.broadcastLoopTimer !== null) window.clearTimeout(this.broadcastLoopTimer);
     if (this.workTimer !== null) window.clearTimeout(this.workTimer);
     if (this.chatClose) {
       this.chatClose();
@@ -1130,17 +1122,14 @@ class PetSprite {
       });
   }
 
-  // 「碎碎念」菜单：立即让 host 强制新生成一句并展示（绕过节流缓存；
-  // /whisper/trigger 与周期端点同一逻辑但 force=true；失败显式告警，不伪造文案）
-  // 手动触发不受 whisperEnabled 限制——该字段只关自动周期轮询，手动永远可用。
+  // 「碎碎念」菜单：POST 动作让 host 立即新生成一句（写进 S），随即立刻跑一拍 /state 拿文本展示
+  // （0 延迟，不用等下一个 1s）。动作不回文本——文本只有一个出口（S）。
+  // 手动触发不受 whisperEnabled 限制——该字段只关自动周期，手动永远可用。
   showWhisperFromMenu() {
-    S.fetchWhisperTrigger(WHISPER_URL + '/trigger?pet=' + encodeURIComponent(this.pet.id))
-      .then((state) => {
-        if (state.ok) {
-          this.showWhisper(state.text, state.image);
-        } else {
-          console.warn('[dsh-pet] 菜单碎碎念失败 reason=' + state.reason + (state.message ? ' ' + state.message : ''));
-        }
+    S.postAction(WHISPER_URL + '?pet=' + encodeURIComponent(this.pet.id))
+      .then((ok) => {
+        if (!ok) console.warn('[dsh-pet] 菜单碎碎念：生成动作未成功 pet=' + this.pet.id);
+        pollStateNow(); // 立即拉一拍：文本随这一拍到达并展示
       })
       .catch((e) => {
         console.warn('[dsh-pet] 菜单碎碎念异常', e);
@@ -1166,9 +1155,10 @@ class PetSprite {
       y: Math.max(4, this.hit.getBoundingClientRect().top + 6),
       // 弹窗同菜单：只允许在「窗口 ∩ 工作区」内显示，贴边时不被屏幕裁掉（#41）
       clamp: this.visibleClampRect(),
-      onReply: (reply, image) => {
-        console.info('[dsh-pet] 对话回复 pet=' + this.pet.id + '「' + reply + '」' + (image ? ' [' + image + ']' : ''));
-        this.showWhisper(reply, image); // 复用碎碎念链路：随机说话动画 + 气泡 10s（含配图）
+      onSent: () => {
+        // 发送成功：回复已写进 S，立刻跑一拍 /state 让气泡 0 延迟出现（不必等下一个 1s）
+        console.info('[dsh-pet] 对话已发送 pet=' + this.pet.id);
+        pollStateNow();
       },
       onClose: () => {
         this.chatClose = null;

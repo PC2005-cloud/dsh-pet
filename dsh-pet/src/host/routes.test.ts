@@ -222,6 +222,26 @@ describe('/state + /balance —— 轮询统一状态与余额动作端点', () 
   });
 });
 
+describe('轮询统一后删掉的旧端点 —— 不得复活', () => {
+  // 这些端点改造前各有独立的客户端轮询循环；全部并入 GET /state 后删除。
+  // 保留这条守卫是为了防止"顺手又加回一个 /xxx 轮询端点"（那正是这次要消灭的东西）。
+  for (const path of ['/dsh-pet-7340/broadcast', '/dsh-pet-7340/work-status', '/dsh-pet-7340/notify']) {
+    test(`${path} 已删除（GET 不再是端点）`, async () => {
+      const r = await call(path);
+      assert.notEqual(r.status, 200, `${path} 应已并入 /state`);
+    });
+  }
+
+  test('/whisper 只接受 POST（读端点已删，GET 不再返回文本）', async () => {
+    assert.equal((await call('/dsh-pet-7340/whisper?pet=main', 'GET')).status, 405);
+  });
+
+  test('/whisper/trigger 已删除（手动碎碎念并入 POST /whisper）', async () => {
+    const r = await call('/dsh-pet-7340/whisper/trigger?pet=main');
+    assert.notEqual(r.status, 200);
+  });
+});
+
 describe('thumb 路由 —— 合法路径照常（修复不得误杀）', () => {
   test('pet pack 自己的素材：中文名 petId 正常返回', async () => {
     const r = await call(`/dsh-pet-7340/thumb/${encodeURIComponent(CN_PET)}/test.webm`);

@@ -1,8 +1,8 @@
 /**
  * host 侧工作状态联动核心（自包含，不 import src/shared —— DSH 单文件加载约束）。
  *
- * 职责：监听 DSH `session/event`，把 6 类会话事件压缩成"当前活动工作状态"，供
- * `/dsh-pet-7340/work-status` 端点给浏览器轮询（与 balance/whisper 轮询同族）。
+ * 职责：监听 DSH `session/event`，把 6 类会话事件压缩成"当前活动工作状态"，由 index.ts
+ * 写进 S 的 sections.workStatus，浏览器/桌面统一轮询 /state 后按 counter 变化渲染。
  * 只做聚合与去重：状态无变化不产生新输出（签名比对防刷屏）；不调用任何模型。
  *
  * 本文件同时承载**按会话聚合 + 展示快照**（WorkStatusStore）：state 与任务详情文案 task 都挂在

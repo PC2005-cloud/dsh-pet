@@ -8,6 +8,7 @@
 // 路径（'sections.balance' / 'pets.<id>.say'）只当**不透明键**用，绝不解析——
 // 宠物 id 允许含点号，解析出来必然出错。
 import { toBalanceState, type BalanceState } from './balance';
+import { toWorkStatus, type WorkStatusSnapshot } from './work-status';
 
 /** 一个叶子：计数器 + 载荷（data 为 null = 还没有数据，消费端跳过） */
 export interface StateLeaf {
@@ -110,6 +111,26 @@ export function readBalance(leaf: StateLeaf): { state: BalanceState; manual: boo
   if (!state) return null;
   const manual = (leaf.data as { manual?: unknown }).manual === true;
   return { state, manual };
+}
+
+/**
+ * 类型收窄：宠物说话叶子 → `{ text, image? }`（形状非法 / 空文本 → null，消费端跳过这一拍）。
+ * 碎碎念、命令气泡、对话回复共用这一个叶子——前端本来就是同一条展示链路
+ * （同一个 triggerWhisper、同一个气泡槽、同一批 events.whisper 动画）。
+ */
+export function readSay(leaf: StateLeaf): { text: string; image?: string } | null {
+  if (!leaf.data || typeof leaf.data !== 'object') return null;
+  const d = leaf.data as { text?: unknown; image?: unknown };
+  if (typeof d.text !== 'string' || !d.text) return null;
+  return { text: d.text, image: typeof d.image === 'string' ? d.image : undefined };
+}
+
+/**
+ * 类型收窄：工作状态叶子 → 快照（形状非法 → null，消费端跳过这一拍）。
+ * 与余额不同，这里没有"手动"标记：工作状态永远由 DSH 事件驱动，没有用户主动要的那条路。
+ */
+export function readWorkStatus(leaf: StateLeaf): WorkStatusSnapshot | null {
+  return toWorkStatus(leaf.data);
 }
 
 /**

@@ -3,7 +3,7 @@
  *
  * 背景：helper 的 stdout/stderr 是宿主给的管道（helper-process.ts: stdio ['pipe','pipe','pipe']）。
  * 宿主进程一退出，这两根管道的读端随之关闭，而 helper 下一次写（bridge 协议行 —— 渲染端每秒至少
- * 一条 /broadcast 轮询）就会拿到 EPIPE。在 Node 里那是 process.stdout 上的 'error' 事件：
+ * 一条 /state 轮询）就会拿到 EPIPE。在 Node 里那是 process.stdout 上的 'error' 事件：
  * **没挂监听就是未捕获异常**，而 Electron 主进程自带的处理器只会弹一个模态框、且**不退出**
  * （lib/browser/init.ts 原文注释：Don't quit on fatal error）。
  *

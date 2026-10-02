@@ -17,9 +17,16 @@ import { planMove } from '../shared/motion';
 import { flattenConfigPets, isWebVisible } from '../shared/config';
 import { balanceEventIndex, balancePercent, decideBalanceNotice, type BalanceState } from '../shared/balance';
 // 轮询统一状态 S：前端唯一的数据来源与渲染入口（拉取 / 拍平 / 比对都在 shared，两端同一份）
-import { fetchState, flattenCounters, readBalance, takeChanged } from '../shared/state';
-import { fetchWhisperState, fetchWhisperTrigger } from '../shared/whisper';
-import { WORK_STATUS_INDEX, fetchWorkStatus, type WorkStatusSnapshot } from '../shared/work-status';
+import {
+  fetchState,
+  flattenCounters,
+  postAction,
+  readBalance,
+  readSay,
+  readWorkStatus,
+  takeChanged,
+} from '../shared/state';
+import { WORK_STATUS_INDEX, type WorkStatusSnapshot } from '../shared/work-status';
 import { makeBalanceBubble, makeWhisperBubble } from './bubble';
 import { clickScore, SCORE_MIN_SPEED, mountScorePopup, spawnScoreBurst } from '../shared/score-popup';
 import { CANVAS_H, FEET_Y, HIT_BOX, DRAG_THRESHOLD, PET_REF_WIDTH, ANIMATION_EXT } from '../shared/constants';
@@ -35,6 +42,12 @@ import {
 // 对话弹窗：与桌面共用同一份组件（数据经 host /chat 读写同一份记忆）
 import { mountChatDialog } from '../shared/chat';
 import { petBridge } from './settings';
+import { notifyFromFrame } from './notify';
+
+/** 容器注册的「立刻拉一拍 /state」钩子：前端动作（右键菜单 / 对话弹窗）完成后调用——
+ *  数据只从 S 来（动作端点不回数据），但叫醒一拍就能 0 延迟看到结果，不用等下一个 1s。
+ *  未注册（容器还没挂）时是空操作，调用方不需要判空。 */
+export const statePoller: { now: () => void } = { now: () => {} };
 // 拖拽抛掷物理（弹簧跟手 + 甩抛 + 重力反弹）：两端共用同一份纯计算（src/shared/physics.ts）
 import {
   estimateReleaseVelocity,
@@ -128,6 +141,8 @@ export function makePetUI(rt: {
     balanceNoticeTick,
     workStatus,
     workStatusTick,
+    say,
+    sayTick,
     arena,
   }: {
     cfg: RuntimePet;
@@ -136,6 +151,9 @@ export function makePetUI(rt: {
     balanceNoticeTick: number;
     workStatus: WorkStatusSnapshot | null;
     workStatusTick: number;
+    /** 本宠物的「说一句话」（碎碎念/命令气泡/对话回复三合一；容器从 S 分发下来） */
+    say?: { text: string; image?: string; seq: number };
+    sayTick: number;
     arena: ReactNS.MutableRefObject<{ slots: Record<string, PetCollisionSlot> }>;
   }) {
     // ---- 尺寸（由配置传入；容器/设置页更新后即时跟随）----
@@ -439,7 +457,7 @@ export function makePetUI(rt: {
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [balanceNoticeTick]);
 
-    // 工作状态联动：容器轮询 /work-status 递增 workStatusTick → 本宠物（workStatusEnabled 开启时）
+    // 工作状态联动：容器统一轮询 /state 的 sections.workStatus 递增 workStatusTick → 本宠物（workStatusEnabled 开启时）
     // 按 events.workStatus 档位播动画 + 弹文本气泡。
     // 气泡驻留语义：thinking/working/result/waiting（"事情还没完"）常驻显示，直到状态切走；
     //   success/error（"这事结束了"）10s 自动收起；
@@ -539,97 +557,18 @@ export function makePetUI(rt: {
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [workStatusTick]);
 
-    // 碎碎念：本宠物独立轮询 /whisper?pet=<id> —— host 按宠物独立生成（用本种类人设）、按宠物节流。
-    // 首拉仅记基线（不触发，避免页面加载/刷新时重放）；之后 ts 变化（本宠物新周期的新句）才触发动画+气泡；
-    // 失败/未配置静默跳过（不弹错误气泡）。每只宠物独立轮询 = 各自周期、各自人设、各自一句话。
-    const whisperTextRef = useRef<string | null>(null);
-    const prevWhisperTsRef = useRef(0);
+    // 说话（碎碎念周期 / 命令气泡 / 对话回复**三合一**）：容器统一轮询 /state 后，把属于本宠物的
+    // pets.<id>.say 分发下来；seq 变化即播说话动画 + 弹气泡（10s）。
+    // 改造前这里是两条独立轮询（/whisper 周期 + /broadcast 1s）、host 侧也是两个缓存；
+    // 现在只有一个数据源（S），"首拉记基线"由容器统一处理。
+    // 不受 whisperEnabled 门控：那个字段只关自动周期，命令/对话的手动语义永远可用。
+    const prevSaySeqRef = useRef(0);
     useEffect(() => {
-      if (!cfg.whisperEnabled) return; // 未启用碎碎念 -> 该宠物对碎碎念事件完全免疫
-      let alive = true;
-      let hasBaseline = false;
-      const refresh = async () => {
-        try {
-          const state = await fetchWhisperState('/dsh-pet-7340/whisper?pet=' + encodeURIComponent(cfg.id));
-          if (!alive) return;
-          if (state.ok) {
-            if (!hasBaseline) {
-              hasBaseline = true; // 首次仅记基线：避免启动/刷新时重放历史事件
-              prevWhisperTsRef.current = state.ts;
-              whisperTextRef.current = state.text;
-              return;
-            }
-            if (state.ts !== prevWhisperTsRef.current) {
-              prevWhisperTsRef.current = state.ts;
-              whisperTextRef.current = state.text;
-              triggerWhisper(state.text, state.image);
-            }
-          } else {
-            console.warn(
-              '[dsh-pet] 碎碎念生成失败 pet=' +
-                cfg.id +
-                ' reason=' +
-                state.reason +
-                (state.message ? ' ' + state.message : ''),
-            );
-          }
-        } catch (e) {
-          if (alive) console.warn('[dsh-pet] 碎碎念拉取异常 pet=' + cfg.id, e);
-        }
-      };
-      void refresh();
-      const intervalMs = Math.max(1000, (cfg.eventsRefreshSec.whisper ?? 3600) * 1000);
-      const timer = window.setInterval(() => void refresh(), intervalMs);
-      return () => {
-        alive = false;
-        window.clearInterval(timer);
-      };
+      if (!say || say.seq === prevSaySeqRef.current) return;
+      prevSaySeqRef.current = say.seq;
+      triggerWhisper(say.text, say.image);
       // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [cfg.id, cfg.whisperEnabled]);
-
-    // 命令触发气泡（/chat 斜杠命令）：1s 轻量轮询 /broadcast?pet=<id>，ts 变化即弹气泡。
-    // 与碎碎念周期轮询独立（host 广播缓存是另一条通道）：手动触发语义不受 whisperEnabled 门控
-    const prevBroadcastTsRef = useRef(0);
-    useEffect(() => {
-      let alive = true;
-      let hasBaseline = false;
-      const refresh = async () => {
-        try {
-          const r = await fetch('/dsh-pet-7340/broadcast?pet=' + encodeURIComponent(cfg.id), { cache: 'no-store' });
-          if (!alive || !r.ok) return;
-          const d = (await r.json().catch(() => null)) as {
-            ok?: unknown;
-            text?: unknown;
-            image?: unknown;
-            ts?: unknown;
-          } | null;
-          if (!d || d.ok !== true) return;
-          const ts = typeof d.ts === 'number' ? d.ts : 0;
-          if (!hasBaseline) {
-            // 首拉无条件记基线（含 ts=0）：若 ts=0 提前 return 会跳过基线建立，
-            // 导致第一条命令广播被当成基线吃掉（该条永不弹）
-            hasBaseline = true;
-            prevBroadcastTsRef.current = ts;
-            return;
-          }
-          if (ts === 0 || ts === prevBroadcastTsRef.current) return; // 无广播 / 无变化
-          prevBroadcastTsRef.current = ts;
-          if (typeof d.text === 'string' && d.text) {
-            // image：host 侧抽定/模型选定的配图名（未开配图则 undefined）——与 /whisper 同契约
-            triggerWhisper(d.text, typeof d.image === 'string' ? d.image : undefined);
-          }
-        } catch {
-          /* 广播轮询失败静默：下一周期再试 */
-        }
-      };
-      void refresh();
-      const timer = window.setInterval(() => void refresh(), 1000);
-      return () => {
-        alive = false;
-        window.clearInterval(timer);
-      };
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [cfg.id]);
+    }, [sayTick]);
 
     // 碎碎念触发（本宠物）：随机抽 events.whisper 动画 + 弹文本气泡（10s 消失，与动画解耦）
     // image：host 侧随机抽定的配图名称（未开配图/池为空则 undefined）——与文本同一次触发一起来
@@ -1315,20 +1254,16 @@ export function makePetUI(rt: {
     // 无「打开网站 / 查看余额」（打开网站=就在网页里；查看余额已由对话框 /balance 命令实现）。
     const handleMenuAction = (leaf: MenuLeaf) => {
       if (leaf.action === 'whisper') {
-        // 手动碎碎念：强制 host 立即新生成一句并展示（绕过节流缓存；失败显式告警，不伪造文案）。
-        // 手动触发不受 whisperEnabled 限制——该字段只关自动周期轮询，手动永远可用。
+        // 手动碎碎念：POST 动作端点让 host 立即新生成一句（写进 S）。
+        // 动作**不回文本**——收到 ok 后叫醒一拍 /state，文本随下一拍到达并弹气泡（0 延迟）。
+        // 手动触发不受 whisperEnabled 限制——该字段只关自动周期，手动永远可用。
         console.info('[dsh-pet] 菜单触发碎碎念 pet=' + cfg.id);
-        fetchWhisperTrigger('/dsh-pet-7340/whisper/trigger?pet=' + encodeURIComponent(cfg.id))
-          .then((state) => {
-            if (state.ok) {
-              triggerWhisper(state.text, state.image);
-            } else {
-              console.warn(
-                '[dsh-pet] 碎碎念手动触发失败 reason=' + state.reason + (state.message ? ' ' + state.message : ''),
-              );
-            }
+        postAction('/dsh-pet-7340/whisper?pet=' + encodeURIComponent(cfg.id))
+          .then((ok: boolean) => {
+            if (!ok) console.warn('[dsh-pet] 碎碎念手动触发失败 pet=' + cfg.id);
+            statePoller.now();
           })
-          .catch((e) => console.warn('[dsh-pet] 碎碎念手动触发异常', e));
+          .catch((e: unknown) => console.warn('[dsh-pet] 碎碎念手动触发异常', e));
         return;
       }
       if (leaf.action === 'chat') {
@@ -1344,9 +1279,10 @@ export function makePetUI(rt: {
           baseUrl: '/dsh-pet-7340/chat',
           x: hitRect ? hitRect.right + 6 : window.innerWidth - 256,
           y: hitRect ? hitRect.top + 6 : 8,
-          onReply: (reply, image) => {
-            console.info('[dsh-pet] 对话回复 pet=' + cfg.id + '「' + reply + '」' + (image ? ' [' + image + ']' : ''));
-            triggerWhisper(reply, image); // 复用碎碎念链路：随机说话动画 + 气泡 10s（含配图）
+          onSent: () => {
+            // 发送成功：回复已写进 S，叫醒一拍 /state 让气泡 0 延迟出现（不必等下一个 1s）
+            console.info('[dsh-pet] 对话已发送 pet=' + cfg.id);
+            statePoller.now();
           },
           onClose: () => {
             chatRef.current = null;
@@ -1528,11 +1464,11 @@ export function makePetUI(rt: {
         console.error('[dsh-pet] 余额查询失败 reason=' + state.reason + (state.message ? ' ' + state.message : ''));
       }
     };
-    // 工作状态：容器统一轮询 /work-status（任一宠物启用才启动），快照 + tick 递增驱动各宠物播档位动画
+    // 工作状态：容器统一轮询 /state 的 sections.workStatus，快照 + tick 递增驱动各宠物播档位动画
     const [workStatus, setWorkStatus] = useState<WorkStatusSnapshot | null>(null);
     const [workStatusTick, setWorkStatusTick] = useState(0);
-    // 碎碎念：轮询下沉到每只 PetCard（各自按自己的周期拉取 /whisper?pet=<id>，人设/文本/触发全部独立），
-    // 容器不再持有共享状态——与「每只宠物单独触发对话」的产品语义一致。
+    // 说话（碎碎念 / 命令气泡 / 对话回复三合一）：容器统一轮询 /state 的 pets.<id>.say，
+    // 按宠物分发到对应 PetCard（sayRef + sayTick；见下方统一轮询与 PetCard 的 say 分支）。
 
     useEffect(() => {
       let alive = true;
@@ -1589,14 +1525,14 @@ export function makePetUI(rt: {
 
     // 浏览器 overlay 只渲染 display ∈ {web, both} 的宠物；desktop / none 不参与网页显示
     const visiblePets = pets.filter((p) => isWebVisible(p.display));
-    // 是否存在启用工作状态联动的宠物：全禁用时不轮询 /work-status（避免无意义的周期请求）
-    const anyWorkStatusEnabled = visiblePets.some((p) => p.workStatusEnabled);
 
     // ---- 统一轮询（GET /state，1s）：前端**唯一**的数据来源与渲染入口 ----
     // 每个叶子 = { counter, data }：首拉只记基线（不渲染——避免刷新页面时重放旧气泡），
-    // 之后 counter 变了才渲染。各功能逐个接入（当前：余额），旧的独立轮询循环随迁随删。
-    // 为什么不再按"有没有启用某功能"决定要不要轮询：气泡广播（命令触发）与宠物开关无关，
+    // 之后 counter 变了才渲染。分发到各功能（余额 / 工作状态 / 通知 / 说话）。
+    // 为什么不再按"有没有启用某功能"决定要不要轮询：说话（命令触发）与宠物开关无关，
     // 今天每只宠物的 /broadcast 轮询本来就不受开关门控——统一后至少不比现在多。
+    const [sayTick, setSayTick] = useState(0);
+    const sayRef = useRef<Record<string, { text: string; image?: string; seq: number }>>({});
     useEffect(() => {
       if (!ready) return;
       let alive = true;
@@ -1614,45 +1550,40 @@ export function makePetUI(rt: {
             if (path === 'sections.balance') {
               const hit = readBalance(leaf);
               if (hit) applyBalanceRef.current(hit.state, hit.manual);
+            } else if (path === 'sections.workStatus') {
+              const snap = readWorkStatus(leaf);
+              if (snap) {
+                setWorkStatus(snap);
+                setWorkStatusTick((t) => t + 1); // 任何变化都触发（含回到空闲：用于收起常驻气泡）
+              }
+            } else if (path === 'sections.notify') {
+              // 系统通知（单槽：同一秒多条只留最后一条，由 host 决定）→ 弹 toast（内部有开关/聚焦/权限门）
+              notifyFromFrame(leaf.data);
+            } else if (path.startsWith('pets.') && path.endsWith('.say')) {
+              // 说话叶子：路径形如 pets.<id>.say。宠物 id **允许含点号**，所以按前缀/后缀切片，
+              // 绝不 split('.')（那会把 id 切碎、派发给不存在的宠物）。
+              const petId = path.slice('pets.'.length, -'.say'.length);
+              const said = readSay(leaf);
+              if (said) {
+                sayRef.current[petId] = { ...said, seq: (sayRef.current[petId]?.seq ?? 0) + 1 };
+                setSayTick((t) => t + 1);
+              }
             }
           }
         } catch {
           /* 轻量轮询失败静默：下一拍再试 */
         }
       };
+      // 前端动作（右键菜单/对话弹窗）完成后叫醒一拍：数据只从 S 来，但结果可以 0 延迟可见
+      statePoller.now = () => void poll();
       void poll();
       const timer = window.setInterval(() => void poll(), 1000);
       return () => {
         alive = false;
+        statePoller.now = () => {};
         window.clearInterval(timer);
       };
     }, [ready]);
-
-    // 工作状态轮询：任一宠物启用且配置就绪后，1s 轻量轮询 /work-status（host 端点 no-cache）。
-    // 拉取成功且 ts 变化才 setWorkStatus + 递增 workStatusTick（与 broadcast 同一触发语义，避免刷屏）。
-    useEffect(() => {
-      if (!ready || !anyWorkStatusEnabled) return; // 未就绪 / 全宠物未启用：不启动轮询
-      let alive = true;
-      let prevTs = -1;
-      const poll = async () => {
-        try {
-          const snap = await fetchWorkStatus();
-          if (!alive) return;
-          if (snap.ts === prevTs) return; // 无变化：不触发（首拉记基线，避免重放历史状态）
-          prevTs = snap.ts;
-          setWorkStatus(snap);
-          setWorkStatusTick((t) => t + 1); // 任何 ts 变化都触发（含回到空闲：用于收起常驻气泡）
-        } catch {
-          /* 轻量轮询失败静默：下一周期再试 */
-        }
-      };
-      void poll();
-      const timer = window.setInterval(() => void poll(), 1000);
-      return () => {
-        alive = false;
-        window.clearInterval(timer);
-      };
-    }, [ready, anyWorkStatusEnabled]);
 
     return ready
       ? visiblePets.map((p) =>
@@ -1664,6 +1595,8 @@ export function makePetUI(rt: {
             balanceNoticeTick,
             workStatus,
             workStatusTick,
+            say: sayRef.current[p.id],
+            sayTick,
             arena: arenaRef,
           }),
         )

@@ -36,18 +36,16 @@
  *                                       { sections: { balance, workStatus, notify }, pets: { <id>: { say } } }，
  *                                       每个叶子 = { counter, data }；counter 变了前端才渲染。
  *                                       只读、纯内存、零副作用（绝不在这里触发外部调用/模型生成）。
- *                                       正在逐块接入：余额已接入，其余见后续步骤。
- *   /dsh-pet-7340/whisper|whisper/trigger → 碎碎念周期/手动生成（按宠物独立，人设读成品）
- *   /dsh-pet-7340/chat                → 对话与记忆（GET 最近窗口 / POST 对话并写 memory.json）
- *   /dsh-pet-7340/broadcast            → /chat 命令触发的气泡广播（两端 1s 轻轮询）
  *   /dsh-pet-7340/balance              → 余额刷新（POST 动作端点，写 S；数据从 /state 读）
- *   /dsh-pet-7340/notify              → 系统通知帧（host 监听 DSH 宿主事件生成，浏览器增量轮询）
+ *   /dsh-pet-7340/whisper              → 让某只宠物立即说一句（POST 动作端点，写 S 的 pets.<id>.say）
+ *   /dsh-pet-7340/chat                 → 对话与记忆（GET 最近窗口 / POST 对话并写 memory.json；
+ *                                       POST 只回 {ok}，回复同样写 S 的 pets.<id>.say）
  *   /dsh-pet-7340/font|pic             → 字体 / 通知图标素材
  *
  * 系统通知不属于宠物行为、不在这里的旧实现是：浏览器半侧 notify.ts 经 connection 事件流
  * （api.events.mux/host）监听 DSH 事件。但 DSH 0.1.5 已删除该事件流 API——通知改为
- * host 侧监听宿主事件（session/event + agent/error）生成帧入队，浏览器轮询
- * /dsh-pet-7340/notify 拉取（见下方 notify 队列与监听；帧契约与 shared/notify.ts 一致）。
+ * host 侧监听宿主事件（session/event + agent/error）生成帧写进 S 的 sections.notify，
+ * 浏览器统一轮询 /state 后弹 toast（帧契约与 shared/notify.ts 一致；单槽，见下方 pushNotifyFrame）。
  *
  * 桌面模式（Electron 透明窗）没有独立配置文件：宠物显示在哪全部由宠物条目的 display 决定
  * （web=仅浏览器 / desktop=仅桌面 / both=两者 / none=都不显示；缺失时合并器填内置默认值）。
@@ -260,19 +258,29 @@ export function apply(ctx: any): void {
   // 会话存**——task 曾是全局单值，写过一次就跟着此后所有会话活动一直显示（issue #59）。
   // 进程内内存态：重启回空闲；每次会话事件有实际状态变化才更新（签名比对防刷屏）。
   const workStatus = new WorkStatusStore();
-  // 系统通知帧队列（/notify 端点增量拉取）：host 监听 DSH 宿主事件生成通知帧
-  // （帧契约与 shared/notify.ts 一致），浏览器 1s 轮询 /notify?since=<seq> 拉增量弹 toast。
-  // 背景：DSH 0.1.5 删除浏览器侧 api.events.mux/host 事件流，改为 host 转发通道——
-  // 不依赖 DSH 版本间变化的事件 API。进程内内存态：重启清空（通知本来就是瞬时提醒）。
-  const notifyFrames: Array<{ seq: number; frame: HostNotifyFrame }> = [];
-  let notifySeq = 0;
-  const NOTIFY_QUEUE_MAX = 100; // 上限防膨胀：超出丢最旧（1s 轮询正常不会积压）
-  const pushNotifyFrame = (frame: HostNotifyFrame): void => {
-    notifySeq += 1;
-    notifyFrames.push({ seq: notifySeq, frame });
-    if (notifyFrames.length > NOTIFY_QUEUE_MAX) notifyFrames.shift();
+  // 工作状态快照 → 写进 S（前端 1s 轮询 /state 后按 counter 变化渲染）。
+  // **只在内容真的变了时才写**：每次写都会推进 counter，前端据此重播档位动画——
+  // 会话事件很密（每个 tool/call 都来），无条件写会把动画刷成幻灯片。
+  // 判据用**内容**（state + task）而不是 store 的 ts：ts 是 Date.now()（毫秒分辨率），
+  // 同一毫秒内连改两次会被误判成"没变化"而漏写（测试里连发事件就会踩到）。
+  // data 里不再带 ts：「变了没有」已由叶子 counter 承担，少一个会漂移的第二信号。
+  let publishedWork = '\u0000';
+  const publishWorkStatus = (): void => {
+    const snap = workStatus.snapshot();
+    const key = String(snap.state) + '\u0000' + String(snap.task);
+    if (key === publishedWork) return;
+    publishedWork = key;
+    state.writeSection('workStatus', { state: snap.state, task: snap.task });
   };
-  /** 每会话 turn 级标志（goal 续跑轮判定；不参与展示，仅修正 turn/end 终局语义） */
+  // 系统通知帧：host 监听 DSH 宿主事件生成通知帧（帧契约与 shared/notify.ts 一致），写进 S 的
+  // sections.notify，浏览器 1s 轮询 /state 后弹 toast。
+  // 背景：DSH 0.1.5 删除浏览器侧 api.events.mux/host 事件流，改为 host 转发通道——
+  // 不依赖 DSH 版本间变化的事件 API。
+  // **单槽**（后到覆盖先到）：同一秒来多条只弹最后一条。这是有意的取舍——1 秒内连弹多个系统通知
+  // 本身没有意义（反而更烦），所以不再带 seq / 增量帧队列（改造前的 frames 数组机制已删）。
+  const pushNotifyFrame = (frame: HostNotifyFrame): void => {
+    state.writeSection('notify', frame);
+  }; /** 每会话 turn 级标志（goal 续跑轮判定；不参与展示，仅修正 turn/end 终局语义） */
   const turnFlags = new Map<string, WorkStatusTurnContext>();
   /** 终态（success/error）展示窗口定时器：约 60s 后清掉该会话条目，陈旧完成态不再浮上来（Bug 2/3） */
   const terminalTimers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -289,24 +297,21 @@ export function apply(ctx: any): void {
     if (terminalTimers.has(sessionId)) return;
     const t = setTimeout(() => {
       terminalTimers.delete(sessionId);
-      const state = workStatus.stateOf(sessionId);
-      if (state === 'success' || state === 'error') {
+      const sessionState = workStatus.stateOf(sessionId);
+      if (sessionState === 'success' || sessionState === 'error') {
         workStatus.clear(sessionId); // 条目连同它的任务详情文案一起消失，不残留到后续活动
         turnFlags.delete(sessionId);
+        publishWorkStatus(); // 清完要写 S：否则前端一直挂着那条陈旧完成态
       }
     }, TERMINAL_KEEP_MS);
     terminalTimers.set(sessionId, t);
   };
   // 命令「当前桌宠」（/pet 选择、/chat 使用）：全局单值不分会话；进程内内存，重启回默认第一只
   let activePetId = '';
-  // 命令触发的展示气泡缓存（/chat 命令写入；浏览器/桌面 1s 轮询 /broadcast 拉取，ts 变化即弹气泡）。
-  // 与碎碎念周期缓存（whisperCache）独立：手动触发语义不受 whisperEnabled 门控（进程内，重启清空）
-  const broadcastCache = new Map<string, { text: string; image?: string; ts: number }>();
-  // 碎碎念生成缓存（按宠物独立）：每只启用的宠物在自己的周期内返回同一句（ts 不变），
-  // 同宠物的多个端共享一句、避免重复 LLM 调用（进程内内存态，重启清空）。
-  // image = 该次生成配的表情包名称（未开配图则为 undefined）——与 text 同生命周期，
-  // 保证周期内多端看到的是"同一句话配同一张图"
-  const whisperCache = new Map<string, { text: string; image?: string; ts: number }>();
+  // 碎碎念周期调度的「上次生成时刻」（按宠物）：调度拍据此判断到没到点。
+  // 改造前这份节流靠 whisperCache（缓存 + ts 比较），现在"该不该生成"由调度侧决定、
+  // "生成结果"直接写 S——多端共享同一句由 S 天然保证，不再需要第二份缓存。
+  const lastWhisperAt = new Map<string, number>();
 
   // 对话记忆文件（唯一读写方 = 本进程；浏览器/桌面两端都只是客户端 → 同一实例天然共享同一份记忆）。
   // 结构双层：{ <种类桶 assetRoot ?? petId>: { <实例 id>: { messages: ChatMemoryMessage[] } } }
@@ -376,49 +381,43 @@ export function apply(ctx: any): void {
   };
 
   /** 生成/返回某宠物的一句碎碎念（周期 GET 与菜单手动触发共用的同一逻辑）：
-   *  每只宠物独立生成（所属条目的人设），缓存按 pet 分开；
-   *  force=false 走周期节流（缓存期内返回同一句 ts），force=true 强制新生成并刷新缓存
-   *  （右键菜单「碎碎念」手动触发：绕过节流立即新出一句，同宠多端下次轮询看到新 ts 一起展示）。
-   *  配图（whisperImageEnabled 开启时）：从表情包池**随机抽 1 张**，把描述注入指令并随文本带回；
-   *  连图带句一起进缓存——周期内多端轮询看到的是同一张图（同 ts 同图，语义与文本一致）。 */
-  const serveWhisper = async (
-    petId: string,
-    force: boolean,
-  ): Promise<{ ok: boolean; text?: string; image?: string; ts?: number; reason?: string; message?: string }> => {
+   *  每只宠物独立生成（所属条目的人设）。生成成功就写进 S 的 pets.<id>.say——
+   *  碎碎念 / 命令气泡 / 对话回复在前端本来就是**同一条展示链路**（同一个 triggerWhisper、
+   *  同一个气泡槽、同一批 events.whisper 动画），所以合并成同一个叶子；"周期内不重复"由
+   *  调度侧的 lastWhisperAt 保证，不再需要一份 whisperCache（多端共享也由 S 天然保证）。
+   *  配图（whisperImageEnabled 开启时）：从表情包池**随机抽 1 张**，把描述注入指令并随文本一起写。 */
+  const publishWhisper = async (petId: string): Promise<boolean> => {
     const cfg = readAllConfig(configPaths);
     const found = findPetInstance(cfg, petId);
     const conf = found ? found.conf : (cfg.main ?? {});
-    // 所属条目的碎碎念周期（合并器已填内置默认，必为正数秒）
-    const ers = conf.eventsRefreshSec as Record<string, unknown> | undefined;
-    const intervalSec = ers && typeof ers.whisper === 'number' ? ers.whisper : 3600;
     const system = petSystemPrompt(petId, cfg);
-    const now = Date.now();
-    const cached = whisperCache.get(petId);
-    if (!force && cached && now - cached.ts < intervalSec * 1000) {
-      return { ok: true, text: cached.text, image: cached.image, ts: cached.ts };
-    }
     // 配图：全局开关关闭 / 池为空 / 池内图片全缺失 → 纯文本（不报错，退化为原行为）
     const meme =
       conf.whisperImageEnabled === true ? pickMeme(readMemePool(conf.memes, PACKAGE_ROOT_ASSETS)) : undefined;
     // 模型：条目配置的 whisperModel 优先（留空 = 不指定）；生成侧失败会回落到当前对话的模型重试一次
     const result = await generateWhisper(ctx, system, meme, configuredModel(conf, 'whisperModel'));
     if (!result.ok) {
-      return { ok: false, reason: result.reason, message: result.message };
+      // 失败**不写 S**（与改造前一致：静默跳过 + console.warn，不伪造文案、不弹错误气泡）
+      console.warn(
+        '[dsh-pet] 碎碎念生成失败 pet=' +
+          petId +
+          ' reason=' +
+          result.reason +
+          (result.message ? ' ' + result.message : ''),
+      );
+      return false;
     }
-    whisperCache.set(petId, { text: result.text, image: result.image, ts: now });
-    return { ok: true, text: result.text, image: result.image, ts: now };
+    state.writePet(petId, 'say', result.image ? { text: result.text, image: result.image } : { text: result.text });
+    return true;
   };
 
-  /** 与某只宠物对话：截取最近记忆 → 生成回复 → 写入记忆 → 返回 {reply,ts}。
-   *  供 /chat 端点（POST）与 /chat 命令共用同一条路径（锁内读写，防两端交错写盘）。
-   *  配图（chatImageEnabled 开启时）：把表情包清单交给模型按语境选一张，命中池内才随回复带回。 */
+  /** 与某只宠物对话：截取最近记忆 → 生成回复 → 写入记忆 → 把回复写进 S 的 pets.<id>.say。
+   *  供 POST /chat（动作端点）与 /chat 命令共用同一条路径（锁内读写，防两端交错写盘）。
+   *  配图（chatImageEnabled 开启时）：把表情包清单交给模型按语境选一张，命中池内才随回复写回。 */
   const chatWithPet = async (
     petId: string,
     text: string,
-  ): Promise<
-    | { ok: true; reply: string; image?: string; ts: number }
-    | { ok: false; reason: 'provider-missing' | 'generate-error'; message?: string }
-  > =>
+  ): Promise<{ ok: true } | { ok: false; reason: 'provider-missing' | 'generate-error'; message?: string }> =>
     withMemoryLock(async () => {
       const cfg = readAllConfig(configPaths);
       const rounds = memoryRounds(petId, cfg);
@@ -440,9 +439,13 @@ export function apply(ctx: any): void {
       // 记忆只存正文（配图属展示层，不进上下文——否则下次请求会把标记当历史读回去）
       entry.messages.push({ role: 'assistant', content: generated.text, ts: now });
       await writeMemory(mem);
-      return generated.image
-        ? { ok: true as const, reply: generated.text, image: generated.image, ts: now }
-        : { ok: true as const, reply: generated.text, ts: now };
+      // 回复写进 S（与碎碎念同一个叶子：前端本来就是同一条展示链路）
+      state.writePet(
+        petId,
+        'say',
+        generated.image ? { text: generated.text, image: generated.image } : { text: generated.text },
+      );
+      return { ok: true as const };
     });
 
   /**
@@ -456,6 +459,14 @@ export function apply(ctx: any): void {
     const ers = cfg.main?.eventsRefreshSec as Record<string, unknown> | undefined;
     const n = Number(ers?.balance);
     return Number.isFinite(n) && n > 0 ? n : 1800;
+  };
+
+  /** 碎碎念周期（秒）：该宠物**所属条目**的 eventsRefreshSec.whisper（合并器已填默认；非法兜底 300） */
+  const whisperPeriodSec = (cfg: Record<string, Record<string, unknown>>, petId: string): number => {
+    const conf = (findPetInstance(cfg, petId) ?? { conf: cfg.main ?? {} }).conf;
+    const ers = conf.eventsRefreshSec as Record<string, unknown> | undefined;
+    const n = Number(ers?.whisper);
+    return Number.isFinite(n) && n > 0 ? n : 300;
   };
 
   /**
@@ -491,13 +502,6 @@ export function apply(ctx: any): void {
         }),
       );
     }
-  };
-
-  /** 命令触发的展示气泡：/chat 命令写入（两端 1s 轮询 /broadcast 拉取展示）；覆盖手动触发场景。
-   *  image：配图名称（碎碎念/对话配图开关开启时由 host 抽定或模型选定），随文本一起进缓存——
-   *  与 /whisper 的 serveWhisper 契约对齐，否则命令这条路会把图丢掉（只剩文字气泡）。 */
-  const broadcastTo = (petId: string, text: string, image?: string): void => {
-    broadcastCache.set(petId, { text, image, ts: Date.now() });
   };
 
   /** 当前交互桌宠 id：/pet 已选且仍存在 → 该宠物；未选/已失效 → 有效宠物列表第一只（进程内，重启回默认） */
@@ -875,33 +879,15 @@ export function apply(ctx: any): void {
       return { kind: 'json', status: 200, obj: { ok: true } };
     }
 
-    // 碎碎念周期文本：/dsh-pet-7340/whisper?pet=<id>（GET，浏览器/桌面共用）
-    // 按宠物独立生成：每只启用碎碎念的宠物在自己的周期用**所属条目的人设**生成一句话
-    // （文件宠物 = pet/<名>-config.json 顶层 whisperPrompt；主宠物 = main 条目即内置默认）。
-    // 节流/缓存按 pet 分开：同一宠物周期内重复请求返回同一句（ts 不变，client 检测变化才触发），
-    // 同一宠物的多个端（浏览器+桌面窗口）共享一句，不重复调 LLM。
+    // 碎碎念：/dsh-pet-7340/whisper?pet=<id>（POST = 立即让桌宠新说一句，返回 {ok}）
+    // 动作端点，**不返回文本**——文本走 S 的 pets.<id>.say（碎碎念/命令气泡/对话回复同一个叶子）。
+    // 手动语义不受 whisperEnabled 门控：那个字段只关自动周期（与改造前一致）。
     if (rest === 'whisper') {
-      if (method !== 'GET') return { kind: 'json', status: 405, obj: { error: 'method not allowed' } };
+      if (method !== 'POST') return { kind: 'json', status: 405, obj: { error: 'method not allowed' } };
+      const petId = String(url.searchParams.get('pet') ?? '');
       try {
-        const petId = String(url.searchParams.get('pet') ?? '');
-        return { kind: 'json', status: 200, obj: await serveWhisper(petId, false) };
-      } catch (e) {
-        return {
-          kind: 'json',
-          status: 200,
-          obj: { ok: false, reason: 'generate-error', message: e instanceof Error ? e.message : String(e) },
-        };
-      }
-    }
-
-    // 碎碎念手动触发：/dsh-pet-7340/whisper/trigger?pet=<id>（GET，右键菜单「碎碎念」用）
-    // 与周期端点同一逻辑，但 force=true：绕过节流缓存立即强制新生成一句并刷新缓存
-    // （同宠物周期轮询端下次拉取看到新 ts 也会跟着展示——与 /balance/trigger 同语义）。
-    if (rest === 'whisper/trigger') {
-      if (method !== 'GET') return { kind: 'json', status: 405, obj: { error: 'method not allowed' } };
-      try {
-        const petId = String(url.searchParams.get('pet') ?? '');
-        return { kind: 'json', status: 200, obj: await serveWhisper(petId, true) };
+        const ok = await publishWhisper(petId);
+        return { kind: 'json', status: 200, obj: ok ? { ok: true } : { ok: false, reason: 'generate-error' } };
       } catch (e) {
         return {
           kind: 'json',
@@ -912,8 +898,8 @@ export function apply(ctx: any): void {
     }
 
     // 对话：/dsh-pet-7340/chat?pet=<id>
-    //   GET  —— 最近记忆窗口（截尾 chatMemoryRounds 轮），弹窗打开时展示
-    //   POST —— 携带历史生成回复并写入记忆（{text} → {ok, reply, ts}）
+    //   GET  —— 最近记忆窗口（截尾 chatMemoryRounds 轮），弹窗打开时展示（一次性读，不是轮询）
+    //   POST —— 携带历史生成回复并写入记忆；**只回 {ok}**，回复走 S 的 pets.<id>.say
     // 记忆唯一读写方 = host（memory.json；浏览器/桌面两端都只是客户端）→
     // 同一实例的浏览器与桌面天然共享同一份记忆；文件全存不删，
     // 请求只截尾部 chatMemoryRounds 轮（1 轮 = 1 问 1 答；合并器已按条目填默认）。
@@ -953,52 +939,6 @@ export function apply(ctx: any): void {
           obj: { ok: false, reason: 'generate-error', message: e instanceof Error ? e.message : String(e) },
         };
       }
-    }
-
-    // 命令触发气泡广播：/dsh-pet-7340/broadcast?pet=<id>（GET，no-cache）
-    // /chat 命令把碎碎念/对话文本（+配图名，与 /whisper 同契约）写入 broadcastCache，
-    // 浏览器/桌面 1s 轻量轮询拉取，ts 变化即弹气泡——与 /balance/trigger 同语义
-    // （无缓存返回 ts=0，轮询侧恒定不触发）
-    if (rest === 'broadcast') {
-      if (method !== 'GET') return { kind: 'json', status: 405, obj: { error: 'method not allowed' } };
-      const petId = String(url.searchParams.get('pet') ?? '');
-      const hit = broadcastCache.get(petId);
-      return {
-        kind: 'json',
-        status: 200,
-        obj: { ok: true, text: hit?.text ?? '', image: hit?.image, ts: hit?.ts ?? 0 },
-        headers: { 'cache-control': 'no-cache, no-store' },
-      };
-    }
-
-    // 工作状态联动：/dsh-pet-7340/work-status（GET，no-cache）
-    // host 监听 DSH session/event 聚合出"当前活动状态"（WorkStatusStore：state 与 task 同取优先级
-    // 最高的会话）；浏览器 1s 轻量轮询拉取，ts 变化即按 events.workStatus 档位播动画 + 弹气泡。
-    // 空闲（无会话活动）state=null、task=null；不调用任何模型。
-    if (rest === 'work-status') {
-      if (method !== 'GET') return { kind: 'json', status: 405, obj: { error: 'method not allowed' } };
-      return {
-        kind: 'json',
-        status: 200,
-        obj: workStatus.snapshot(),
-        headers: { 'cache-control': 'no-cache, no-store' },
-      };
-    }
-
-    // 系统通知帧：/dsh-pet-7340/notify?since=<seq>（GET，no-cache）
-    // host 监听 DSH session/event + agent/error 生成通知帧（帧契约 = shared/notify.ts），
-    // 浏览器 1s 轮询增量拉取（只返回 seq>since 的帧）；无 since 时返回全量队列
-    //（浏览器首拉记基线 seq，不重放历史——与 broadcast/work-status 首次记基线同语义）。
-    if (rest === 'notify') {
-      if (method !== 'GET') return { kind: 'json', status: 405, obj: { error: 'method not allowed' } };
-      const since = Number(url.searchParams.get('since') ?? '0');
-      const frames = notifyFrames.filter((f) => f.seq > since).map((f) => f.frame);
-      return {
-        kind: 'json',
-        status: 200,
-        obj: { ok: true, seq: notifySeq, frames },
-        headers: { 'cache-control': 'no-cache, no-store' },
-      };
     }
 
     // 动画文件：/dsh-pet-7340/thumb/<素材根>/<file>，扩展名 webm（默认）/ mov（macOS 定制）。
@@ -1111,6 +1051,7 @@ export function apply(ctx: any): void {
             sessionId,
             currentTaskFromTodo(event as { data?: { todos?: Array<{ status?: string; content?: string }> } }),
           );
+          publishWorkStatus(); // 任务文案变化也要写 S（气泡内容靠它更新）
         }
         return;
       }
@@ -1131,6 +1072,7 @@ export function apply(ctx: any): void {
         // 代价：goal 续跑这类多轮任务，每轮开头会回落一瞬档位文案，直到本轮（通常在开头几步内）
         // 再写一次 todo 清单。
         workStatus.setTask(sessionId, null);
+        publishWorkStatus(); // 清掉上一轮任务文案也要写 S
       }
       if (
         type === 'tool/call' &&
@@ -1155,12 +1097,14 @@ export function apply(ctx: any): void {
           turnFlags.delete(sessionId);
           cancelTerminalCleanup(sessionId); // 条目都要清了，别留一个到点后无事可做的定时器
           workStatus.clear(sessionId); // 条目连同任务详情文案一起消失（clear 内部会重算展示）
+          publishWorkStatus(); // 回合被打断 → 回到空闲：前端据此收起常驻气泡
         }
         return;
       }
       const seq = Number((event as { seq?: unknown }).seq ?? 0);
       // 同会话同状态不重复更新（防刷屏）；不同状态才改写并重算展示
       if (!workStatus.setState(sessionId, next, seq)) return;
+      publishWorkStatus(); // 档位变了 → 写 S（前端据此切动画 + 气泡）
       // 终态只展示短暂窗口后自动清理：陈旧完成态不再浮上来（Bug 3 的一环，顺带缓解 Bug 2 残留）。
       // 回到非终态则取消那次待执行的清理——否则它到点时会话已非终态，既不清也不重排，
       // 条目（连同旧任务文案）就永久留下了。
@@ -1251,6 +1195,47 @@ export function apply(ctx: any): void {
     };
   }, 'dsh-pet: balance poll');
 
+  // 碎碎念周期：host 侧调度（前端不再有任何碎碎念定时器）。
+  // 一拍 = 读一次配置 + 给"到点"的宠物各生成一句；下一拍按**最短周期**排（多数部署只有一个
+  // 周期值，那它就是那个值）。用"读一次配置 + 逐宠物比对 lastWhisperAt"而不是每宠一个定时器：
+  // 宠物随配置增删、周期随条目改，固定拍天然跟上，不用维护一堆定时器的生命周期。
+  ctx.effect(() => {
+    let disposed = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    function arm(sec: number): void {
+      if (disposed) return;
+      timer = setTimeout(() => void tick(), Math.max(1000, sec * 1000));
+    }
+    function tick(): void {
+      let next = 300;
+      try {
+        const cfg = readAllConfig(configPaths);
+        const now = Date.now();
+        let min = Infinity;
+        for (const pet of flattenPetList(cfg)) {
+          const petId = String(pet.id ?? '');
+          if (!petId || pet.whisperEnabled !== true) continue;
+          const sec = whisperPeriodSec(cfg, petId);
+          min = Math.min(min, sec);
+          if (now - (lastWhisperAt.get(petId) ?? 0) < sec * 1000) continue;
+          lastWhisperAt.set(petId, now);
+          // 不 await：生成要几秒，别把调度拍拖住（每只宠物独立生成，互不阻塞）
+          void publishWhisper(petId).catch(() => {});
+        }
+        if (Number.isFinite(min)) next = min;
+      } catch {
+        // 读配置抛错 = 安装损坏（同余额定时器）：不再重排，别白占常驻句柄
+        return;
+      }
+      arm(next);
+    }
+    void tick(); // 启动即生成一次（与改造前客户端首拉就生成一致）
+    return () => {
+      disposed = true;
+      if (timer !== null) clearTimeout(timer);
+    };
+  }, 'dsh-pet: whisper poll');
+
   // /pet 斜杠命令：选择「当前桌宠」（/chat 对话的目标）。浏览器端另有 commandUi 装饰的选择框
   // （裸输 /pet 回车或菜单点选时弹出，选中后提交 /pet <id> 走同一 handler）；手输参数认 id 或名字
   // （name 可重复：唯一命中才认，重名报错列出候选 id）。
@@ -1305,39 +1290,33 @@ export function apply(ctx: any): void {
     'dsh-pet: /pet command',
   );
 
-  // /chat 斜杠命令：与当前桌宠对话。无参数 = 碎碎念一句（手动语义：绕过节流立即新生成，不受
-  // whisperEnabled 门控）；有参数 = 正常对话（走 /chat 端点同一条路径：记忆 + 人设 + 写盘）。
-  // 两分支的文本都写入广播缓存 → 浏览器/桌面 1s 轮询 /broadcast 拉取后弹气泡展示。
+  // /chat 斜杠命令：与当前桌宠对话。无参数 = 碎碎念一句（手动语义：不受 whisperEnabled 门控，
+  // 那个字段只关自动周期）；有参数 = 正常对话（走 chatWithPet 同一条路径：记忆 + 人设 + 写盘）。
+  // 两个分支都是 **fire-and-forget**：回执不等模型（生成要几秒），文本一律写进 S 的
+  // pets.<id>.say，前端 1s 轮询 /state 后弹气泡——与 /balance 命令同一套语义（回执不带数据）。
   ctx.effect(
     () =>
       ctx.commands.register({
         name: 'chat',
         description: '与桌宠对话：留空 = 碎碎念一句；输入消息 = 正常对话',
         input: { hint: '[消息]（留空 = 碎碎念）' },
-        handler: async ({ rawInput }: { rawInput: string }) => {
+        handler: ({ rawInput }: { rawInput: string }) => {
           const petId = resolveActivePetId();
           if (!petId) return { kind: 'error', text: '没有可交互的桌宠' };
           const text = rawInput.trim();
-          try {
-            if (!text) {
-              // 碎碎念：force=true 立即生成并刷新周期缓存（同宠物两端轮询 /whisper 也会跟着展示）
-              const w = await serveWhisper(petId, true);
-              if (!w.ok) {
-                return { kind: 'error', text: '碎碎念生成失败' + (w.message ? '：' + w.message : '') };
-              }
-              broadcastTo(petId, w.text ?? '', w.image);
-              return { kind: 'success', text: w.text ?? '' };
-            }
-            if (text.length > 2000) return { kind: 'error', text: '消息过长（限 2000 字）' };
-            const r = await chatWithPet(petId, text);
-            if (!r.ok) {
-              return { kind: 'error', text: '对话失败' + (r.message ? '：' + r.message : '') };
-            }
-            broadcastTo(petId, r.reply, r.image);
-            return { kind: 'success', text: r.reply };
-          } catch (e) {
-            return { kind: 'error', text: '对话失败：' + (e instanceof Error ? e.message : String(e)) };
+          if (!text) {
+            void publishWhisper(petId).catch((e: unknown) =>
+              console.warn('[dsh-pet] 碎碎念异常：' + (e instanceof Error ? e.message : String(e))),
+            );
+            return { kind: 'success', text: '已让桌宠碎碎念一句' };
           }
+          if (text.length > 2000) return { kind: 'error', text: '消息过长（限 2000 字）' };
+          void chatWithPet(petId, text).then((r) => {
+            if (!r.ok) {
+              console.warn('[dsh-pet] 对话失败 reason=' + r.reason + (r.message ? ' ' + r.message : ''));
+            }
+          });
+          return { kind: 'success', text: '已发送，桌宠马上回应' };
         },
       }),
     'dsh-pet: /chat command',
