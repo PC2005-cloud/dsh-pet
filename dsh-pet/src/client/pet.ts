@@ -1396,7 +1396,13 @@ export function makePetUI(rt: {
         return h(WhisperBubble, { text: workText, on: workBubbleOn });
       }
       if (whisperBubbleOn && whisperText) {
-        return h(WhisperBubble, { text: whisperText, image: whisperImage, on: whisperBubbleOn });
+        // assetRoot：配图去哪个表情包目录链取（种类独占 → 用户目录 → 包内），与动画素材同一套归属
+        return h(WhisperBubble, {
+          text: whisperText,
+          image: whisperImage,
+          assetRoot: cfg.assetRoot,
+          on: whisperBubbleOn,
+        });
       }
       if (bubbleOn && balance && cfg.balanceEnabled) {
         return h(BalanceBubble, { state: balance, on: bubbleOn });

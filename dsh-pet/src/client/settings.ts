@@ -247,12 +247,13 @@ export const zh = {
   defaultConfig: '默认配置（只读，完整参考）',
   userConfig: '用户配置（自定义覆盖）',
   animationDir: '动画素材目录（可自定义/扩充动画）',
+  memesDir: '表情包目录（可自定义/扩充配图）',
   saved: '已保存，桌宠即时生效。',
   loadError: '加载配置失败',
   invalid: '请检查输入：大小需为正数，边距可为任意数字。',
   busy: '保存中…',
   extraPetsHint:
-    '另 {n} 只额外宠物由 pet/ 目录文件定义（<名>-config.json + <名>-animation/），它们不在此列表——改文件后浏览器刷新页面、桌面端右键「重载配置」即可生效。',
+    '另 {n} 只额外宠物由 pet/ 目录文件定义（<名>-config.json + <名>-animation/ + <名>-memes/），它们不在此列表——改文件后浏览器刷新页面、桌面端右键「重载配置」即可生效。',
   notifyToggle: '系统通知',
   notifyToggleHint: '对话完成 / 生成失败 / 权限申请 / 用户选择，在窗口失焦时弹出系统级通知（桌面右下角）。',
   whisperImageToggle: '碎碎念配图',
@@ -391,12 +392,13 @@ export const en = {
   defaultConfig: 'Default config (read-only, complete reference)',
   userConfig: 'User config (custom overrides)',
   animationDir: 'Animation assets dir (add/customize animations here)',
+  memesDir: 'Meme images dir (add/customize images here)',
   saved: 'Saved — the pets updated instantly.',
   loadError: 'Failed to load config',
   invalid: 'Check your input: size must be positive; margins can be any number.',
   busy: 'Saving…',
   extraPetsHint:
-    '{n} extra pet(s) are file-defined in the pet/ directory (<name>-config.json + <name>-animation/). They are not in this list — after editing the files, refresh the page (browser) or right-click a desktop pet → "Reload config".',
+    '{n} extra pet(s) are file-defined in the pet/ directory (<name>-config.json + <name>-animation/ + <name>-memes/). They are not in this list — after editing the files, refresh the page (browser) or right-click a desktop pet → "Reload config".',
   notifyToggle: 'System notifications',
   notifyToggleHint:
     'OS-level toasts (bottom-right of the desktop) for conversation completion, failures, permission requests, and questions — only while this window is unfocused.',
@@ -893,6 +895,8 @@ export function makePetConfigSection(rt: {
       user: string;
       default: string;
       animations: string;
+      /** 用户表情包目录（$DSH_HOME/dsh-pet/memes：加图不必改包） */
+      memes?: string;
       /** 插件落盘的全部位置（路径 + 是否已存在），host 按平台推导 */
       storage?: Array<{ key: string; path: string; exists?: boolean }>;
       /** 当前 profile 名（拼卸载命令用；反推不出时为空串） */
@@ -1520,6 +1524,9 @@ export function makePetConfigSection(rt: {
                 h('div', { className: 'dsh-pet-cfg__path', children: t('defaultConfig') + '：' + paths.default }),
                 h('div', { className: 'dsh-pet-cfg__path', children: t('userConfig') + '：' + paths.user }),
                 h('div', { className: 'dsh-pet-cfg__path', children: t('animationDir') + '：' + paths.animations }),
+                paths.memes
+                  ? h('div', { className: 'dsh-pet-cfg__path', children: t('memesDir') + '：' + paths.memes })
+                  : null,
               ],
             })
           : null,

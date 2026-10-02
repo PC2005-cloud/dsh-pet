@@ -52,7 +52,7 @@ macOS 的 Safari/WKWebView 下透明动画需用 `.mov` 素材，三步：
 - **多宠物碰撞（0.2.5）**：`petCollision: true` 开启后，飞行中的宠物撞到其它宠物按**动量守恒 + 恢复系数 0.995** 弹开（质量 ∝ size²，被撞方从落点以新初速抛出去），浏览器与桌面跨窗口同语义（默认关闭）
 - **碎碎念**：宠物时不时自己冒一句——按 `eventsRefreshSec.whisper` 周期（默认 300 秒）调用当前会话所用的模型生成（人设 = 全局 `whisperPrompt`，另追加一句名字声明），气泡展示 10 秒；右键菜单「碎碎念」可立即催一句（绕过节流，同一实例的多端一起看到）。**默认开启**，按宠物可关（`pets[].whisperEnabled`）
 - **对话**：右键「对话」弹窗跟宠物聊天，也能用 `/chat <消息>` 命令（留空 = 催一句碎碎念）——记忆持久化在 `$DSH_HOME/dsh-pet/memory.json`（**全存不删**，每次请求只带最近 `chatMemoryRounds` 轮），浏览器与桌面共享同一份记忆；对话目标为 `/pet` 选中的那只，未选则取列表第一只
-- **表情包配图（0.2.9）**：气泡可以带一张表情包——碎碎念**随机抽 1 张**（`whisperImageEnabled`：只是把这张图的描述加进同一次请求，约 +100 字符 / ≈60 token，增量可忽略）；对话把**整张清单**交给模型按语境选（`chatImageEnabled`：每条消息约 +1.1k 字符 / ≈650 token，约碎碎念配图的 11 倍，随图片数量线性增长）。图片与描述的映射在 `memes`（键 = 包内 `assets/memes/<键>.png`），两个开关默认都开
+- **表情包配图（0.2.9）**：气泡可以带一张表情包——碎碎念**随机抽 1 张**（`whisperImageEnabled`：只是把这张图的描述加进同一次请求，约 +100 字符 / ≈60 token，增量可忽略）；对话把**整张清单**交给模型按语境选（`chatImageEnabled`：每条消息约 +1.1k 字符 / ≈650 token，约碎碎念配图的 11 倍，随图片数量线性增长）。图片与描述的映射在 `memes`（键 = 表情包目录里的 `<键>.png`；素材归属与动画同一套，见「高级自定义」），两个开关默认都开
 - **右键级联菜单**：右键宠物弹出（桌面与浏览器共用同一份组件，`src/shared/menu.ts`）——桌面端根项「**打开网站** / **查看余额** / **回到初始位置** / **重载配置** + **动作**」、浏览器端「**回到初始位置** + **动作**」；「打开网站」用**系统默认浏览器**打开 DSH 网站（等效网页里 Ctrl+点击链接）；「查看余额」立即拉余额弹气泡播档位动画（与周期触发同一展示路径）；「回到初始位置」停漫游回配置角落；「重载配置」（桌面专属）请宿主重启桌面 Helper——**全部桌面宠物窗口按最新配置重建**，改完配置文件不必回设置页点保存（与保存同一条重启路径：等旧进程退出再起新的；代价是会话内拖拽落点清空、回配置角落）；**动作 → 分类 → 具体动画**（分类 = 待机/转向/拖拽/点击回应/移动/随机动作分类/余额档位；**点播「移动」分类动画会真实行走一段**——边界检查/随机距离/起停时段与随机移动完全一致；noMirror 文字类朝右时自动强制朝左）——浏览器端只在宠物命中区拦截右键（`preventDefault`），完全不进入/改动 DSH 页面自己的菜单
 - **左右朝向**：所有动画 CSS 镜像，人物可朝左 / 朝右
 - **落地对齐**：动画统一脚底线，宠物始终站在"地面"上
@@ -79,7 +79,7 @@ macOS 的 Safari/WKWebView 下透明动画需用 `.mov` 素材，三步：
   - `web` = 仅浏览器 overlay / `desktop` = 仅桌面模式 / `both` = 两者都显示 / `none` = 都不显示
   - 桌面模式渲染 `display` 含 `desktop` 的**全部**宠物（多开同屏，与浏览器一致）；大小/位置各自读自己的配置
   - 在 DSH 设置页「桌宠配置」编辑，保存即时生效；`display` 缺失/非法即配置错误，**代码不做兜底**
-- 桌面与浏览器是**同一套动画素材**（`/dsh-pet-7340/thumb/<前缀>/<name>.webm`：main 用用户 `main-animation/` 目录优先 + 包内素材；额外宠物只查自己的 `pet/<前缀>-animation/`，同种类多实例共享）；配置加载失败会**大声报错**（红色错误条 + 每 5 秒自动重试），绝不静默兜底
+- 桌面与浏览器是**同一套动画素材**（`/dsh-pet-7340/thumb/<前缀>/<name>.webm`：main 用用户 `main-animation/` 目录优先 + 包内素材；额外宠物只查自己的 `pet/<前缀>-animation/`，同种类多实例共享）；**配图（表情包）共用同一套素材归属**（`/dsh-pet-7340/pic/memes/<前缀>/<名>.png`：`pet/<前缀>-memes/` 独占 → 用户 `memes/` → 包内 `assets/memes/`）；配置加载失败会**大声报错**（红色错误条 + 每 5 秒自动重试），绝不静默兜底
 
 ## ⌨️ 斜杠命令
 
@@ -104,7 +104,7 @@ macOS 的 Safari/WKWebView 下透明动画需用 `.mov` 素材，三步：
 | `whisperModel` / `chatModel`   | 碎碎念 / 对话各自用哪个**服务商 + 模型**（条目级；设置页「AI 模型」每项一个下拉框，与 DSH 对话框右下角的模型选择器同款：搜索 + 按服务商分组的清单，选项同源）。`provider` 与 `model` **都留空 = 跟随当前对话的模型**（默认）；只填一半即配置错误。填了但调用失败（凭据被删 / 模型下架）会自动回落到当前对话的模型重试一次                                                                                             |
 | `whisperImageEnabled`（0.2.9） | 碎碎念配图总开关（布尔，默认开）：开启后每次碎碎念从 `memes` 池**随机抽 1 张**，连同那句话一起显示。token：碎碎念本来就每次生成都要调一次模型，配图只多约 100 字符（≈60 token），增量可忽略                                                                                                                                                                                                                           |
 | `chatImageEnabled`（0.2.9）    | 对话配图总开关（布尔，默认开）：开启后把**整张** `memes` 清单交给模型**按语境选 1 张**（可不选；选了池外名称视为没选并剥掉标记）。token：每条消息约 1.1k 字符（≈650 token），随图片数量线性增长                                                                                                                                                                                                                       |
-| `memes`（0.2.9）               | 表情包映射：键 = 包内 `assets/memes/<键>.png` 的文件名（不含扩展名），值 = 该图内容的简要描述（模型据此选图/配文）。配置里写了但文件不存在的条目**自动失效**（删图不必同步改配置）；删掉某个键即停用该图                                                                                                                                                                                                              |
+| `memes`（0.2.9）               | 表情包映射：键 = 表情包目录里的 `<键>.png` 文件名（不含扩展名），值 = 该图内容的简要描述（模型据此选图/配文）。图片按**素材归属**查找（种类独占 `pet/<前缀>-memes/` → 用户目录 `memes/` → 包内 `assets/memes/`，与动画同规矩）；配置里写了但哪个目录都没有该文件的条目**自动失效**（删图不必同步改配置）；删掉某个键即停用该图                                                                                        |
 | `notificationsEnabled`         | 系统通知总开关（布尔，默认开）：对话完成 / 生成失败 / 输出截断 / 权限申请 / 用户选择，在窗口失焦时弹系统级通知（桌面右下角）                                                                                                                                                                                                                                                                                          |
 | `physics`（0.2.5）             | 拖拽抛掷物理参数（全局，所有宠物共用）：`gravity` 重力 / `restitution` 碰壁恢复系数（0~1）/ `groundFriction` 地面摩擦 / `ceilingBounce` 顶部反弹 / `throwPower` 总力度 / `petCollision` 多宠物碰撞开关；缺省取内置默认（1400 / 0.78 / 2.5 / true / 1.0 / false）；`gravity=0` 为无重力，`petCollision=true` 开启多宠物碰撞                                                                                            |
 
@@ -120,13 +120,14 @@ macOS 的 Safari/WKWebView 下透明动画需用 `.mov` 素材，三步：
 | 用户配置             | `$DSH_HOME/dsh-pet/main-config.jsonc` | 覆盖片段：可整体覆盖 `pets` / `animations` / `animationWeights`，缺省字段回落默认                     |
 | 对话记忆（自动生成） | `$DSH_HOME/dsh-pet/memory.json`       | 对话历史（user/assistant 正文，**全存不删**；每次请求只取最近 `chatMemoryRounds` 轮）。删掉即清空记忆 |
 | 用户动画（可选）     | `$DSH_HOME/dsh-pet/main-animation/`   | 放入 `.webm`（VP9-Alpha）即可作为动画播放，**优先于包内素材**（放 `main-animation/webm/` 子目录）     |
+| 用户表情包（可选）   | `$DSH_HOME/dsh-pet/memes/`            | 放入 `.png` 即可作为配图，**优先于包内素材**；键（文件名去扩展名）与描述仍需写进配置的 `memes`        |
 
 - 设置页底部「高级配置」显示这些路径；「卸载与存储」列出插件的全部存储位置与卸载命令
 - 自定义动画：把 `xxx.webm` 放进 `main-animation/webm/`，在动画池/分类里写 `"xxx"`，**刷新页面**即可（无需重启 DSH）
 - 格式：`.webm` 需 **VP9 Alpha** 编码（Chrome/Edge/Firefox），与包内素材同规范，普通编码会有黑底
 - 修改用户配置后同样**刷新页面**生效
 - 动画名请对照默认配置填写，避免引用不存在的动画
-- 表情包图片放在**包内** `assets/memes/`（键 = 文件名去扩展名），用户目录不放表情包——加图/换图需要改包内目录，`add`/更新时会被包覆盖；只想去掉某张图，删 config 里 `memes` 对应的键即可（不用动图片文件）
+- 表情包图片按**素材归属**查找（与动画同一套）：`pet/<前缀>-memes/`（种类独占，见下节）→ 用户目录 `$DSH_HOME/dsh-pet/memes/` → 包内 `assets/memes/`。往用户目录放 `xxx.png`，再在 config 的 `memes` 里写 `"xxx": "这张图的描述"`，**刷新页面**即可用（加图/换图不必再改包内目录，也就不会被 `add`/更新覆盖）；只想去掉某张图，删 config 里对应的键即可（不用动图片文件）
 
 ### 🐾 额外宠物（pet pack）——添加新「种类」
 
@@ -135,12 +136,14 @@ macOS 的 Safari/WKWebView 下透明动画需用 `.mov` 素材，三步：
 ```
 $DSH_HOME/dsh-pet/pet/
 ├─ pig-config.json        ← 额外宠物 pig 的配置（命名词干 = 种类名，实例 id 任意）
-└─ pig-animation/         ← pig 自己的动画素材（直接平铺 .webm，仿 main-animation）
-   ├─ 待机.webm
-   └─ 打滚.webm
+├─ pig-animation/         ← pig 自己的动画素材（直接平铺 .webm，仿 main-animation）
+│  ├─ 待机.webm
+│  └─ 打滚.webm
+└─ pig-memes/             ← 可选：pig 自己的表情包（直接平铺 .png，仿用户 memes/）
+   └─ 吃白饭的大肥鱼.png
 ```
 
-每只额外宠物 = 一个 `-config.json`（配置）+ 一个 `-animation/` 目录（素材），同前缀配对，扫描 `pet/` 自动发现（浏览器与桌面同时生效，无需重启）。
+每只额外宠物 = 一个 `-config.json`（配置）+ 一个 `-animation/` 目录（素材），同前缀配对，扫描 `pet/` 自动发现（浏览器与桌面同时生效，无需重启）；`-memes/` 目录可选，有则**独占**该种类的配图（见下节）。
 
 配置文件**与 `main-config.jsonc` / `config.jsonc` 完全同构**——直接复制一份 main 配置、换成自己的动画池，就是一只新宠物。一个 `-config.json` 定义**一个「种类」**（动画池 + 素材目录），`pets` 数组可放该种类的**任意多只实例**（每只独立 size/位置，共享动画池与素材）：
 
@@ -182,7 +185,7 @@ $DSH_HOME/dsh-pet/pet/
 
 规则（与主宠物严格隔离，绝不混用）：
 
-- **素材只查自己的**：素材目录名 = 文件名前缀（`pet/pig-config.json` → `pet/pig-animation/`），该种类所有实例共用；动画 URL 为 `/thumb/<前缀>/<名>.webm`，查不到即 404 报错——**绝不落到 `main-animation` 或包内素材**
+- **素材只查自己的**：素材目录名 = 文件名前缀（`pet/pig-config.json` → `pet/pig-animation/`），该种类所有实例共用；动画 URL 为 `/thumb/<前缀>/<名>.webm`，查不到即 404 报错——**绝不落到 `main-animation` 或包内素材**。配图同理：`pet/<前缀>-memes/` 存在时**只查它**（`/pic/memes/<前缀>/<名>.png` 查不到即 404），绝不回落到用户 `memes/` 或包内 `assets/memes/`
 - **动画池不回落全局**：`animations` / `animationWeights` 是该种类的（结构校验与主配置同一套规则）
 - `pets` 数组非空、每只字段（id/size/balanceEnabled/display/position）完整合法、数组内 id 唯一——**id 随意写、数量随意**，与主配置完全一致
 - `notificationsEnabled` / `eventsRefreshSec` 是**全局属性**，不归宠物文件管：写了忽略、不写不报错
@@ -198,7 +201,7 @@ dsh plugin --profile web remove dsh-pet
 
 插件在本机落下的全部位置（设置页「卸载与存储」区块也列出这些，且路径按你的机器实时解析）：
 
-- `$DSH_HOME/dsh-pet/` —— 插件用户数据：自定义配置 `main-config.jsonc`、对话记忆 `memory.json`、自定义动画素材 `main-animation/`、文件宠物 `pet/`
+- `$DSH_HOME/dsh-pet/` —— 插件用户数据：自定义配置 `main-config.jsonc`、对话记忆 `memory.json`、自定义动画素材 `main-animation/`、自定义表情包 `memes/`、文件宠物 `pet/`
 - `$DSH_HOME/electron/` —— 桌面宠物用的 Electron 运行时（体积较大；删除后下次启用桌面模式会自动重新下载）
 - `%APPDATA%\dsh-pet-electron-helper\` —— 桌面宠物窗口缓存与主屏缩放缓存（macOS：`~/Library/Application Support/`；Linux：`$XDG_CONFIG_HOME` 或 `~/.config/`；可删，会自动重建）
 - `%LOCALAPPDATA%\electron\Cache\` —— Electron 安装包下载缓存（macOS：`~/Library/Caches/electron`；Linux：`$XDG_CACHE_HOME` 或 `~/.cache/`；可删，需要时会重新下载）

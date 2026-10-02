@@ -115,8 +115,11 @@ export const inject = ['webServer', 'agentDefaultModel', 'credentials', 'llm', '
 /** 本包目录：宿主构建产物位于 lib/，其上一级即包根。 */
 const PACKAGE_ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)));
 
-/** 包内 assets 根（表情包池解析用：assets/memes/<名称>.png） */
+/** 包内 assets 根 */
 const PACKAGE_ROOT_ASSETS = join(PACKAGE_ROOT, 'assets');
+
+/** 包内表情包目录（表情包池的最后一环：assets/memes/<名称>.png） */
+const PACKAGE_MEMES_DIR = join(PACKAGE_ROOT_ASSETS, 'memes');
 
 /** 路由前缀 */
 const ROUTE_PREFIX = '/dsh-pet-7340';
@@ -254,6 +257,24 @@ export function apply(ctx: any): void {
   migrateUserConfig(configPaths, (msg) => console.log('[dsh-pet] ' + msg));
   // 用户动画目录（thumb 播放时优先于包内素材；webm 放 main-animation/webm/，mov（macOS 定制）放 main-animation/mov/）
   const thumbUserRoot = join(userRoot, 'main-animation');
+  // 用户表情包目录（碎碎念/对话配图的图片：优先于包内 assets/memes，加图不必改包）
+  const memesUserRoot = join(userRoot, 'memes');
+  /**
+   * 表情包目录链 —— 与动画素材（/thumb）**同一套素材归属语义**：
+   *   - `pet/<素材根>-memes/` 存在（种类自带表情包）：**只查它**，池与路由都不回落——
+   *     查不到即 404 / 该条目剔除（与 `pet/<素材根>-animation/` 的独占规则逐字一致）；
+   *   - 否则：用户目录 `$DSH_HOME/dsh-pet/memes/` 优先，其次包内 `assets/memes/`（逐文件合并，
+   *     与「main-animation/<ext> → 包内 assets/<ext>」的主素材链同构）。
+   * 池（readMemePool）与路由（/pic/memes）必须走**同一个函数**：池里能选的名字，
+   * 路由必须取得到，否则气泡配图会图裂。
+   * 素材根一律先过 resolveAsset：它来自 URL 段，Windows 上 %5C 解出的反斜杠不会被
+   * rest.split('/') 切开，直接 join 会让 `..\..\x` 逃出用户根读盘（与 /thumb 同一道防线）。
+   */
+  const memeDirsFor = (assetRoot: string): string[] => {
+    const own = resolveAsset(petConfigDir, assetRoot + '-memes');
+    if (own !== undefined && existsSync(own)) return [own];
+    return [memesUserRoot, PACKAGE_MEMES_DIR];
+  };
   // 轮询统一状态（S）：前端 1s 轮询的**唯一**数据源（余额 / 工作状态 / 通知 / 宠物说话）。
   // 所有写入走 state.writeSection / writePet（由它统一更新 counter），见 ./state 的说明。
   const state = new PollStateStore();
@@ -396,10 +417,10 @@ export function apply(ctx: any): void {
     const cfg = readAllConfig(configPaths);
     const found = findPetInstance(cfg, petId);
     const conf = found ? found.conf : (cfg.main ?? {});
+    const entry = found ? found.entry : 'main';
     const system = petSystemPrompt(petId, cfg);
     // 配图：全局开关关闭 / 池为空 / 池内图片全缺失 → 纯文本（不报错，退化为原行为）
-    const meme =
-      conf.whisperImageEnabled === true ? pickMeme(readMemePool(conf.memes, PACKAGE_ROOT_ASSETS)) : undefined;
+    const meme = conf.whisperImageEnabled === true ? pickMeme(readMemePool(conf.memes, memeDirsFor(entry))) : undefined;
     // 模型：条目配置的 whisperModel 优先（留空 = 不指定）；生成侧失败会回落到当前对话的模型重试一次
     const result = await generateWhisper(ctx, system, meme, configuredModel(conf, 'whisperModel'));
     if (!result.ok) {
@@ -427,13 +448,14 @@ export function apply(ctx: any): void {
     withMemoryLock(async () => {
       const cfg = readAllConfig(configPaths);
       const rounds = memoryRounds(petId, cfg);
-      const conf = (findPetInstance(cfg, petId) ?? { conf: cfg.main ?? {} }).conf;
+      const found = findPetInstance(cfg, petId);
+      const conf = (found ?? { conf: cfg.main ?? {} }).conf;
       // 人设：所属条目的 whisperPrompt（合并器已填默认）+ 名字声明（与碎碎念同一拼装）
       const system = petSystemPrompt(petId, cfg);
-      // 配图：开关关闭 → 空池（指令与解析都不介入，与旧行为逐字一致）
-      const pool = conf.chatImageEnabled === true ? readMemePool(conf.memes, PACKAGE_ROOT_ASSETS) : [];
+      // 配图：开关关闭 → 空池（指令与解析都不介入，与旧行为逐字一致）；目录链按所属条目取
+      const pool = conf.chatImageEnabled === true ? readMemePool(conf.memes, memeDirsFor(found?.entry ?? 'main')) : [];
       const mem = await readMemory();
-      const bucketKey = findPetInstance(cfg, petId)?.entry ?? petId;
+      const bucketKey = found?.entry ?? petId;
       const bucket = (mem[bucketKey] ??= {});
       const entry = (bucket[petId] ??= { messages: [] });
       const list = entry.messages.slice().slice(-rounds * 2);
@@ -803,6 +825,7 @@ export function apply(ctx: any): void {
           user: userConfigPath,
           default: join(PACKAGE_ROOT, 'assets', 'config.jsonc'),
           animations: thumbUserRoot,
+          memes: memesUserRoot,
           // 全部落盘位置（本包用户数据 / Electron 运行时 / 桌面端缓存 / 下载缓存 / 插件本体）：
           // 前两条直接传真实写入方的路径，不在这里重拼目录名
           storage: storageEntries({
@@ -933,7 +956,7 @@ export function apply(ctx: any): void {
           active: resolveActivePetId(),
           text: o.text,
           image: o.image,
-          assetsRoot: PACKAGE_ROOT_ASSETS,
+          memeDirs: memeDirsFor,
         });
         if (!d.ok) return { kind: 'json', status: 200, obj: { ok: false, reason: d.reason, message: d.message } };
         state.writePet(d.petId, 'say', d.image ? { text: d.text, image: d.image } : { text: d.text });
@@ -1052,12 +1075,31 @@ export function apply(ctx: any): void {
     }
 
     // 通知图标：/dsh-pet-7340/pic/<file> → 包内 assets/pic（方形 png，系统通知 icon 用）
-    // 表情包同走 pic 前缀（/pic/memes/<名称>.png → 包内 assets/memes）——都是"包内静态图"，
-    // 共用一条路由与防穿越校验；名称含中文，URL 段已在上方 decodeURIComponent 解码。
+    // 表情包：/dsh-pet-7340/pic/memes/<素材根>/<名称>.png → 按素材根走 memeDirsFor 的目录链
+    // （种类独占目录 → 用户目录 → 包内），与 /thumb 同一套素材归属语义；名称含中文，URL 段已在上方解码。
+    // 旧的两段形式 /pic/memes/<名称>.png 保留：等价于素材根 main 的目录链（未升级的客户端照常取到包内图）。
     if (scope === 'pic') {
-      const isMeme = restParts[0] === 'memes';
-      const picRoot = join(PACKAGE_ROOT, 'assets', isMeme ? 'memes' : 'pic');
-      const picFile = resolveExisting(picRoot, (isMeme ? restParts.slice(1) : restParts).join('/'));
+      if (restParts[0] === 'memes') {
+        const segs = restParts.slice(1);
+        // 段数 ≥ 2 = <素材根>/<名称…>；恰好 1 段 = 旧扁平形式。表情包名称即文件名（不含子目录），
+        // 所以两种形式不歧义；素材根与 /thumb 的 petId 同规矩：含分隔符 / 保留字符即显式 400。
+        const scoped = segs.length >= 2;
+        const assetRoot = scoped ? segs[0] : 'main';
+        if (scoped && (assetRoot.length > 64 || ID_FORBIDDEN.test(assetRoot))) {
+          return { kind: 'text', status: 400, body: 'dsh-pet: invalid asset root' };
+        }
+        const rel = (scoped ? segs.slice(1) : segs).join('/');
+        let picFile: string | undefined;
+        for (const dir of memeDirsFor(assetRoot)) {
+          picFile = resolveExisting(dir, rel);
+          if (picFile !== undefined) break;
+        }
+        if (picFile === undefined) return { kind: 'text', status: 404, body: 'dsh-pet: pic not found' };
+        const ext = picFile.slice(picFile.lastIndexOf('.')).toLowerCase();
+        return { kind: 'file', file: picFile, contentType: MIME[ext] ?? 'application/octet-stream' };
+      }
+      const picRoot = join(PACKAGE_ROOT, 'assets', 'pic');
+      const picFile = resolveExisting(picRoot, restParts.join('/'));
       if (picFile === undefined) return { kind: 'text', status: 404, body: 'dsh-pet: pic not found' };
       const ext = picFile.slice(picFile.lastIndexOf('.')).toLowerCase();
       return { kind: 'file', file: picFile, contentType: MIME[ext] ?? 'application/octet-stream' };

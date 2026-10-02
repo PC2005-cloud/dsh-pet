@@ -1,8 +1,12 @@
 /**
- * 表情包池（host 半侧）：把配置顶层 memes 映射（名称 → 描述）解析成可用的候选池。
+ * 表情包池（host 半侧）：把配置的 memes 映射（名称 → 描述）解析成可用的候选池。
  *
  * 设计：
- * - memes 是「键 = assets/memes/<键>.png，值 = 该图内容描述」，碎碎念/对话共用同一张表；
+ * - memes 是「键 = <表情包目录>/<键>.png，值 = 该图内容描述」，碎碎念/对话共用同一张表；
+ * - 目录是一条**链**（调用方给，顺序即优先级）：种类独占目录 → 用户目录 → 包内目录。
+ *   名字在链上任一目录里存在即算命中——这与 /pic/memes 路由的逐目录查找**必须同一份顺序**
+ *   （池说"这张能选"，路由就得"取得到"，否则气泡会图裂）；链怎么算由调用方
+ *   （host/index.ts 的 memeDirsFor）唯一决定，本模块只按给定顺序查盘；
  * - 只认**磁盘上真实存在**的图片：配置里写了但文件缺失的条目静默剔除（不告警刷屏，
  *   用户删图后不必同步改配置）；文件在但配置没写的图不参与（无从得知它的描述）；
  * - 纯函数 + 目录参数，便于测试（不碰全局状态）。
@@ -10,9 +14,6 @@
 
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-
-/** 表情包根目录（包内 assets/memes） */
-export const MEMES_DIR = 'memes';
 
 /** 池中一张图：name = 配置键（= 文件名去扩展名），desc = 给模型看的描述 */
 export interface MemeEntry {
@@ -22,18 +23,18 @@ export interface MemeEntry {
 
 /**
  * 从配置的 memes 映射解析出候选池。
- * @param memes 配置顶层 memes 值（未配置/类型非法 → 空池）
- * @param assetsRoot 包内 assets 目录绝对路径
- * @returns 名称升序的候选池（文件缺失或描述为空的条目被剔除）
+ * @param memes 配置的 memes 值（未配置/类型非法 → 空池）
+ * @param dirs 表情包目录链（顺序即优先级；空链 → 空池）
+ * @returns 名称升序的候选池（链上哪个目录都没有该图、或描述为空 → 剔除）
  */
-export function readMemePool(memes: unknown, assetsRoot: string): MemeEntry[] {
+export function readMemePool(memes: unknown, dirs: readonly string[]): MemeEntry[] {
   if (!memes || typeof memes !== 'object' || Array.isArray(memes)) return [];
-  const dir = join(assetsRoot, MEMES_DIR);
+  if (dirs.length === 0) return [];
   const out: MemeEntry[] = [];
   for (const [name, desc] of Object.entries(memes as Record<string, unknown>)) {
     const text = typeof desc === 'string' ? desc.trim() : '';
     if (!name || !text) continue;
-    if (!existsSync(join(dir, name + '.png'))) continue;
+    if (!dirs.some((dir) => existsSync(join(dir, name + '.png')))) continue;
     out.push({ name, desc: text });
   }
   return out.sort((a, b) => a.name.localeCompare(b.name, 'zh'));

@@ -27,6 +27,10 @@ const SECRET = 'TOP-SECRET-BYTES';
 const OWN = 'PETPACK-OWN-ASSET';
 /** 主素材池内容 */
 const MAIN = 'MAIN-POOL-ASSET';
+/** 用户表情包目录（共享链）里的图 */
+const SHARED_PIC = 'SHARED-MEME-BYTES';
+/** pet pack 独占表情包目录里的图 */
+const OWN_PIC = 'PETPACK-OWN-MEME';
 /** 中文名 pet pack（仓库明确支持中文名，标识符校验不得用 ASCII 白名单） */
 const CN_PET = '测试宠';
 
@@ -68,9 +72,16 @@ before(() => {
   writeFileSync(join(userRoot, 'pet', `${CN_PET}-animation`, 'test.webm'), OWN);
   mkdirSync(join(userRoot, 'main-animation', 'webm'), { recursive: true });
   writeFileSync(join(userRoot, 'main-animation', 'webm', 'mainidle.webm'), MAIN);
-  // 用户根之外的诱饵：目录名以 -animation 结尾，正是旧漏洞能读到的东西
+  // 表情包：用户目录（共享链）+ pet pack 独占目录（与 <名>-animation/ 同一套素材归属）
+  mkdirSync(join(userRoot, 'memes'), { recursive: true });
+  writeFileSync(join(userRoot, 'memes', '共用图.png'), SHARED_PIC);
+  mkdirSync(join(userRoot, 'pet', `${CN_PET}-memes`), { recursive: true });
+  writeFileSync(join(userRoot, 'pet', `${CN_PET}-memes`, '自家图.png'), OWN_PIC);
+  // 用户根之外的诱饵：目录名以 -animation / -memes 结尾，正是旧漏洞能读到的东西
   mkdirSync(join(dir, 'outside-animation'), { recursive: true });
   writeFileSync(join(dir, 'outside-animation', 'leak.webm'), SECRET);
+  mkdirSync(join(dir, 'outside-memes'), { recursive: true });
+  writeFileSync(join(dir, 'outside-memes', 'leak.png'), SECRET);
 
   savedHome = process.env.DSH_HOME;
   savedElectron = process.env.DSH_PET_ELECTRON_PATH;
@@ -361,6 +372,77 @@ describe('thumb 路由 —— petId 不得当路径片段（PR #53 的不变式�
 
   test('fileName 段同样不可穿越（防线不是只守住 petId）', async () => {
     const r = await call('/dsh-pet-7340/thumb/main/..%2F..%2F..%2Foutside%2Fleak.webm');
+    assert.equal(r.status, 404);
+    assert.equal(r.body.includes(SECRET), false);
+  });
+});
+
+describe('pic/memes 路由 —— 表情包素材归属（与 thumb 同一套语义）', () => {
+  test('种类独占：pet/<素材根>-memes/ 里的图按 <素材根>/<名> 取到（中文素材根照常）', async () => {
+    const r = await call(`/dsh-pet-7340/pic/memes/${encodeURIComponent(CN_PET)}/${encodeURIComponent('自家图')}.png`);
+    assert.equal(r.status, 200);
+    assert.equal(r.body, OWN_PIC);
+  });
+
+  test('非独占：走用户目录 → 包内目录的回落链（main 与未知素材根同一口径）', async () => {
+    for (const root of ['main', 'nosuchpet']) {
+      const r = await call(`/dsh-pet-7340/pic/memes/${root}/${encodeURIComponent('共用图')}.png`);
+      assert.equal(r.status, 200, `素材根 ${root} 应走回落链`);
+      assert.equal(r.body, SHARED_PIC);
+    }
+  });
+
+  test('旧的两段形式 /pic/memes/<名>.png 保留（= 素材根 main 的回落链）', async () => {
+    const r = await call(`/dsh-pet-7340/pic/memes/${encodeURIComponent('共用图')}.png`);
+    assert.equal(r.status, 200);
+    assert.equal(r.body, SHARED_PIC);
+  });
+
+  test('独占就是独占：种类自己的目录里没有 → 404，绝不回落到用户/包内目录', async () => {
+    // 共用图 只存在于用户目录；该种类有独立的 -memes 目录 → 只查它，不混用
+    const r = await call(`/dsh-pet-7340/pic/memes/${encodeURIComponent(CN_PET)}/${encodeURIComponent('共用图')}.png`);
+    assert.equal(r.status, 404);
+    assert.equal(r.body.includes(SHARED_PIC), false, '独占目录命中时不得回落到共享目录');
+  });
+
+  test('不存在的图 → 404', async () => {
+    assert.equal((await call('/dsh-pet-7340/pic/memes/main/nope.png')).status, 404);
+  });
+
+  test('通知图标（/pic/<名>.png）不受影响：仍只从包内 assets/pic 取', async () => {
+    // 源码形态下包内 assets 不可达 → 404（关键是不被 memes 分支吞掉）
+    assert.equal((await call('/dsh-pet-7340/pic/logo.png')).status, 404);
+  });
+});
+
+describe('pic/memes 路由 —— 素材根不得当路径片段（与 thumb 同一条不变式）', () => {
+  test('%5C 反斜杠穿越（Windows）→ 400，且绝不读到用户根之外', async () => {
+    const r = await call('/dsh-pet-7340/pic/memes/..%5C..%5C..%5Coutside-memes/leak.png');
+    assert.equal(r.status, 400);
+    assert.equal(r.body.includes(SECRET), false, '越根内容不得出现在响应体里');
+  });
+
+  test('冒号 / 控制字符同样按非法素材根拒绝', async () => {
+    for (const bad of ['C%3A%5CWindows', '%00null']) {
+      const r = await call(`/dsh-pet-7340/pic/memes/${bad}/leak.png`);
+      assert.equal(r.status, 400, `素材根=${bad} 应 400`);
+    }
+  });
+
+  test('%2F 正斜杠被切成多段：穿越落在名称段，由 resolveAsset 拦下 → 404', async () => {
+    const r = await call('/dsh-pet-7340/pic/memes/..%2F..%2F..%2Foutside-memes/leak.png');
+    assert.equal(r.status, 404);
+    assert.equal(r.body.includes(SECRET), false);
+  });
+
+  test('名称段同样不可穿越（防线不是只守住素材根）', async () => {
+    const r = await call('/dsh-pet-7340/pic/memes/main/..%2F..%2F..%2Foutside-memes%2Fleak.png');
+    assert.equal(r.status, 404);
+    assert.equal(r.body.includes(SECRET), false);
+  });
+
+  test('双重编码不会被二次解码（只 decode 一次）→ 404 且不越根', async () => {
+    const r = await call('/dsh-pet-7340/pic/memes/..%255C..%255C..%255Coutside-memes/leak.png');
     assert.equal(r.status, 404);
     assert.equal(r.body.includes(SECRET), false);
   });

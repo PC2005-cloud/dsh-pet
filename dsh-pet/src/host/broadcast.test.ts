@@ -21,10 +21,12 @@ const IN_POOL2 = '大的要来啦';
 /** 配置里写了、但磁盘上没有对应 png → readMemePool 会剔除，投喂时算"不在池内" */
 const NO_FILE = '缺文件的图';
 
-let assetsRoot = '';
+let tempRoot = '';
+let memesDir = '';
 let cfg: Record<string, Record<string, unknown>>;
 
-/** 决策的便捷调用：只覆盖本次关心的参数，其余取默认 */
+/** 决策的便捷调用：只覆盖本次关心的参数，其余取默认。
+ *  memeDirs 默认给「共享表情包目录」这一条链（= 非独占的回落链），与 host 的 memeDirsFor 同序。 */
 const decide = (over: Partial<Parameters<typeof decideBroadcast>[0]> = {}) =>
   decideBroadcast({
     cfg,
@@ -32,15 +34,17 @@ const decide = (over: Partial<Parameters<typeof decideBroadcast>[0]> = {}) =>
     active: '',
     text: '主人，该喝水了',
     image: undefined,
-    assetsRoot,
+    memeDirs: () => [memesDir],
     ...over,
   });
 
 before(() => {
-  assetsRoot = mkdtempSync(join(tmpdir(), 'dsh-pet-broadcast-'));
-  mkdirSync(join(assetsRoot, 'memes'), { recursive: true });
-  writeFileSync(join(assetsRoot, 'memes', `${IN_POOL}.png`), 'x');
-  writeFileSync(join(assetsRoot, 'memes', `${IN_POOL2}.png`), 'x');
+  const root = mkdtempSync(join(tmpdir(), 'dsh-pet-broadcast-'));
+  memesDir = join(root, 'memes');
+  mkdirSync(memesDir, { recursive: true });
+  writeFileSync(join(memesDir, `${IN_POOL}.png`), 'x');
+  writeFileSync(join(memesDir, `${IN_POOL2}.png`), 'x');
+  tempRoot = root;
 
   cfg = {
     main: {
@@ -54,7 +58,7 @@ before(() => {
 });
 
 after(() => {
-  rmSync(assetsRoot, { recursive: true, force: true });
+  rmSync(tempRoot, { recursive: true, force: true });
 });
 
 describe('normalizeBroadcastText —— 文本规范化（路由与决策层共用同一条规则）', () => {
@@ -131,7 +135,7 @@ describe('decideBroadcast —— 宠物选择', () => {
   });
 });
 
-describe('decideBroadcast —— 配图只认包内表情包池', () => {
+describe('decideBroadcast —— 配图只认该桌宠条目的表情包池', () => {
   test('池内命中 → 通过，并采用池里的规范名', () => {
     const d = decide({ image: IN_POOL });
     assert.equal(d.ok, true);
@@ -188,5 +192,22 @@ describe('decideBroadcast —— 配图只认包内表情包池', () => {
     assert.equal(decide({ cfg: two, requested: 'pack1', image: IN_POOL }).ok, false);
     assert.equal(decide({ cfg: two, requested: 'pack1', image: IN_POOL2 }).ok, true);
     assert.equal(decide({ cfg: two, requested: 'main', image: IN_POOL }).ok, true);
+  });
+
+  test('目录链按条目取：种类独占目录里的图，喂给该宠物才算命中', () => {
+    // pack1 自带表情包目录（独占：链里只有它），main 走共享目录
+    const ownDir = join(tempRoot, 'pack1-memes');
+    mkdirSync(ownDir, { recursive: true });
+    writeFileSync(join(ownDir, '自家图.png'), 'x');
+    const own = { 自家图: '这个种类自己带的', [IN_POOL]: '共用目录里那张同名图' };
+    const two = {
+      main: { ...cfg.main, pets: [{ id: 'main', name: 'A' }] },
+      pack1: { ...cfg.main, memes: own, pets: [{ id: 'pack1', name: 'B' }] },
+    };
+    // 独占链里没有共享目录 → 只有包内目录里才有的 可爱 不算命中；自家图命中
+    const dirs = (entry: string) => (entry === 'pack1' ? [ownDir] : [memesDir]);
+    assert.equal(decide({ cfg: two, memeDirs: dirs, requested: 'pack1', image: IN_POOL }).ok, false);
+    assert.equal(decide({ cfg: two, memeDirs: dirs, requested: 'pack1', image: '自家图' }).ok, true);
+    assert.equal(decide({ cfg: two, memeDirs: dirs, requested: 'main', image: IN_POOL }).ok, true);
   });
 });

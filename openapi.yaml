@@ -212,8 +212,9 @@ paths:
         - **不设长度限制，也不限频**：投喂是显式的调用方行为，内容与频率都由调用方自己负责，
           宿主不做静默丢弃、截断或排队；
         - `pet` 必须是一只真实存在的桌宠；缺省时落到当前桌宠，仍为空则兜底 `main`；
-        - `image` 只接受**包内表情包名**（即该桌宠条目 `memes` 里、且 `assets/memes/<名>.png`
-          真实存在的键）。传入外部 URL 或池外名称一律拒绝——前端因此永远不会去加载任意外部地址
+        - `image` 只接受**该桌宠条目表情包池内**的名称（即该条目 `memes` 里、且在其表情包目录链
+          —— `pet/<素材根>-memes/`（独占）或 `memes/` → 包内 `assets/memes/` ——里真实存在的键）。
+          传入外部 URL 或池外名称一律拒绝——前端因此永远不会去加载任意外部地址
           （与对话选图共用同一份校验）。
       parameters:
         - name: pet
@@ -239,8 +240,8 @@ paths:
                 image:
                   type: string
                   description: |
-                    可选配图：**包内表情包名**（`assets/memes/<名>.png` 的文件名，不含扩展名）。
-                    必须在该桌宠条目的 `memes` 里且文件真实存在，否则 `ok: false` +
+                    可选配图**名称**（配置 `memes` 的键 = 图文件名去扩展名，不含路径）。
+                    必须在该桌宠条目的 `memes` 里、且在其表情包目录链里真实存在，否则 `ok: false` +
                     `reason: unknown-image`。不接受 URL。
                   example: 可爱
             examples:
@@ -773,12 +774,22 @@ paths:
       operationId: getPic
       summary: 获取通知图标 / 表情包
       description: |
-        从包内静态图目录读取：
+        静态图，两种形式：
 
-        - `/dsh-pet-7340/pic/<名>.png` → `assets/pic/`（方形 png，系统通知图标用）
-        - `/dsh-pet-7340/pic/memes/<名>.png` → `assets/memes/`（碎碎念/对话配图用的表情包）
+        - `/dsh-pet-7340/pic/<名>.png` → **包内** `assets/pic/`（方形 png，系统通知图标用）。
+        - `/dsh-pet-7340/pic/memes/<素材根>/<名>.png` → 表情包（碎碎念/对话配图用的图），
+          按素材根决定**素材归属**，与动画（`/thumb`）同一套语义：
+          1. `pet/<素材根>-memes/` 存在（种类自带表情包）：**只查该目录**，查不到即 `404` 显式报错，
+             **绝不回落**别的目录；
+          2. 不存在：用户目录 `$DSH_HOME/dsh-pet/memes/` 优先，其次包内 `assets/memes/`（逐文件合并，
+             与 `main-animation/<ext> → 包内 assets/<ext>` 的主素材链同构）。
 
-        两者共用一条路由与同一份防穿越校验。名称可含中文（URL 段会被解码）。
+          素材根 = 该宠物的条目 key（`assetRoot`：主配置宠物为 `main`，文件宠物为配置文件前缀）。
+          旧的两段形式 `/dsh-pet-7340/pic/memes/<名>.png` 仍然可用，等价于素材根 `main` 的回落链
+          （未升级的客户端照常取到包内表情包）。
+
+          `素材根` 是**标识符**（不是路径片段）：含分隔符 / 保留字符即 `400`，早于任何路径拼接判定。
+          表情包名称即文件名（不含子目录），两者共用同一份防穿越校验。
       parameters:
         - $ref: "#/components/parameters/AssetFile"
       responses:
@@ -801,6 +812,12 @@ paths:
               schema:
                 type: string
                 format: binary
+        "400":
+          description: "素材根含非法字符（`dsh-pet: invalid asset root`）"
+          content:
+            text/plain:
+              schema:
+                type: string
         "404":
           description: "图片不存在（`dsh-pet: pic not found`）"
           content:
@@ -825,7 +842,9 @@ components:
       name: file
       in: path
       required: true
-      description: 文件名，可含子目录（形如 `memes/大的要来啦.png`）
+      description: |
+        文件名，可含子目录。表情包为 `memes/<素材根>/<名>.png`（旧形式 `memes/<名>.png` 亦可），
+        通知图标为 `<名>.png`。
       schema:
         type: string
 
@@ -942,7 +961,7 @@ components:
                   counter: 1755000000300
                   data:
                     text: 主人今天也要加油哦～
-                    image: /dsh-pet-7340/pic/memes/可爱.png
+                    image: 可爱
 
     BalanceLeaf:
       type: object
@@ -1222,8 +1241,10 @@ components:
         image:
           type: string
           description: |
-            可选配图 URL（形如 `/dsh-pet-7340/pic/memes/可爱.png`），
+            可选配图**名称**（不是 URL）：配置 `memes` 的键，也就是该图文件的文件名（不含扩展名）。
             仅在配置开启了 `whisperImageEnabled` / `chatImageEnabled` 且命中池内图片时出现。
+            消费端（浏览器 / 桌面）按素材根拼成 `/dsh-pet-7340/pic/memes/<素材根>/<名>.png`
+            取图，素材根 = 该宠物的条目 key（`assetRoot`）。
 
     Counter:
       type: integer

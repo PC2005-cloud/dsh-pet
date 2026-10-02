@@ -11,10 +11,11 @@
  * 设计口径：
  * - **不设长度限制，也不限频**：投喂是显式的调用方行为，内容与频率都由调用方自己负责；
  *   宿主只保证"非空就搬运"，不做静默丢弃、截断或排队。
- * - 配图只认**包内表情包名**（池内命中即取其规范名）：杜绝第三方注入外部地址，
+ * - 配图只认**该桌宠条目表情包池内**的名称（池内命中即取其规范名）：杜绝第三方注入外部地址，
  *   前端也就不会去加载任意 URL。与对话选图共用同一份 matchMeme 校验。
  * - 失败一律返回明确 reason，不抛异常（路由据此回 HTTP 200 + ok:false，与 /chat 口径一致）。
- * - assetsRoot 是参数而非模块常量：便于测试注入临时目录（同 memes.ts 的约定）。
+ * - memeDirs 是参数而非模块常量：池的目录链由调用方（host/index.ts 的 memeDirsFor）唯一决定，
+ *   便于测试注入临时目录（同 memes.ts 的约定）。
  */
 
 import { findPetInstance, flattenPetList } from './config';
@@ -44,7 +45,7 @@ export function normalizeBroadcastText(text: unknown): string {
  * @param active `resolveActivePetId()` 的结果（可为空串；无宠物时为空）
  * @param text 外部给的文本（未规范化）
  * @param image 外部给的配图名（未规范化；空/缺省 = 不配图）
- * @param assetsRoot 包内 assets 绝对路径（决定表情包池里哪些图真实存在）
+ * @param memeDirs 条目（素材根）→ 表情包目录链（顺序即优先级）；决定池里哪些图真实存在
  */
 export function decideBroadcast(args: {
   cfg: Record<string, Record<string, unknown>>;
@@ -52,9 +53,9 @@ export function decideBroadcast(args: {
   active: string;
   text: unknown;
   image: unknown;
-  assetsRoot: string;
+  memeDirs: (entry: string) => string[];
 }): BroadcastDecision {
-  const { cfg, requested, active, assetsRoot } = args;
+  const { cfg, requested, active, memeDirs } = args;
 
   const text = normalizeBroadcastText(args.text);
   if (!text) return { ok: false, reason: 'bad-request', message: 'text 为空' };
@@ -69,8 +70,10 @@ export function decideBroadcast(args: {
   if (!rawImage) return { ok: true, petId, text };
 
   // 配图：只认池内命中的名称（命中后用池里的规范名，而不是外部原样传入的字符串）
-  const conf = (findPetInstance(cfg, petId) ?? { conf: cfg.main ?? {} }).conf;
-  const hit = matchMeme(readMemePool(conf.memes, assetsRoot), rawImage);
+  // 池按**所属条目**取（与碎碎念/对话同一口径）：配图不跨宠物串池
+  const found = findPetInstance(cfg, petId);
+  const conf = found ? found.conf : (cfg.main ?? {});
+  const hit = matchMeme(readMemePool(conf.memes, memeDirs(found ? found.entry : 'main')), rawImage);
   if (!hit) {
     return { ok: false, reason: 'unknown-image', message: '配图不在表情包池内：' + rawImage };
   }
