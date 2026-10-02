@@ -15,7 +15,7 @@ import { PET_DISPLAYS } from '../shared/config';
 import { DEFAULT_PHYSICS } from '../shared/physics';
 import { NOTIFY_ICONS, reloadNotifications, requestNotificationPermission } from './notify';
 import type { Corner, ModelSelection, Pet, PetDisplay, PhysicsParams } from '../shared/types';
-import type { ChangeEvent, CSSProperties, Dispatch, FunctionComponent, SetStateAction } from 'react';
+import type { ChangeEvent, Dispatch, FunctionComponent, SetStateAction } from 'react';
 import type * as ReactNS from 'react';
 import type { jsx } from 'react/jsx-runtime';
 
@@ -83,6 +83,81 @@ const SETTINGS_CSS = [
   '.dsh-pet-mp__name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}',
   '.dsh-pet-mp__check{flex:none;margin-left:auto}',
   '.dsh-pet-mp__status{padding:8px;font-size:12px;line-height:18px;color:var(--dsw-alias-label-tertiary)}',
+
+  // ===================== 设置页骨架（重构后） =====================
+  // 这一段只放「伪类 / 悬浮 / 栅格」这类行内样式表达不了的东西；其余排版仍走组件里的行内 style。
+  // 类名统一 dsh-pet-cfg__ 前缀，不会撞 DSH 自己的类名。
+
+  // 页面根容器与标题
+  '.dsh-pet-cfg{display:flex;flex-direction:column;gap:12px;color:var(--dsw-alias-label-primary);font-size:13px;line-height:20px}',
+  '.dsh-pet-cfg__title{display:flex;align-items:center;gap:6px;margin:0;font-size:16px;font-weight:500;line-height:24px}',
+
+  // 卡片：宠物配置 / 全局开关 / AI 模型 / 物理 / 高级配置 / 卸载与存储 统一用这一个框
+  '.dsh-pet-cfg__card{display:flex;flex-direction:column;gap:10px;padding:12px 14px;border:1px solid var(--dsw-alias-border-l2);border-radius:12px}',
+  '.dsh-pet-cfg__cardHead{display:flex;align-items:center;gap:6px;min-height:20px}',
+  '.dsh-pet-cfg__cardTitle{font-size:13px;font-weight:500;color:var(--dsw-alias-label-primary)}',
+
+  // 栅格：列数固定 → 行与行的控件自然对齐成一列
+  '.dsh-pet-cfg__grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px 16px;align-items:end}',
+  '.dsh-pet-cfg__grid4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px 16px;align-items:end}',
+  '.dsh-pet-cfg__grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 16px;align-items:end}',
+
+  // 字段：标签（+ 问号）在上、控件在下
+  '.dsh-pet-cfg__field{display:flex;flex-direction:column;gap:4px;min-width:0}',
+  '.dsh-pet-cfg__flabel{display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--dsw-alias-label-secondary)}',
+
+  // 输入 / 下拉
+  '.dsh-pet-cfg__inp{box-sizing:border-box;width:100%;min-height:28px;padding:4px 10px;border:1px solid var(--dsw-alias-border-l2);border-radius:8px;background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);font:inherit;font-size:13px;outline:none}',
+  '.dsh-pet-cfg__inp:focus{border-color:var(--dsw-alias-state-business-primary)}',
+  '.dsh-pet-cfg__inp:disabled{color:var(--dsw-alias-label-tertiary);cursor:default}',
+
+  // 开关（勾选框 + 标题 + 问号）
+  '.dsh-pet-cfg__toggle{display:flex;align-items:center;gap:6px;min-width:0;font-size:13px;color:var(--dsw-alias-label-primary)}',
+  '.dsh-pet-cfg__toggle>label{display:inline-flex;align-items:center;gap:6px;cursor:pointer;min-width:0}',
+  '.dsh-pet-cfg__toggle>label>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+  '.dsh-pet-cfg__toggle input[type=checkbox]{flex:none;width:16px;height:16px;margin:0;accent-color:var(--dsw-alias-state-business-primary);cursor:pointer}',
+
+  // 问号 + 悬浮说明：解释小字全部收进这里（data-tip → ::after）
+  '.dsh-pet-cfg__q{position:relative;display:inline-flex;align-items:center;justify-content:center;flex:none;width:14px;height:14px;border:1px solid var(--dsw-alias-label-tertiary);border-radius:50%;color:var(--dsw-alias-label-tertiary);font-size:10px;font-style:normal;line-height:1;cursor:help;user-select:none}',
+  // 气泡默认**左对齐**到问号（left:-4px），而不是居中。
+  // 为什么不能居中：问号常常贴着卡片左缘（卡片头、栅格第一列、页标题），居中会让气泡
+  // 往左伸出一大截，被设置页的滚动容器（overflow 会连带裁掉横向）切掉——看起来就是
+  // 「气泡左边被左边框遮住」。左对齐则一律向右展开，左侧永不出界。
+  '.dsh-pet-cfg__q::after{content:attr(data-tip);position:absolute;left:-4px;bottom:calc(100% + 8px);width:max-content;max-width:260px;padding:6px 10px;border-radius:8px;background:var(--dsw-alias-tooltip-bg);color:#fff;font-size:12px;font-style:normal;font-weight:400;line-height:18px;text-align:left;white-space:normal;opacity:0;visibility:hidden;pointer-events:none;transition:opacity .12s ease;box-shadow:0 6px 20px rgba(0,0,0,.22);z-index:2147483000}',
+  '.dsh-pet-cfg__q:hover::after{opacity:1;visibility:visible}',
+  // 最右一列：改为右对齐，避免气泡顶出设置页右缘
+  '.dsh-pet-cfg__q.is-end::after{left:auto;right:-4px}',
+
+  // 按钮
+  '.dsh-pet-cfg__btn{border:1px solid var(--dsw-alias-border-l2);background:transparent;color:var(--dsw-alias-label-primary);border-radius:8px;padding:4px 14px;font:inherit;font-size:12px;line-height:20px;cursor:pointer;white-space:nowrap}',
+  // 实心主按钮**必须排除**在通用 hover 之外：interactive-bg-hover 是半透明白（#ffffff14），
+  // 直接顶掉 button-info-fill 会让蓝色保存按钮一悬停就变成一块发白的透明块，非常突兀。
+  // 实心按钮的 hover 走主题自己的 button-info-hover（更深的蓝）。
+  '.dsh-pet-cfg__btn:hover:not(:disabled):not(.is-primary){background:var(--dsw-alias-interactive-bg-hover)}',
+  '.dsh-pet-cfg__btn:disabled{opacity:.5;cursor:default}',
+  '.dsh-pet-cfg__btn.is-primary{border-color:var(--dsw-alias-button-info-fill);background:var(--dsw-alias-button-info-fill);color:#fff}',
+  '.dsh-pet-cfg__btn.is-primary:hover:not(:disabled){border-color:var(--dsw-alias-button-info-hover);background:var(--dsw-alias-button-info-hover)}',
+  '.dsh-pet-cfg__btn.is-danger{border-color:var(--dsw-alias-state-error-secondary);color:var(--dsw-alias-state-error-primary)}',
+  '.dsh-pet-cfg__btn.is-sm{padding:2px 10px}',
+  '.dsh-pet-cfg__btn.is-ghost{border-style:dashed;color:var(--dsw-alias-label-secondary)}',
+
+  // 宠物列表 tab
+  '.dsh-pet-cfg__tabs{display:flex;gap:8px;flex-wrap:wrap;align-items:center}',
+  '.dsh-pet-cfg__tabsLabel{font-size:12px;color:var(--dsw-alias-label-secondary)}',
+  '.dsh-pet-cfg__tab{border:1px solid var(--dsw-alias-border-l2);background:transparent;color:var(--dsw-alias-label-primary);border-radius:8px;padding:4px 12px;font:inherit;font-size:13px;cursor:pointer}',
+  '.dsh-pet-cfg__tab:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover)}',
+  '.dsh-pet-cfg__tab:disabled{opacity:.5;cursor:default}',
+  '.dsh-pet-cfg__tab.is-active{border-color:var(--dsw-alias-state-business-primary);background:var(--dsw-alias-interactive-bg-active)}',
+  '.dsh-pet-cfg__tab.is-ghost{border-style:dashed;color:var(--dsw-alias-label-secondary)}',
+
+  // 操作区 / 提示文字 / 路径
+  '.dsh-pet-cfg__actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:4px}',
+  '.dsh-pet-cfg__msg{margin-left:4px;font-size:12px;color:var(--dsw-alias-state-success-primary)}',
+  '.dsh-pet-cfg__msg.is-err{color:var(--dsw-alias-state-error-primary)}',
+  '.dsh-pet-cfg__note{margin:0;font-size:12px;line-height:18px;color:var(--dsw-alias-label-tertiary)}',
+  '.dsh-pet-cfg__path{font-size:12px;line-height:18px;word-break:break-all;user-select:text;color:var(--dsw-alias-label-secondary)}',
+  '.dsh-pet-cfg__path b{color:var(--dsw-alias-label-primary);font-weight:400}',
+  '.dsh-pet-cfg__cmd{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Courier New",monospace;font-size:12px;line-height:18px;word-break:break-all;user-select:text;padding:6px 10px;border:1px solid var(--dsw-alias-border-l2);border-radius:8px;background:var(--dsw-alias-interactive-bg-active);color:var(--dsw-alias-label-primary)}',
 ].join('\n');
 
 const settingsCssTag = 'dsh-pet/settings.css';
@@ -107,6 +182,16 @@ type ModelRow =
 export const zh = {
   nav: '桌宠配置',
   intro: '管理多个桌宠：每个宠物可独立设置大小与位置（保存后即时生效）。',
+  // 卡片标题 + 卡片级说明（说明都进问号，不再占一行小字）
+  petCardTitle: '宠物配置',
+  petCardHint:
+    '每只宠物独立配置：名字 / 大小 / 显示位置 / 位置 / 偏移 / 四个功能开关。改完点最下面的「保存」即时生效。',
+  globalTitle: '全局开关',
+  globalHint:
+    '所有宠物共用。这几个开关只改本地状态，随「保存」整包写入用户配置（不做即时写入）；系统通知在保存后即时重读，无需刷新页面。',
+  cornerHint: '宠物贴着屏幕的哪个角（桌面端按各自显示器的工作区算）。',
+  marginXHint: '距所选角落的水平距离（px），可为任意数字。',
+  marginYHint: '距所选角落的垂直距离（px），可为任意数字。',
   // 「/」命令菜单里的行标题（图标由 app.ts 经 command-faces.ts 补上）
   'cmd.chat': '对话',
   'cmd.pet': '桌宠',
@@ -117,6 +202,7 @@ export const zh = {
   confirmRemove: '确定删除宠物「{id}」吗？',
   confirmTitle: '确认操作',
   cancel: '取消',
+  ok: '知道了',
   atLeastOne: '至少保留一个宠物。',
   emptyPets: '暂无宠物，点击「添加宠物」创建。',
   sizeLabel: '大小（宽度 px）',
@@ -210,8 +296,8 @@ export const zh = {
   modelFieldHint: '选「跟随当前对话」= 用当前对话的模型；指定了但调用失败会自动回落到当前对话的模型重试一次。',
   invalidModel: '请检查模型设置：服务商与模型要么都选，要么都留空（跟随当前对话）。',
   modelCatalogFailed: '模型列表加载失败（刷新页面可重试）；当前配置值仍会原样保留。',
-  notifyGetPermission: '获取权限',
-  notifyPermissionOk: '已获得通知权限，右下角出现测试通知。',
+  notifyTest: '测试弹窗',
+  notifyTestOk: '测试通知已发送，请查看桌面右下角。',
   notifyDenyUnsupported: '当前环境不支持系统通知（浏览器无 Notification API）。',
   notifyDenyBlocked: '通知权限已被浏览器标记为「阻止」。',
   notifyDenyRejected: '你在权限询问弹窗中选择了「阻止」。',
@@ -237,6 +323,16 @@ export const zh = {
 export const en = {
   nav: 'Pet Config',
   intro: 'Manage multiple pets: each pet has its own size and position (applies instantly after saving).',
+  // Card titles + card-level help (all hints move into the "?" bubble)
+  petCardTitle: 'Pet',
+  petCardHint:
+    'Per-pet settings: name / size / display / corner / offsets / the four feature switches. Click "Save" at the bottom to apply instantly.',
+  globalTitle: 'Global switches',
+  globalHint:
+    'Shared by every pet. These switches only change local state and are written to the user config on "Save" (never written immediately); system notifications re-read right after saving, no page refresh needed.',
+  cornerHint: 'Which screen corner the pet sticks to (per-monitor work area in desktop mode).',
+  marginXHint: 'Horizontal distance from the chosen corner (px); any number.',
+  marginYHint: 'Vertical distance from the chosen corner (px); any number.',
   // Row titles in the "/" command menu (icons are added by app.ts)
   'cmd.chat': 'Chat',
   'cmd.pet': 'Pet',
@@ -247,6 +343,7 @@ export const en = {
   confirmRemove: 'Delete pet "{id}"?',
   confirmTitle: 'Confirm action',
   cancel: 'Cancel',
+  ok: 'Got it',
   atLeastOne: 'Keep at least one pet.',
   emptyPets: 'No pets yet — click "Add pet" to create one.',
   sizeLabel: 'Size (width px)',
@@ -350,8 +447,8 @@ export const en = {
     'Check the model settings: pick both a provider and a model, or leave both empty (follow the current conversation).',
   modelCatalogFailed:
     'Failed to load the model list (refresh the page to retry); your current values are kept as they are.',
-  notifyGetPermission: 'Get permission',
-  notifyPermissionOk: 'Notification permission granted — a test notification was sent.',
+  notifyTest: 'Test notification',
+  notifyTestOk: 'Test notification sent — check the bottom-right of your desktop.',
   notifyDenyUnsupported: 'System notifications are not supported in this environment (no Notification API).',
   notifyDenyBlocked: 'Notification permission is blocked by the browser.',
   notifyDenyRejected: 'You chose "Block" in the permission prompt.',
@@ -414,17 +511,7 @@ export function makePetConfigSection(rt: {
   const CORNERS: Corner[] = ['top-left', 'top-right', 'bottom-left', 'bottom-right'];
   const cornerLabel = (c: Corner): string => t('corner.' + c);
 
-  const inputStyle = {
-    boxSizing: 'border-box',
-    border: '1px solid var(--dsw-alias-border-l2)',
-    borderRadius: '8px',
-    background: 'var(--dsw-alias-bg-layer-1)',
-    color: 'var(--dsw-alias-label-primary)',
-    padding: '5px 10px',
-    fontSize: '13px',
-    minHeight: '28px',
-    outline: 'none',
-  } as CSSProperties;
+  const inputClass = 'dsh-pet-cfg__inp';
 
   /** 等宽字体栈（路径与命令展示用；不引外部字体，走系统栈，避免多拉一份资源） */
   const MONO = 'ui-monospace, SFMono-Regular, Menlo, Consolas, "Courier New", monospace';
@@ -438,44 +525,79 @@ export function makePetConfigSection(rt: {
     }
   };
 
-  /** 全局开关的一格（2×2 网格单元）：勾选框 + 标题在上，描述在下。
-   *  label 为文案键：标题 = t(label)，描述 = t(label + 'Hint')；描述左缩进 24px 与标题同列对齐
-   *  （勾选框 16px + 间距 8px）。label 元素包住整格，点标题或描述都能切换。 */
+  /**
+   * 问号 + 悬浮说明（本页所有解释小字的唯一去处）。
+   *
+   * 为什么用 `<i>` 而不是 `<button>`：它只是说明入口，点了不该有任何行为，也不该被
+   * Tab 当成操作项；真正的可交互入口是它旁边的输入框 / 开关。说明文字走 `data-tip`
+   * 属性，由 SETTINGS_CSS 的 `::after{content:attr(data-tip)}` 画成气泡——CSS 才能
+   * 表达 hover / 过渡，行内样式做不到。
+   *
+   * @param tip 说明正文（已翻译）
+   * @param end 是否右对齐气泡（给栅格最右一列用，免得气泡顶出设置页）
+   */
+  const q = (tip: string, end = false): ReturnType<typeof h> =>
+    h('i', {
+      className: 'dsh-pet-cfg__q' + (end ? ' is-end' : ''),
+      'data-tip': tip,
+      'aria-label': tip,
+      role: 'img',
+      children: '?',
+    });
+
+  /** 卡片头：标题 + 问号说明（+ 可选右侧动作，由调用方自行 append） */
+  const cardHead = (title: string, tip?: string, end = false): ReturnType<typeof h> =>
+    h('div', {
+      className: 'dsh-pet-cfg__cardHead',
+      children: [
+        h('span', { key: 't', className: 'dsh-pet-cfg__cardTitle', children: title }),
+        tip ? q(tip, end) : null,
+      ],
+    });
+
+  /** 一个字段：标签（+ 问号）在上、控件在下 */
+  const field = (label: string, control: ReturnType<typeof h>, tip?: string, end = false): ReturnType<typeof h> =>
+    h('div', {
+      className: 'dsh-pet-cfg__field',
+      children: [
+        h('span', {
+          key: 'l',
+          className: 'dsh-pet-cfg__flabel',
+          children: tip ? [label, q(tip, end)] : label,
+        }),
+        control,
+      ],
+    });
+
+  /**
+   * 开关的一格：勾选框 + 标题 + 问号。
+   * label 为文案键：标题 = t(label)，说明 = t(label + 'Hint')（说明进问号，不再占一行小字）。
+   * 说明挂在问号上而不是整格——点标题只切开关，看说明去点问号，两个动作不再抢同一次点击。
+   */
   const toggleCell = (
     label: string,
     value: boolean,
     disabled: boolean,
     onToggle: (v: boolean) => void,
+    end = false,
   ): ReturnType<typeof h> =>
-    h('label', {
-      key: label,
-      style: {
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '4px',
-        minWidth: 0,
-        fontSize: '13px',
-        color: 'var(--dsw-alias-label-primary)',
-        cursor: 'pointer',
-      },
+    h('div', {
+      className: 'dsh-pet-cfg__toggle',
       children: [
-        h('span', {
-          style: { display: 'flex', gap: '8px', alignItems: 'center' },
+        h('label', {
+          key: 'l',
           children: [
             h('input', {
+              key: 'i',
               type: 'checkbox',
               checked: value,
               disabled,
               onChange: (e: ChangeEvent<HTMLInputElement>) => onToggle(e.target.checked),
-              style: { width: '16px', height: '16px', accentColor: 'var(--dsw-alias-state-business-primary)' },
             }),
-            h('span', { children: t(label) }),
+            h('span', { key: 't', children: t(label) }),
           ],
         }),
-        h('span', {
-          style: { fontSize: '11px', color: 'var(--dsw-alias-label-tertiary)', paddingLeft: '24px' },
-          children: t(label + 'Hint'),
-        }),
+        q(t(label + 'Hint'), end),
       ],
     });
 
@@ -756,12 +878,15 @@ export function makePetConfigSection(rt: {
     const [selId, setSelId] = useState<string>(initPets[0]?.id ?? '');
     const [busy, setBusy] = useState(false);
     const [msg, setMsg] = useState<{ kind: 'ok' | 'err' | ''; text: string }>({ kind: '', text: '' });
-    // 确认/提示弹窗（仿官方弹窗：遮罩 + 居中卡片 + 双按钮）：
-    //   remove  —— 删除宠物
+    // 确认/提示弹窗（仿官方弹窗：遮罩 + 居中卡片 + 按钮）：
+    //   remove  —— 删除宠物（双按钮：取消 / 删除）
+    //   lastOne —— 只剩一只、删不了：同样走弹窗（单按钮「知道了」）。
+    //              以前这里是在按钮旁闪一行红字——位置在页面中段、颜色又淡，很容易被忽略，
+    //              用户只看到「点了删除没反应」。
     //   sync    —— 同步（说明会用内置默认整份覆盖）
     //   corrupt —— 保存时发现用户配置**已损坏**（解析不了）：取消 = 不动文件，确认 = 强行白名单重建
     const [dialog, setDialog] = useState<
-      null | { kind: 'remove' } | { kind: 'sync' } | { kind: 'corrupt'; path: string }
+      null | { kind: 'remove' } | { kind: 'lastOne' } | { kind: 'sync' } | { kind: 'corrupt'; path: string }
     >(null);
     // 配置文件地址与存储位置清单（「高级配置」「卸载与存储」区块；读取失败仅缺省不显示，不影响表单）
     const [paths, setPaths] = useState<null | {
@@ -865,7 +990,14 @@ export function makePetConfigSection(rt: {
       if (v) await requestNotificationPermission();
     };
 
-    const grantNotifyPermission = async () => {
+    /**
+     * 「测试弹窗」按钮：发一条测试系统通知，验证整条链路通不通。
+     *
+     * 顺带承担申请权限的职责——没授权时先申请（借这次用户手势，无手势的自动申请可能被浏览器
+     * 静默压制），授权成功再发测试通知。所以这一个按钮同时是「拿权限」和「验链路」的入口，
+     * 不需要再单独摆一个「获取权限」按钮。
+     */
+    const testNotification = async () => {
       setPermMsg({ kind: '', text: '' });
       const r = await requestNotificationPermission();
       if (!r.ok) {
@@ -887,7 +1019,7 @@ export function makePetConfigSection(rt: {
       } catch {
         /* 个别环境构造失败：仍按已授权提示 */
       }
-      setPermMsg({ kind: 'ok', text: t('notifyPermissionOk') });
+      setPermMsg({ kind: 'ok', text: t('notifyTestOk') });
     };
 
     // 当前选中的宠物对象（表单数据源）；selId 由 add/remove/sync 同步维护，列表非空时恒有效
@@ -1039,11 +1171,9 @@ export function makePetConfigSection(rt: {
     };
 
     const removeSel = () => {
-      if (pets.length <= 1) {
-        setMsg({ kind: 'err', text: t('atLeastOne') });
-        return;
-      }
-      setDialog({ kind: 'remove' });
+      // 两种情形都走弹窗：能删 → 确认删除；只剩一只 → 说明删不了。
+      // 不再把「至少保留一个宠物」塞进按钮旁的消息行（那里离删除按钮很远，等于没提示）。
+      setDialog({ kind: pets.length <= 1 ? 'lastOne' : 'remove' });
     };
 
     const doRemove = () => {
@@ -1052,691 +1182,388 @@ export function makePetConfigSection(rt: {
       setSelId(list[0].id);
     };
 
-    const field = (key: 'size' | 'marginX' | 'marginY', value: number, setter: (v: number) => void, width: string) =>
+    /** 宠物数值输入（大小 / 水平偏移 / 垂直偏移）——宽度交给栅格，不再各自写死 */
+    const numInput = (
+      key: 'size' | 'marginX' | 'marginY',
+      value: number,
+      setter: (v: number) => void,
+    ): ReturnType<typeof h> =>
       h('input', {
         type: 'number',
+        className: inputClass,
         step: key === 'size' ? '10' : '1',
         min: key === 'size' ? '120' : '',
         value: String(value),
         disabled: busy,
         onChange: (e: ChangeEvent<HTMLInputElement>) => setter(Number(e.target.value)),
-        style: { width, ...inputStyle },
       });
 
-    /** 物理参数的一格：标题 + 数字输入 + 一行说明（排版与全局开关一致，说明缩进对齐输入框） */
-    const physField = (key: 'gravity' | 'restitution' | 'groundFriction' | 'throwPower', step: string, min: string) =>
-      h('label', {
-        style: {
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '4px',
-          minWidth: 0,
-          fontSize: '13px',
-          color: 'var(--dsw-alias-label-primary)',
-        },
-        children: [
-          h('span', { children: t('physics.' + key) }),
-          h('input', {
-            type: 'number',
-            step,
-            min,
-            value: String(physics[key]),
-            disabled: busy,
-            onChange: (e: ChangeEvent<HTMLInputElement>) =>
-              setPhysics((p) => ({ ...p, [key]: Number(e.target.value) }) as PhysicsParams),
-            style: { width: '140px', ...inputStyle },
-          }),
-          h('span', {
-            style: { fontSize: '11px', color: 'var(--dsw-alias-label-tertiary)' },
-            children: t('physics.' + key + 'Hint'),
-          }),
-        ],
-      });
+    /** 物理参数的一格：标签 + 问号在上、数字输入在下（说明进问号） */
+    const physField = (
+      key: 'gravity' | 'restitution' | 'groundFriction' | 'throwPower',
+      step: string,
+      min: string,
+      end = false,
+    ): ReturnType<typeof h> =>
+      field(
+        t('physics.' + key),
+        h('input', {
+          type: 'number',
+          className: inputClass,
+          step,
+          min,
+          value: String(physics[key]),
+          disabled: busy,
+          onChange: (e: ChangeEvent<HTMLInputElement>) =>
+            setPhysics((p) => ({ ...p, [key]: Number(e.target.value) }) as PhysicsParams),
+        }),
+        t('physics.' + key + 'Hint'),
+        end,
+      );
 
-    /** 「AI 模型」的一格：标题 + 单下拉选择器（碎碎念 / 对话各一格；说明在整段下面统一给一行） */
+    /** 「AI 模型」的一格：标签 + 问号在上、单下拉选择器在下 */
     const modelCell = (
       key: 'whisperModel' | 'chatModel',
       value: ModelSelection,
       setter: (v: ModelSelection) => void,
-    ) => {
+      end = false,
+    ): ReturnType<typeof h> => {
       const label = t(key === 'whisperModel' ? 'whisperModelLabel' : 'chatModelLabel');
-      return h('div', {
-        key,
-        style: {
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '4px',
-          minWidth: 0,
-          fontSize: '13px',
-          color: 'var(--dsw-alias-label-primary)',
-        },
-        children: [
-          h('span', { children: label }),
-          h(ModelPicker, { label, value, disabled: busy, catalog, failed: catalogErr, onChange: setter }),
-        ],
-      });
+      return field(
+        label,
+        h(ModelPicker, { label, value, disabled: busy, catalog, failed: catalogErr, onChange: setter }),
+        t('modelFieldHint'),
+        end,
+      );
     };
 
     return h('section', {
-      style: {
-        maxWidth: '720px',
-        color: 'var(--dsw-alias-label-primary)',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '6px',
-      },
+      className: 'dsh-pet-cfg',
+      style: { maxWidth: '720px' },
       children: [
+        // 标题：intro 与「额外宠物」说明都收进问号，不再各占一行小字
         h('h2', {
-          style: { margin: 0, fontSize: '16px', fontWeight: 500, lineHeight: '24px' },
-          children: t('nav'),
+          className: 'dsh-pet-cfg__title',
+          children: [
+            t('nav'),
+            q(extraCount > 0 ? t('intro') + '\n' + t('extraPetsHint').replace('{n}', String(extraCount)) : t('intro')),
+          ],
         }),
-        h('p', {
-          style: {
-            margin: 0,
-            fontSize: '14px',
-            color: 'var(--dsw-alias-label-tertiary)',
-            lineHeight: '22px',
-          },
-          children: t('intro'),
-        }),
-        // 额外宠物提示（文件定义，不在此编辑列表）
-        extraCount > 0
-          ? h('p', {
-              style: {
-                margin: 0,
-                fontSize: '12px',
-                color: 'var(--dsw-alias-label-tertiary)',
-                lineHeight: '18px',
-              },
-              children: t('extraPetsHint').replace('{n}', String(extraCount)),
-            })
-          : null,
 
         // 宠物列表 + 添加
         h('div', {
-          style: { display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center', marginTop: '4px' },
+          className: 'dsh-pet-cfg__tabs',
           children: [
-            h('span', {
-              style: { fontSize: '12px', color: 'var(--dsw-alias-label-secondary)' },
-              children: t('petsLabel'),
-            }),
+            h('span', { key: 'label', className: 'dsh-pet-cfg__tabsLabel', children: t('petsLabel') }),
             ...pets.map((p) =>
               h('button', {
                 key: p.id,
                 type: 'button',
                 onClick: () => setSelId(p.id),
-                style: {
-                  border:
-                    '1px solid ' +
-                    (p.id === selId ? 'var(--dsw-alias-state-business-primary)' : 'var(--dsw-alias-border-l2)'),
-                  background: p.id === selId ? 'var(--dsw-alias-interactive-bg-active)' : 'transparent',
-                  color: 'var(--dsw-alias-label-primary)',
-                  borderRadius: '8px',
-                  padding: '4px 12px',
-                  fontSize: '13px',
-                  cursor: 'pointer',
-                },
+                className: 'dsh-pet-cfg__tab' + (p.id === selId ? ' is-active' : ''),
                 children: (p.name || p.id) + ' (' + p.size + 'px)',
               }),
             ),
             h('button', {
+              key: 'add',
               type: 'button',
               onClick: addPet,
               disabled: busy,
-              style: {
-                border: '1px dashed var(--dsw-alias-border-l2)',
-                background: 'transparent',
-                color: 'var(--dsw-alias-label-secondary)',
-                borderRadius: '8px',
-                padding: '4px 12px',
-                fontSize: '13px',
-                cursor: 'pointer',
-              },
+              className: 'dsh-pet-cfg__tab is-ghost',
               children: '+ ' + t('add'),
             }),
           ],
         }),
 
-        // 选中宠物表单
+        // 选中宠物配置卡：第 1 行 名字/大小/显示位置、第 2 行 位置/偏移、第 3 行 四个开关
         cur
           ? h('div', {
-              style: {
-                display: 'flex',
-                gap: '16px',
-                flexWrap: 'wrap',
-                marginTop: '8px',
-                padding: '12px 14px',
-                border: '1px solid var(--dsw-alias-border-l2)',
-                borderRadius: '12px',
-              },
+              className: 'dsh-pet-cfg__card',
               children: [
-                h('label', {
-                  style: {
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '4px',
-                    fontSize: '12px',
-                    color: 'var(--dsw-alias-label-secondary)',
-                  },
+                h('div', {
+                  className: 'dsh-pet-cfg__cardHead',
                   children: [
-                    t('nameLabel'),
-                    h('input', {
-                      type: 'text',
-                      value: String(cur.name ?? ''),
+                    h('span', { key: 't', className: 'dsh-pet-cfg__cardTitle', children: t('petCardTitle') }),
+                    q(t('petCardHint')),
+                    h('button', {
+                      key: 'rm',
+                      type: 'button',
+                      onClick: removeSel,
                       disabled: busy,
-                      maxLength: 50,
-                      onChange: (e: ChangeEvent<HTMLInputElement>) => updateSel({ name: e.target.value }),
-                      style: { width: '200px', ...inputStyle },
-                    }),
-                    h('span', {
-                      style: { fontSize: '11px', color: 'var(--dsw-alias-label-tertiary)' },
-                      children: t('nameHint'),
+                      className: 'dsh-pet-cfg__btn is-danger is-sm',
+                      style: { marginLeft: 'auto' },
+                      children: t('remove'),
                     }),
                   ],
                 }),
-                h('label', {
-                  style: {
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '4px',
-                    fontSize: '12px',
-                    color: 'var(--dsw-alias-label-secondary)',
-                  },
+
+                h('div', {
+                  className: 'dsh-pet-cfg__grid3',
                   children: [
-                    t('sizeLabel'),
-                    field('size', cur.size, (v) => updateSel({ size: v }), '150px'),
-                    h('span', {
-                      style: { fontSize: '11px', color: 'var(--dsw-alias-label-tertiary)' },
-                      children: t('sizeHint'),
-                    }),
+                    field(
+                      t('nameLabel'),
+                      h('input', {
+                        type: 'text',
+                        className: inputClass,
+                        value: String(cur.name ?? ''),
+                        disabled: busy,
+                        maxLength: 50,
+                        onChange: (e: ChangeEvent<HTMLInputElement>) => updateSel({ name: e.target.value }),
+                      }),
+                      t('nameHint'),
+                    ),
+                    field(
+                      t('sizeLabel'),
+                      numInput('size', cur.size, (v) => updateSel({ size: v })),
+                      t('sizeHint'),
+                    ),
+                    field(
+                      t('displayLabel'),
+                      h('select', {
+                        className: inputClass,
+                        value: cur.display,
+                        disabled: busy,
+                        onChange: (e: ChangeEvent<HTMLSelectElement>) =>
+                          updateSel({ display: e.target.value as PetDisplay }),
+                        children: PET_DISPLAYS.map((d) =>
+                          h('option', {
+                            key: d,
+                            value: d,
+                            children: t('display.' + d),
+                          }),
+                        ),
+                      }),
+                      t('displayHint'),
+                      true,
+                    ),
                   ],
                 }),
-                h('label', {
-                  style: {
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '4px',
-                    fontSize: '12px',
-                    color: 'var(--dsw-alias-label-secondary)',
-                  },
+
+                h('div', {
+                  className: 'dsh-pet-cfg__grid3',
                   children: [
-                    t('cornerLabel'),
-                    h('select', {
-                      value: cur.position.corner,
-                      disabled: busy,
-                      onChange: (e: ChangeEvent<HTMLSelectElement>) =>
-                        updateSel({ position: { corner: e.target.value as Corner } }),
-                      style: { width: '160px', ...inputStyle },
-                      children: CORNERS.map((c) =>
-                        h('option', {
-                          key: c,
-                          value: c,
-                          children: cornerLabel(c),
-                        }),
-                      ),
-                    }),
+                    field(
+                      t('cornerLabel'),
+                      h('select', {
+                        className: inputClass,
+                        value: cur.position.corner,
+                        disabled: busy,
+                        onChange: (e: ChangeEvent<HTMLSelectElement>) =>
+                          updateSel({ position: { corner: e.target.value as Corner } }),
+                        children: CORNERS.map((c) =>
+                          h('option', {
+                            key: c,
+                            value: c,
+                            children: cornerLabel(c),
+                          }),
+                        ),
+                      }),
+                      t('cornerHint'),
+                    ),
+                    field(
+                      t('marginX'),
+                      numInput('marginX', cur.position.marginX, (v) => updateSel({ position: { marginX: v } })),
+                      t('marginXHint'),
+                    ),
+                    field(
+                      t('marginY'),
+                      numInput('marginY', cur.position.marginY, (v) => updateSel({ position: { marginY: v } })),
+                      t('marginYHint'),
+                      true,
+                    ),
                   ],
                 }),
-                h('label', {
-                  style: {
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '4px',
-                    fontSize: '12px',
-                    color: 'var(--dsw-alias-label-secondary)',
-                  },
+
+                h('div', {
+                  className: 'dsh-pet-cfg__grid4',
                   children: [
-                    t('marginX'),
-                    field('marginX', cur.position.marginX, (v) => updateSel({ position: { marginX: v } }), '120px'),
+                    toggleCell('balanceEnabled', !!cur.balanceEnabled, busy, (v) => updateSel({ balanceEnabled: v })),
+                    toggleCell('whisperEnabled', !!cur.whisperEnabled, busy, (v) => updateSel({ whisperEnabled: v })),
+                    toggleCell('workStatusEnabled', !!cur.workStatusEnabled, busy, (v) =>
+                      updateSel({ workStatusEnabled: v }),
+                    ),
+                    toggleCell('fixedEnabled', !!cur.fixedEnabled, busy, (v) => updateSel({ fixedEnabled: v }), true),
                   ],
-                }),
-                h('label', {
-                  style: {
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '4px',
-                    fontSize: '12px',
-                    color: 'var(--dsw-alias-label-secondary)',
-                  },
-                  children: [
-                    t('marginY'),
-                    field('marginY', cur.position.marginY, (v) => updateSel({ position: { marginY: v } }), '120px'),
-                  ],
-                }),
-                h('label', {
-                  style: {
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '4px',
-                    fontSize: '12px',
-                    color: 'var(--dsw-alias-label-secondary)',
-                  },
-                  children: [
-                    t('balanceEnabled'),
-                    h('input', {
-                      type: 'checkbox',
-                      checked: !!cur.balanceEnabled,
-                      disabled: busy,
-                      onChange: (e: ChangeEvent<HTMLInputElement>) => updateSel({ balanceEnabled: e.target.checked }),
-                      style: { width: '16px', height: '16px', accentColor: 'var(--dsw-alias-state-business-primary)' },
-                    }),
-                    h('span', {
-                      style: { fontSize: '11px', color: 'var(--dsw-alias-label-tertiary)' },
-                      children: t('balanceEnabledHint'),
-                    }),
-                  ],
-                }),
-                h('label', {
-                  style: {
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '4px',
-                    fontSize: '12px',
-                    color: 'var(--dsw-alias-label-secondary)',
-                  },
-                  children: [
-                    t('whisperEnabled'),
-                    h('input', {
-                      type: 'checkbox',
-                      checked: !!cur.whisperEnabled,
-                      disabled: busy,
-                      onChange: (e: ChangeEvent<HTMLInputElement>) => updateSel({ whisperEnabled: e.target.checked }),
-                      style: { width: '16px', height: '16px', accentColor: 'var(--dsw-alias-state-business-primary)' },
-                    }),
-                    h('span', {
-                      style: { fontSize: '11px', color: 'var(--dsw-alias-label-tertiary)' },
-                      children: t('whisperEnabledHint'),
-                    }),
-                  ],
-                }),
-                h('label', {
-                  style: {
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '4px',
-                    fontSize: '12px',
-                    color: 'var(--dsw-alias-label-secondary)',
-                  },
-                  children: [
-                    t('workStatusEnabled'),
-                    h('input', {
-                      type: 'checkbox',
-                      checked: !!cur.workStatusEnabled,
-                      disabled: busy,
-                      onChange: (e: ChangeEvent<HTMLInputElement>) =>
-                        updateSel({ workStatusEnabled: e.target.checked }),
-                      style: { width: '16px', height: '16px', accentColor: 'var(--dsw-alias-state-business-primary)' },
-                    }),
-                    h('span', {
-                      style: { fontSize: '11px', color: 'var(--dsw-alias-label-tertiary)' },
-                      children: t('workStatusEnabledHint'),
-                    }),
-                  ],
-                }),
-                h('label', {
-                  style: {
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '4px',
-                    fontSize: '12px',
-                    color: 'var(--dsw-alias-label-secondary)',
-                  },
-                  children: [
-                    t('fixedEnabled'),
-                    h('input', {
-                      type: 'checkbox',
-                      checked: !!cur.fixedEnabled,
-                      disabled: busy,
-                      onChange: (e: ChangeEvent<HTMLInputElement>) => updateSel({ fixedEnabled: e.target.checked }),
-                      style: { width: '16px', height: '16px', accentColor: 'var(--dsw-alias-state-business-primary)' },
-                    }),
-                    h('span', {
-                      style: { fontSize: '11px', color: 'var(--dsw-alias-label-tertiary)' },
-                      children: t('fixedEnabledHint'),
-                    }),
-                  ],
-                }),
-                h('label', {
-                  style: {
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '4px',
-                    fontSize: '12px',
-                    color: 'var(--dsw-alias-label-secondary)',
-                  },
-                  children: [
-                    t('displayLabel'),
-                    h('select', {
-                      value: cur.display,
-                      disabled: busy,
-                      onChange: (e: ChangeEvent<HTMLSelectElement>) =>
-                        updateSel({ display: e.target.value as PetDisplay }),
-                      style: { width: '160px', ...inputStyle },
-                      children: PET_DISPLAYS.map((d) =>
-                        h('option', {
-                          key: d,
-                          value: d,
-                          children: t('display.' + d),
-                        }),
-                      ),
-                    }),
-                    h('span', {
-                      style: { fontSize: '11px', color: 'var(--dsw-alias-label-tertiary)' },
-                      children: t('displayHint'),
-                    }),
-                  ],
-                }),
-                h('button', {
-                  type: 'button',
-                  onClick: removeSel,
-                  disabled: busy,
-                  title: t('remove'),
-                  style: {
-                    alignSelf: 'flex-end',
-                    border: '1px solid var(--dsw-alias-state-error-secondary)',
-                    background: 'transparent',
-                    color: 'var(--dsw-alias-state-error-primary)',
-                    borderRadius: '8px',
-                    padding: '4px 12px',
-                    fontSize: '12px',
-                    cursor: 'pointer',
-                  },
-                  children: t('remove'),
                 }),
               ],
             })
           : h('p', {
-              style: { margin: 0, fontSize: '13px', color: 'var(--dsw-alias-label-tertiary)' },
+              className: 'dsh-pet-cfg__note',
               children: t('emptyPets'),
             }),
 
-        // 四个全局开关：2×2 网格，每格「勾选框 + 标题」在上、描述在下。
+        // 全局开关卡（需求 4：四个开关一行）。
         // 四个开关行为**一致**：切换只改本地状态，随「保存」整包写入用户级配置——不做即时写入
         // （即时写盘会触发宿主重启桌面 Helper，把全部桌面宠物窗口重建一遍）。系统通知额外在保存后
         // 由 save() 调 reloadNotifications() 让通知引擎即时重读。
+        // 「测试弹窗」按钮不在这里——它是个动作，跟「保存 / 同步」同一行（见下面的操作区）。
         h('div', {
-          style: {
-            display: 'grid',
-            gridTemplateColumns: '1fr 1fr',
-            gap: '10px 16px',
-            marginTop: '8px',
-            alignItems: 'start',
-          },
+          className: 'dsh-pet-cfg__card',
           children: [
-            toggleCell('notifyToggle', notifyEnabled, busy, (v) => void toggleNotify(v)),
-            toggleCell('whisperImageToggle', whisperImage, busy, setWhisperImage),
-            toggleCell('chatImageToggle', chatImage, busy, setChatImage),
-            toggleCell('confineToggle', confineScreen, busy, setConfineScreen),
-          ],
-        }),
-
-        // AI 模型（碎碎念 / 对话各自的服务商 + 模型，条目级）：与上面四个开关同一套语义——
-        // 只改本地状态，随「保存」整包写入。host 侧生成时优先用它，失败自动回落到当前对话的模型。
-        h('div', {
-          style: { marginTop: '10px', fontSize: '13px', fontWeight: 500, color: 'var(--dsw-alias-label-primary)' },
-          children: t('modelTitle'),
-        }),
-        h('p', {
-          style: { margin: 0, fontSize: '11px', color: 'var(--dsw-alias-label-tertiary)', lineHeight: '16px' },
-          children: t('modelHint'),
-        }),
-        catalogErr
-          ? h('p', {
-              style: {
-                margin: 0,
-                fontSize: '11px',
-                color: 'var(--dsw-alias-state-error-primary)',
-                lineHeight: '16px',
-              },
-              children: t('modelCatalogFailed'),
-            })
-          : null,
-        h('div', {
-          style: {
-            display: 'grid',
-            gridTemplateColumns: '1fr 1fr',
-            gap: '10px 16px',
-            marginTop: '4px',
-            alignItems: 'start',
-          },
-          children: [
-            modelCell('whisperModel', whisperModel, setWhisperModel),
-            modelCell('chatModel', chatModel, setChatModel),
-          ],
-        }),
-        h('p', {
-          style: { margin: 0, fontSize: '11px', color: 'var(--dsw-alias-label-tertiary)', lineHeight: '16px' },
-          children: t('modelFieldHint'),
-        }),
-
-        // 物理参数（拖拽抛掷手感，全局）：四个数字输入 + 两个开关，与上面四个开关同一套语义
-        // （只改本地状态，随「保存」整包写入；不做即时写入）。浏览器保存后即时生效；桌面端由
-        // 保存触发的 Helper 重启重新读取——physics 在 sprite 构造时只读一次。
-        h('div', {
-          style: { marginTop: '10px', fontSize: '13px', fontWeight: 500, color: 'var(--dsw-alias-label-primary)' },
-          children: t('physicsTitle'),
-        }),
-        h('p', {
-          style: { margin: 0, fontSize: '11px', color: 'var(--dsw-alias-label-tertiary)', lineHeight: '16px' },
-          children: t('physicsHint'),
-        }),
-        h('div', {
-          style: {
-            display: 'grid',
-            gridTemplateColumns: '1fr 1fr',
-            gap: '10px 16px',
-            marginTop: '4px',
-            alignItems: 'start',
-          },
-          children: [
-            physField('gravity', '50', '0'),
-            physField('restitution', '0.01', '0'),
-            physField('groundFriction', '0.1', '0'),
-            physField('throwPower', '0.05', '0.05'),
-            toggleCell('physicsCeilingBounce', physics.ceilingBounce, busy, (v) =>
-              setPhysics((p) => ({ ...p, ceilingBounce: v })),
-            ),
-            toggleCell('physicsPetCollision', physics.petCollision, busy, (v) =>
-              setPhysics((p) => ({ ...p, petCollision: v })),
-            ),
-          ],
-        }),
-
-        // 权限获取按钮 + 反馈（独立一行，样式对齐设置页现有按钮）
-        h('div', {
-          style: { display: 'flex', gap: '8px', alignItems: 'center', marginTop: '4px' },
-          children: [
-            h('button', {
-              type: 'button',
-              onClick: () => void grantNotifyPermission(),
-              style: {
-                border: '1px solid var(--dsw-alias-border-l2)',
-                background: 'transparent',
-                color: 'var(--dsw-alias-label-primary)',
-                borderRadius: '8px',
-                padding: '4px 14px',
-                fontSize: '12px',
-                cursor: 'pointer',
-              },
-              children: t('notifyGetPermission'),
+            cardHead(t('globalTitle'), t('globalHint')),
+            h('div', {
+              className: 'dsh-pet-cfg__grid4',
+              children: [
+                toggleCell('notifyToggle', notifyEnabled, busy, (v) => void toggleNotify(v)),
+                toggleCell('whisperImageToggle', whisperImage, busy, setWhisperImage),
+                toggleCell('chatImageToggle', chatImage, busy, setChatImage),
+                toggleCell('confineToggle', confineScreen, busy, setConfineScreen, true),
+              ],
             }),
-            permMsg.text
-              ? h('span', {
-                  style: {
-                    fontSize: '12px',
-                    color:
-                      permMsg.kind === 'err'
-                        ? 'var(--dsw-alias-state-error-primary)'
-                        : 'var(--dsw-alias-state-ok-primary)',
-                    lineHeight: '18px',
-                  },
-                  children: permMsg.text,
+          ],
+        }),
+
+        // AI 模型卡（需求 5）：碎碎念 / 对话各自的服务商 + 模型，条目级——与四个开关同一套语义，
+        // 只改本地状态、随「保存」整包写入。host 侧生成时优先用它，失败自动回落到当前对话的模型。
+        h('div', {
+          className: 'dsh-pet-cfg__card',
+          children: [
+            cardHead(t('modelTitle'), t('modelHint')),
+            catalogErr
+              ? h('p', {
+                  className: 'dsh-pet-cfg__note',
+                  style: { color: 'var(--dsw-alias-state-error-primary)' },
+                  children: t('modelCatalogFailed'),
                 })
               : null,
+            h('div', {
+              className: 'dsh-pet-cfg__grid2',
+              children: [
+                modelCell('whisperModel', whisperModel, setWhisperModel),
+                modelCell('chatModel', chatModel, setChatModel, true),
+              ],
+            }),
           ],
         }),
 
-        // 操作区
+        // 物理卡（需求 6）：四个数字输入一行 + 两个开关一行。
+        // 与上面四个开关同一套语义（只改本地状态，随「保存」整包写入；不做即时写入）。
+        // 浏览器保存后即时生效；桌面端由保存触发的 Helper 重启重新读取——physics 在 sprite 构造时只读一次。
         h('div', {
-          style: { display: 'flex', gap: '8px', alignItems: 'center', marginTop: '4px' },
+          className: 'dsh-pet-cfg__card',
+          children: [
+            cardHead(t('physicsTitle'), t('physicsHint')),
+            h('div', {
+              className: 'dsh-pet-cfg__grid4',
+              children: [
+                physField('gravity', '50', '0'),
+                physField('restitution', '0.01', '0'),
+                physField('groundFriction', '0.1', '0'),
+                physField('throwPower', '0.05', '0.05', true),
+              ],
+            }),
+            h('div', {
+              className: 'dsh-pet-cfg__grid2',
+              children: [
+                toggleCell('physicsCeilingBounce', physics.ceilingBounce, busy, (v) =>
+                  setPhysics((p) => ({ ...p, ceilingBounce: v })),
+                ),
+                toggleCell(
+                  'physicsPetCollision',
+                  physics.petCollision,
+                  busy,
+                  (v) => setPhysics((p) => ({ ...p, petCollision: v })),
+                  true,
+                ),
+              ],
+            }),
+          ],
+        }),
+
+        // 操作区：「测试弹窗」与「保存 / 同步」同一行（都是动作）；「同步」的副作用说明收进问号
+        h('div', {
+          className: 'dsh-pet-cfg__actions',
           children: [
             h('button', {
               type: 'button',
               disabled: busy,
               onClick: () => void save(),
-              style: {
-                border: '1px solid var(--dsw-alias-button-info-fill)',
-                background: 'var(--dsw-alias-button-info-fill)',
-                color: '#fff',
-                borderRadius: '8px',
-                padding: '4px 14px',
-                fontSize: '12px',
-                cursor: 'pointer',
-                opacity: busy ? 0.5 : 1,
-              },
+              className: 'dsh-pet-cfg__btn is-primary',
               children: t('save'),
             }),
             h('button', {
               type: 'button',
               disabled: busy,
               onClick: sync,
-              style: {
-                border: '1px solid var(--dsw-alias-border-l2)',
-                background: 'transparent',
-                color: 'var(--dsw-alias-label-primary)',
-                borderRadius: '8px',
-                padding: '4px 14px',
-                fontSize: '12px',
-                cursor: 'pointer',
-                opacity: busy ? 0.5 : 1,
-              },
+              className: 'dsh-pet-cfg__btn',
               children: t('sync'),
             }),
+            h('button', {
+              type: 'button',
+              onClick: () => void testNotification(),
+              className: 'dsh-pet-cfg__btn',
+              children: t('notifyTest'),
+            }),
+            q(t('syncHint')),
+            // 两个反馈各归各的：msg = 保存/同步结果，permMsg = 测试通知结果
             msg.text
               ? h('span', {
-                  style: {
-                    fontSize: '12px',
-                    color:
-                      msg.kind === 'err' ? 'var(--dsw-alias-state-error-primary)' : 'var(--dsw-alias-state-ok-primary)',
-                    marginLeft: '4px',
-                  },
+                  className: 'dsh-pet-cfg__msg' + (msg.kind === 'err' ? ' is-err' : ''),
                   children: msg.text,
+                })
+              : null,
+            permMsg.text
+              ? h('span', {
+                  className: 'dsh-pet-cfg__msg' + (permMsg.kind === 'err' ? ' is-err' : ''),
+                  children: permMsg.text,
                 })
               : null,
           ],
         }),
 
-        // 同步的副作用提示（POST 会用内置默认整份覆盖用户配置，含高级自定义）
-        h('p', {
-          style: { margin: 0, fontSize: '11px', color: 'var(--dsw-alias-label-tertiary)', lineHeight: '16px' },
-          children: t('syncHint'),
-        }),
-
-        // 高级配置（文件地址）：供高级用户直接编辑配置文件自定义
+        // 高级配置（文件地址）：供高级用户直接编辑配置文件自定义；说明收进问号
         paths
           ? h('div', {
-              style: {
-                marginTop: '12px',
-                padding: '10px 14px',
-                border: '1px solid var(--dsw-alias-border-l2)',
-                borderRadius: '12px',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '6px',
-                fontSize: '12px',
-                color: 'var(--dsw-alias-label-secondary)',
-              },
+              className: 'dsh-pet-cfg__card',
               children: [
-                h('div', {
-                  style: { fontSize: '12px', color: 'var(--dsw-alias-label-primary)', fontWeight: 500 },
-                  children: t('configMeta'),
-                }),
-                h('div', { style: { fontSize: '12px', lineHeight: '20px' }, children: t('configMetaHint') }),
-                h('div', {
-                  style: { fontSize: '12px', lineHeight: '18px', wordBreak: 'break-all' },
-                  children: t('defaultConfig') + '：' + paths.default,
-                }),
-                h('div', {
-                  style: { fontSize: '12px', lineHeight: '18px', wordBreak: 'break-all' },
-                  children: t('userConfig') + '：' + paths.user,
-                }),
-                h('div', {
-                  style: { fontSize: '12px', lineHeight: '18px', wordBreak: 'break-all' },
-                  children: t('animationDir') + '：' + paths.animations,
-                }),
+                cardHead(t('configMeta'), t('configMetaHint')),
+                h('div', { className: 'dsh-pet-cfg__path', children: t('defaultConfig') + '：' + paths.default }),
+                h('div', { className: 'dsh-pet-cfg__path', children: t('userConfig') + '：' + paths.user }),
+                h('div', { className: 'dsh-pet-cfg__path', children: t('animationDir') + '：' + paths.animations }),
               ],
             })
           : null,
 
-        // 卸载与存储：先列出插件落盘的全部位置（路径在前、作用在后），再给出卸载方法
+        // 卸载与存储：先列出插件落盘的全部位置（路径在前、作用在后），再给出卸载方法；说明收进问号
         paths && paths.storage && paths.storage.length > 0
           ? h('div', {
-              style: {
-                marginTop: '12px',
-                padding: '10px 14px',
-                border: '1px solid var(--dsw-alias-border-l2)',
-                borderRadius: '12px',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '6px',
-                fontSize: '12px',
-                color: 'var(--dsw-alias-label-secondary)',
-              },
+              className: 'dsh-pet-cfg__card',
               children: [
-                h('div', {
-                  style: { fontSize: '12px', color: 'var(--dsw-alias-label-primary)', fontWeight: 500 },
-                  children: t('storageTitle'),
-                }),
-                h('div', { style: { fontSize: '12px', lineHeight: '20px' }, children: t('storageHint') }),
+                cardHead(t('storageTitle'), t('storageHint')),
                 // 存储位置清单：每条都是「路径（等宽、可选中复制）→ 作用」
                 ...paths.storage.map((s) =>
                   h('div', {
                     key: s.key,
-                    style: { fontSize: '12px', lineHeight: '18px', wordBreak: 'break-all', userSelect: 'text' },
+                    className: 'dsh-pet-cfg__path',
                     children: [
-                      h('span', {
-                        style: { color: 'var(--dsw-alias-label-primary)', fontFamily: MONO },
-                        children: s.path,
-                      }),
+                      h('b', { key: 'p', style: { fontFamily: MONO }, children: s.path }),
                       // 尚未产生的目录（如从未启用桌面模式的 Electron）标一下，避免用户去找不存在的文件夹
                       h('span', {
+                        key: 'd',
                         children: ' — ' + t('storage.' + s.key) + (s.exists === false ? t('storageMissing') : ''),
                       }),
                     ],
                   }),
                 ),
                 h('div', {
-                  style: {
-                    marginTop: '4px',
-                    fontSize: '12px',
-                    color: 'var(--dsw-alias-label-primary)',
-                    fontWeight: 500,
-                  },
+                  key: 'ut',
+                  className: 'dsh-pet-cfg__cardTitle',
+                  style: { marginTop: '4px' },
                   children: t('uninstallTitle'),
                 }),
-                h('div', { style: { fontSize: '12px', lineHeight: '20px' }, children: t('uninstallStep1') }),
-                h('div', { style: { fontSize: '12px', lineHeight: '20px' }, children: t('uninstallStep2') }),
+                h('div', { key: 'u1', className: 'dsh-pet-cfg__note', children: t('uninstallStep1') }),
+                h('div', { key: 'u2', className: 'dsh-pet-cfg__note', children: t('uninstallStep2') }),
                 h('div', {
-                  style: {
-                    fontFamily: MONO,
-                    fontSize: '12px',
-                    lineHeight: '18px',
-                    wordBreak: 'break-all',
-                    userSelect: 'text',
-                    padding: '6px 10px',
-                    borderRadius: '8px',
-                    border: '1px solid var(--dsw-alias-border-l2)',
-                    background: 'var(--dsw-alias-interactive-bg-active)',
-                    color: 'var(--dsw-alias-label-primary)',
-                  },
+                  key: 'cmd',
+                  className: 'dsh-pet-cfg__cmd',
                   children: t('uninstallCmd').replace('{profile}', paths.profile || '<profile>'),
                 }),
-                h('div', { style: { fontSize: '12px', lineHeight: '20px' }, children: t('uninstallStep3') }),
+                h('div', { key: 'u3', className: 'dsh-pet-cfg__note', children: t('uninstallStep3') }),
               ],
             })
           : null,
 
-        // 确认/提示弹窗（仿官方弹窗视觉：遮罩 + 居中卡片 + 双按钮）
+        // 确认/提示弹窗（仿官方弹窗视觉：遮罩 + 居中卡片 + 按钮）
         dialog
           ? h('div', {
               style: {
@@ -1773,65 +1600,54 @@ export function makePetConfigSection(rt: {
                     children:
                       dialog.kind === 'remove'
                         ? t('confirmRemove').replace('{id}', selId)
-                        : dialog.kind === 'corrupt'
-                          ? t('corruptBody').replace('{path}', dialog.path)
-                          : t('confirmSync'),
+                        : dialog.kind === 'lastOne'
+                          ? t('atLeastOne')
+                          : dialog.kind === 'corrupt'
+                            ? t('corruptBody').replace('{path}', dialog.path)
+                            : t('confirmSync'),
                   }),
                   h('div', {
                     style: { display: 'flex', gap: '8px', justifyContent: 'flex-end' },
-                    children: [
-                      h('button', {
-                        type: 'button',
-                        onClick: () => setDialog(null),
-                        style: {
-                          border: '1px solid var(--dsw-alias-border-l2)',
-                          background: 'transparent',
-                          color: 'var(--dsw-alias-label-primary)',
-                          borderRadius: '8px',
-                          padding: '4px 14px',
-                          fontSize: '12px',
-                          cursor: 'pointer',
-                        },
-                        children: t('cancel'),
-                      }),
-                      h('button', {
-                        type: 'button',
-                        onClick: () => {
-                          const d = dialog;
-                          setDialog(null);
-                          if (d.kind === 'remove') doRemove();
-                          else if (d.kind === 'corrupt')
-                            void save(true); // 确认：带 ?force=1 强行重建
-                          else void doSync();
-                        },
-                        style:
-                          dialog.kind === 'sync'
-                            ? {
-                                border: '1px solid var(--dsw-alias-button-info-fill)',
-                                background: 'var(--dsw-alias-button-info-fill)',
-                                color: '#fff',
-                                borderRadius: '8px',
-                                padding: '4px 14px',
-                                fontSize: '12px',
-                                cursor: 'pointer',
-                              }
-                            : {
-                                border: '1px solid var(--dsw-alias-state-error-secondary)',
-                                background: 'transparent',
-                                color: 'var(--dsw-alias-state-error-primary)',
-                                borderRadius: '8px',
-                                padding: '4px 14px',
-                                fontSize: '12px',
-                                cursor: 'pointer',
+                    // 只剩一只 = 没有可确认的动作，只给一个「知道了」；其余都是 取消 + 确认 双按钮
+                    children:
+                      dialog.kind === 'lastOne'
+                        ? [
+                            h('button', {
+                              key: 'ok',
+                              type: 'button',
+                              onClick: () => setDialog(null),
+                              className: 'dsh-pet-cfg__btn is-primary',
+                              children: t('ok'),
+                            }),
+                          ]
+                        : [
+                            h('button', {
+                              key: 'cancel',
+                              type: 'button',
+                              onClick: () => setDialog(null),
+                              className: 'dsh-pet-cfg__btn',
+                              children: t('cancel'),
+                            }),
+                            h('button', {
+                              key: 'confirm',
+                              type: 'button',
+                              onClick: () => {
+                                const d = dialog;
+                                setDialog(null);
+                                if (d.kind === 'remove') doRemove();
+                                else if (d.kind === 'corrupt')
+                                  void save(true); // 确认：带 ?force=1 强行重建
+                                else void doSync();
                               },
-                        children:
-                          dialog.kind === 'remove'
-                            ? t('remove')
-                            : dialog.kind === 'corrupt'
-                              ? t('corruptConfirm')
-                              : t('sync'),
-                      }),
-                    ],
+                              className: 'dsh-pet-cfg__btn ' + (dialog.kind === 'sync' ? 'is-primary' : 'is-danger'),
+                              children:
+                                dialog.kind === 'remove'
+                                  ? t('remove')
+                                  : dialog.kind === 'corrupt'
+                                    ? t('corruptConfirm')
+                                    : t('sync'),
+                            }),
+                          ],
                   }),
                 ],
               }),
