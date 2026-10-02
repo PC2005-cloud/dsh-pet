@@ -40,6 +40,8 @@
  *   /dsh-pet-7340/whisper              → 让某只宠物立即说一句（POST 动作端点，写 S 的 pets.<id>.say）
  *   /dsh-pet-7340/broadcast            → 第三方投喂：把外部给定的文本写进气泡（POST 动作端点，写 S 的
  *                                       pets.<id>.say；不生成、只搬运，供宿主侧其他插件集成）
+ *   /dsh-pet-7340/anim                 → 点播动画：让桌宠播一段指定动画（POST 动作端点，写 S 的
+ *                                       pets.<id>.anim；效果与右键「动作」菜单一致，供其他插件调用）
  *   /dsh-pet-7340/chat                 → 对话与记忆（GET 最近窗口 / POST 对话并写 memory.json；
  *                                       POST 只回 {ok}，回复同样写 S 的 pets.<id>.say）
  *   /dsh-pet-7340/font|pic             → 字体 / 通知图标素材
@@ -72,6 +74,7 @@ import { generateChat, type ChatMemoryMessage } from './chat';
 import { configuredModel } from './model-selection';
 import { pickMeme, readMemePool } from './memes';
 import { decideBroadcast, normalizeBroadcastText } from './broadcast';
+import { decideAnim } from './anim';
 import {
   findPetInstance,
   flattenPetList,
@@ -934,6 +937,46 @@ export function apply(ctx: any): void {
         });
         if (!d.ok) return { kind: 'json', status: 200, obj: { ok: false, reason: d.reason, message: d.message } };
         state.writePet(d.petId, 'say', d.image ? { text: d.text, image: d.image } : { text: d.text });
+        return { kind: 'json', status: 200, obj: { ok: true } };
+      } catch (e) {
+        // 配置读取失败等（安装损坏）→ 显式失败，不静默
+        return {
+          kind: 'json',
+          status: 200,
+          obj: { ok: false, reason: 'generate-error', message: e instanceof Error ? e.message : String(e) },
+        };
+      }
+    }
+
+    // 点播动画：/dsh-pet-7340/anim?pet=<id>（POST = 让桌宠播一段指定动画）
+    // 效果与右键菜单点「动作」树**完全一致**——两端都复用同一个菜单动作处理函数
+    // （浏览器 handleMenuAction / 桌面 sprite.onMenuAction），宿主只负责把名字送到。
+    // 写入 S 的 pets.<id>.anim —— 前端 1s 内发现 counter 变化后换源播放（**名字即文件名**）。
+    // 动作端点，只回 {ok}。
+    // 校验（不通过一律 HTTP 200 + ok:false，与其他动作端点口径一致）：
+    //   name 必填、trim 后非空，且必须在该宠物 animations 配置能点到的集合内
+    //   （播放端对不存在的动画没有兜底：名字即文件名 → 404 → 加载失败 → 表现为"点了没反应"，
+    //    所以必须在这里拦住，而不是写进 S 让前端白跑一趟）；
+    //   pet 缺省 = 当前桌宠（resolveActivePetId），须真实存在。
+    if (rest === 'anim') {
+      if (method !== 'POST') return { kind: 'json', status: 405, obj: { error: 'method not allowed' } };
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(body ?? 'null');
+      } catch {
+        return { kind: 'json', status: 400, obj: { error: 'invalid JSON body' } };
+      }
+      const o = parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : {};
+      try {
+        const cfg = readAllConfig(configPaths);
+        const d = decideAnim({
+          cfg,
+          requested: String(url.searchParams.get('pet') ?? ''),
+          active: resolveActivePetId(),
+          name: o.name,
+        });
+        if (!d.ok) return { kind: 'json', status: 200, obj: { ok: false, reason: d.reason, message: d.message } };
+        state.writePet(d.petId, 'anim', { name: d.name });
         return { kind: 'json', status: 200, obj: { ok: true } };
       } catch (e) {
         // 配置读取失败等（安装损坏）→ 显式失败，不静默

@@ -23,6 +23,7 @@ import {
   postAction,
   readBalance,
   readSay,
+  readAnim,
   readWorkStatus,
   takeChanged,
 } from '../shared/state';
@@ -143,6 +144,8 @@ export function makePetUI(rt: {
     workStatusTick,
     say,
     sayTick,
+    animCue,
+    animCueTick,
     arena,
   }: {
     cfg: RuntimePet;
@@ -154,6 +157,10 @@ export function makePetUI(rt: {
     /** 本宠物的「说一句话」（碎碎念/命令气泡/对话回复三合一；容器从 S 分发下来） */
     say?: { text: string; image?: string; seq: number };
     sayTick: number;
+    /** 本宠物的「点播动画」指令（其他插件经 POST /anim 写进 S；容器从 S 分发下来）。
+     *  注意与组件内既有的 `anim`（**当前正在播的**动画名）区分：这个只是"要播什么"的指令。 */
+    animCue?: { name: string; seq: number };
+    animCueTick: number;
     arena: ReactNS.MutableRefObject<{ slots: Record<string, PetCollisionSlot> }>;
   }) {
     // ---- 尺寸（由配置传入；容器/设置页更新后即时跟随）----
@@ -569,6 +576,17 @@ export function makePetUI(rt: {
       triggerWhisper(say.text, say.image);
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [sayTick]);
+
+    // 点播动画（其他插件经 POST /anim 写进 S）：容器统一轮询后把属于本宠物的
+    // pets.<id>.anim 分发下来；seq 变化即播——**走与右键菜单完全同一个处理函数**，
+    // 所以"镜像修正 / 移动类走真实位移 / 其余播一遍"的语义天然一致，这里不重写一遍。
+    const prevAnimSeqRef = useRef(0);
+    useEffect(() => {
+      if (!animCue || animCue.seq === prevAnimSeqRef.current) return;
+      prevAnimSeqRef.current = animCue.seq;
+      handleMenuAction({ label: animCue.name, anim: animCue.name });
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [animCueTick]);
 
     // 碎碎念触发（本宠物）：随机抽 events.whisper 动画 + 弹文本气泡（10s 消失，与动画解耦）
     // image：host 侧随机抽定的配图名称（未开配图/池为空则 undefined）——与文本同一次触发一起来
@@ -1533,6 +1551,8 @@ export function makePetUI(rt: {
     // 今天每只宠物的 /broadcast 轮询本来就不受开关门控——统一后至少不比现在多。
     const [sayTick, setSayTick] = useState(0);
     const sayRef = useRef<Record<string, { text: string; image?: string; seq: number }>>({});
+    const [animCueTick, setAnimCueTick] = useState(0);
+    const animCueRef = useRef<Record<string, { name: string; seq: number }>>({});
     useEffect(() => {
       if (!ready) return;
       let alive = true;
@@ -1568,6 +1588,15 @@ export function makePetUI(rt: {
                 sayRef.current[petId] = { ...said, seq: (sayRef.current[petId]?.seq ?? 0) + 1 };
                 setSayTick((t) => t + 1);
               }
+            } else if (path.startsWith('pets.') && path.endsWith('.anim')) {
+              // 点播动画叶子：路径形如 pets.<id>.anim。同样按前缀/后缀切片，绝不 split('.')。
+              // 每次写入 counter 都递增，所以同一个动画连点两次也会分发两次（重播）。
+              const petId = path.slice('pets.'.length, -'.anim'.length);
+              const hit = readAnim(leaf);
+              if (hit) {
+                animCueRef.current[petId] = { name: hit.name, seq: (animCueRef.current[petId]?.seq ?? 0) + 1 };
+                setAnimCueTick((t) => t + 1);
+              }
             }
           }
         } catch {
@@ -1597,6 +1626,8 @@ export function makePetUI(rt: {
             workStatusTick,
             say: sayRef.current[p.id],
             sayTick,
+            animCue: animCueRef.current[p.id],
+            animCueTick,
             arena: arenaRef,
           }),
         )

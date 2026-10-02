@@ -33,8 +33,8 @@ export interface StateLeaf {
 /** 全局段（所有端共享一份） */
 export type SectionName = 'balance' | 'workStatus' | 'notify';
 
-/** 每宠物段 */
-export type PetLeafName = 'say';
+/** 每宠物段（say = 要说的话；anim = 要播的动画名） */
+export type PetLeafName = 'say' | 'anim';
 
 /** S 的完整形态（GET /state 的响应体） */
 export interface PollState {
@@ -74,11 +74,11 @@ export class PollStateStore {
     this.sections[name] = { counter: this.next(), data };
   }
 
-  /** 写一只宠物的叶子（宠物条目不存在则自动建立） */
+  /** 写一只宠物的叶子（宠物条目不存在则自动建立，两个槽位一起建好，形状恒定） */
   writePet(petId: string, leaf: PetLeafName, data: unknown): void {
     let entry = this.pets.get(petId);
     if (!entry) {
-      entry = { say: emptyLeaf() };
+      entry = { say: emptyLeaf(), anim: emptyLeaf() };
       this.pets.set(petId, entry);
     }
     entry[leaf] = { counter: this.next(), data };

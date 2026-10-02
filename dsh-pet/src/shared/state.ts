@@ -134,6 +134,18 @@ export function readWorkStatus(leaf: StateLeaf): WorkStatusSnapshot | null {
 }
 
 /**
+ * 类型收窄：点播动画叶子 → 动画名（形状非法 / 空名 → null，消费端跳过这一拍）。
+ * **名字即文件名**：消费端拿到后交给菜单动作处理函数换源播放，所以这里只做形状校验；
+ * "这个动画是否存在于该宠物"由宿主在写入前保证（播放端对不存在的名字没有兜底）。
+ */
+export function readAnim(leaf: StateLeaf): { name: string } | null {
+  if (!leaf.data || typeof leaf.data !== 'object') return null;
+  const d = leaf.data as { name?: unknown };
+  if (typeof d.name !== 'string' || !d.name) return null;
+  return { name: d.name };
+}
+
+/**
  * 动作端点：POST 一次，返回是否成功（`{ok:true}`）。
  * 动作**不返回数据**——数据只有一个出口（/state），调用方收到 ok 后立刻 `pollStateNow()`
  * 拉一拍即可 0 延迟看到结果（见 host 侧的路由说明）。

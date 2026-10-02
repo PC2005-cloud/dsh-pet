@@ -287,6 +287,30 @@ describe('/broadcast —— 第三方投喂（POST 写入端点，issue #76）',
   });
 });
 
+describe('/anim —— 点播动画（POST 写入端点）', () => {
+  // 覆盖范围同 /broadcast：源码形态下 PACKAGE_ROOT 解析为 <pkg>/src，readAllConfig 必然抛错，
+  // 因此"成功写进 pets.<id>.anim"那条路径在这里测不了（名字校验与宠物选择由 anim.test.ts
+  // 的决策层单测覆盖）。这里只钉路由层契约：方法、JSON 解析、失败口径。
+
+  test('GET → 405（点播是动作端点，不是读端点）', async () => {
+    assert.equal((await call('/dsh-pet-7340/anim?pet=main')).status, 405);
+  });
+
+  test('请求体不是合法 JSON → 400', async () => {
+    const r = await call('/dsh-pet-7340/anim?pet=main', 'POST', '{ 不是 json');
+    assert.equal(r.status, 400);
+    assert.match(r.body, /invalid JSON body/);
+  });
+
+  test('配置不可达时不静默：显式 ok:false/generate-error（不假装已点播）', async () => {
+    const r = await call('/dsh-pet-7340/anim?pet=main', 'POST', JSON.stringify({ name: '东张西望' }));
+    assert.equal(r.status, 200);
+    const body = JSON.parse(r.body) as { ok: boolean; reason: string };
+    assert.equal(body.ok, false, '读不到配置绝不能回 ok:true——否则调用方以为动画已点播');
+    assert.equal(body.reason, 'generate-error');
+  });
+});
+
 describe('thumb 路由 —— 合法路径照常（修复不得误杀）', () => {
   test('pet pack 自己的素材：中文名 petId 正常返回', async () => {
     const r = await call(`/dsh-pet-7340/thumb/${encodeURIComponent(CN_PET)}/test.webm`);

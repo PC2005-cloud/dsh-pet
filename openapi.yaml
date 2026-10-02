@@ -40,8 +40,8 @@ info:
 
     1. **数据只有一个出口**：`GET /state`。它返回宿主内存里的一份"已发布状态" S，
        里面是若干 **叶子（leaf）**，每个叶子形如 `{ counter, data }`。
-    2. **动作端点不返回数据**：`POST /balance`、`POST /whisper`、`POST /broadcast`、`POST /chat`
-       只回 `{ ok: true }`，
+    2. **动作端点不返回数据**：`POST /balance`、`POST /whisper`、`POST /broadcast`、`POST /anim`、
+       `POST /chat` 只回 `{ ok: true }`，
        表示"这次动作做完了"。它们在宿主内部把结果**写进 S**，调用方随后拉一拍 `/state` 就能看到。
     3. **`counter` 是"变了没有"的唯一信号**：它是 `Date.now()` 且**严格递增**（同毫秒连写会 +1），
        宿主重启也不会倒退。消费端只比较 `counter` 是否与自己上次记录的一致，一致就跳过渲染。
@@ -258,6 +258,84 @@ paths:
           description: |
             恒为 200（除 405/400）。失败通过 `ok: false` 表达，`reason` 可能是
             `bad-request`（空文本/超长）、`unknown-pet`、`unknown-image`、
+            `generate-error`（配置不可读等）。
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/OkResponse"
+                  - $ref: "#/components/schemas/FailureResponse"
+        "400":
+          description: '请求体不是合法 JSON（`{ "error": "invalid JSON body" }`）'
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+
+  /dsh-pet-7340/anim:
+    post:
+      tags: [Action]
+      operationId: playAnimation
+      summary: 点播动画——让桌宠播一段指定动画
+      description: |
+        效果与**右键菜单里点「动作」树完全一致**：两端都复用同一个菜单动作处理函数
+        （浏览器 `handleMenuAction` / 桌面 `sprite.onMenuAction`），所以镜像修正（文字类朝右时
+        先强制朝左）、移动类走真实位移、其余播一遍这些语义天然一致。
+
+        名字写进 `pets.<id>.anim`，消费端在 1 秒内轮询发现 `counter` 变化后换源播放。
+        **动画名即素材文件名**（`/dsh-pet-7340/thumb/<素材根>/<名字>.webm`），所以名字必须是
+        该宠物 `animations` 配置里菜单能点到的名字之一——播放端对不存在的名字没有兜底
+        （404 → 加载失败 → 表现为"点了没反应"），因此由宿主在写入前拦下。
+
+        **校验**（任何一条不通过都返回 HTTP 200 + `ok: false`）：
+
+        - `name` 必填，`trim()` 后不得为空，且必须在该宠物的动画池内；
+        - `pet` 必须是一只真实存在的桌宠；缺省时落到当前桌宠，仍为空则兜底 `main`。
+
+        **注意**：`once` 语义是"插播一段"——播完会回到正常的动画链（与菜单点一下相同）。
+        另外同一个动画连续点播两次：`counter` 会递增，正常情况下会重播；但若第二次落在
+        播放端上一次切换尚未就绪的窗口内，可能被其防重逻辑吞掉（表现为只播一次）。
+      parameters:
+        - name: pet
+          in: query
+          required: false
+          description: |
+            目标桌宠 id。缺省时落到当前桌宠；仍无法确定时兜底 `main`。
+            指定的 id 不存在 → `ok: false` + `reason: unknown-pet`。
+          schema:
+            type: string
+          example: main
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                  description: |
+                    要播放的动画名。必须是该宠物 `animations` 配置里菜单可点到的名字
+                    （`idle` / `turn` / `drag` / `clicks` / `moves.actions` / `categories` /
+                    `events` 这七类池子的并集），否则 `ok: false` + `reason: unknown-animation`。
+                  example: 东张西望
+            examples:
+              turn:
+                summary: 播一段转向动画
+                value:
+                  name: 东张西望
+              move:
+                summary: 播一段移动动画（会真的走过去，与菜单一致）
+                value:
+                  name: 螃蟹走路
+      responses:
+        "200":
+          description: |
+            恒为 200（除 405/400）。失败通过 `ok: false` 表达，`reason` 可能是
+            `bad-request`（名字为空）、`unknown-pet`、`unknown-animation`、
             `generate-error`（配置不可读等）。
           content:
             application/json:
@@ -788,7 +866,7 @@ components:
             失败原因分类。`bad-request` 参数不合法（空文本/超长）、`provider-missing` 没有可用
             的对话服务商、`generate-error` 生成或 IO 失败、`unknown-pet` 指定的桌宠不存在、
             `unknown-image` 配图不在包内表情包池内。
-          enum: [bad-request, provider-missing, generate-error, unknown-pet, unknown-image]
+          enum: [bad-request, provider-missing, generate-error, unknown-pet, unknown-image, unknown-animation]
         message:
           type: string
           description: 人类可读的补充说明（可选）
@@ -825,6 +903,8 @@ components:
             properties:
               say:
                 $ref: "#/components/schemas/SayLeaf"
+              anim:
+                $ref: "#/components/schemas/AnimLeaf"
       examples:
         typical:
           summary: 一只有余额与碎碎念的宠物
@@ -1090,6 +1170,31 @@ components:
           const: host/agent-error
         message:
           type: string
+
+    AnimLeaf:
+      type: object
+      required: [counter, data]
+      properties:
+        counter:
+          $ref: "#/components/schemas/Counter"
+        data:
+          description: |
+            该宠物要播的动画；`null` = 从未写过。
+            每次写入 counter 都递增，所以**同一个动画连续点播两次也会被消费端当成两次指令**
+            （重播）。名字即素材文件名（`/thumb/<素材根>/<名字>.webm`），因此名字必须存在于
+            该宠物的动画池内——由 `POST /anim` 在写入前校验。
+          oneOf:
+            - $ref: "#/components/schemas/Anim"
+            - type: "null"
+
+    Anim:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          description: 要播放的动画名（等于 `animations` 配置里菜单可点到的某个名字）
+          example: 东张西望
 
     SayLeaf:
       type: object

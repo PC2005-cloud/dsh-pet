@@ -752,6 +752,34 @@
           </div>
         </div>
 
+        <!-- 点播动画：其他插件让桌宠播一段动画（效果与右键「动作」菜单一致） -->
+        <div class="card">
+          <div class="card-head">
+            <h2>点播动画</h2>
+            <span class="hint">以"外部插件"身份让桌宠播一段</span>
+          </div>
+          <div class="card-body">
+            <div class="card-desc">
+              模拟其他插件调用 <span class="mono">POST /anim</span>：把动画名写进状态，
+              桌宠在 1 秒内发现后换源播放，<b>效果与右键菜单点「动作」完全一致</b>。
+              名字必须是该宠物动画池里真实存在的（下拉框列的就是池子）。
+            </div>
+            <div class="field" style="margin-top:10px">
+              <label for="anim-name">动画</label>
+              <select id="anim-name" style="flex:1;min-width:220px"></select>
+              <select id="anim-pet" style="width:auto"></select>
+            </div>
+            <div class="field">
+              <button type="button" class="btn primary" id="anim-play">播放</button>
+              <span class="hint" id="anim-result"></span>
+            </div>
+            <div class="note" style="margin-top:8px">
+              点播是"插播一段"：播完会回到正常动画链；<span class="mono">display: both</span>
+              时浏览器与桌面都会播。
+            </div>
+          </div>
+        </div>
+
         <!-- 原始状态 -->
         <div class="card">
           <div class="card-head">
@@ -1357,6 +1385,7 @@
       if (!pets.some((p) => p.id === S.chatPetId)) S.chatPetId = S.petId;
       renderPetIdentity();
       fillPetSelects();
+      fillAnimSelect();
       renderSettingsPets();
     }
 
@@ -1400,7 +1429,7 @@
     }
 
     function fillPetSelects() {
-      for (const id of ["pet-select", "chat-pet-select", "bc-pet"]) {
+      for (const id of ["pet-select", "chat-pet-select", "bc-pet", "anim-pet"]) {
         const sel = $(id);
         sel.innerHTML = "";
         for (const p of S.pets) {
@@ -1791,6 +1820,7 @@
       renderPetIdentity();
       // 用最近一次快照立刻显示这只宠物此刻说的话（否则要等它下次变化才渲染）
       showSayFor(S.petId);
+      fillAnimSelect(); // 动画池是按条目分的：换宠物要换下拉框
     });
 
     $("chat-pet-select").addEventListener("change", (e) => {
@@ -1838,6 +1868,88 @@
       S.chatPetId = S.petId;
       fillPetSelects();
       void showView("chat");
+    });
+
+    /**
+     * 从某条目的 animations 配置收集可点播的动画名 —— 与右键菜单同一份集合
+     * （菜单树由 buildMenuTree 从这 7 个池推导：idle / turn / drag / clicks /
+     *  moves.actions / categories / events）。这里在消费端复刻一遍，用于填充下拉框；
+     * 真正的合法性校验在宿主侧（写 S 之前）。
+     */
+    function animationNamesOf(animations) {
+      const a = animations && typeof animations === "object" ? animations : {};
+      const out = [];
+      const push = (arr) => {
+        for (const n of arr) if (typeof n === "string" && n && !out.includes(n)) out.push(n);
+      };
+      const strings = (v) => (Array.isArray(v) ? v.filter((x) => typeof x === "string" && x) : []);
+      push(strings(a.idle));
+      push(strings(a.turn));
+      push(strings(a.drag));
+      push(strings(a.clicks));
+      const moves = a.moves && typeof a.moves === "object" ? a.moves : {};
+      push(Array.isArray(moves.actions) ? moves.actions.map((m) => m && m.name).filter((x) => typeof x === "string" && x) : []);
+      if (Array.isArray(a.categories)) for (const c of a.categories) if (c) push(strings(c.actions));
+      const events = a.events && typeof a.events === "object" ? a.events : {};
+      for (const key of Object.keys(events)) {
+        const pool = events[key];
+        if (!Array.isArray(pool)) continue;
+        const names = [];
+        for (const slot of pool) {
+          if (typeof slot === "string") names.push(slot);
+          else names.push(...strings(slot));
+        }
+        push(names);
+      }
+      return out;
+    }
+
+    /** 当前选中宠物所属条目的动画池（用于点播下拉框） */
+    function currentAnimations() {
+      const p = currentPet();
+      const entry = p && S.cfg ? S.cfg[p.entry] : null;
+      return entry && entry.animations ? entry.animations : null;
+    }
+
+    /** 填充点播动画下拉框（宠物切换/配置重载后都要刷新） */
+    function fillAnimSelect() {
+      const sel = $("anim-name");
+      if (!sel) return;
+      const names = animationNamesOf(currentAnimations());
+      const prev = sel.value;
+      sel.innerHTML = "";
+      for (const n of names) {
+        const o = el("option", null, n);
+        o.value = n;
+        sel.appendChild(o);
+      }
+      if (!names.length) {
+        const o = el("option", null, "（该宠物没有可点播的动画）");
+        o.value = "";
+        sel.appendChild(o);
+      }
+      if (prev && names.includes(prev)) sel.value = prev;
+    }
+
+    // 点播动画：以"外部插件"的身份让桌宠播一段（效果与右键「动作」菜单一致）
+    $("anim-play").addEventListener("click", async () => {
+      const petId = $("anim-pet").value || S.petId;
+      const name = $("anim-name").value;
+      const res = $("anim-result");
+      if (!name) {
+        res.textContent = "该宠物没有可点播的动画";
+        return;
+      }
+      res.textContent = "点播中…";
+      const r = await POST("/anim?pet=" + encodeURIComponent(petId), { body: { name } });
+      if (r.status === 200 && r.body && r.body.ok) {
+        res.textContent = "已点播 · " + r.ms + "ms（桌宠 1 秒内开始播）";
+        // 动作端点不回数据：立刻补拉一拍，让状态位里的 anim counter 及时反映出来
+        await poll();
+      } else {
+        const why = (r.body && r.body.message) || (r.body && r.body.reason) || r.error || "HTTP " + r.status;
+        res.textContent = "被拒：" + why;
+      }
     });
 
     // 第三方投喂：以"外部插件"的身份把文本写进气泡（issue #76 的场景）

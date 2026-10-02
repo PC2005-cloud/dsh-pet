@@ -245,6 +245,18 @@ function applyWorkStatusLeaf(leaf) {
   for (const s of sprites) s.onWorkTick(snap, workTick);
 }
 
+/** 点播动画叶子 → 对应宠物播该动画（其他插件经 POST /anim 写进 S）。
+ *  复用**右键菜单同一个处理函数** onMenuAction，所以镜像修正 / 移动类走真实位移 /
+ *  其余播一遍的语义与菜单点一下完全一致，这里不重写一遍。
+ *  petId 由路径解析出来（pets.<id>.anim）；本窗口只装一只宠物，按 id 命中即可。 */
+function applyAnimLeaf(petId, leaf) {
+  const hit = S.readAnim(leaf);
+  if (!hit) return;
+  for (const s of sprites) {
+    if (s.pet.id === petId) s.onMenuAction({ label: hit.name, anim: hit.name });
+  }
+}
+
 /** 跑一拍 /state（1s 定时与「前端动作后立刻刷新」共用同一份实现） */
 async function pollStateOnce() {
   try {
@@ -261,6 +273,9 @@ async function pollStateOnce() {
       else if (change.path.startsWith('pets.') && change.path.endsWith('.say')) {
         // 宠物 id **允许含点号**：按前缀/后缀切片，绝不 split('.')
         applySayLeaf(change.path.slice('pets.'.length, -'.say'.length), change.leaf);
+      } else if (change.path.startsWith('pets.') && change.path.endsWith('.anim')) {
+        // 点播动画：同样按前缀/后缀切片（counter 每次写入都递增，连点两次也会分发两次）
+        applyAnimLeaf(change.path.slice('pets.'.length, -'.anim'.length), change.leaf);
       }
     }
   } catch {
