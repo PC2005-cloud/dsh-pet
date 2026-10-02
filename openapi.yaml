@@ -1,0 +1,1314 @@
+openapi: 3.1.0
+
+info:
+  title: dsh-pet HTTP API
+  version: 0.3.1
+  summary: DSH 桌宠插件的宿主 HTTP 接口
+  description: |
+    dsh-pet 的宿主（host）半侧通过 DSH 的 `webServer` 服务注册**一条前缀路由** `/dsh-pet-7340`，
+    浏览器半侧、桌面 Electron 半侧、以及设置页全都消费同一份实现（`handlePetRoute`）。
+    本文件是该路由的公开契约：任何第三方插件 / 脚本都可以按此访问桌宠能力。
+
+    ## 部署形态
+
+    接口挂在 **DSH 自己的 Web 服务**上，因此没有固定端口：
+
+    - `servers` 里的 `http://127.0.0.1:{port}` 是占位——`{port}` 就是 `ctx.webServer.port`，
+      也就是 `dsh web` 启动时打印的地址（未显式指定端口时默认 3080）。
+      插件本身不固定监听端口，只往宿主的 Web 服务上挂路由。
+    - 只监听 **127.0.0.1**，不对外网暴露，也**没有任何鉴权**：任何能访问本机该端口的进程都能调用。
+      请勿把该端口转发/代理到公网。
+    - 桌面半侧不走 HTTP，而是 `dsh-pet-bridge://` 自定义 scheme 经主进程管道转发到**同一个**
+      `handlePetRoute`。所以下表所有路径对两端行为完全一致。
+
+    ## 两分钟上手
+
+    ```bash
+    BASE=http://127.0.0.1:3080/dsh-pet-7340
+
+    # 1. 拉一次统一状态（只读、零副作用，可以随便轮询）
+    curl -s $BASE/state
+
+    # 2. 让 main 这只宠物立刻说一句（动作端点：只回 {ok}，内容去 /state 里取）
+    curl -s -X POST "$BASE/whisper?pet=main"
+    curl -s $BASE/state   # → pets.main.say.data.text
+    ```
+
+    ## 数据流：为什么有"动作端点"和"/state"两套
+
+    这是本 API 最重要的一条约定，理解了它其余都是细节：
+
+    1. **数据只有一个出口**：`GET /state`。它返回宿主内存里的一份"已发布状态" S，
+       里面是若干 **叶子（leaf）**，每个叶子形如 `{ counter, data }`。
+    2. **动作端点不返回数据**：`POST /balance`、`POST /whisper`、`POST /broadcast`、`POST /chat`
+       只回 `{ ok: true }`，
+       表示"这次动作做完了"。它们在宿主内部把结果**写进 S**，调用方随后拉一拍 `/state` 就能看到。
+    3. **`counter` 是"变了没有"的唯一信号**：它是 `Date.now()` 且**严格递增**（同毫秒连写会 +1），
+       宿主重启也不会倒退。消费端只比较 `counter` 是否与自己上次记录的一致，一致就跳过渲染。
+       这样前端不需要任何业务知识就能统一处理所有叶子。
+
+    因此推荐的消费姿势是：
+
+    - **要数据** → 每秒 `GET /state`，比对 `counter`，只处理变化的叶子。
+    - **要触发行为** → `POST` 对应动作端点，收到 `ok` 后**立刻**再 `GET /state` 一次，
+      即可 0 延迟拿到结果（不必等下一个轮询周期）。
+
+  license:
+    name: MIT
+    identifier: MIT
+
+externalDocs:
+  description: 项目仓库与使用说明
+  url: https://github.com/PC2005-cloud/dsh-pet
+
+servers:
+  - url: http://127.0.0.1:{port}
+    description: |
+      本机 DSH Web 服务。`{port}` = `ctx.webServer.port`（`dsh web` 默认 3080）。
+      路由前缀固定为 `/dsh-pet-7340`（7340 是历史遗留的名字，**不是端口号**）。
+    variables:
+      port:
+        default: "3080"
+        description: DSH Web 服务实际监听的端口
+
+tags:
+  - name: State
+    description: 统一状态轮询——前端 1 秒一次的唯一数据源，只读、纯内存、零副作用
+  - name: Action
+    description: 动作端点——触发一次宿主行为，写进 State，只回 `{ ok }`
+  - name: Config
+    description: 配置的读取、保存与元信息
+  - name: Assets
+    description: 字体、通知图标、表情包、动画素材
+
+paths:
+  /dsh-pet-7340/state:
+    get:
+      tags: [State]
+      operationId: getState
+      summary: 拉取统一状态 S
+      description: |
+        返回宿主内存中的已发布状态 S，形状固定为：
+
+        ```jsonc
+        {
+          "sections": {
+            "balance":    { "counter": 1755000000000, "data": { /* BalanceState */ } },
+            "workStatus": { "counter": 1755000000001, "data": { /* WorkStatusSnapshot */ } },
+            "notify":     { "counter": 1755000000002, "data": { /* NotifyFrame */ } }
+          },
+          "pets": {
+            "main": { "say": { "counter": 1755000000003, "data": { "text": "……" } } }
+          }
+        }
+        ```
+
+        **约定与注意事项**：
+
+        - `sections` 是**全局**段，所有端共享一份；`pets.<id>` 是**每只宠物**各自一份。
+        - 叶子 `data` 为 `null` 表示"从未写过"（此时 `counter` 为 `0`）；消费端应跳过它。
+        - **`counter` 只在内容被写入时更新**，不是每次请求都变。所以"数据没变"和"接口挂了"
+          要区分开：后者表现为 HTTP 非 2xx 或连接失败。
+        - 响应带 `cache-control: no-cache, no-store`，可以放心轮询。
+        - **本端点绝不触发外部调用或模型生成**——它只读内存。这是硬保证：1 秒一次的轮询
+          不能因为某个慢请求而卡住所有人。
+        - 路径（`sections.balance`、`pets.<id>.say`）请当作**不透明键**使用，
+          **不要按 `.` 切分**：宠物 id 允许包含点号（例如 `a.b`），切分必然出错。
+          要提取 id 请用固定前缀/后缀做切片。
+        - 宠物 id 是配置里 `pets[].id`，默认是 `main`。要拿到全部 id 请看 `GET /config`。
+      responses:
+        "200":
+          description: 当前状态
+          headers:
+            cache-control:
+              description: 恒为 `no-cache, no-store`
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PollState"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /dsh-pet-7340/balance:
+    post:
+      tags: [Action]
+      operationId: refreshBalance
+      summary: 立即刷新一次余额
+      description: |
+        用**当前对话的服务商**（`ctx.agentDefaultModel.currentSelection()`）查一次余额，
+        并把结果写进 `sections.balance`。这是 `POST` 动作端点，**不返回余额数据**。
+
+        - 余额不可用时（服务商不支持 / 缺凭证 / 抓取失败）同样写入 S，
+          以 `{ ok: false, reason, message }` 形式表达；此时本端点**依然返回 `ok: true`**，
+          因为"刷新动作本身"完成了。要区分请读 `sections.balance.data.ok`。
+        - 写入时会带上 `manual: true` 标记（只在本次刷新是用户主动触发时），
+          消费端据此决定"余额不可用时要不要必弹文字说明"。
+        - 常规的周期刷新由宿主**自己的定时器**完成（周期来自配置
+          `eventsRefreshSec.balance`，默认 1800 秒），前端不需要轮询它。
+      responses:
+        "200":
+          description: 刷新动作已完成（不代表余额可用）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+
+  /dsh-pet-7340/whisper:
+    post:
+      tags: [Action]
+      operationId: whisper
+      summary: 让指定宠物立刻说一句
+      description: |
+        按该宠物所属条目的 `whisperPrompt` 人设生成一句碎碎念，写入 `pets.<id>.say`。
+        这是 `POST` 动作端点，**不返回文本**——文本只有一个出口（`/state`）。
+
+        - `whisperEnabled` 配置**不门控本端点**：那个字段只关自动周期碎碎念，
+          手动/接口触发始终可用，不受它影响。
+        - 生成失败时**不写 S**（不会伪造文案、也不会弹错误气泡），宿主打一条 `console.warn`，
+          本端点返回 `{ ok: false, reason: 'generate-error' }`。
+        - 若该宠物条目开启了 `whisperImageEnabled` 且表情包池非空，
+          会随机抽一张配图，随文本一起写进叶子的 `image` 字段。
+        - 模型选择：条目配置的 `whisperModel` 优先；留空则跟随当前对话的模型。
+          指定模型生成失败时会**自动回落到当前对话的模型**重试一次。
+      parameters:
+        - $ref: "#/components/parameters/PetIdQuery"
+      responses:
+        "200":
+          description: |
+            生成结果。注意 HTTP 状态码**恒为 200**（除 405）：失败通过 `ok: false` 表达，
+            这样调用方只需解析一层即可，不必区分"HTTP 失败"与"业务失败"。
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/OkResponse"
+                  - $ref: "#/components/schemas/FailureResponse"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+
+  /dsh-pet-7340/broadcast:
+    post:
+      tags: [Action]
+      operationId: broadcast
+      summary: 第三方投喂——把外部给定的文本写进气泡
+      description: |
+        与 `POST /whisper` 的分工：**这个端点不生成内容**，调用方自己给文本，宿主只负责搬运
+        并显示。宿主侧其他插件（例如"女仆"巡检插件想在巡检完替主人说一句）用它把文本送进
+        桌宠气泡，桌宠就成了那套人格的实体。
+
+        文本写进 `pets.<id>.say` —— 与碎碎念、对话回复**同一个叶子**，因此浏览器与桌面两端
+        在 1 秒内自动显示，**消费端无需改动**。这是动作端点，只回 `{ ok }`，文本本身从
+        `/state` 读。
+
+        **校验**（任何一条不通过都返回 HTTP 200 + `ok: false`，与 `POST /chat` 口径一致）：
+
+        - `text` 必填，`trim()` 后不得为空；
+        - **不设长度限制，也不限频**：投喂是显式的调用方行为，内容与频率都由调用方自己负责，
+          宿主不做静默丢弃、截断或排队；
+        - `pet` 必须是一只真实存在的桌宠；缺省时落到当前桌宠，仍为空则兜底 `main`；
+        - `image` 只接受**包内表情包名**（即该桌宠条目 `memes` 里、且 `assets/memes/<名>.png`
+          真实存在的键）。传入外部 URL 或池外名称一律拒绝——前端因此永远不会去加载任意外部地址
+          （与对话选图共用同一份校验）。
+      parameters:
+        - name: pet
+          in: query
+          required: false
+          description: |
+            目标桌宠 id。**缺省时落到当前桌宠**（宿主内部按已选/首个有效桌宠解析），
+            仍无法确定时兜底 `main`。指定的 id 不存在 → `ok: false` + `reason: unknown-pet`。
+          schema:
+            type: string
+          example: main
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [text]
+              properties:
+                text:
+                  type: string
+                  description: 要让桌宠说的话。`trim()` 后不得为空；不设长度限制。
+                image:
+                  type: string
+                  description: |
+                    可选配图：**包内表情包名**（`assets/memes/<名>.png` 的文件名，不含扩展名）。
+                    必须在该桌宠条目的 `memes` 里且文件真实存在，否则 `ok: false` +
+                    `reason: unknown-image`。不接受 URL。
+                  example: 可爱
+            examples:
+              textOnly:
+                summary: 只说一句
+                value:
+                  text: 主人，该喝水了
+              withMeme:
+                summary: 带一张包内表情包
+                value:
+                  text: 巡检完毕，一切正常
+                  image: 厉害了我的鲸
+      responses:
+        "200":
+          description: |
+            恒为 200（除 405/400）。失败通过 `ok: false` 表达，`reason` 可能是
+            `bad-request`（空文本/超长）、`unknown-pet`、`unknown-image`、
+            `generate-error`（配置不可读等）。
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/OkResponse"
+                  - $ref: "#/components/schemas/FailureResponse"
+        "400":
+          description: '请求体不是合法 JSON（`{ "error": "invalid JSON body" }`）'
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+
+  /dsh-pet-7340/chat:
+    get:
+      tags: [Action]
+      operationId: getChatMemory
+      summary: 读取最近对话记忆窗口
+      description: |
+        返回该宠物的最近若干轮对话（**一次性读取，不是轮询**），供对话弹窗打开时回填历史。
+
+        记忆的唯一读写方是宿主（落盘在 `memory.json`），浏览器与桌面两端都只是客户端，
+        因此同一 DSH 实例下的两端**天然共享同一份记忆**。文件全量保留、不删除，
+        只是响应时按 `chatMemoryRounds`（默认 5 轮，1 轮 = 1 问 1 答）截取尾部。
+      parameters:
+        - $ref: "#/components/parameters/PetIdQuery"
+      responses:
+        "200":
+          description: 最近窗口
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, messages, rounds]
+                properties:
+                  ok:
+                    type: boolean
+                    const: true
+                  messages:
+                    type: array
+                    description: 按时间正序排列的消息，最多 `rounds * 2` 条
+                    items:
+                      $ref: "#/components/schemas/ChatMemoryMessage"
+                  rounds:
+                    type: integer
+                    description: 该宠物当前生效的轮数（来自配置 `chatMemoryRounds`）
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    post:
+      tags: [Action]
+      operationId: sendChat
+      summary: 对指定宠物说一句话并生成回复
+      description: |
+        携带历史上下文生成回复，把「问 + 答」写入记忆，并把回复写进 `pets.<id>.say`。
+        这是动作端点，**只回 `{ ok: true }`**——回复文本从 `/state` 读。
+
+        调用方收到 `ok` 后应立刻拉一拍 `/state` 即可看到回复，无需额外等待。
+
+        - 文本会 `trim()`，空文本 → `{ ok: false, reason: 'bad-request' }`。
+        - 文本超过 **2000 字** → `{ ok: false, reason: 'bad-request' }`。
+        - 模型选择：条目配置的 `chatModel` 优先；留空则跟随当前对话的模型。
+          指定模型生成失败时会**自动回落到当前对话的模型**重试一次。
+        - 记忆只存**正文**：配图属展示层，不进上下文（否则下次请求会把标记当历史读回去）。
+      parameters:
+        - $ref: "#/components/parameters/PetIdQuery"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [text]
+              properties:
+                text:
+                  type: string
+                  maxLength: 2000
+                  description: 用户消息正文
+            examples:
+              hello:
+                summary: 打个招呼
+                value:
+                  text: 今天过得怎么样？
+      responses:
+        "200":
+          description: |
+            恒为 200（除 405）。`reason` 取值：`bad-request`（空/超长消息）、
+            `provider-missing`（没有可用的对话服务商）、`generate-error`（生成/IO 失败）。
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/OkResponse"
+                  - $ref: "#/components/schemas/FailureResponse"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+
+  /dsh-pet-7340/config:
+    get:
+      tags: [Config]
+      operationId: getConfig
+      summary: 读取合并后的成品配置
+      description: |
+        返回**合并成品**：内置默认（`assets/config.jsonc`）与用户层
+        （`$DSH_HOME/dsh-pet/main-config.jsonc`）深度合并后的结果，
+        每个条目的字段都已填满（动画池、权重、物理参数、工作状态文案等），
+        浏览器/桌面/设置页直接消费，**无需任何校验或兜底**。
+
+        顶层键是"条目名"（`main`、`test1`……），不是数组。
+      responses:
+        "200":
+          description: 成品配置（顶层为条目名 → 该条目配置对象）
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  $ref: "#/components/schemas/PetConfigEntry"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+        "500":
+          description: 配置文件损坏或读取失败
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      tags: [Config]
+      operationId: saveConfig
+      summary: 保存用户层配置
+      description: |
+        对用户层做**白名单重建**后写盘，随后返回保存后的成品聚合（与 `GET /config` 同一份）。
+
+        有以下几点必须知道：
+
+        - **只白名单字段会被保留**：`pets[]` 的 `id`/`name`/`size`/`balanceEnabled`/
+          `whisperEnabled`/`workStatusEnabled`/`display`/`position`，以及顶层
+          `notificationsEnabled`/`whisperImageEnabled`/`chatImageEnabled`/`confineToScreen`。
+          其余字段会沿用磁盘上用户文件里的原值（透传保留），所以设置页保存
+          **不会抹掉**你手写的精调配置（`physics`/`whisperPrompt`/`chatMemoryRounds` 等）。
+        - 用户层文件**存在但连 JSONC 都解析不了**（真损坏）时，默认**先不写盘**，
+          返回 `409` 让调用方确认——因为白名单重建会把文件里剩下的内容整份丢掉且静默。
+          确认要重建时加 `?force=1`。
+        - 保存成功后宿主会**异步**重启桌面 Helper（`display`/`size` 等可能变化），
+          不阻塞响应。
+      parameters:
+        - name: force
+          in: query
+          required: false
+          description: 置 `1` 时跳过"用户层不可解析"的预检，强行重建并写盘
+          schema:
+            type: string
+            enum: ["1"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SaveConfigRequest"
+            examples:
+              singlePet:
+                summary: 保存一只宠物
+                value:
+                  pets:
+                    - id: main
+                      name: 蓝毛小女仆
+                      size: 462
+                      balanceEnabled: true
+                      whisperEnabled: true
+                      workStatusEnabled: true
+                      display: both
+                      position:
+                        corner: bottom-right
+                        marginX: 24
+                        marginY: 24
+                  notificationsEnabled: true
+                  whisperImageEnabled: true
+                  chatImageEnabled: true
+      responses:
+        "200":
+          description: 保存成功，返回保存后的成品聚合
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  $ref: "#/components/schemas/PetConfigEntry"
+        "400":
+          description: |
+            请求体非法。可能是 JSON 解析失败（`invalid JSON body`），
+            或字段校验不通过（`invalid pet config`：`id` 为空/超 64 字/含文件名非法字符、
+            `size` 非正数、`balanceEnabled` 非布尔、`display` 不在枚举内、
+            `position.corner` 不在枚举内、`marginX`/`marginY` 非数字等）。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+        "409":
+          description: |
+            用户层配置损坏且未带 `?force=1`。调用方应弹窗询问用户，
+            取消则不动文件，确认后带 `?force=1` 重试。
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [error, needConfirm, userFile]
+                properties:
+                  error:
+                    type: string
+                    const: user config is unparsable
+                  needConfirm:
+                    type: boolean
+                    const: true
+                  userFile:
+                    type: string
+                    description: 损坏的用户配置文件绝对路径
+    post:
+      tags: [Config]
+      operationId: syncConfigFromDefault
+      summary: 用内置默认覆盖用户层配置
+      description: |
+        把包内 `assets/config.jsonc` 的**原文（含注释）**整份写入用户配置文件。
+        这既是「恢复默认」，也顺便给用户留下一份可直接编辑的完整配置，
+        不必再自己从包内复制一份。
+
+        写盘后异步重启桌面 Helper，并返回新的成品聚合。
+      responses:
+        "200":
+          description: 同步成功，返回新的成品聚合
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  $ref: "#/components/schemas/PetConfigEntry"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+        "500":
+          description: 内置默认文件缺失，或用户目录不可写（绝不静默留下半个配置文件）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /dsh-pet-7340/config/meta:
+    get:
+      tags: [Config]
+      operationId: getConfigMeta
+      summary: 配置文件路径与存储位置清单
+      description: |
+        设置页「高级配置」与「卸载与存储」区块的展示数据源：
+        告诉你配置和各类数据到底落在哪，以及卸载命令该用哪个 profile。
+      responses:
+        "200":
+          description: 路径清单
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [user, default, animations, storage, profile]
+                properties:
+                  user:
+                    type: string
+                    description: 用户层配置文件绝对路径
+                  default:
+                    type: string
+                    description: 包内内置默认配置绝对路径
+                  animations:
+                    type: string
+                    description: 用户动画素材根目录绝对路径
+                  storage:
+                    type: array
+                    description: 全部落盘位置（用户数据 / Electron 运行时 / 桌面端缓存 / 下载缓存 / 插件本体）
+                    items:
+                      $ref: "#/components/schemas/StorageEntry"
+                  profile:
+                    type: string
+                    description: |
+                      DSH profile 名，用于拼接卸载命令
+                      `dsh plugin --profile <名> remove dsh-pet`。反推不出时为空串。
+
+  /dsh-pet-7340/models:
+    get:
+      tags: [Config]
+      operationId: listModels
+      summary: 列出可选服务商与模型
+      description: |
+        设置页「AI 模型」下拉框的数据源，与 DSH 自己的模型选择器**同源**——
+        都来自宿主 `llm` 服务：`listProviders()` 是已注册的实时服务商路由，
+        `listModels(provider)` 是该路由下的模型。
+
+        - 只读、无副作用。
+        - 某个服务商列模型失败（适配器不支持 / 网络问题）只让它 `models` 为空数组，
+          **不拖垮整张清单**。
+        - 一个服务商路由都没注册时，回落到 `listConfigurableProviders()`
+          （适配器声明可配置的路由），免得下拉框空着。
+        - 服务商/模型的 `name` 缺失时回落为 `id`。
+      responses:
+        "200":
+          description: 服务商与模型清单
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [providers]
+                properties:
+                  providers:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Provider"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+        "500":
+          description: 读取服务商清单失败
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /dsh-pet-7340/reload:
+    post:
+      tags: [Action]
+      operationId: reload
+      summary: 重载桌面端（重启 Helper）
+      description: |
+        重启桌面 Helper 进程，全部桌面宠物窗口按最新配置重建。
+        与保存配置走**同一条**重启路径（串行队列 + 等旧进程真正退出再起新的），
+        因此宠物数量 / `display` / `size` 的变化同样生效。
+
+        **注意**：发起者通常就是即将被重启的那个 Helper，本响应不保证送达。
+        因此实现上不等待重启完成，立刻返回 `200`。
+      responses:
+        "200":
+          description: 已排入重启队列
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [reloading]
+                properties:
+                  reloading:
+                    type: boolean
+                    const: true
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+
+  "/dsh-pet-7340/thumb/{petId}/{file}":
+    get:
+      tags: [Assets]
+      operationId: getAnimation
+      summary: 获取宠物动画素材
+      description: |-
+        按「是否存在该宠物的独立素材目录 `pet/<petId>-animation/`」决定素材归属：
+
+        - **存在**（pet pack 宠物）：只查该目录，查不到即 `404` 显式报错——**绝不混用**别的素材。
+        - **不存在**（所有主配置宠物，包括用户添加的任意多只）：走主素材链——
+          用户目录 `main-animation/<webm|mov>` 优先，其次包内 `assets/<webm|mov>`。
+          与宠物数量无关，多只共用。
+
+        `petId` 是**标识符**（即 `<名>-animation` 里的 `<名>`），不是路径片段：
+        含分隔符 / 保留字符即 `400`，早于任何路径拼接判定。合法名（含中文）照常。
+      parameters:
+        - name: petId
+          in: path
+          required: true
+          description: 素材根标识符（pet pack 宠物为 `<名>`，主宠物传 `main`）
+          schema:
+            type: string
+        - name: file
+          in: path
+          required: true
+          description: 动画文件名（可含子路径）。**扩展名必须是 `.webm` 或 `.mov`**
+          schema:
+            type: string
+      responses:
+        "200":
+          description: 动画文件
+          content:
+            video/webm:
+              schema:
+                type: string
+                format: binary
+            video/quicktime:
+              schema:
+                type: string
+                format: binary
+        "400":
+          description: |
+            `petId` 含非法字符；或扩展名不是 `.webm`/`.mov`
+            （`unsupported animation format`）；或路径段数不对。
+          content:
+            text/plain:
+              schema:
+                type: string
+        "404":
+          description: "素材不存在（`dsh-pet: asset not found`）"
+          content:
+            text/plain:
+              schema:
+                type: string
+
+  "/dsh-pet-7340/font/{file}":
+    get:
+      tags: [Assets]
+      operationId: getFont
+      summary: 获取字体文件
+      description: 从包内 `assets/fonts/` 读取（扁平结构，**没有** petId 段）。
+      parameters:
+        - $ref: "#/components/parameters/AssetFile"
+      responses:
+        "200":
+          description: 字体文件
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        "404":
+          description: "字体不存在（`dsh-pet: font not found`）"
+          content:
+            text/plain:
+              schema:
+                type: string
+
+  "/dsh-pet-7340/pic/{file}":
+    get:
+      tags: [Assets]
+      operationId: getPic
+      summary: 获取通知图标 / 表情包
+      description: |
+        从包内静态图目录读取：
+
+        - `/dsh-pet-7340/pic/<名>.png` → `assets/pic/`（方形 png，系统通知图标用）
+        - `/dsh-pet-7340/pic/memes/<名>.png` → `assets/memes/`（碎碎念/对话配图用的表情包）
+
+        两者共用一条路由与同一份防穿越校验。名称可含中文（URL 段会被解码）。
+      parameters:
+        - $ref: "#/components/parameters/AssetFile"
+      responses:
+        "200":
+          description: 图片文件
+          content:
+            image/png:
+              schema:
+                type: string
+                format: binary
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+            image/webp:
+              schema:
+                type: string
+                format: binary
+            image/gif:
+              schema:
+                type: string
+                format: binary
+        "404":
+          description: "图片不存在（`dsh-pet: pic not found`）"
+          content:
+            text/plain:
+              schema:
+                type: string
+
+components:
+  parameters:
+    PetIdQuery:
+      name: pet
+      in: query
+      required: true
+      description: |
+        目标宠物 id（配置里 `pets[].id`，默认 `main`）。
+        允许包含点号与中文；**不要**按 `.` 解析由 `/state` 返回的路径键来取它。
+      schema:
+        type: string
+      example: main
+
+    AssetFile:
+      name: file
+      in: path
+      required: true
+      description: 文件名，可含子目录（形如 `memes/大的要来啦.png`）
+      schema:
+        type: string
+
+  responses:
+    MethodNotAllowed:
+      description: '该方法不被支持（`{ "error": "method not allowed" }`）'
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
+    InternalError:
+      description: 宿主内部错误
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
+  schemas:
+    OkResponse:
+      type: object
+      required: [ok]
+      properties:
+        ok:
+          type: boolean
+          const: true
+      description: 动作已完成。数据请从 `GET /state` 读取。
+
+    FailureResponse:
+      type: object
+      required: [ok, reason]
+      properties:
+        ok:
+          type: boolean
+          const: false
+        reason:
+          type: string
+          description: |
+            失败原因分类。`bad-request` 参数不合法（空文本/超长）、`provider-missing` 没有可用
+            的对话服务商、`generate-error` 生成或 IO 失败、`unknown-pet` 指定的桌宠不存在、
+            `unknown-image` 配图不在包内表情包池内。
+          enum: [bad-request, provider-missing, generate-error, unknown-pet, unknown-image]
+        message:
+          type: string
+          description: 人类可读的补充说明（可选）
+
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+
+    PollState:
+      type: object
+      required: [sections, pets]
+      description: |
+        统一状态 S。每个叶子都是 `{ counter, data }`；`counter` 变化即表示该叶子更新了。
+      properties:
+        sections:
+          type: object
+          description: 全局段（所有端共享一份）
+          required: [balance, workStatus, notify]
+          properties:
+            balance:
+              $ref: "#/components/schemas/BalanceLeaf"
+            workStatus:
+              $ref: "#/components/schemas/WorkStatusLeaf"
+            notify:
+              $ref: "#/components/schemas/NotifyLeaf"
+        pets:
+          type: object
+          description: 每只宠物各自一份；键是宠物 id（**可含点号，勿切分**）
+          additionalProperties:
+            type: object
+            properties:
+              say:
+                $ref: "#/components/schemas/SayLeaf"
+      examples:
+        typical:
+          summary: 一只有余额与碎碎念的宠物
+          value:
+            sections:
+              balance:
+                counter: 1755000000000
+                data:
+                  ok: true
+                  provider: deepseek
+                  kind: deepseek
+                  data:
+                    currency: CNY
+                    total: "42.00"
+                    granted: "10.00"
+                    toppedUp: "32.00"
+              workStatus:
+                counter: 1755000000100
+                data:
+                  state: working
+                  task: 正在读取 src/host/index.ts
+              notify:
+                counter: 1755000000200
+                data:
+                  type: session/event
+                  event:
+                    type: turn/end
+                    data:
+                      reason:
+                        kind: completed
+            pets:
+              main:
+                say:
+                  counter: 1755000000300
+                  data:
+                    text: 主人今天也要加油哦～
+                    image: /dsh-pet-7340/pic/memes/可爱.png
+
+    BalanceLeaf:
+      type: object
+      required: [counter, data]
+      properties:
+        counter:
+          $ref: "#/components/schemas/Counter"
+        data:
+          description: |
+            `BalanceState`；`null` = 从未写过。
+            由宿主周期刷新（`eventsRefreshSec.balance`，默认 1800 秒）或 `POST /balance` 写入。
+          oneOf:
+            - $ref: "#/components/schemas/BalanceView"
+            - $ref: "#/components/schemas/BalanceUnavailable"
+            - type: "null"
+
+    BalanceView:
+      type: object
+      required: [ok, provider, kind]
+      description: 余额可用
+      properties:
+        ok:
+          type: boolean
+          const: true
+        provider:
+          type: string
+          example: deepseek
+        kind:
+          type: string
+          description: |
+            服务商类型。`opencode` 走三窗口用量（百分比），`deepseek` 走账户金额。
+          enum: [opencode, deepseek]
+        manual:
+          type: boolean
+          description: |
+            仅当本次写入是**手动触发**（`POST /balance`、`/balance` 命令、桌面「查看余额」菜单）
+            时出现。消费端据此决定"余额不可用时要不要必弹文字说明"。
+        rolling:
+          type: number
+          description: opencode：滚动窗口用量（0-100）
+        weekly:
+          type: number
+          description: opencode：周窗口用量（0-100）
+        monthly:
+          type: number
+          description: opencode：月窗口用量（0-100）
+        rollingResetsAt:
+          type: string
+          format: date-time
+          description: opencode：滚动窗口重置时间
+        weeklyResetsAt:
+          type: string
+          format: date-time
+          description: opencode：周窗口重置时间
+        monthlyResetsAt:
+          type: string
+          format: date-time
+          description: opencode：月窗口重置时间
+        currency:
+          type: string
+          description: deepseek：币种
+        total:
+          type: string
+          description: deepseek：总余额（字符串，与上游接口一致）
+        granted:
+          type: string
+          description: deepseek：赠送额度
+        toppedUp:
+          type: string
+          description: deepseek：充值额度
+
+    BalanceUnavailable:
+      type: object
+      required: [ok, provider, reason]
+      description: 余额不可用（显式标记，不静默）
+      properties:
+        ok:
+          type: boolean
+          const: false
+        provider:
+          type: string
+        manual:
+          type: boolean
+          description: 同 `BalanceView.manual`
+        reason:
+          type: string
+          enum: [unsupported, credential-missing, fetch-error]
+          description: |
+            `unsupported` = 该服务商不支持查余额；
+            `credential-missing` = 缺凭证；
+            `fetch-error` = 抓取失败。
+        message:
+          type: string
+
+    WorkStatusLeaf:
+      type: object
+      required: [counter, data]
+      properties:
+        counter:
+          $ref: "#/components/schemas/Counter"
+        data:
+          description: |
+            `WorkStatusSnapshot`；`null` = 从未写过。
+            由宿主监听 DSH 会话事件（`turn/start`、`tool/call`、`tool/result`、
+            `approval/asked`、`turn/end`）聚合后写入。
+          oneOf:
+            - $ref: "#/components/schemas/WorkStatusSnapshot"
+            - type: "null"
+
+    WorkStatusSnapshot:
+      type: object
+      required: [state, task]
+      properties:
+        state:
+          description: |
+            工作状态档位，对应配置 `animations.events.workStatus` 数组的索引。
+            `null` = 空闲。
+          oneOf:
+            - type: string
+              enum: [thinking, working, result, waiting, success, error]
+            - type: "null"
+        task:
+          description: 当前任务详情（由 todo / write 工具提供），可为 `null`
+          oneOf:
+            - type: string
+            - type: "null"
+
+    NotifyLeaf:
+      type: object
+      required: [counter, data]
+      properties:
+        counter:
+          $ref: "#/components/schemas/Counter"
+        data:
+          description: |
+            通知帧；`null` = 从未写过。
+            由宿主监听 DSH 宿主事件生成，浏览器轮询到变化后弹系统 toast。
+            **单槽**：新通知直接覆盖旧的，不排队（1 秒轮询下同一拍只处理最新一条）。
+          oneOf:
+            - $ref: "#/components/schemas/NotifyFrame"
+            - type: "null"
+
+    NotifyFrame:
+      oneOf:
+        - $ref: "#/components/schemas/TurnEndFrame"
+        - $ref: "#/components/schemas/ApprovalFrame"
+        - $ref: "#/components/schemas/QuestionFrame"
+        - $ref: "#/components/schemas/AgentErrorFrame"
+      discriminator:
+        propertyName: type
+        mapping:
+          session/event: "#/components/schemas/TurnEndFrame"
+          approval/requested: "#/components/schemas/ApprovalFrame"
+          question/requested: "#/components/schemas/QuestionFrame"
+          host/agent-error: "#/components/schemas/AgentErrorFrame"
+
+    TurnEndFrame:
+      type: object
+      required: [type, event]
+      description: 一个回合结束（仅 `completed` / `error` / `max-tokens` 会通知；`aborted` 等不通知）
+      properties:
+        type:
+          type: string
+          const: session/event
+        event:
+          type: object
+          required: [type, data]
+          properties:
+            type:
+              type: string
+              const: turn/end
+            data:
+              type: object
+              properties:
+                reason:
+                  type: object
+                  properties:
+                    kind:
+                      type: string
+                      enum: [completed, error, max-tokens]
+                    error:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+
+    ApprovalFrame:
+      type: object
+      required: [type]
+      description: 模型在申请工具权限
+      properties:
+        type:
+          type: string
+          const: approval/requested
+        toolName:
+          type: string
+          description: 申请权限的工具名（可选）
+        reason:
+          type: string
+          description: 申请原因（可选）
+
+    QuestionFrame:
+      type: object
+      required: [type, questions]
+      description: 模型调用 `ask_user_question` 工具，在等用户回答
+      properties:
+        type:
+          type: string
+          const: question/requested
+        questions:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            properties:
+              question:
+                type: string
+
+    AgentErrorFrame:
+      type: object
+      required: [type, message]
+      description: 无回合位置的生成失败（DSH 0.1.5+ 的 `agent/error` 事件）
+      properties:
+        type:
+          type: string
+          const: host/agent-error
+        message:
+          type: string
+
+    SayLeaf:
+      type: object
+      required: [counter, data]
+      properties:
+        counter:
+          $ref: "#/components/schemas/Counter"
+        data:
+          description: |
+            该宠物要说的话；`null` = 从未写过。
+            **碎碎念、命令气泡、对话回复共用这一个叶子**——前端本来就是同一条展示链路
+            （同一个气泡槽、同一批 `events.whisper` 动画）。
+          oneOf:
+            - $ref: "#/components/schemas/Say"
+            - type: "null"
+
+    Say:
+      type: object
+      required: [text]
+      properties:
+        text:
+          type: string
+          description: 要显示的文本（空文本会被消费端丢弃）
+        image:
+          type: string
+          description: |
+            可选配图 URL（形如 `/dsh-pet-7340/pic/memes/可爱.png`），
+            仅在配置开启了 `whisperImageEnabled` / `chatImageEnabled` 且命中池内图片时出现。
+
+    Counter:
+      type: integer
+      format: int64
+      minimum: 0
+      description: |
+        叶子版本号。每次写入更新，取值 `Date.now()` 且**严格递增**
+        （同毫秒连写会 +1），宿主重启也不会倒退。
+        **就靠它判断"变了没有"**：与上次记录的值相同即跳过渲染。
+        `0` 表示从未写过。
+
+    ChatMemoryMessage:
+      type: object
+      required: [role, content, ts]
+      properties:
+        role:
+          type: string
+          enum: [user, assistant]
+        content:
+          type: string
+          description: 消息正文（不含配图标记）
+        ts:
+          type: integer
+          format: int64
+          description: 写入时间戳（毫秒）
+
+    Provider:
+      type: object
+      required: [id, name, models]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+          description: 显示名；缺失时回落为 `id`
+        models:
+          type: array
+          description: 该服务商下的模型（列不出时为空数组）
+          items:
+            type: object
+            required: [id, name]
+            properties:
+              id:
+                type: string
+              name:
+                type: string
+
+    StorageEntry:
+      type: object
+      description: 一处落盘位置
+      properties:
+        label:
+          type: string
+        path:
+          type: string
+      additionalProperties: true
+
+    ModelSelection:
+      type: object
+      description: |
+        条目级的模型指定。**`provider` 与 `model` 必须同时为空或同时非空**——
+        两个都留空 = 跟随当前对话的模型；只填一个视为无效配置。
+      required: [provider, model]
+      properties:
+        provider:
+          type: string
+        model:
+          type: string
+
+    Position:
+      type: object
+      required: [corner, marginX, marginY]
+      properties:
+        corner:
+          type: string
+          description: 停靠角
+          enum: [top-left, top-right, bottom-left, bottom-right]
+        marginX:
+          type: number
+          description: 水平边距（像素）
+        marginY:
+          type: number
+          description: 垂直边距（像素）
+
+    PetEntry:
+      type: object
+      description: 白名单内的宠物条目（`PUT /config` 的输入形状）
+      required: [id, name, size, balanceEnabled, display, position]
+      properties:
+        id:
+          type: string
+          maxLength: 64
+          description: 宠物 id。**不可含文件名非法字符**（Windows 保留符 + 控制字符）
+        name:
+          type: string
+          description: 显示名；留空时宿主按 `id` 处理并告警
+        size:
+          type: number
+          exclusiveMinimum: 0
+          description: 宠物尺寸（像素）
+        balanceEnabled:
+          type: boolean
+        whisperEnabled:
+          type: boolean
+          description: 是否开启周期碎碎念（**不门控** `POST /whisper`）
+        workStatusEnabled:
+          type: boolean
+        display:
+          type: string
+          enum: [web, desktop, both, none]
+          description: 显示在哪：仅浏览器 / 仅桌面 / 两者 / 都不显示
+        position:
+          $ref: "#/components/schemas/Position"
+
+    SaveConfigRequest:
+      type: object
+      required: [pets]
+      properties:
+        pets:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/PetEntry"
+        notificationsEnabled:
+          type: boolean
+        whisperImageEnabled:
+          type: boolean
+        chatImageEnabled:
+          type: boolean
+        confineToScreen:
+          type: boolean
+
+    PetConfigEntry:
+      type: object
+      description: |
+        合并器填满后的条目配置。字段远多于 `PetEntry`——还包括
+        `whisperPrompt`、`chatMemoryRounds`、`whisperModel`、`chatModel`、`memes`、
+        `workStatusTexts`、`physics`、`animations`、`eventsRefreshSec`、`animationWeights` 等。
+        完整字段与默认值见包内 `assets/config.jsonc`（带注释，是默认值的唯一来源）。
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        size:
+          type: number
+        balanceEnabled:
+          type: boolean
+        whisperEnabled:
+          type: boolean
+        workStatusEnabled:
+          type: boolean
+        display:
+          type: string
+          enum: [web, desktop, both, none]
+        position:
+          $ref: "#/components/schemas/Position"
+        whisperPrompt:
+          type: string
+          description: 该宠物的人设提示词（碎碎念与对话共用）
+        chatMemoryRounds:
+          type: integer
+          description: 对话记忆轮数（1 轮 = 1 问 1 答）
+        whisperModel:
+          $ref: "#/components/schemas/ModelSelection"
+        chatModel:
+          $ref: "#/components/schemas/ModelSelection"
+        whisperImageEnabled:
+          type: boolean
+        chatImageEnabled:
+          type: boolean
+        memes:
+          type: object
+          description: 表情包池——键为图片名，值为该图的语境描述（供模型选择）
+          additionalProperties:
+            type: string
+        workStatusTexts:
+          type: array
+          description: 工作状态气泡文案，索引与 `animations.events.workStatus` 严格对齐
+          items:
+            type: string
+        eventsRefreshSec:
+          type: object
+          description: 周期刷新间隔（秒）。这两个周期都由**宿主定时器**驱动，前端不轮询它们。
+          properties:
+            balance:
+              type: integer
+              default: 1800
+              description: 余额刷新周期
+            whisper:
+              type: integer
+              default: 300
+              description: 周期碎碎念间隔
+      additionalProperties: true
