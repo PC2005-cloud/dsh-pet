@@ -34,6 +34,7 @@ const BASE = {
       balanceEnabled: false,
       whisperEnabled: false,
       workStatusEnabled: false,
+      fixedEnabled: false,
       display: 'web',
       position: { corner: 'bottom-right', marginX: 40, marginY: 40 },
     },
@@ -411,6 +412,41 @@ describe('saveUserConfig —— 抛掷锁定开关（白名单 + 透传保留）
   });
 });
 
+describe('saveUserConfig —— 宠物固定 fixedEnabled（per-pet 白名单）', () => {
+  /** 取落盘后的第 n 只宠物 */
+  const petAt = (out: Record<string, unknown> | null, n = 0): Record<string, unknown> =>
+    (out?.pets as Record<string, unknown>[])[n];
+
+  test('随请求体逐宠物写入（不在白名单就会被保存悄悄丢掉——physics 的老 bug 同款）', () => {
+    const out = saveOnce({ pets: [{ ...PETS[0], fixedEnabled: true }] });
+    assert.equal(petAt(out).fixedEnabled, true, 'fixedEnabled 必须在 saveUserConfig 的白名单里');
+  });
+
+  test('未传时落盘即缺失（读取侧取内置默认，不凭空造值）', () => {
+    // 显式构造一只「没写 fixedEnabled」的宠物：落盘对象里该键为 undefined（JSON.stringify 丢弃），
+    // 合并读取时再由内置默认补上——设置页不传它时不得凭空写一个 false 进去
+    const bare: Record<string, unknown> = { ...PETS[0] };
+    delete bare.fixedEnabled;
+    assert.equal(petAt(saveOnce({ pets: [bare] })).fixedEnabled, undefined);
+  });
+
+  test('传非布尔 → 整体拒绝（宿主回 400）', () => {
+    assert.equal(saveOnce({ pets: [{ ...PETS[0], fixedEnabled: 'yes' }] }), null);
+  });
+
+  test('逐实例独立：一只 true 一只 false 都按各自的值落盘', () => {
+    const out = saveOnce({
+      pets: [
+        { ...PETS[0], id: 'a', fixedEnabled: true },
+        { ...PETS[0], id: 'b', fixedEnabled: false },
+      ],
+    });
+    const pets = out?.pets as Record<string, unknown>[];
+    assert.equal(pets.find((p) => p.id === 'a')?.fixedEnabled, true);
+    assert.equal(pets.find((p) => p.id === 'b')?.fixedEnabled, false);
+  });
+});
+
 describe('saveUserConfig —— 物理参数 physics（白名单 + 透传保留）', () => {
   const PHYS: Record<string, unknown> = BASE.physics;
 
@@ -553,6 +589,43 @@ describe('readAllConfig —— 抛掷锁定合并（缺失取默认 / 非法回�
   test('用户层写了非法值 → 回退内置默认', () => {
     const merged = readAllConfig(withBase({ confineToScreen: true }, { confineToScreen: 'yes' }));
     assert.equal(merged.main.confineToScreen, true); // 回退默认 true
+  });
+});
+
+describe('readAllConfig —— 宠物固定合并（缺失取默认 / 非法回退默认 / 逐实例独立）', () => {
+  /** 取合并后第 n 只宠物 */
+  const petAt = (merged: Record<string, Record<string, unknown>>, n = 0): Record<string, unknown> =>
+    (merged.main.pets as Record<string, unknown>[])[n];
+
+  test('内置默认有值 → 用户层没写时读得到（默认 false = 保持原行为）', () => {
+    assert.equal(petAt(readAllConfig(withBase({}))).fixedEnabled, false);
+  });
+
+  test('用户层写了 true → 覆盖内置默认', () => {
+    const merged = readAllConfig(withBase({}, { pets: [{ ...BASE.pets[0], fixedEnabled: true }] }));
+    assert.equal(petAt(merged).fixedEnabled, true);
+  });
+
+  test('用户层写了非法值 → 回退内置默认（告警 + 默认，不让脏值进渲染层）', () => {
+    const merged = readAllConfig(withBase({}, { pets: [{ ...BASE.pets[0], fixedEnabled: 'yes' }] }));
+    assert.equal(petAt(merged).fixedEnabled, false);
+  });
+
+  test('逐实例独立：同一列表里两只宠物各取各的值（不是条目级、不共享）', () => {
+    const merged = readAllConfig(
+      withBase(
+        {},
+        {
+          pets: [
+            { ...BASE.pets[0], id: 'a', fixedEnabled: true },
+            { ...BASE.pets[0], id: 'b', fixedEnabled: false },
+          ],
+        },
+      ),
+    );
+    const pets = merged.main.pets as Record<string, unknown>[];
+    assert.equal(pets.find((p) => p.id === 'a')?.fixedEnabled, true);
+    assert.equal(pets.find((p) => p.id === 'b')?.fixedEnabled, false);
   });
 });
 

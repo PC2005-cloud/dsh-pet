@@ -130,6 +130,9 @@ export const zh = {
   workStatusEnabled: '工作状态联动',
   workStatusEnabledHint:
     '启用后该宠物跟随 DSH 工作状态：思考/工作中/等待确认/完成/出错时自动切对应动画并弹气泡（动画池在配置顶层，仅监听不调用模型）。',
+  fixedEnabled: '宠物固定',
+  fixedEnabledHint:
+    '启用后随机动画不再让宠物自己转向或走开，只播原地待机与随机小动作；右键菜单点播、接口触发、余额/碎碎念/工作状态动画不受影响。',
   displayLabel: '显示位置',
   displayHint: 'web=仅浏览器 / desktop=仅桌面 / both=两者都显示 / none=都不显示',
   'display.web': '仅浏览器',
@@ -259,6 +262,9 @@ export const en = {
   workStatusEnabled: 'Work status',
   workStatusEnabledHint:
     'When enabled, this pet follows DSH work state: thinking / working / waiting / done / error switch animations and show bubbles (pool in top-level config; listening only, no model calls).',
+  fixedEnabled: 'Pin in place',
+  fixedEnabledHint:
+    'When enabled, the random chain no longer turns this pet or walks it away — only idle and in-place actions play. Right-click picks, API triggers and balance / whisper / work-status animations are unaffected.',
   displayLabel: 'Display',
   displayHint: 'web = browser only / desktop = desktop only / both = both / none = neither',
   'display.web': 'Browser only',
@@ -1024,6 +1030,7 @@ export function makePetConfigSection(rt: {
           balanceEnabled: tpl.balanceEnabled,
           whisperEnabled: tpl.whisperEnabled,
           workStatusEnabled: tpl.workStatusEnabled,
+          fixedEnabled: tpl.fixedEnabled,
           display: tpl.display,
           position: { ...tpl.position },
         },
@@ -1363,6 +1370,29 @@ export function makePetConfigSection(rt: {
                     h('span', {
                       style: { fontSize: '11px', color: 'var(--dsw-alias-label-tertiary)' },
                       children: t('workStatusEnabledHint'),
+                    }),
+                  ],
+                }),
+                h('label', {
+                  style: {
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '4px',
+                    fontSize: '12px',
+                    color: 'var(--dsw-alias-label-secondary)',
+                  },
+                  children: [
+                    t('fixedEnabled'),
+                    h('input', {
+                      type: 'checkbox',
+                      checked: !!cur.fixedEnabled,
+                      disabled: busy,
+                      onChange: (e: ChangeEvent<HTMLInputElement>) => updateSel({ fixedEnabled: e.target.checked }),
+                      style: { width: '16px', height: '16px', accentColor: 'var(--dsw-alias-state-business-primary)' },
+                    }),
+                    h('span', {
+                      style: { fontSize: '11px', color: 'var(--dsw-alias-label-tertiary)' },
+                      children: t('fixedEnabledHint'),
                     }),
                   ],
                 }),

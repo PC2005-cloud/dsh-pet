@@ -447,6 +447,7 @@ function mergePet(
     balanceEnabled: petBool(p.balanceEnabled, base.balanceEnabled, label, 'balanceEnabled', id),
     whisperEnabled: petBool(p.whisperEnabled, base.whisperEnabled, label, 'whisperEnabled', id),
     workStatusEnabled: petBool(p.workStatusEnabled, base.workStatusEnabled, label, 'workStatusEnabled', id),
+    fixedEnabled: petBool(p.fixedEnabled, base.fixedEnabled, label, 'fixedEnabled', id),
     display: petEnum(p.display, PET_DISPLAY_SET, base.display, label, 'display', id),
     position: {
       corner: petEnum(ownPos.corner, CORNER_SET, basePos.corner, label, 'position.corner', id),
@@ -549,6 +550,10 @@ export function saveUserConfig(
     if (whisperEnabled !== undefined && typeof whisperEnabled !== 'boolean') return null;
     const workStatusEnabled = pp.workStatusEnabled;
     if (workStatusEnabled !== undefined && typeof workStatusEnabled !== 'boolean') return null;
+    // 宠物固定（随机链不再抽「转向 / 移动」两档）：与上面两个开关同语义——可选，
+    // 传了必须是布尔，没传则走下面的读取侧默认值（内置默认 false = 保持原行为）。
+    const fixedEnabled = pp.fixedEnabled;
+    if (fixedEnabled !== undefined && typeof fixedEnabled !== 'boolean') return null;
     const display = String(pp.display ?? '');
     if (!PET_DISPLAY_SET.has(display)) return null;
     const pos = pp.position && typeof pp.position === 'object' ? (pp.position as Record<string, unknown>) : {};
@@ -564,6 +569,7 @@ export function saveUserConfig(
       balanceEnabled,
       whisperEnabled,
       workStatusEnabled,
+      fixedEnabled,
       display,
       position: { corner, marginX, marginY },
     });

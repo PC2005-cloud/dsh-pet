@@ -95,6 +95,12 @@ export interface Pet {
   /** 是否启用工作状态联动：true=监听 DSH 会话事件（tool/call 等），按 animations.events.workStatus
    *  数组切档位动画 + 气泡；false=禁用。缺失默认 true（内置默认开启）。监听不调用模型，无 KV cache 风险 */
   workStatusEnabled: boolean;
+  /** 宠物固定：true = 随机动画链不再抽「转向(turn) / 移动(move)」两档——宠物不自己翻朝向、
+   *  也不自己走开，只播原地待机与随机小动作（这两档权重按 0 算，份额自然并入随机小动作）。
+   *  **只影响随机链**：右键菜单点播（含「转向 / 移动」两项）、/anim 接口与命令、事件动画
+   *  （余额/碎碎念/工作状态）、点击回应与拖拽一律照常——用户主动触发的不受此限制。
+   *  缺失默认 false（保持原行为：会自己走、会自己翻） */
+  fixedEnabled: boolean;
   /** 显示位置（web/desktop/both/none，必填）：缺失即配置错误，代码不做兜底 */
   display: PetDisplay;
   position: { corner: Corner; marginX: number; marginY: number };

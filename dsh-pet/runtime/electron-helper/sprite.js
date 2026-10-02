@@ -400,7 +400,9 @@ class PetSprite {
     this.stopMove();
     const { animations, animationWeights } = { animations: this.animations, animationWeights: this.weights };
     const roll = Math.random();
-    const k = S.rollKind(roll, animationWeights);
+    // 宠物固定（pets[].fixedEnabled）：掷骰时把「转向 / 移动」两档权重按 0 算（与浏览器同一份
+    // 决策）——随机链不再让宠物自己翻朝向或走开。右键菜单点播与 /anim 接口不走这里，不受影响。
+    const k = S.rollKind(roll, animationWeights, { fixed: this.pet.fixedEnabled });
     let next;
     if (k === 'idle') {
       next = S.pick(animations.idle, this.anim);

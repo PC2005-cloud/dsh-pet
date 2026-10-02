@@ -630,7 +630,10 @@ export function makePetUI(rt: {
       const animations = petAnims;
       const animationWeights = petWeights;
       const roll = Math.random();
-      const k = rollKind(roll, animationWeights);
+      // 宠物固定（pets[].fixedEnabled）：掷骰时把「转向 / 移动」两档权重按 0 算——随机链不再让
+      // 宠物自己翻朝向或走开（份额自然并入随机小动作）。右键菜单点播与 /anim 接口不走这里，
+      // 故不受影响（见 handleMenuAction）。
+      const k = rollKind(roll, animationWeights, { fixed: cfg.fixedEnabled });
       let kind: string;
       let next: string;
       if (k === 'idle') {

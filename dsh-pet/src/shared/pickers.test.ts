@@ -1,13 +1,16 @@
 /**
  * pickers 事件档位逻辑单元测试 —— 钉住「数组槽位 = 档内随机 + 避免连续重复」与
- * 「成员判断必须穿透数组槽位」（直接 includes 会漏掉嵌套候选）两套语义。
+ * 「成员判断必须穿透数组槽位」（直接 includes 会漏掉嵌套候选）两套语义，
+ * 以及随机链掷骰 rollKind（含宠物固定 fixedEnabled）与「双端必须都传该开关」的源码守卫。
  *
  * 跑法：node --experimental-strip-types --test src/shared/pickers.test.ts
  */
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 
-import { isEventAnim, nextWorkStatusAnim, pickSlot, poolIncludes, slotIncludes } from './pickers.ts';
+import { isEventAnim, nextWorkStatusAnim, pickSlot, poolIncludes, rollKind, slotIncludes } from './pickers.ts';
 
 describe('pickSlot —— 事件档位取值', () => {
   test('字符串槽位原样返回（原行为不变），exclude 不影响字符串', () => {
@@ -110,5 +113,83 @@ describe('nextWorkStatusAnim —— workStatus 播完续播决策（档内轮换
   test('动画不属于 workStatus 池 → null（按原语义处理，如回 idle）', () => {
     assert.equal(nextWorkStatusAnim(wsPool, '余额-钱袋满溢'), null);
     assert.equal(nextWorkStatusAnim([], '认真工作'), null);
+  });
+});
+
+describe('rollKind —— 随机链掷骰（含宠物固定 fixedEnabled）', () => {
+  /** 与内置 config.jsonc 同形的顶层权重（idle 10 / turn 5 / move 5 / 余量 80 = 随机动作） */
+  const w = { idle: 10, turn: 5, move: 5 };
+
+  test('默认：三档边界（idle / turn / move / 余量 action）', () => {
+    assert.equal(rollKind(0, w), 'idle');
+    assert.equal(rollKind(0.0999, w), 'idle');
+    assert.equal(rollKind(0.1, w), 'turn');
+    assert.equal(rollKind(0.1499, w), 'turn');
+    assert.equal(rollKind(0.15, w), 'move');
+    assert.equal(rollKind(0.1999, w), 'move');
+    assert.equal(rollKind(0.2, w), 'action');
+    assert.equal(rollKind(0.9999, w), 'action');
+  });
+
+  test('宠物固定：turn / move 两档按 0 算，只可能 idle 或 action', () => {
+    // idle 的绝对边界原样不动（不做归一化：turn/move 的份额直接并入 action）
+    assert.equal(rollKind(0, w, { fixed: true }), 'idle');
+    assert.equal(rollKind(0.0999, w, { fixed: true }), 'idle');
+    // 原本落 turn / move 的两个区间，现在全部归 action
+    assert.equal(rollKind(0.1, w, { fixed: true }), 'action');
+    assert.equal(rollKind(0.15, w, { fixed: true }), 'action');
+    assert.equal(rollKind(0.1999, w, { fixed: true }), 'action');
+    assert.equal(rollKind(0.9999, w, { fixed: true }), 'action');
+  });
+
+  test('宠物固定 + 全区间扫描：绝不返回 turn / move', () => {
+    for (let i = 0; i < 1000; i++) {
+      const roll = i / 1000;
+      const k = rollKind(roll, w, { fixed: true });
+      assert.ok(k === 'idle' || k === 'action', `roll=${roll} 抽到了 ${k}（宠物固定后不该出现）`);
+    }
+  });
+
+  test('宠物固定 + idle = 0：退化为只会播原地随机动作（不除零、不落空）', () => {
+    const zero = { idle: 0, turn: 5, move: 5 };
+    assert.equal(rollKind(0, zero, { fixed: true }), 'action');
+    assert.equal(rollKind(0.9999, zero, { fixed: true }), 'action');
+  });
+
+  test('缺省 / 显式 false = 原行为（开关关闭时随机链逐位不变）', () => {
+    for (const roll of [0, 0.05, 0.12, 0.17, 0.5, 0.9999]) {
+      assert.equal(rollKind(roll, w, {}), rollKind(roll, w), `roll=${roll}：空选项应等价于不传`);
+      assert.equal(rollKind(roll, w, { fixed: false }), rollKind(roll, w), `roll=${roll}：false 应等价于不传`);
+    }
+  });
+});
+
+describe('宠物固定 —— 双端一致守卫（两端必须都把这个开关传进掷骰）', () => {
+  // 背景：随机链在两端各有一层薄壳（浏览器 React 组件 / 桌面 DOM sprite），掷骰本身共用
+  // src/shared/pickers 的 rollKind。若只在其中一端传 fixed，另一端的宠物照样自己走/自己翻，
+  // 表现为「设置页勾了没用」——而且只在一种显示模式下复现，极难排查。这里把两侧钉住。
+  const browserShell = readFileSync(fileURLToPath(new URL('../client/pet.ts', import.meta.url)), 'utf8');
+  const desktopShell = readFileSync(
+    fileURLToPath(new URL('../../runtime/electron-helper/sprite.js', import.meta.url)),
+    'utf8',
+  );
+
+  test('浏览器壳（client/pet.ts 的 pickNext）传了 fixed', () => {
+    assert.ok(
+      /rollKind\([^)]*fixed:/.test(browserShell),
+      'client/pet.ts 的 pickNext 必须把 fixed 传进 rollKind（否则浏览器里的宠物照旧乱走）',
+    );
+  });
+
+  test('桌面壳（sprite.js 的 playIdle）传了 fixed', () => {
+    assert.ok(
+      /rollKind\([^)]*fixed:/.test(desktopShell),
+      'runtime/electron-helper/sprite.js 的 playIdle 必须把 fixed 传进 rollKind（否则桌面里的宠物照旧乱走）',
+    );
+  });
+
+  test('两端传的都是该宠物自己的配置项（不是写死的 true/false）', () => {
+    assert.ok(/fixed:\s*cfg\.fixedEnabled/.test(browserShell), '浏览器壳必须传 cfg.fixedEnabled');
+    assert.ok(/fixed:\s*this\.pet\.fixedEnabled/.test(desktopShell), '桌面壳必须传 this.pet.fixedEnabled');
   });
 });

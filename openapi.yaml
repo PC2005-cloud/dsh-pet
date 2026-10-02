@@ -476,7 +476,7 @@ paths:
         有以下几点必须知道：
 
         - **只白名单字段会被保留**：`pets[]` 的 `id`/`name`/`size`/`balanceEnabled`/
-          `whisperEnabled`/`workStatusEnabled`/`display`/`position`，以及顶层
+          `whisperEnabled`/`workStatusEnabled`/`fixedEnabled`/`display`/`position`，以及顶层
           `notificationsEnabled`/`whisperImageEnabled`/`chatImageEnabled`/`confineToScreen`。
           其余字段会沿用磁盘上用户文件里的原值（透传保留），所以设置页保存
           **不会抹掉**你手写的精调配置（`physics`/`whisperPrompt`/`chatMemoryRounds` 等）。
@@ -510,6 +510,7 @@ paths:
                       balanceEnabled: true
                       whisperEnabled: true
                       workStatusEnabled: true
+                      fixedEnabled: false
                       display: both
                       position:
                         corner: bottom-right
@@ -1330,6 +1331,12 @@ components:
           description: 是否开启周期碎碎念（**不门控** `POST /whisper`）
         workStatusEnabled:
           type: boolean
+        fixedEnabled:
+          type: boolean
+          description: |
+            宠物固定：`true` = 随机动画链不再抽「转向 / 移动」两档（宠物不自己翻朝向、不自己走开，
+            只播原地待机与随机小动作）。**只影响随机链**——右键菜单点播、`POST /anim`、
+            事件动画（余额/碎碎念/工作状态）、点击回应与拖拽均不受影响。缺失默认 `false`。
         display:
           type: string
           enum: [web, desktop, both, none]
@@ -1375,6 +1382,9 @@ components:
           type: boolean
         workStatusEnabled:
           type: boolean
+        fixedEnabled:
+          type: boolean
+          description: 宠物固定（随机链不再抽「转向 / 移动」两档；主动触发不受影响）
         display:
           type: string
           enum: [web, desktop, both, none]

@@ -71,14 +71,29 @@ export const pickWeightedCategory = (categories: Category[], facing: string): Ca
 /** 掷骰结果类别 */
 export type RollKind = 'idle' | 'turn' | 'move' | 'action';
 
+/** 掷骰选项 */
+export interface RollOptions {
+  /** 宠物固定（pets[].fixedEnabled）：true = 把「改变宠物状态」的两档权重按 0 算——
+   *  turn（播完翻转朝向）与 move（走真实位移）都抽不到，它们的份额自然归入 action
+   *  （原地随机动作）。不做归一化：idle 的绝对概率原样不动，实现最简，且 idle=0 的
+   *  退化配置也自然（只会做原地随机动作）。 */
+  fixed?: boolean;
+}
+
 /**
  * 按权重掷骰：roll ∈ [0,1) → 下一个动画类别（纯函数，可单测）。
  * topEnd = (idle+turn+move)/100：三档权重占比之和，剩余概率归入 'action'。
+ * opts.fixed（宠物固定）为真时 turn/move 两档权重按 0 算，只可能返回 'idle' 或 'action'。
+ *
+ * 浏览器（client/pet.ts 的 pickNext）与桌面（runtime/electron-helper/sprite.js 的 playIdle）
+ * 共用本函数，两端随机链行为严格一致。
  */
-export const rollKind = (roll: number, w: Weights): RollKind => {
-  const topEnd = (w.idle + w.turn + w.move) / 100;
+export const rollKind = (roll: number, w: Weights, opts?: RollOptions): RollKind => {
+  const turn = opts?.fixed ? 0 : w.turn;
+  const move = opts?.fixed ? 0 : w.move;
+  const topEnd = (w.idle + turn + move) / 100;
   if (roll < w.idle / 100) return 'idle';
-  if (roll < (w.idle + w.turn) / 100) return 'turn';
+  if (roll < (w.idle + turn) / 100) return 'turn';
   if (roll < topEnd) return 'move';
   return 'action';
 };
