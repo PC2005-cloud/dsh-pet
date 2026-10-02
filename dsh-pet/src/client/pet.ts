@@ -15,13 +15,9 @@ import {
 } from '../shared/pickers';
 import { planMove } from '../shared/motion';
 import { flattenConfigPets, isWebVisible } from '../shared/config';
-import {
-  balanceEventIndex,
-  balancePercent,
-  decideBalanceNotice,
-  fetchBalanceState,
-  type BalanceState,
-} from '../shared/balance';
+import { balanceEventIndex, balancePercent, decideBalanceNotice, type BalanceState } from '../shared/balance';
+// 轮询统一状态 S：前端唯一的数据来源与渲染入口（拉取 / 拍平 / 比对都在 shared，两端同一份）
+import { fetchState, flattenCounters, readBalance, takeChanged } from '../shared/state';
 import { fetchWhisperState, fetchWhisperTrigger } from '../shared/whisper';
 import { WORK_STATUS_INDEX, fetchWorkStatus, type WorkStatusSnapshot } from '../shared/work-status';
 import { makeBalanceBubble, makeWhisperBubble } from './bubble';
@@ -1506,8 +1502,6 @@ export function makePetUI(rt: {
     // 共享碰撞站场（宠物间碰撞）：每只 PetCard 注册自己的槽位；飞行中的宠物在 startThrow
     // 每帧读数碰撞。纯 ref 同步，不触发 React 重渲染。
     const arenaRef = useRef<{ slots: Record<string, PetCollisionSlot> }>({ slots: {} });
-    // 主条目刷新周期（余额轮询等全局节奏用；合并器已填内置默认）
-    const mainRefreshRef = useRef<Record<string, number>>({});
     // 余额状态（容器统一拉取，PetCard 共享；balanceTick 每次成功拉取递增，驱动事件动画；
     // balanceNoticeTick 每次「该提示不可用原因」递增，驱动文字说明气泡）
     const [balance, setBalance] = useState<BalanceState | null>(null);
@@ -1515,9 +1509,10 @@ export function makePetUI(rt: {
     const [balanceNoticeTick, setBalanceNoticeTick] = useState(0);
     // 上次已提示的不可用原因（reason:provider）：自动轮询只在原因变化时再弹（判定在 src/shared，两端同一份）
     const noticeKeyRef = useRef<string | null>(null);
-    // 余额结果 → 状态与气泡（周期轮询与手动触发**共用这一条路径**，避免各写一份后漂移）。
-    // 存 ref 而非 useCallback：两个 effect 的依赖数组保持 [ready, anyBalanceEnabled] 不变，
+    // 余额结果 → 状态与气泡（周期刷新与手动触发**共用这一条路径**，避免各写一份后漂移）。
+    // 存 ref 而非 useCallback：/state 轮询 effect 的依赖数组保持 [ready] 不变，
     // 同时规避引用每次渲染都变化导致的重复建 effect（本文件已有的 ref 同步写法）。
+    // explicit：这次写入是不是手动触发的（host 在叶子里标了 manual，见 shared/state 的 readBalance）。
     const applyBalanceRef = useRef<(state: BalanceState, explicit: boolean) => void>(() => {});
     applyBalanceRef.current = (state, explicit) => {
       setBalance(state);
@@ -1552,7 +1547,6 @@ export function makePetUI(rt: {
           throw new Error('配置响应不是成品聚合（host 版本不匹配？）');
         }
         const flattened = flattenConfigPets(merged);
-        mainRefreshRef.current = (main.eventsRefreshSec as Record<string, number> | undefined) ?? {};
         petBridge.current = flattened;
         // 「添加宠物」模板 = main 条目 pets[0]（内置默认或用户覆盖后的主宠物）
         petBridge.template = Array.isArray(main.pets) ? ((main.pets as Pet[])[0] ?? undefined) : undefined;
@@ -1595,57 +1589,35 @@ export function makePetUI(rt: {
 
     // 浏览器 overlay 只渲染 display ∈ {web, both} 的宠物；desktop / none 不参与网页显示
     const visiblePets = pets.filter((p) => isWebVisible(p.display));
-    // 是否存在启用余额功能的宠物：全禁用时跳过余额轮询（不拉取 /dsh-pet-7340/balance，避免无意义的周期请求）
-    const anyBalanceEnabled = visiblePets.some((p) => p.balanceEnabled);
     // 是否存在启用工作状态联动的宠物：全禁用时不轮询 /work-status（避免无意义的周期请求）
     const anyWorkStatusEnabled = visiblePets.some((p) => p.workStatusEnabled);
 
-    // 余额轮询：配置就绪（ready）且至少一只宠物启用余额后启动拉取一次，之后按 eventsRefreshSec.balance（秒）周期刷新；
-    // 成功递增 balanceTick 触发事件动画；不可用状态按 decideBalanceNotice 判定是否弹文字说明气泡（自动轮询仅在原因变化时弹一次）
+    // ---- 统一轮询（GET /state，1s）：前端**唯一**的数据来源与渲染入口 ----
+    // 每个叶子 = { counter, data }：首拉只记基线（不渲染——避免刷新页面时重放旧气泡），
+    // 之后 counter 变了才渲染。各功能逐个接入（当前：余额），旧的独立轮询循环随迁随删。
+    // 为什么不再按"有没有启用某功能"决定要不要轮询：气泡广播（命令触发）与宠物开关无关，
+    // 今天每只宠物的 /broadcast 轮询本来就不受开关门控——统一后至少不比现在多。
     useEffect(() => {
-      if (!ready || !anyBalanceEnabled) return; // 未就绪 / 全宠物未启用余额：不启动轮询
+      if (!ready) return;
       let alive = true;
-      const refresh = async () => {
-        try {
-          const state = await fetchBalanceState();
-          if (!alive) return;
-          applyBalanceRef.current(state, false);
-        } catch (e) {
-          if (alive) console.error('[dsh-pet] 余额拉取异常', e);
-        }
-      };
-      void refresh();
-      const intervalMs = Math.max(1000, (mainRefreshRef.current.balance ?? 1800) * 1000);
-      const timer = window.setInterval(() => void refresh(), intervalMs);
-      return () => {
-        alive = false;
-        window.clearInterval(timer);
-      };
-    }, [ready, anyBalanceEnabled]);
-    // 手动 /balance 触发：1s 轻量轮询触发计数（host 端点响应头已禁止缓存），
-    // 计数变化且余额启用时立即刷新余额（与周期轮询共用 applyBalanceRef；explicit=true：不可用也必弹文字说明）
-    useEffect(() => {
-      if (!ready || !anyBalanceEnabled) return;
-      let alive = true;
-      let prev = -1;
+      let baseline: Record<string, number> | null = null;
       const poll = async () => {
         try {
-          const r = await fetch('/dsh-pet-7340/balance/trigger');
-          if (!alive || !r.ok) return;
-          const data = await r.json().catch(() => null);
-          const count = data && typeof data.count === 'number' ? data.count : -1;
-          if (count < 0) return;
-          if (prev === -1) {
-            prev = count; // 首次仅记基线：避免页面加载时重放历史触发
+          const s = await fetchState();
+          if (!alive || !s) return;
+          if (baseline === null) {
+            baseline = flattenCounters(s); // 首拉：只记基线，不渲染
             return;
           }
-          if (count === prev) return;
-          prev = count;
-          const state = await fetchBalanceState();
-          if (!alive) return;
-          applyBalanceRef.current(state, true); // 显式请求（/balance）：不可用也必弹文字说明
+          for (const { path, leaf } of takeChanged(s, baseline)) {
+            if (leaf.data === null) continue;
+            if (path === 'sections.balance') {
+              const hit = readBalance(leaf);
+              if (hit) applyBalanceRef.current(hit.state, hit.manual);
+            }
+          }
         } catch {
-          /* 轻量轮询失败静默：下一周期再试 */
+          /* 轻量轮询失败静默：下一拍再试 */
         }
       };
       void poll();
@@ -1654,7 +1626,7 @@ export function makePetUI(rt: {
         alive = false;
         window.clearInterval(timer);
       };
-    }, [ready, anyBalanceEnabled]);
+    }, [ready]);
 
     // 工作状态轮询：任一宠物启用且配置就绪后，1s 轻量轮询 /work-status（host 端点 no-cache）。
     // 拉取成功且 ts 变化才 setWorkStatus + 递增 workStatusTick（与 broadcast 同一触发语义，避免刷屏）。

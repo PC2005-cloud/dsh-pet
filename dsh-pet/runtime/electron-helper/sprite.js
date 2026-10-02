@@ -1115,24 +1115,15 @@ class PetSprite {
     this.syncInputBusy(); // 菜单关：若没有别的占用（拖拽/弹窗）则交还常规判定
   }
 
-  // 「查看余额」菜单：立即拉取余额并展示（不需要等 1s 触发轮询；展示走 showBalanceNow 同一路径）
+  // 「查看余额」菜单：POST 动作让 host 刷新余额（写进 S），随即**立刻跑一拍 /state** 拿结果展示
+  // （0 延迟，不用等下一个 1s；展示走 showBalanceNow/showBalanceNotice 同一路径）。
+  // 注意这里不再直接拉余额：数据只有一个出口（S），菜单只负责"让它刷新"。
   showBalanceFromMenu() {
     if (!this.pet.balanceEnabled) return;
-    S.fetchBalanceState(BALANCE_URL)
-      .then((state) => {
-        balance = state;
-        window.__dshPetDebug.lastBalanceOk = state && state.ok === true;
-        if (state.ok) {
-          this.showBalanceNow(state);
-        } else {
-          // 菜单是显式请求：一律弹文字说明，不做「原因变化」去重——用户每次点都该有答复
-          this.showBalanceNotice(state);
-          if (state.reason !== 'unsupported') {
-            console.error(
-              '[dsh-pet] 菜单查看余额失败 reason=' + state.reason + (state.message ? ' ' + state.message : ''),
-            );
-          }
-        }
+    S.postAction(BALANCE_URL)
+      .then((ok) => {
+        if (!ok) console.warn('[dsh-pet] 菜单查看余额：刷新动作未成功');
+        pollStateNow(); // 立即拉一拍：结果 0 延迟可见（失败也会由 /state 里的 ok:false 弹文字说明）
       })
       .catch((e) => {
         console.error('[dsh-pet] 菜单查看余额异常', e);

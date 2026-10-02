@@ -1,9 +1,10 @@
 // 余额数据层与展示视图（src/shared 纯逻辑，浏览器 bundle 与桌面 shared-core 共用）：
-// 拉取 /dsh-pet-7340/balance → 解析 → 档位计算 → 气泡行数据。
-// 不依赖 React/DOM；host/balance.ts 的 BalanceResult 与本模块的 RawBalanceResult 同构
-// （HTTP 契约两端各自声明，host 无需 import 本目录——DSH 单文件加载约束）。
+// 解析 S 的余额叶子（host 的 BalanceResult）→ 客户端视图 → 档位计算 → 气泡行数据。
+// 取数不在本模块：改造后余额由 host 定时器刷新并写进 /state（两端共享同一份结果），
+// 本模块只做纯解析/展示。不依赖 React/DOM；host/balance.ts 的 BalanceResult 与本模块的
+// RawBalanceResult 同构（HTTP 契约两端各自声明，host 无需 import 本目录——DSH 单文件加载约束）。
 
-/** /dsh-pet-7340/balance 响应（与 host/balance.ts 同构；两端按此结构校验） */
+/** 余额叶子里的原始响应（与 host/balance.ts 的 BalanceResult 同构；两端按此结构校验） */
 export interface RawBalanceResult {
   ok: boolean;
   provider?: string;
@@ -53,48 +54,33 @@ export interface BalanceUnavailable {
 
 export type BalanceState = BalanceView | BalanceUnavailable;
 
-const TIMEOUT_MS = 20000;
-const RETRIES = 2;
-
-/** 带超时 + 重试的 GET（host 已内置重试，这里再兜底网络抖动）。
- *  浏览器传默认相对路径；桌面模式（Electron，file:// 页面）传绝对 URL。 */
-async function getWithRetry(url: string): Promise<Response> {
-  let last: unknown;
-  for (let i = 0; i <= RETRIES; i++) {
-    try {
-      const res = await fetch(url, { signal: AbortSignal.timeout(TIMEOUT_MS) });
-      if (res.ok) return res;
-      last = new Error('HTTP ' + res.status);
-    } catch (e) {
-      last = e;
-    }
-    if (i < RETRIES) await new Promise((r) => setTimeout(r, 600));
-  }
-  throw last instanceof Error ? last : new Error(String(last));
-}
-
-/** 拉取当前状态的余额；网络/解析失败显式抛错（上层决定报错方式，绝不静默 0） */
-export async function fetchBalanceState(baseUrl: string = '/dsh-pet-7340/balance'): Promise<BalanceState> {
-  const res = await getWithRetry(baseUrl);
-  const raw: RawBalanceResult = await res.json().catch(() => null);
-  if (!raw || typeof raw !== 'object') throw new Error('dsh-pet: 余额响应非法');
-
-  const provider = String(raw.provider ?? 'unknown');
-  if (raw.ok !== true) {
+/**
+ * host 的余额原始响应（`BalanceResult`，经 `/state` 的 `sections.balance` 叶子送达）→ 客户端视图。
+ *
+ * 形状非法 / kind 不认识 → **null**（消费端跳过这一拍）——注意这里**不抛**：它跑在 1s 轮询里，
+ * 抛异常会把整拍打断（其余叶子也跟着不渲染）。取数失败（HTTP/网络）在改造后不再发生在这里：
+ * 取数在 host，失败会以 `ok:false` 写进 S，由这里正常映射成"不可用"状态。
+ */
+export function toBalanceState(raw: unknown): BalanceState | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const r = raw as RawBalanceResult;
+  const provider = String(r.provider ?? 'unknown');
+  if (r.ok !== true) {
     const reason =
-      raw.reason === 'unsupported' || raw.reason === 'credential-missing' || raw.reason === 'fetch-error'
-        ? raw.reason
+      r.reason === 'unsupported' || r.reason === 'credential-missing' || r.reason === 'fetch-error'
+        ? r.reason
         : 'fetch-error';
-    return { provider, ok: false, reason, message: typeof raw.message === 'string' ? raw.message : undefined };
+    return { provider, ok: false, reason, message: typeof r.message === 'string' ? r.message : undefined };
   }
 
-  if (raw.kind === 'opencode') {
-    const d = raw.data;
-    if (!d || typeof d !== 'object') throw new Error('dsh-pet: opencode 数据非法');
+  const d = r.data;
+  if (!d || typeof d !== 'object') return null;
+
+  if (r.kind === 'opencode') {
     const rolling = Number(d.rolling);
     const weekly = Number(d.weekly);
     const monthly = Number(d.monthly);
-    if (![rolling, weekly, monthly].every(Number.isFinite)) throw new Error('dsh-pet: opencode 百分比非数字');
+    if (![rolling, weekly, monthly].every(Number.isFinite)) return null;
     return {
       provider,
       kind: 'opencode',
@@ -107,9 +93,7 @@ export async function fetchBalanceState(baseUrl: string = '/dsh-pet-7340/balance
       monthlyResetsAt: typeof d.monthlyResetsAt === 'string' ? d.monthlyResetsAt : undefined,
     };
   }
-  if (raw.kind === 'deepseek') {
-    const d = raw.data;
-    if (!d || typeof d !== 'object') throw new Error('dsh-pet: deepseek 数据非法');
+  if (r.kind === 'deepseek') {
     return {
       provider,
       kind: 'deepseek',
@@ -120,15 +104,7 @@ export async function fetchBalanceState(baseUrl: string = '/dsh-pet-7340/balance
       toppedUp: typeof d.toppedUp === 'string' ? d.toppedUp : undefined,
     };
   }
-  throw new Error('dsh-pet: 余额 kind 非法');
-}
-
-/** 手动触发计数（/balance 命令 +1；两个平台同样的 1s 轻量轮询语义）。 */
-export async function fetchTriggerCount(baseUrl: string = '/dsh-pet-7340/balance/trigger'): Promise<number> {
-  const res = await fetch(baseUrl, { cache: 'no-store' });
-  if (!res.ok) return -1;
-  const data = await res.json().catch(() => null);
-  return data && typeof data.count === 'number' ? data.count : -1;
+  return null;
 }
 
 /** DeepSeek 满额基准（¥）：余额 ≥ 该值视为 100%（未消耗），余额按比例折算为已用百分比 */

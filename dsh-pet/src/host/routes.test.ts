@@ -36,6 +36,8 @@ let dir = '';
 let call: (url: string, method?: string) => Promise<Result> = () => Promise.reject(new Error('未初始化'));
 let savedHome: string | undefined;
 let savedElectron: string | undefined;
+/** apply() 注册的全部 effect 释放函数（after 里调用：否则常驻定时器会让测试进程不退出） */
+const disposers: Array<() => void> = [];
 
 /** 最小响应桩：writeHead 记状态码，Writable 收集 body（sendFile 经 pipe 写入） */
 class FakeRes extends Writable {
@@ -78,9 +80,13 @@ before(() => {
   let handler: ((req: unknown, res: unknown) => Promise<void>) | undefined;
   const noop = (): void => {};
   apply({
+    // 与 DSH 一致：effect 的返回值是**释放函数**。这里收下来在 after() 里调用——
+    // 插件现在有常驻定时器（余额周期刷新），不释放的话测试进程会一直等它（跑完不退出）。
     effect: (fn: () => unknown) => {
       try {
-        return fn();
+        const dispose = fn();
+        if (typeof dispose === 'function') disposers.push(dispose as () => void);
+        return dispose;
       } catch {
         /* 源码形态下内置配置不可达，refreshDesktop 会抛给调用方——这里吞掉，不影响路由注册 */
       }
@@ -89,7 +95,9 @@ before(() => {
     webServer: { register: (spec: { handler: typeof handler }) => ((handler = spec.handler), noop) },
     commands: { register: () => noop },
     logger: { warn: () => {}, info: () => {}, debug: () => {}, error: () => {} },
-    agentDefaultModel: { currentSelection: () => undefined },
+    // 固定返回一个"没登记余额接口"的服务商：POST /balance 的路径因此是确定的
+    // （matchBalanceProvider 不命中 → S 里写 ok:false/unsupported，而不是靠抛错走到 fetch-error）
+    agentDefaultModel: { currentSelection: () => ({ provider: 'no-such-provider', model: 'x' }) },
     credentials: { resolve: async () => undefined },
     // 模型清单路由的数据源（与 DSH 模型选择器同源的宿主 llm 服务）：一个正常服务商 +
     // 一个列不出模型的服务商（验证单点失败不拖垮整张清单）
@@ -127,6 +135,14 @@ before(() => {
 });
 
 after(() => {
+  // 先释放插件注册的 effect（清掉余额周期定时器），否则测试跑完进程不退出
+  for (const dispose of disposers.splice(0)) {
+    try {
+      dispose();
+    } catch {
+      /* 释放失败不影响其余清理 */
+    }
+  }
   if (savedHome === undefined) delete process.env.DSH_HOME;
   else process.env.DSH_HOME = savedHome;
   if (savedElectron === undefined) delete process.env.DSH_PET_ELECTRON_PATH;
@@ -158,6 +174,51 @@ describe('/models 路由 —— 设置页「AI 模型」下拉框的数据源', 
   test('非 GET → 405（只读端点）', async () => {
     const r = await call('/dsh-pet-7340/models', 'POST');
     assert.equal(r.status, 405);
+  });
+});
+
+describe('/state + /balance —— 轮询统一状态与余额动作端点', () => {
+  test('GET /state 返回 { sections, pets }（初始叶子 counter=0 / data=null）', async () => {
+    const r = await call('/dsh-pet-7340/state');
+    assert.equal(r.status, 200);
+    const body = JSON.parse(r.body) as {
+      sections: Record<string, { counter: number; data: unknown }>;
+      pets: Record<string, unknown>;
+    };
+    assert.deepEqual(Object.keys(body.sections).sort(), ['balance', 'notify', 'workStatus']);
+    assert.equal(body.sections.balance.counter, 0, '没人写过时 counter=0（前端首拉当基线）');
+    assert.equal(body.sections.balance.data, null);
+    assert.deepEqual(body.pets, {});
+  });
+
+  test('非 GET → 405（只读端点）', async () => {
+    assert.equal((await call('/dsh-pet-7340/state', 'POST')).status, 405);
+  });
+
+  test('POST /balance 是动作端点：只回 { ok: true }，不返回余额数据', async () => {
+    const r = await call('/dsh-pet-7340/balance', 'POST');
+    assert.equal(r.status, 200);
+    assert.deepEqual(JSON.parse(r.body), { ok: true }, '动作端点不得把余额数据塞进响应');
+  });
+
+  test('GET /balance 已删除 → 405（数据只有 /state 一个出口）', async () => {
+    assert.equal((await call('/dsh-pet-7340/balance', 'GET')).status, 405);
+  });
+
+  test('POST /balance 之后：余额出现在 S 里，且带 manual 标记（前端据此必弹文字说明）', async () => {
+    await call('/dsh-pet-7340/balance', 'POST');
+    const r = await call('/dsh-pet-7340/state');
+    const leaf = (JSON.parse(r.body) as { sections: { balance: { counter: number; data: Record<string, unknown> } } })
+      .sections.balance;
+    assert.ok(leaf.counter > 0, '动作必须推进 counter（否则前端不会渲染）');
+    assert.equal(leaf.data.ok, false, '该服务商没登记余额接口 → 不可用状态也写进 S');
+    assert.equal(leaf.data.reason, 'unsupported');
+    assert.equal(leaf.data.manual, true, '手动触发的标记必须随数据一起写');
+  });
+
+  test('旧的 /balance/trigger 已删除 → 不再是一个端点（落到素材兜底 → 404）', async () => {
+    const r = await call('/dsh-pet-7340/balance/trigger');
+    assert.notEqual(r.status, 200, '触发计数端点应已删除');
   });
 });
 

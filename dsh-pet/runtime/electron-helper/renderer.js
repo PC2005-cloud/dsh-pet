@@ -51,8 +51,6 @@ async function loadConfig() {
   const merged = await res.json();
   return {
     pets: S.flattenConfigPets(merged),
-    // 主条目周期（余额轮询等全局节奏；合并器已填内置默认）
-    refreshSec: (merged && merged.main && merged.main.eventsRefreshSec) || {},
     // 拖拽抛掷物理参数（顶层全局，所有宠物共用；合并器已填内置默认）
     physics: (merged && merged.main && merged.main.physics) || S.DEFAULT_PHYSICS,
     // 抛掷锁定在当前屏幕（根字段；合并器已填内置默认 false）

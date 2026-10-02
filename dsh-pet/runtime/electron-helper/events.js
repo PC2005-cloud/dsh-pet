@@ -273,69 +273,64 @@ function applyBalanceNotice(state, explicit) {
   }
 }
 
+// ---------- 统一轮询（GET /state，1s）：与浏览器同一份数据来源与渲染入口 ----------
+// 每个叶子 = { counter, data }：首拉只记基线（不渲染），之后 counter 变了才渲染。
+// 各功能逐个接入（当前：余额），旧的独立轮询循环随迁随删。
+let stateBaseline = null;
+
+/** 余额叶子 → 展示（成功播档位动画 + 气泡；不可用按 shared 判定弹文字说明） */
+function applyBalanceLeaf(leaf) {
+  const hit = S.readBalance(leaf);
+  if (!hit) return;
+  balance = hit.state;
+  window.__dshPetDebug.lastBalanceOk = hit.state && hit.state.ok === true;
+  if (hit.state.ok) {
+    balanceTick++;
+    for (const s of sprites) s.onBalanceTick(hit.state, balanceTick);
+  } else {
+    // 不可用：manual（用户主动要的）一律弹，周期刷新只在原因变化时弹一次
+    applyBalanceNotice(hit.state, hit.manual);
+  }
+}
+
+/** 跑一拍 /state（1s 定时与「前端动作后立刻刷新」共用同一份实现） */
+async function pollStateOnce() {
+  try {
+    const s = await S.fetchState(STATE_URL);
+    if (!s) return;
+    if (stateBaseline === null) {
+      stateBaseline = S.flattenCounters(s); // 首拉：只记基线，不渲染（避免启动/重载时重放旧气泡）
+      return;
+    }
+    for (const change of S.takeChanged(s, stateBaseline)) {
+      if (change.leaf.data === null) continue;
+      if (change.path === 'sections.balance') applyBalanceLeaf(change.leaf);
+    }
+  } catch {
+    /* 轻量轮询失败静默：下一拍再试 */
+  }
+}
+
+/** 立即跑一拍：右键菜单等**前端动作**完成后调用——结果 0 延迟可见，不用等下一个 1s */
+function pollStateNow() {
+  void pollStateOnce();
+}
+
 function startLoops() {
   if (loopsStarted) return;
   loopsStarted = true;
 
-  // 是否存在启用余额功能的宠物：全禁用时跳过余额轮询（不拉取，避免无意义的周期请求——与浏览器一致）
-  const anyBalanceEnabled = sprites.some((s) => s.pet.balanceEnabled);
-
-  // 余额周期轮询：eventsRefreshSec.balance（秒），成功递增 balanceTick 触发事件动画
-  if (anyBalanceEnabled) {
-    const intervalMs = Math.max(1000, (config.refreshSec?.balance ?? 1800) * 1000);
-    const balanceLoop = async () => {
-      try {
-        const state = await S.fetchBalanceState(BALANCE_URL);
-        balance = state;
-        window.__dshPetDebug.lastBalanceOk = state && state.ok === true;
-        if (state.ok) {
-          balanceTick++;
-          for (const s of sprites) s.onBalanceTick(state, balanceTick);
-        } else {
-          // 不可用：按 shared 的判定决定是否弹文字说明（自动轮询仅在原因变化时弹一次）
-          applyBalanceNotice(state, false);
-        }
-      } catch (e) {
-        console.error('[dsh-pet] 余额拉取异常', e);
-      }
-      setTimeout(() => void balanceLoop(), intervalMs);
-    };
-    void balanceLoop();
-  }
+  // 统一轮询：1s 一拍（余额数据由 host 定时器刷新后写进 S，这里只读）
+  const stateLoop = async () => {
+    await pollStateOnce();
+    setTimeout(() => void stateLoop(), 1000);
+  };
+  void stateLoop();
 
   // 碎碎念：每只启用宠物独立轮询（startWhisperLoop）——各自周期、各自人设、各自一句话（与浏览器一致）
   for (const s of sprites) s.startWhisperLoop();
   // 命令触发气泡：每只宠物独立 1s 轻轮询（startBroadcastLoop）——/chat 命令写入即展示
   for (const s of sprites) s.startBroadcastLoop();
-
-  // 手动 /balance 触发：1s 轻量轮询触发计数（端点已禁止缓存），计数变化且余额启用时立即刷新余额并递增 tick
-  let triggerBaseline = null;
-  const triggerLoop = async () => {
-    try {
-      const count = await S.fetchTriggerCount(TRIGGER_URL);
-      if (count < 0) return;
-      if (triggerBaseline === null) {
-        triggerBaseline = count; // 首次仅记基线：避免启动时重放历史触发
-      } else if (count !== triggerBaseline) {
-        triggerBaseline = count;
-        if (anyBalanceEnabled) {
-          const state = await S.fetchBalanceState(BALANCE_URL);
-          balance = state;
-          if (state.ok) {
-            balanceTick++;
-            for (const s of sprites) s.onBalanceTick(state, balanceTick);
-          } else {
-            // 手动 /balance：显式请求，不可用也必弹文字说明
-            applyBalanceNotice(state, true);
-          }
-        }
-      }
-    } catch {
-      /* 轻量轮询失败静默：下一周期再试 */
-    }
-    setTimeout(() => void triggerLoop(), 1000);
-  };
-  if (anyBalanceEnabled) void triggerLoop();
 
   // 工作状态联动：任一宠物启用才轮询 /work-status（1s；避免无意义的周期请求——与浏览器一致）。
   // ts 变化（含回到空闲：host 在状态变化时更新 ts，切走 = 新 ts，用于收起常驻气泡）才递增 workTick →

@@ -32,10 +32,15 @@
  *       文件宠物 = $DSH_HOME/dsh-pet/pet/<素材根>-animation/（只查自己的，绝不回落）；
  *       主宠物   = $DSH_HOME/dsh-pet/main-animation/<webm|mov>（用户目录，优先）→ 包内 assets/<webm|mov>
  *       <素材根> 是**标识符**（pet/ 下文件名前缀），含分隔符/保留字符即 400（见 ID_FORBIDDEN）
+ *   /dsh-pet-7340/state               → **轮询统一状态 S**（GET，前端 1s 轮询的唯一数据源）：
+ *                                       { sections: { balance, workStatus, notify }, pets: { <id>: { say } } }，
+ *                                       每个叶子 = { counter, data }；counter 变了前端才渲染。
+ *                                       只读、纯内存、零副作用（绝不在这里触发外部调用/模型生成）。
+ *                                       正在逐块接入：余额已接入，其余见后续步骤。
  *   /dsh-pet-7340/whisper|whisper/trigger → 碎碎念周期/手动生成（按宠物独立，人设读成品）
  *   /dsh-pet-7340/chat                → 对话与记忆（GET 最近窗口 / POST 对话并写 memory.json）
  *   /dsh-pet-7340/broadcast            → /chat 命令触发的气泡广播（两端 1s 轻轮询）
- *   /dsh-pet-7340/balance|balance/trigger → 余额查询 / 手动触发计数（/balance 命令 +1）
+ *   /dsh-pet-7340/balance              → 余额刷新（POST 动作端点，写 S；数据从 /state 读）
  *   /dsh-pet-7340/notify              → 系统通知帧（host 监听 DSH 宿主事件生成，浏览器增量轮询）
  *   /dsh-pet-7340/font|pic             → 字体 / 通知图标素材
  *
@@ -88,6 +93,7 @@ import {
 } from './work-status';
 import { agentErrorFrame, reduceNotifyFrame, type HostNotifyFrame } from './notify-events';
 import { profileNameFrom, storageEntries } from './storage-paths';
+import { PollStateStore } from './state';
 import {
   HelperProcess,
   defaultElectronExe,
@@ -244,8 +250,9 @@ export function apply(ctx: any): void {
   migrateUserConfig(configPaths, (msg) => console.log('[dsh-pet] ' + msg));
   // 用户动画目录（thumb 播放时优先于包内素材；webm 放 main-animation/webm/，mov（macOS 定制）放 main-animation/mov/）
   const thumbUserRoot = join(userRoot, 'main-animation');
-  // 手动触发计数：/balance 命令 +1，两边（浏览器/桌面）同样的 1s 轮询检测变化后刷新余额（进程内内存态，重启归零）
-  let balanceTriggerCount = 0;
+  // 轮询统一状态（S）：前端 1s 轮询的**唯一**数据源（余额 / 工作状态 / 通知 / 宠物说话）。
+  // 所有写入走 state.writeSection / writePet（由它统一更新 counter），见 ./state 的说明。
+  const state = new PollStateStore();
   // 工作状态联动快照（/work-status 端点响应，浏览器 1s 轮询）：state=当前活动状态（null=空闲）、
   // task=当前任务详情、ts=最近变化时间（轮询侧检测变化用）。气泡文案不在此：浏览器读配置
   // events.workStatusTexts（host 不内置文案）。
@@ -443,6 +450,48 @@ export function apply(ctx: any): void {
    * 字段填满），命令与桌面模式都从这里取。
    */
   const effectivePetList = (): Record<string, unknown>[] => flattenPetList(readAllConfig(configPaths));
+
+  /** 余额刷新周期（秒）：成品 main 条目的 eventsRefreshSec.balance（合并器已填默认；非法兜底 1800） */
+  const balancePeriodSec = (cfg: Record<string, Record<string, unknown>>): number => {
+    const ers = cfg.main?.eventsRefreshSec as Record<string, unknown> | undefined;
+    const n = Number(ers?.balance);
+    return Number.isFinite(n) && n > 0 ? n : 1800;
+  };
+
+  /**
+   * 刷新余额并写入 S —— host 侧**唯一**的余额查询点。
+   *
+   * 改造前是每个客户端各自按自己的定时器去查（浏览器一个 + 桌面每窗口一个）：同一份外部 API
+   * 被重复请求、两端还可能看到新旧不一致的数据。现在只有这里查，两端都从 /state 读同一份结果。
+   *
+   * 失败也写进 S（reason 区分 unsupported / credential-missing / fetch-error）——余额不可用要弹
+   * 文字说明气泡，不能静默；意外异常同样落成 fetch-error，不吞。
+   *
+   * @param manual 这次刷新是不是"用户要的"（/balance 命令、桌面「查看余额」菜单）。
+   *   标记随数据一起写进叶子：只有 host 知道是谁要的，前端据此决定余额不可用时要不要**必弹**
+   *   文字说明（decideBalanceNotice 的 explicit；周期刷新则只在原因变化时弹一次，免得反复刷屏）。
+   */
+  const refreshBalance = async (manual = false): Promise<void> => {
+    const mark = <T>(v: T): T | (T & { manual: true }) => (manual ? { ...v, manual: true } : v);
+    try {
+      const sel = ctx.agentDefaultModel.currentSelection();
+      const result = await queryBalance(sel.provider, async (ref) => {
+        const rc = await ctx.credentials.resolve(credentialRef(ref));
+        return rc?.value;
+      });
+      state.writeSection('balance', mark(result));
+    } catch (e) {
+      state.writeSection(
+        'balance',
+        mark({
+          ok: false,
+          provider: 'unknown',
+          reason: 'fetch-error',
+          message: e instanceof Error ? e.message : String(e),
+        }),
+      );
+    }
+  };
 
   /** 命令触发的展示气泡：/chat 命令写入（两端 1s 轮询 /broadcast 拉取展示）；覆盖手动触发场景。
    *  image：配图名称（碎碎念/对话配图开关开启时由 host 抽定或模型选定），随文本一起进缓存——
@@ -802,39 +851,28 @@ export function apply(ctx: any): void {
       }
     }
 
-    // 余额查询（浏览器/桌面共用；结果由 host 侧完成全部抓取与校验，两端都不接触 key）
-    if (rest === 'balance') {
+    // 轮询统一状态（S）：/dsh-pet-7340/state（GET，no-cache）——前端 1s 轮询的**唯一**数据源
+    // （余额 / 工作状态 / 通知 / 宠物说话，形状见 ./state）。
+    // 只读、纯内存、**零副作用**：绝不在这里触发外部调用或模型生成——那会把所有人的 1s 轮询拖死。
+    if (rest === 'state') {
       if (method !== 'GET') return { kind: 'json', status: 405, obj: { error: 'method not allowed' } };
-      try {
-        const sel = ctx.agentDefaultModel.currentSelection();
-        const result = await queryBalance(sel.provider, async (ref) => {
-          const rc = await ctx.credentials.resolve(credentialRef(ref));
-          return rc?.value;
-        });
-        return { kind: 'json', status: 200, obj: result };
-      } catch (e) {
-        // 意外异常（如注入服务缺失）：显式 500，不静默
-        return {
-          kind: 'json',
-          status: 500,
-          obj: {
-            ok: false,
-            provider: 'unknown',
-            reason: 'fetch-error',
-            message: e instanceof Error ? e.message : String(e),
-          },
-        };
-      }
-    }
-
-    // 手动触发计数：/dsh-pet-7340/balance/trigger（no-cache，浏览器/桌面 1s 轻量轮询；/balance 命令写入）
-    if (rest === 'balance/trigger') {
       return {
         kind: 'json',
         status: 200,
-        obj: { count: balanceTriggerCount },
-        headers: { 'cache-control': 'no-cache, no-store' }, // 触发计数必须实时，禁止任何缓存层介入
+        obj: state.read(),
+        headers: { 'cache-control': 'no-cache, no-store' },
       };
+    }
+
+    // 余额：/dsh-pet-7340/balance（POST = 立即刷新一次并写入 S，返回 {ok}）
+    // 动作端点，**不返回余额数据**——数据只有一个出口（/state），这里只负责"让它刷新"。
+    // 改造前这里是 GET（直接查余额）+ /balance/trigger（1s 计数轮询）两个端点，都已删除：
+    // 前端不再各自定时查余额（host 定时器统一查，两端共享一份），也不再需要计数轮询中转。
+    if (rest === 'balance') {
+      if (method !== 'POST') return { kind: 'json', status: 405, obj: { error: 'method not allowed' } };
+      await refreshBalance(true); // manual：用户主动要的，余额不可用时前端必弹文字说明
+      // ok 只表示"这次刷新动作完成了"；余额本身是否可用在 S 的 data 里（ok:false 会弹文字说明气泡）
+      return { kind: 'json', status: 200, obj: { ok: true } };
     }
 
     // 碎碎念周期文本：/dsh-pet-7340/whisper?pet=<id>（GET，浏览器/桌面共用）
@@ -1166,20 +1204,52 @@ export function apply(ctx: any): void {
     };
   }, 'dsh-pet: notify frames');
 
-  // /balance 斜杠命令：递增触发计数 → 浏览器/桌面检测到变化后立即刷新余额
-  // （成功播档位动画 + 余额气泡；服务商不支持/缺凭证/抓取失败则弹文字说明气泡，绝不静默）
+  // /balance 斜杠命令：触发一次余额刷新（写 S → 前端 1s 轮询看到后弹气泡）。
+  // fire-and-forget：回执不等外部 API（查询可能要几秒），立刻回；结果一律从 S 看
+  // （成功播档位动画 + 余额气泡；服务商不支持 / 缺凭证 / 抓取失败则弹文字说明气泡，绝不静默）。
   ctx.effect(
     () =>
       ctx.commands.register({
         name: 'balance',
         description: '手动触发桌宠余额显示（立即弹出余额气泡）',
         handler: () => {
-          balanceTriggerCount += 1;
+          void refreshBalance(true); // manual：命令是用户主动敲的
           return { kind: 'success', text: '已触发桌宠余额显示' };
         },
       }),
     'dsh-pet: /balance command',
   );
+
+  // 余额周期刷新：host 侧唯一定时器（前端不再有任何余额定时器）。
+  // 周期**每次重新读配置** eventsRefreshSec.balance → 改了配置下一拍自然跟上。
+  // 没有任何启用余额的宠物时跳过查询：尊重配置，不白花外部 API 调用。
+  ctx.effect(() => {
+    let disposed = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    function arm(sec: number): void {
+      if (disposed) return;
+      timer = setTimeout(() => void tick(), Math.max(1000, sec * 1000));
+    }
+    async function tick(): Promise<void> {
+      let sec: number;
+      try {
+        const cfg = readAllConfig(configPaths);
+        sec = balancePeriodSec(cfg);
+        // 没有任何启用余额的宠物 → 不查（省外部调用）；配置改了下一拍自然跟上
+        if (flattenPetList(cfg).some((p) => p.balanceEnabled === true)) await refreshBalance();
+      } catch {
+        // 读配置抛错 = 安装损坏（readAllConfig 只在**内置默认**缺失/损坏时抛，用户层写坏只会告警回退）：
+        // 不再重排——每 30 分钟重试一次没有意义，而且会白占一个常驻定时器。修好安装后重启 DSH 即可。
+        return;
+      }
+      arm(sec);
+    }
+    void tick(); // 启动即拉一次（与改造前客户端"先拉一次再定时"一致）
+    return () => {
+      disposed = true;
+      if (timer !== null) clearTimeout(timer);
+    };
+  }, 'dsh-pet: balance poll');
 
   // /pet 斜杠命令：选择「当前桌宠」（/chat 对话的目标）。浏览器端另有 commandUi 装饰的选择框
   // （裸输 /pet 回车或菜单点选时弹出，选中后提交 /pet <id> 走同一 handler）；手输参数认 id 或名字
