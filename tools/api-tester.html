@@ -734,15 +734,22 @@
               <b>不生成内容</b>，只把给定的文本搬运到桌宠气泡。配图只接受<b>该桌宠条目表情包池内</b>的名字
               （图片归属按条目分：<span class="mono">pet/&lt;素材根&gt;-memes/</span> 独占 → 用户
               <span class="mono">memes/</span> → 包内 <span class="mono">assets/memes/</span>）。
+              下拉框已经把池算好了——只列<b>磁盘上真实存在</b>的图（配置里写了但文件不在的会被宿主剔除，这里提前隐藏）。
             </div>
             <div class="field" style="margin-top:10px">
               <label for="bc-text">要说的话</label>
               <input id="bc-text" type="text" value="巡检完毕，一切正常" style="flex:1;min-width:220px">
             </div>
             <div class="field">
-              <label for="bc-image">配图名</label>
-              <input id="bc-image" type="text" placeholder="留空则不配图；名字须在该宠物条目的池内（pet pack 只看自己的 -memes/）">
-              <select id="bc-pet" style="width:auto"></select>
+              <label for="bc-image">配图</label>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+                <select id="bc-image" style="flex:1;min-width:200px;width:auto">
+                  <option value="">（加载中…）</option>
+                </select>
+                <select id="bc-pet" style="width:auto"></select>
+                <button type="button" class="btn sm" id="bc-image-reload">刷新图片清单</button>
+              </div>
+              <div id="bc-image-hint" style="margin-top:6px;font-size:12px;color:var(--faint)"></div>
             </div>
             <div class="field">
               <button type="button" class="btn primary" id="bc-send">投喂</button>
@@ -864,6 +871,38 @@
               <label>对话配图张数上限（0 = 不限制，全部发给模型）</label>
               <input type="number" id="sw-image-limit" min="0" step="1">
             </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <h2>AI 模型</h2>
+            <span class="hint">与 DSH 自己的模型选择器同源</span>
+          </div>
+          <div class="card-body">
+            <div class="card-desc">
+              碎碎念与对话各自用哪个模型（<span class="mono">whisperModel</span> /
+              <span class="mono">chatModel</span>）。<b>要么都留空（= 跟随当前对话的模型）、要么都选</b>
+              ——只选一半是非法组合（宿主直接回 400）。清单来自 <span class="mono">GET /models</span>。
+            </div>
+            <div class="fields" id="model-rows" style="margin-top:10px">
+              <div class="empty-note">加载中…</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <h2>物理（拖拽抛掷手感）</h2>
+            <span class="hint">全局：写用户级配置的 physics 段</span>
+          </div>
+          <div class="card-body">
+            <div class="card-desc">
+              重力 / 弹性 / 地面摩擦 / 总力度 + 两个开关。浏览器保存后即时生效；桌面端由保存触发的
+              Helper 重启重新读取——<span class="mono">physics</span> 在 sprite 构造时只读一次。
+            </div>
+            <div class="fields" id="phys-rows" style="margin-top:10px"></div>
+            <div class="switches" id="phys-toggles"></div>
           </div>
         </div>
 
@@ -1406,6 +1445,7 @@
       renderPetIdentity();
       fillPetSelects();
       fillAnimSelect();
+      void fillBcImageSelect(); // 广播配图下拉也按条目分，配置重载后要重填
       renderSettingsPets();
     }
 
@@ -1475,6 +1515,140 @@
         }
         sel.value = id === "chat-pet-select" ? S.chatPetId : S.petId;
       }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // 广播配图下拉：选项 = 该宠物所属条目的表情包池
+    // ═══════════════════════════════════════════════════════════════
+    // 为什么不做成自由文本框：配图名必须是**池内**的名字（宿主 decideBroadcast 用 matchMeme
+    // 校验，池外一律 unknown-image 被拒），而"配置里写了"不等于"文件在"——池的真实成员判据是
+    // 「有非空描述 + 磁盘上有 <名>.png」。手打名字既容易写错，也看不出哪几张其实已经没文件了。
+    // 这里把两件事都替用户算好：
+    //   - 候选 = 该条目 memes 里有非空描述的键（与宿主 readMemePool 同一口径）；
+    //   - 可用 = 再叠一层存在性核对：**HEAD** /pic/memes/<素材根>/<名>.png。该路由与池走
+    //     同一条目录链（pet/<根>-memes/ 独占 → 用户 memes/ → 包内 assets/memes/），
+    //     200 = 池内、404 = 池外。用 HEAD 而不是 GET：表情包单张能到 1MB+，
+    //     GET 探测会白传几十 MB；HEAD 只回状态码（Node 对 HEAD 不写 body）。
+
+    /** HEAD 探测缓存（key = 素材根 \0 名称）——同一张图一次会话只探一次 */
+    const memeExistsCache = new Map();
+
+    /** 该图在宿主侧是否真实存在（= 池成员判据） */
+    async function memeExists(assetRoot, name) {
+      const key = assetRoot + "\u0000" + name;
+      if (memeExistsCache.has(key)) return memeExistsCache.get(key);
+      let ok = false;
+      try {
+        const res = await fetch(memeUrl(name, assetRoot), { method: "HEAD", cache: "no-store" });
+        ok = res.status === 200;
+      } catch {
+        ok = false; // 连不上/被拦 → 当作"不存在的图"（下拉框宁少勿错）
+      }
+      memeExistsCache.set(key, ok);
+      return ok;
+    }
+
+    /** 广播目标宠物所属条目的配图候选（配置口径，尚未核对文件是否存在） */
+    function bcMemeCandidates() {
+      const petId = $("bc-pet").value || S.petId;
+      // 素材根缺省回落 main：两段形式 /pic/memes/<名>.png 与 /pic/memes/main/<名>.png
+      // 在宿主侧是同一条目录链（未升级的客户端走的就是前者），这里显式成 main 只为提示文案不出现 "?"
+      const root = assetRootOf(petId) || "main";
+      const conf = S.cfg && S.cfg[root] ? S.cfg[root] : null;
+      const memes = conf && conf.memes && typeof conf.memes === "object" ? conf.memes : {};
+      const list = [];
+      for (const [name, desc] of Object.entries(memes)) {
+        const text = typeof desc === "string" ? desc.trim() : "";
+        if (!name || !text) continue; // 与宿主 readMemePool 同一口径：键空或描述空即不参与
+        list.push({ name, desc: text });
+      }
+      return { root, list };
+    }
+
+    const clipText = (s, n) => (s.length > n ? s.slice(0, n - 1) + "…" : s);
+
+    /** 并发上限内批量探测（几十张图同时读盘没有意义，6 路足够跑满带宽） */
+    async function probeMemes(root, list) {
+      const flags = new Map();
+      const queue = list.slice();
+      const worker = async () => {
+        while (queue.length) {
+          const m = queue.shift();
+          flags.set(m.name, await memeExists(root, m.name));
+        }
+      };
+      await Promise.all(Array.from({ length: Math.min(6, list.length) }, () => worker()));
+      return flags;
+    }
+
+    /** 填充序号：连点两次宠物下拉时，只认最后一次的结果（否则旧条目的池会覆盖新条目的） */
+    let bcFillSeq = 0;
+
+    /**
+     * 重填广播配图下拉框 —— 换宠物 / 重载配置 / 点「刷新图片清单」后都要重填。
+     * 池是按**条目**分的（pet pack 的 -memes/ 独占），所以换宠物必须重填，
+     * 否则会列出别只宠物条目的名字，点了必然 unknown-image。
+     * @param force 忽略存在性缓存（用户刚往 memes/ 里丢了新图时用）
+     */
+    async function fillBcImageSelect(opt = {}) {
+      const sel = $("bc-image");
+      const hint = $("bc-image-hint");
+      if (!sel || !hint) return;
+      const seq = ++bcFillSeq;
+      const prev = sel.value;
+      const { root, list } = bcMemeCandidates();
+      if (opt.force) {
+        for (const key of [...memeExistsCache.keys()]) {
+          if (key.startsWith(root + "\u0000")) memeExistsCache.delete(key);
+        }
+      }
+      sel.innerHTML = "";
+      if (!list.length) {
+        const o = el("option", null, "（该条目没有配置配图）");
+        o.value = "";
+        sel.appendChild(o);
+        hint.textContent =
+          "条目 " + (root || "?") + " 的 memes 里没有可用条目（键为空或描述为空）——投喂只会发文字。";
+        return;
+      }
+      // 探测期间先占位：一次几十张 HEAD 要跑一两秒，别让下拉框在这期间是空的
+      const wait = el("option", null, "（正在核对 " + list.length + " 张图…）");
+      wait.value = "";
+      sel.appendChild(wait);
+      hint.textContent = "正在核对 " + list.length + " 张配图是否存在…";
+
+      const flags = await probeMemes(root, list);
+      if (seq !== bcFillSeq) return; // 期间又换过宠物 → 这次结果作废（别覆盖新条目的池）
+      const avail = list.filter((m) => flags.get(m.name));
+      const missing = list.length - avail.length;
+
+      sel.innerHTML = "";
+      const none = el("option", null, "（不配图）");
+      none.value = "";
+      sel.appendChild(none);
+      for (const m of avail) {
+        const o = el("option", null, m.name + " — " + clipText(m.desc, 28));
+        o.value = m.name;
+        sel.appendChild(o);
+      }
+      if (!avail.length) {
+        const o = el("option", null, "（池内没有真实存在的图）");
+        o.value = "";
+        sel.appendChild(o);
+      }
+      // 保留原选择（仅当它在新池里仍可用）；否则显式回到「不配图」——
+      // 不依赖"浏览器重建 option 后会默认选中第一项"这个隐含行为
+      sel.value = prev && avail.some((m) => m.name === prev) ? prev : "";
+
+      const summary =
+        "条目 " + (root || "?") + "：池内 " + avail.length + " 张可用" +
+        (missing ? "，另有 " + missing + " 张只有配置、磁盘上没文件（宿主也会剔除）" : "");
+      // onchange 用属性赋值而不是 addEventListener：本函数会被反复调用，避免监听器叠加
+      sel.onchange = () => {
+        const m = avail.find((x) => x.name === sel.value);
+        hint.textContent = m ? m.name + "：" + m.desc + "　·　" + summary : summary;
+      };
+      sel.onchange();
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -1578,8 +1752,202 @@
       ["none", "都不显示"],
     ];
 
+    // ── AI 模型（碎碎念 / 对话）────────────────────────────────────
+    // 与宿主 modelSelectionValid 同一套语义：{ provider, model } 要么都空（= 跟随当前对话的模型）、
+    // 要么都非空。只选一半会拼出"A 家服务商 + B 家模型名"这种必然失败的组合，宿主一律回 400。
+    // 清单与 DSH 自己的模型选择器同源：GET /models → [{ id, name, models: [{ id, name }] }]。
+    /** 模型清单（null = 还没拉到；[] = 拉失败 / 没有服务商） */
+    let modelCatalog = null;
+    let modelCatalogPromise = null;
+    /** 清单读取失败的原因（非空时下拉框里的"不在清单里"改标成"清单读取失败"，不误导） */
+    let modelCatalogErr = "";
+    /** 模型草稿（保存前的本地状态）；null = 下次渲染时从成品配置初始化 */
+    let modelDraft = null;
+
+    /** 成品里的 { provider, model } → 两个 trim 过的字符串 */
+    const readModel = (v) => {
+      const o = v && typeof v === "object" ? v : {};
+      return {
+        provider: String(o.provider == null ? "" : o.provider).trim(),
+        model: String(o.model == null ? "" : o.model).trim(),
+      };
+    };
+
+    /** 拉一次模型清单（并发去重；拉不到就退化成"只有跟随当前对话可选"） */
+    function ensureModelCatalog() {
+      if (modelCatalog) return Promise.resolve(modelCatalog);
+      if (!modelCatalogPromise) {
+        modelCatalogPromise = (async () => {
+          const r = await GET("/models");
+          const ok = r.status === 200 && r.body && Array.isArray(r.body.providers);
+          modelCatalog = ok ? r.body.providers : [];
+          modelCatalogErr = ok ? "" : r.error || "HTTP " + r.status;
+          return modelCatalog;
+        })();
+      }
+      return modelCatalogPromise;
+    }
+
+    /** 一格模型选择：服务商下拉 + 模型下拉（换服务商必须同时重置模型） */
+    function modelCellFor(key) {
+      const cur = modelDraft[key];
+      const groups = modelCatalog || [];
+      const wrap = el("div");
+      wrap.style.cssText = "display:flex;gap:8px;flex-wrap:wrap;align-items:center";
+
+      const provPairs = [["", "（跟随当前对话）"]];
+      for (const g of groups) provPairs.push([g.id, g.name || g.id]);
+      // 配置里的服务商不在清单里（下线 / 改名 / 清单没读到）：如实列出并标注，绝不静默改选成别的
+      const away = modelCatalogErr ? "（清单读取失败）" : "（不在清单里）";
+      if (cur.provider && !groups.some((g) => g.id === cur.provider)) {
+        provPairs.push([cur.provider, cur.provider + away]);
+      }
+      const provSel = selectInput(provPairs, cur.provider, (v) => {
+        // 换服务商必须同时重置模型：否则会拼出"A 家服务商 + B 家模型名"这种必然失败的组合
+        const g = groups.find((x) => x.id === v);
+        modelDraft[key] = { provider: v, model: v && g && g.models.length ? g.models[0].id : "" };
+        renderModelFields();
+      });
+      provSel.style.width = "auto";
+      provSel.style.minWidth = "150px";
+      wrap.appendChild(provSel);
+
+      if (!cur.provider) {
+        // 跟随当前对话：没有模型可选（省掉一个必然被禁用的空下拉框）
+        wrap.appendChild(el("span", "empty-note", "跟随当前对话的模型"));
+        return wrap;
+      }
+      const g = groups.find((x) => x.id === cur.provider);
+      const modelPairs = ((g && g.models) || []).map((m) => [m.id, m.name || m.id]);
+      if (!cur.model && modelPairs.length) {
+        // 选了服务商但模型还没定（正常配置不会出现：宿主要求两者同时非空）→ 默认第一个
+        cur.model = modelPairs[0][0];
+        modelDraft[key] = { provider: cur.provider, model: cur.model };
+      }
+      if (cur.model && !modelPairs.some((p) => p[0] === cur.model)) {
+        modelPairs.push([cur.model, cur.model + away]);
+      }
+      if (!modelPairs.length) modelPairs.push(["", "（该服务商列不出模型）"]);
+      const modelSel = selectInput(modelPairs, cur.model, (v) => {
+        modelDraft[key] = { provider: modelDraft[key].provider, model: v };
+      });
+      modelSel.style.width = "auto";
+      modelSel.style.minWidth = "180px";
+      wrap.appendChild(modelSel);
+      return wrap;
+    }
+
+    /** 渲染两格模型选择（清单没到就先显示"加载中"，到了再渲染） */
+    function renderModelFields() {
+      const box = $("model-rows");
+      if (!box) return;
+      if (modelCatalog === null) {
+        // 清单没到就先别画下拉框：此刻服务商列表是空的，会把配置里那个服务商错标成「不在清单里」
+        box.innerHTML = "";
+        box.appendChild(el("div", "empty-note", "模型清单加载中…"));
+        void ensureModelCatalog().then(() => renderModelFields());
+        return;
+      }
+      const main = S.cfg && S.cfg.main ? S.cfg.main : {};
+      if (!modelDraft) {
+        modelDraft = { whisperModel: readModel(main.whisperModel), chatModel: readModel(main.chatModel) };
+      }
+      box.innerHTML = "";
+      for (const [key, label] of [["whisperModel", "碎碎念模型"], ["chatModel", "对话模型"]]) {
+        const cell = el("div", "field");
+        cell.appendChild(el("label", null, label));
+        cell.appendChild(modelCellFor(key));
+        box.appendChild(cell);
+      }
+    }
+
+    // ── 物理（拖拽抛掷手感）────────────────────────────────────────
+    // 与宿主 physicsValid 同一套规则（非法宿主回 400，这里先就地拦下并给提示）。
+    // 默认值取内置 assets/config.jsonc 的 physics 段——成品配置已填满，正常取不到才用这份兜底。
+    const PHYSICS_DEFAULTS = {
+      gravity: 1400,
+      restitution: 0.78,
+      groundFriction: 2.5,
+      ceilingBounce: true,
+      throwPower: 1.0,
+      petCollision: false,
+    };
+    const PHYS_FIELDS = [
+      ["gravity", "重力 gravity", "px/s²，越大落得越快；0 = 无重力（抛出去匀速直线飞）", "50", "0"],
+      ["restitution", "弹性 restitution", "0~1，碰壁 / 落地反弹保留的速度比例（1 = 完全弹性，0 = 撞上即停）", "0.01", "0"],
+      ["groundFriction", "地面摩擦 groundFriction", "/s，落地后水平速度的衰减率；0 = 冰面不减速", "0.1", "0"],
+      ["throwPower", "总力度 throwPower", "> 0，弹簧跟手与甩出初速度的整体倍率（1 = 默认；越大越跟手、甩得越猛）", "0.05", "0.05"],
+    ];
+    /** 物理草稿（保存前的本地状态）；null = 下次渲染时从成品配置初始化 */
+    let physicsDraft = null;
+
+    function renderPhysicsFields() {
+      const rows = $("phys-rows");
+      const toggles = $("phys-toggles");
+      if (!rows || !toggles) return;
+      const main = S.cfg && S.cfg.main ? S.cfg.main : {};
+      if (!physicsDraft) {
+        const p = main.physics && typeof main.physics === "object" ? main.physics : {};
+        physicsDraft = { ...PHYSICS_DEFAULTS };
+        for (const k of Object.keys(PHYSICS_DEFAULTS)) {
+          if (k === "ceilingBounce" || k === "petCollision") {
+            if (typeof p[k] === "boolean") physicsDraft[k] = p[k];
+          } else if (Number.isFinite(Number(p[k]))) {
+            physicsDraft[k] = Number(p[k]);
+          }
+        }
+      }
+      rows.innerHTML = "";
+      for (const [key, label, hint, step, min] of PHYS_FIELDS) {
+        const cell = el("div", "field");
+        cell.title = hint; // 说明收进悬浮提示（与官方设置页的问号同一个文案）
+        cell.appendChild(el("label", null, label));
+        const i = el("input");
+        i.type = "number";
+        i.step = step;
+        i.min = min;
+        i.value = physicsDraft[key];
+        i.addEventListener("input", () => { physicsDraft[key] = Number(i.value); });
+        cell.appendChild(i);
+        rows.appendChild(cell);
+      }
+      toggles.innerHTML = "";
+      toggles.appendChild(
+        chk(
+          "顶部反弹 ceilingBounce",
+          physicsDraft.ceilingBounce,
+          (v) => { physicsDraft.ceilingBounce = v; },
+          "关掉后抛掷可飞出屏幕顶部（重力仍会把它拉回来）",
+        ),
+      );
+      toggles.appendChild(
+        chk(
+          "宠物互撞 petCollision",
+          physicsDraft.petCollision,
+          (v) => { physicsDraft.petCollision = v; },
+          "飞行中的宠物撞到别的宠物按动量守恒弹开（质量 ∝ 尺寸²）",
+        ),
+      );
+    }
+
+    /** physics 段校验（与宿主 physicsValid 同一套规则）——不通过返回原因文案 */
+    function physicsProblem(p) {
+      if (!Number.isFinite(p.gravity) || p.gravity < 0) return "重力要是 ≥ 0 的数字";
+      if (!Number.isFinite(p.restitution) || p.restitution < 0 || p.restitution > 1) return "弹性要在 0~1 之间";
+      if (!Number.isFinite(p.groundFriction) || p.groundFriction < 0) return "地面摩擦要是 ≥ 0 的数字";
+      if (!Number.isFinite(p.throwPower) || p.throwPower <= 0) return "总力度要是 > 0 的数字";
+      return "";
+    }
+
     /** 草稿 = 界面上正在编辑的宠物列表（保存前的本地状态） */
     let draft = null;
+
+    /** 三个草稿一起丢掉：下次渲染时从成品配置重新初始化 */
+    function resetDrafts() {
+      draft = null;
+      modelDraft = null;
+      physicsDraft = null;
+    }
 
     function renderSettingsPets() {
       const box = $("pet-rows");
@@ -1595,6 +1963,7 @@
           balanceEnabled: p.conf.balanceEnabled === true,
           whisperEnabled: p.conf.whisperEnabled !== false,
           workStatusEnabled: p.conf.workStatusEnabled !== false,
+          fixedEnabled: p.conf.fixedEnabled === true,
           corner: (p.conf.position && p.conf.position.corner) || "bottom-right",
           marginX: Number(p.conf.position && p.conf.position.marginX) || 0,
           marginY: Number(p.conf.position && p.conf.position.marginY) || 0,
@@ -1641,6 +2010,14 @@
         toggles.appendChild(chk("余额", p.balanceEnabled, (v) => { p.balanceEnabled = v; }));
         toggles.appendChild(chk("碎碎念", p.whisperEnabled, (v) => { p.whisperEnabled = v; }));
         toggles.appendChild(chk("工作状态联动", p.workStatusEnabled, (v) => { p.workStatusEnabled = v; }));
+        toggles.appendChild(
+          chk(
+            "宠物固定",
+            p.fixedEnabled,
+            (v) => { p.fixedEnabled = v; },
+            "启用后随机动画不再让宠物自己转向或走开，只播原地待机与随机小动作；右键菜单点播、接口触发、余额/碎碎念/工作状态动画不受影响。",
+          ),
+        );
         row.appendChild(toggles);
 
         box.appendChild(row);
@@ -1655,7 +2032,12 @@
       $("sw-memory-rounds").value = Number.isFinite(Number(main.chatMemoryRounds))
         ? Number(main.chatMemoryRounds)
         : 5;
-      $("sw-image-limit").value = Number.isFinite(Number(main.chatImageLimit)) ? Number(main.chatImageLimit) : 0;
+      // 兜底值与内置默认对齐（assets/config.jsonc 的 chatImageLimit = 10，不是 0）
+      $("sw-image-limit").value = Number.isFinite(Number(main.chatImageLimit)) ? Number(main.chatImageLimit) : 10;
+
+      // 模型与物理两张卡各自的草稿（同一函数里一起渲染，保证"重置草稿"只有一个入口）
+      renderModelFields();
+      renderPhysicsFields();
     }
 
     function field(label, control) {
@@ -1693,8 +2075,9 @@
       return s;
     }
 
-    function chk(label, checked, onChange) {
+    function chk(label, checked, onChange, hint) {
       const l = el("label", "chk");
+      if (hint) l.title = hint;
       const i = el("input");
       i.type = "checkbox";
       i.checked = !!checked;
@@ -1706,6 +2089,19 @@
 
     async function saveConfig() {
       if (!draft || !draft.length) { toast("至少要有一只桌宠", "bad"); return; }
+      // 三份草稿同生共死（都由 renderSettingsPets 初始化）——万一还没渲染完就点了保存，别抛 TypeError
+      if (!modelDraft || !physicsDraft) { toast("设置还没加载完，稍等一下再点保存", "bad"); return; }
+      // 物理：与宿主 physicsValid 同一套规则，先就地拦下（否则整包被宿主回 400，用户不知道是哪一项）
+      const physBad = physicsProblem(physicsDraft);
+      if (physBad) { toast("物理参数不合法：" + physBad, "bad"); return; }
+      // 模型：与宿主 modelSelectionValid 同一套规则——要么都空、要么都非空
+      for (const key of ["whisperModel", "chatModel"]) {
+        const v = modelDraft[key];
+        if (!!v.provider !== !!v.model) {
+          toast((key === "whisperModel" ? "碎碎念" : "对话") + "模型：服务商与模型要么都选、要么都留空", "bad");
+          return;
+        }
+      }
       const body = {
         pets: draft.map((p) => ({
           id: String(p.id || "").trim(),
@@ -1714,6 +2110,7 @@
           balanceEnabled: !!p.balanceEnabled,
           whisperEnabled: !!p.whisperEnabled,
           workStatusEnabled: !!p.workStatusEnabled,
+          fixedEnabled: !!p.fixedEnabled,
           display: p.display,
           position: { corner: p.corner, marginX: Number(p.marginX), marginY: Number(p.marginY) },
         })),
@@ -1723,13 +2120,16 @@
         confineToScreen: $("sw-confine").checked,
         chatMemoryRounds: Number($("sw-memory-rounds").value),
         chatImageLimit: Number($("sw-image-limit").value),
+        physics: { ...physicsDraft },
+        whisperModel: { provider: modelDraft.whisperModel.provider, model: modelDraft.whisperModel.model },
+        chatModel: { provider: modelDraft.chatModel.provider, model: modelDraft.chatModel.model },
       };
       const force = $("cfg-force").checked ? "?force=1" : "";
       const r = await PUT("/config" + force, { body });
 
       if (r.status === 200) {
         toast("配置已保存，桌面端会自动重建", "ok");
-        draft = null;
+        resetDrafts();
         S.cfg = r.body;
         await loadPets();
       } else if (r.status === 409) {
@@ -1865,6 +2265,12 @@
 
     // 点播卡片自己的宠物下拉：换宠物同样要换名字列表（池按条目分，主宠物与 pet pack 完全不同）
     $("anim-pet").addEventListener("change", fillAnimSelect);
+
+    // 广播卡片自己的宠物下拉：配图池同样按条目分（pet pack 的 -memes/ 独占），换宠物必须重填
+    $("bc-pet").addEventListener("change", () => void fillBcImageSelect());
+
+    // 刚往 memes/ 里丢了新图 → 忽略存在性缓存重探一次（否则要刷新整个页面才看得到）
+    $("bc-image-reload").addEventListener("click", () => void fillBcImageSelect({ force: true }));
 
     $("chat-pet-select").addEventListener("change", (e) => {
       S.chatPetId = e.target.value;
@@ -2056,6 +2462,7 @@
         balanceEnabled: false,
         whisperEnabled: true,
         workStatusEnabled: true,
+        fixedEnabled: false,
         corner: "bottom-right",
         marginX: 24,
         marginY: 24,
@@ -2066,7 +2473,7 @@
     $("cfg-save").addEventListener("click", () => void saveConfig());
 
     $("cfg-refresh").addEventListener("click", async () => {
-      draft = null;
+      resetDrafts();
       await loadPets();
       renderSettingsPets();
       toast("已重新读取", "ok");
@@ -2083,7 +2490,7 @@
       const r = await POST("/config");
       if (r.status === 200) {
         toast("已恢复默认", "ok");
-        draft = null;
+        resetDrafts();
         await loadPets();
         renderSettingsPets();
       } else {
