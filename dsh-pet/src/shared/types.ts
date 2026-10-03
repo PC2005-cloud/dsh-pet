@@ -74,8 +74,8 @@ export interface Animations {
  *  workStatusTexts / whisperModel / chatModel）为渲染期派生或「文件定义宠物」专用：
  *  - animations / animationWeights / eventsRefreshSec / physics / confineToScreen / whisperModel / chatModel：所属条目的条目级字段，由配置合并
  *    （host readAllConfig / 客户端 flattenConfigPets）在拍平时吹进每只实例——多实例共享。
- *    其中 physics / confineToScreen / whisperImageEnabled / chatImageEnabled / chatMemoryRounds /
- *    whisperModel / chatModel / eventsRefreshSec 是**全局默认**：文件宠物条目的合并基座取**用户层**
+ *    其中 physics / confineToScreen / whisperImageEnabled / chatImageEnabled / chatImageLimit /
+ *    chatMemoryRounds / whisperModel / chatModel / eventsRefreshSec 是**全局默认**：文件宠物条目的合并基座取**用户层**
  *    （main-config.jsonc），即"设置页改一次，所有宠物（含 pet pack）都生效"；种类文件仍可在自己
  *    顶层覆盖（见 host/config.ts 的 GLOBAL_DEFAULT_KEYS）。其余条目级字段（animations /
  *    whisperPrompt / memes / workStatusTexts …）的基座是**内置默认**，与用户层无关；

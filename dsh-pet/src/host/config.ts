@@ -22,7 +22,7 @@
  *     （如余额周期读不到就按 1800、碎碎念按 300）；
  *   - **显式写了但非法**（类型/结构/白名单外）→ 告警 + 填内置默认值
  *     （同一 文件+字段 进程内只告警一次，避免每请求刷屏；保证返回绝不出现残缺/非法值）；
- *   - **例外：全局默认**（GLOBAL_DEFAULT_KEYS 那 8 个「用户级成本/偏好/环境/节奏」字段）——
+ *   - **例外：全局默认**（GLOBAL_DEFAULT_KEYS 那 9 个「用户级成本/偏好/环境/节奏」字段）——
  *     文件宠物条目的基座取**用户层**（main-config.jsonc）而不是内置默认，即"设置页改一次，
  *     所有宠物都生效"；种类文件仍可在自己顶层覆盖（写了就用自己那份）；
  *   - 身份字段例外（无默认可填）：id 必须存在、全局唯一（缺失/重复/非法/冲突 →
@@ -58,6 +58,7 @@ export const ID_FORBIDDEN = /[\\/:\x00-\x1f]/;
  *   - `chatMemoryRounds`：带多少历史进上下文 = token 成本
  *   - `whisperModel` / `chatModel`：碎碎念 / 对话用哪个模型 = 成本与能力偏好
  *   - `whisperImageEnabled` / `chatImageEnabled`：要不要把表情包清单附进请求 = token 成本
+ *   - `chatImageLimit`：对话那张清单**最多几张**——同属 token 成本（清单每条消息都附）
  *   - `eventsRefreshSec`：多久调一次模型 / 拉一次余额 = 成本与节奏。注意它内部两个键的**消费端**
  *     不同：`.whisper` 按宠物所属条目读（种类可覆盖）；`.balance` 只读 main 条目
  *     （余额数据一份 + host 只有一个定时器，架构上给不了每种类一个周期）
@@ -74,6 +75,7 @@ const GLOBAL_DEFAULT_KEYS = [
   'confineToScreen',
   'whisperImageEnabled',
   'chatImageEnabled',
+  'chatImageLimit',
   'chatMemoryRounds',
   'whisperModel',
   'chatModel',
@@ -309,6 +311,11 @@ function topFieldValid(key: string, value: unknown): boolean {
       const n = Number(value);
       return Number.isFinite(n) && n >= 0;
     }
+    case 'chatImageLimit': {
+      // 对话配图张数上限：非负数字（0 = 不限制）；小数按消费者 Math.floor 取整
+      const n = Number(value);
+      return Number.isFinite(n) && n >= 0;
+    }
     case 'notificationsEnabled':
       return typeof value === 'boolean';
     case 'whisperImageEnabled':
@@ -354,7 +361,7 @@ function eventsRefreshSecValid(value: unknown): boolean {
 /**
  * 文件宠物条目的合并基座：内置默认 + 白名单字段改用**用户层**的值。
  *
- * 为什么：那 8 个字段是用户级成本/偏好/环境/节奏参数，不是种类属性——用户在设置页改一次，
+ * 为什么：那 9 个字段是用户级成本/偏好/环境/节奏参数，不是种类属性——用户在设置页改一次，
  * 期望所有宠物（含 pet pack）都生效。没有这一步，文件宠物只能拿到内置默认值，
  * 于是"设置页写着全局、实际只影响主宠物"（见 GLOBAL_DEFAULT_KEYS 的判据）。
  *
@@ -567,7 +574,7 @@ export function findPetInstance(
 /**
  * 保存用户层（PUT /config）：更新 main-config.jsonc，接受可编辑字段（pets + 全局开关：
  * notificationsEnabled / whisperImageEnabled / chatImageEnabled / confineToScreen + physics
- * + whisperModel / chatModel + chatMemoryRounds）。
+ * + whisperModel / chatModel + chatMemoryRounds + chatImageLimit）。
  * 编辑语义：**非白名单顶层字段（whisperPrompt / eventsRefreshSec / memes 等）从
  * `existing`（当前磁盘上的用户文件原对象）原样透传保留**——
  * 用户手动编辑的精调配置不会被设置页保存抹掉（旧实现是纯白名单重建，会整体覆盖丢失）。
@@ -651,6 +658,10 @@ export function saveUserConfig(
   // 校验直接复用读取侧的 topFieldValid（有限且 ≥ 0），读写同一份规则，不另写一套。
   const cmr = o.chatMemoryRounds;
   if (cmr !== undefined && !topFieldValid('chatMemoryRounds', cmr)) return null;
+  // chatImageLimit（对话配图张数上限；设置页「AI 模型与对话上下文」区的数字输入框写的就是它）：
+  // 与 chatMemoryRounds 同一套语义——传了就校验后进白名单，没传则走下面的透传保留。
+  const cil = o.chatImageLimit;
+  if (cil !== undefined && !topFieldValid('chatImageLimit', cil)) return null;
   const cleanModel = (v: Record<string, unknown>): { provider: string; model: string } => ({
     provider: String(v.provider).trim(),
     model: String(v.model).trim(),
@@ -667,6 +678,7 @@ export function saveUserConfig(
   if (cm !== undefined) outConfig.chatModel = cleanModel(cm as Record<string, unknown>);
   // 数值归一化落盘：请求体传 "9" 也存成 9（与读取侧 topFieldValid 的 Number() 口径一致）
   if (cmr !== undefined) outConfig.chatMemoryRounds = Number(cmr);
+  if (cil !== undefined) outConfig.chatImageLimit = Number(cil);
   // 透传保留：请求体未携带的顶层字段，从 existing（磁盘现有用户文件）原样带回——
   // 设置页只提交 pets(+全局开关+physics+模型+对话历史条数)，手改的 whisperPrompt/memes/... 借此保住。
   // 白名单字段只在「请求体传了」时才算白名单（已由上方写入）；未传时走这里透传磁盘旧值——
@@ -680,6 +692,7 @@ export function saveUserConfig(
   if (wm !== undefined) bodyOwned.add('whisperModel');
   if (cm !== undefined) bodyOwned.add('chatModel');
   if (cmr !== undefined) bodyOwned.add('chatMemoryRounds');
+  if (cil !== undefined) bodyOwned.add('chatImageLimit');
   if (existing && typeof existing === 'object') {
     for (const key of Object.keys(existing)) {
       if (bodyOwned.has(key)) continue; // 白名单字段由请求体决定

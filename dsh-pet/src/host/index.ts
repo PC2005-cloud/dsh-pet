@@ -72,7 +72,7 @@ import { queryBalance } from './balance';
 import { generateWhisper } from './whisper';
 import { generateChat, type ChatMemoryMessage } from './chat';
 import { configuredModel } from './model-selection';
-import { pickMeme, readMemePool } from './memes';
+import { limitPool, pickMeme, readMemePool } from './memes';
 import { decideBroadcast, normalizeBroadcastText } from './broadcast';
 import { decideAnim } from './anim';
 import {
@@ -452,8 +452,12 @@ export function apply(ctx: any): void {
       const conf = (found ?? { conf: cfg.main ?? {} }).conf;
       // 人设：所属条目的 whisperPrompt（合并器已填默认）+ 名字声明（与碎碎念同一拼装）
       const system = petSystemPrompt(petId, cfg);
-      // 配图：开关关闭 → 空池（指令与解析都不介入，与旧行为逐字一致）；目录链按所属条目取
-      const pool = conf.chatImageEnabled === true ? readMemePool(conf.memes, memeDirsFor(found?.entry ?? 'main')) : [];
+      // 配图：开关关闭 → 空池（指令与解析都不介入，与旧行为逐字一致）；目录链按所属条目取。
+      // 张数上限（chatImageLimit，0 = 不限制）：整张清单每条消息都要附，截断后费用上限可控。
+      const pool =
+        conf.chatImageEnabled === true
+          ? limitPool(readMemePool(conf.memes, memeDirsFor(found?.entry ?? 'main')), Number(conf.chatImageLimit))
+          : [];
       const mem = await readMemory();
       const bucketKey = found?.entry ?? petId;
       const bucket = (mem[bucketKey] ??= {});

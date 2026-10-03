@@ -583,6 +583,45 @@ describe('saveUserConfig —— 对话历史条数 chatMemoryRounds（白名单 
   });
 });
 
+describe('saveUserConfig —— 对话配图张数上限 chatImageLimit（白名单 + 透传保留）', () => {
+  test('随请求体写入（设置页「AI 模型与对话上下文」的数字输入框）', () => {
+    const out = saveOnce({ pets: PETS, chatImageLimit: 8 });
+    assert.equal(out?.chatImageLimit, 8, 'chatImageLimit 必须在 saveUserConfig 的白名单里');
+  });
+
+  test('0 是合法值（= 不限制，全部发给模型），照常落盘', () => {
+    assert.equal(saveOnce({ pets: PETS, chatImageLimit: 0 })?.chatImageLimit, 0);
+  });
+
+  test('落盘时归一化成数字（"8" → 8，与读取侧 topFieldValid 同一口径）', () => {
+    assert.equal(saveOnce({ pets: PETS, chatImageLimit: '8' })?.chatImageLimit, 8);
+  });
+
+  test('未传时透传磁盘旧值；磁盘上也没有则不凭空造字段', () => {
+    const kept = saveOnce({ pets: PETS }, { pets: PETS, chatImageLimit: 3 });
+    assert.equal(kept?.chatImageLimit, 3, '未传时必须原样保留磁盘上的手改值');
+    assert.equal('chatImageLimit' in (saveOnce({ pets: PETS }) ?? {}), false, '磁盘上也没有时不得凭空写入');
+  });
+
+  test('请求体覆盖磁盘旧值（与四个全局开关同一语义）', () => {
+    const out = saveOnce({ pets: PETS, chatImageLimit: 8 }, { pets: PETS, chatImageLimit: 3 });
+    assert.equal(out?.chatImageLimit, 8, '请求体优先，不被 existing 反向覆盖');
+  });
+
+  test('非法值 → 整体拒绝（宿主回 400；与读取侧 topFieldValid 同一套规则）', () => {
+    const bad: Array<[string, unknown]> = [
+      ['负数', -1],
+      ['非数字字符串', 'many'],
+      ['对象', { n: 3 }],
+      ['Infinity', Infinity],
+      ['NaN', NaN],
+    ];
+    for (const [name, value] of bad) {
+      assert.equal(saveOnce({ pets: PETS, chatImageLimit: value }), null, `${name} 必须被拒绝`);
+    }
+  });
+});
+
 describe('readAllConfig —— 模型选择合并（缺失取默认 / 非法回退默认）', () => {
   const WM = { provider: 'deepseek', model: 'deepseek-chat' };
 
@@ -731,7 +770,7 @@ describe('syncUserConfigFromDefault —— 同步（内置默认原文写入用�
 /**
  * 文件宠物条目的基座 —— 「全局默认 + 种类可覆盖」。
  *
- * 判据：GLOBAL_DEFAULT_KEYS 那 8 个（physics / confineToScreen / 两个配图开关 /
+ * 判据：GLOBAL_DEFAULT_KEYS 那 9 个（physics / confineToScreen / 两个配图开关 / chatImageLimit /
  * chatMemoryRounds / whisperModel / chatModel / eventsRefreshSec）是**用户级「成本 / 偏好 /
  * 环境 / 节奏」参数**，用户层写了就对**所有条目**生效（含 pet pack）；种类文件自己写了就覆盖
  * 自己那份。其余顶层字段（人设 / 表情包 / 动画池 / 文案）的基座仍是**内置默认**——
@@ -743,6 +782,7 @@ describe('文件宠物条目 —— 全局默认（用户层作基座）+ 种类
     ...BASE,
     whisperImageEnabled: true,
     chatImageEnabled: true,
+    chatImageLimit: 0,
     confineToScreen: false,
     whisperModel: { provider: '', model: '' },
     chatModel: { provider: '', model: '' },
@@ -789,13 +829,14 @@ describe('文件宠物条目 —— 全局默认（用户层作基座）+ 种类
     }
   }
 
-  test('用户层写了这 8 个字段 → 种类条目逐个继承（不再只吃内置默认）', () => {
+  test('用户层写了这 9 个字段 → 种类条目逐个继承（不再只吃内置默认）', () => {
     const out = merged({
       overlay: {
         physics: { ...(BASE_FULL.physics as Record<string, unknown>), petCollision: true, gravity: 999 },
         confineToScreen: true,
         whisperImageEnabled: false,
         chatImageEnabled: false,
+        chatImageLimit: 4,
         chatMemoryRounds: 9,
         whisperModel: { provider: 'p1', model: 'm1' },
         chatModel: { provider: 'p2', model: 'm2' },
@@ -809,6 +850,7 @@ describe('文件宠物条目 —— 全局默认（用户层作基座）+ 种类
     assert.equal(pig.confineToScreen, true);
     assert.equal(pig.whisperImageEnabled, false);
     assert.equal(pig.chatImageEnabled, false);
+    assert.equal(pig.chatImageLimit, 4, 'chatImageLimit 应继承用户层');
     assert.equal(pig.chatMemoryRounds, 9);
     assert.deepEqual(pig.whisperModel, { provider: 'p1', model: 'm1' });
     assert.deepEqual(pig.chatModel, { provider: 'p2', model: 'm2' });
@@ -830,12 +872,14 @@ describe('文件宠物条目 —— 全局默认（用户层作基座）+ 种类
         ...PACK,
         physics: { ...(BASE_FULL.physics as Record<string, unknown>), gravity: 111 },
         chatMemoryRounds: 2,
+        chatImageLimit: 6,
         whisperImageEnabled: true,
       },
     });
     const pig = out.pig;
     assert.equal(rec(pig.physics).gravity, 111, '种类自己写了 physics → 用自己那份');
     assert.equal(pig.chatMemoryRounds, 2, '种类自己写了 chatMemoryRounds → 用自己那份');
+    assert.equal(pig.chatImageLimit, 6, '种类自己写了 chatImageLimit → 用自己那份');
     assert.equal(pig.whisperImageEnabled, true, '种类自己写了开关 → 用自己那份');
     assert.equal(pig.confineToScreen, true, '种类没写 → 仍继承用户层');
     assert.deepEqual(pig.chatModel, { provider: '', model: '' }, '种类没写 → 继承用户层（这里与默认同值）');

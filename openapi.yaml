@@ -501,7 +501,7 @@ paths:
         - **只白名单字段会被保留**：`pets[]` 的 `id`/`name`/`size`/`balanceEnabled`/
           `whisperEnabled`/`workStatusEnabled`/`fixedEnabled`/`display`/`position`，以及顶层
           `notificationsEnabled`/`whisperImageEnabled`/`chatImageEnabled`/`confineToScreen`/
-          `physics`/`whisperModel`/`chatModel`/`chatMemoryRounds`。
+          `physics`/`whisperModel`/`chatModel`/`chatMemoryRounds`/`chatImageLimit`。
           其余字段会沿用磁盘上用户文件里的原值（透传保留），所以设置页保存
           **不会抹掉**你手写的精调配置（`whisperPrompt`/`memes`/`eventsRefreshSec` 等）。
           白名单字段也只在请求体**真的传了**时才算白名单：没传就走透传，不会被抹成默认值。
@@ -1413,6 +1413,15 @@ components:
             对话历史条数（全局默认）：每次对话请求携带的最近历史轮数，1 轮 = 1 问 1 答，
             0 = 不带历史。`memory.json` 全存不删，此值只决定截多少进上下文。
             设置页「AI 模型与对话上下文」区的数字输入框写的就是它。缺失默认 5。
+        chatImageLimit:
+          type: integer
+          minimum: 0
+          description: |
+            对话配图张数上限（全局默认）：对话时发给模型的表情包清单最多几张（「前 N 张」= 配置里写在前面的
+            那 N 条——`memes` 的书写顺序就是生效顺序，想让哪几张优先发出去就往前写）。
+            **0 = 不限制（全部发）**。
+            为什么要它：整张清单每条消息都要附，token 随张数线性增长，限制后配图开销上限可控。
+            设置页「AI 模型与对话上下文」区的数字输入框写的就是它。缺失默认 10。
 
     PetConfigEntry:
       type: object
@@ -1456,6 +1465,10 @@ components:
           type: boolean
         chatImageEnabled:
           type: boolean
+        chatImageLimit:
+          type: integer
+          minimum: 0
+          description: 对话配图张数上限（0 = 不限制）；只影响对话选图，碎碎念只带抽中的那一张
         memes:
           type: object
           description: 表情包池——键为图片名，值为该图的语境描述（供模型选择）

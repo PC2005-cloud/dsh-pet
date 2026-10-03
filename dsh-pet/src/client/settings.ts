@@ -297,10 +297,14 @@ export const zh = {
   modelFieldHint: '选「跟随当前对话」= 用当前对话的模型；指定了但调用失败会自动回落到当前对话的模型重试一次。',
   invalidModel: '请检查模型设置：服务商与模型要么都选，要么都留空（跟随当前对话）。',
   modelCatalogFailed: '模型列表加载失败（刷新页面可重试）；当前配置值仍会原样保留。',
-  chatMemoryLabel: '对话历史条数',
+  chatMemory: '对话历史条数',
   chatMemoryHint:
     '每次对话请求携带的最近历史轮数（1 轮 = 1 问 1 答；0 = 不带历史，每句都是全新对话）。对话记忆本身全存不删，此值只决定截多少进上下文——越大越记得住，也越费 token。全局默认，所有宠物共用（pet pack 可在自己种类文件里单独覆盖）。',
   invalidChatMemory: '请检查对话历史条数：需为 ≥ 0 的数字。',
+  chatImageLimit: '对话配图张数上限',
+  chatImageLimitHint:
+    '对话时发给模型的表情包清单最多几张（「前 N 张」= 配置里写在前面的那 N 条，想让哪几张优先被发出去就把顺序往前挪）。整张清单是每条消息都要附的，token 随张数线性增长——张数一多就是纯烧钱，限制成前 N 张，模型只从这几张里挑。0 = 不限制（全部发）。内置默认 10。全局默认，所有宠物共用（pet pack 可在自己种类文件里覆盖）。只影响对话选图：碎碎念只带抽中的那一张。',
+  invalidChatImageLimit: '请检查对话配图张数上限：需为 ≥ 0 的数字（0 = 不限制）。',
   notifyTest: '测试弹窗',
   notifyTestOk: '测试通知已发送，请查看桌面右下角。',
   notifyDenyUnsupported: '当前环境不支持系统通知（浏览器无 Notification API）。',
@@ -453,10 +457,14 @@ export const en = {
     'Check the model settings: pick both a provider and a model, or leave both empty (follow the current conversation).',
   modelCatalogFailed:
     'Failed to load the model list (refresh the page to retry); your current values are kept as they are.',
-  chatMemoryLabel: 'Chat history rounds',
+  chatMemory: 'Chat history rounds',
   chatMemoryHint:
     'How many recent rounds each chat request carries (1 round = 1 question + 1 answer; 0 = no history, every message starts fresh). The memory itself keeps everything — this only decides how much goes into the context: higher remembers more and costs more tokens. Global default, shared by every pet (a pet pack may override it in its own kind file).',
   invalidChatMemory: 'Check the chat history rounds: it must be a number ≥ 0.',
+  chatImageLimit: 'Chat image limit',
+  chatImageLimitHint:
+    'How many memes at most are listed to the model during chat ("first N" = the first N you wrote in the config, so move the ones you want sent to the front). That whole list is attached to every message and tokens grow linearly with the count, so a long list is pure burn; capping it to the first N makes the model pick only among those. 0 = no limit (send everything). Built-in default 10. Global default, shared by every pet (a pet pack may override it in its own kind file). Chat only — a whisper carries just the one meme it drew.',
+  invalidChatImageLimit: 'Check the chat image limit: it must be a number ≥ 0 (0 = no limit).',
   notifyTest: 'Test notification',
   notifyTestOk: 'Test notification sent — check the bottom-right of your desktop.',
   notifyDenyUnsupported: 'System notifications are not supported in this environment (no Notification API).',
@@ -940,6 +948,10 @@ export function makePetConfigSection(rt: {
     // 与两个模型 / 四个开关同一套语义：只改本地状态，随「保存」整包写入（不做即时写入）。
     // 初值 5 = 内置默认（assets/config.jsonc）；下面的加载效应会用成品 main.chatMemoryRounds 覆盖。
     const [chatMemory, setChatMemory] = useState(5);
+    // 对话配图张数上限（全局默认：对话时发给模型的表情包清单最多几张，写用户级配置的 chatImageLimit）。
+    // 同上：只改本地状态，随「保存」整包写入。初值 10 = 内置默认（砍掉整张清单的约 2/3 开销）；
+    // 加载效应会用成品 main.chatImageLimit 覆盖。
+    const [chatImageLimit, setChatImageLimit] = useState(10);
     // 候选清单（GET /models：宿主 llm 服务的实时服务商 + 各自模型，与 DSH 的模型选择器同源）。
     // null = 还没拉到（下拉框只剩「跟随当前对话」）；拉失败置 catalogErr 显示一行提示。
     const [catalog, setCatalog] = useState<ModelCatalogGroup[] | null>(null);
@@ -974,6 +986,9 @@ export function makePetConfigSection(rt: {
           // 对话历史条数：成品同样已填满（内置默认 5 ← 用户层），合法就原样上屏
           const cmr = Number(m.chatMemoryRounds);
           if (Number.isFinite(cmr) && cmr >= 0) setChatMemory(cmr);
+          // 对话配图张数上限：同上（内置默认 0 = 不限制）
+          const cil = Number(m.chatImageLimit);
+          if (Number.isFinite(cil) && cil >= 0) setChatImageLimit(cil);
         })
         .catch(() => {
           /* 成品拉取失败时保持默认（通知开、配图关） */
@@ -1091,6 +1106,11 @@ export function makePetConfigSection(rt: {
         setMsg({ kind: 'err', text: t('invalidChatMemory') });
         return false;
       }
+      // 对话配图张数上限：同上（0 = 不限制，合法）
+      if (!Number.isFinite(chatImageLimit) || chatImageLimit < 0) {
+        setMsg({ kind: 'err', text: t('invalidChatImageLimit') });
+        return false;
+      }
       return true;
     };
 
@@ -1119,6 +1139,8 @@ export function makePetConfigSection(rt: {
           chatModel: chatModel,
           // 对话历史条数（全局默认白名单字段）：宿主用 topFieldValid 校验（有限且 ≥ 0）
           chatMemoryRounds: chatMemory,
+          // 对话配图张数上限（同上；0 = 不限制）
+          chatImageLimit: chatImageLimit,
         };
         // force === true（用户在损坏弹窗里点了确认）：带 ?force=1 才允许按白名单重建损坏文件
         const res = await fetch('/dsh-pet-7340/config' + (force === true ? '?force=1' : ''), {
@@ -1245,6 +1267,22 @@ export function makePetConfigSection(rt: {
         }),
         t('physics.' + key + 'Hint'),
         end,
+      );
+
+    /** 「全局默认」的一个数字格：标签 + 问号在上、数字输入在下（说明 = t(label + 'Hint') 进问号） */
+    const globalNumField = (label: string, value: number, setter: (v: number) => void): ReturnType<typeof h> =>
+      field(
+        t(label),
+        h('input', {
+          type: 'number',
+          className: inputClass,
+          step: '1',
+          min: '0',
+          value: String(value),
+          disabled: busy,
+          onChange: (e: ChangeEvent<HTMLInputElement>) => setter(Number(e.target.value)),
+        }),
+        t(label + 'Hint'),
       );
 
     /** 「AI 模型」的一格：标签 + 问号在上、单下拉选择器在下 */
@@ -1464,19 +1502,8 @@ export function makePetConfigSection(rt: {
             h('div', {
               className: 'dsh-pet-cfg__grid4',
               children: [
-                field(
-                  t('chatMemoryLabel'),
-                  h('input', {
-                    type: 'number',
-                    className: inputClass,
-                    step: '1',
-                    min: '0',
-                    value: String(chatMemory),
-                    disabled: busy,
-                    onChange: (e: ChangeEvent<HTMLInputElement>) => setChatMemory(Number(e.target.value)),
-                  }),
-                  t('chatMemoryHint'),
-                ),
+                globalNumField('chatMemory', chatMemory, setChatMemory),
+                globalNumField('chatImageLimit', chatImageLimit, setChatImageLimit),
               ],
             }),
           ],

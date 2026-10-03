@@ -860,6 +860,10 @@
               <label>对话历史条数（轮，1 轮 = 1 问 1 答；0 = 不带历史）</label>
               <input type="number" id="sw-memory-rounds" min="0" step="1">
             </div>
+            <div class="field" style="margin-top:10px;max-width:220px">
+              <label>对话配图张数上限（0 = 不限制，全部发给模型）</label>
+              <input type="number" id="sw-image-limit" min="0" step="1">
+            </div>
           </div>
         </div>
 
@@ -1651,6 +1655,7 @@
       $("sw-memory-rounds").value = Number.isFinite(Number(main.chatMemoryRounds))
         ? Number(main.chatMemoryRounds)
         : 5;
+      $("sw-image-limit").value = Number.isFinite(Number(main.chatImageLimit)) ? Number(main.chatImageLimit) : 0;
     }
 
     function field(label, control) {
@@ -1717,6 +1722,7 @@
         chatImageEnabled: $("sw-chat-image").checked,
         confineToScreen: $("sw-confine").checked,
         chatMemoryRounds: Number($("sw-memory-rounds").value),
+        chatImageLimit: Number($("sw-image-limit").value),
       };
       const force = $("cfg-force").checked ? "?force=1" : "";
       const r = await PUT("/config" + force, { body });
