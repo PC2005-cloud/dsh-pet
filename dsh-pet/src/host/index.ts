@@ -68,7 +68,7 @@ import { join, normalize, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths';
 import { credentialRef } from '@deepseek-ai/dsh-credentials';
-import { queryBalance } from './balance';
+import { queryBalance, type AccountBalanceGetter } from './balance';
 import { generateWhisper } from './whisper';
 import { generateChat, type ChatMemoryMessage } from './chat';
 import { configuredModel } from './model-selection';
@@ -502,6 +502,31 @@ export function apply(ctx: any): void {
   };
 
   /**
+   * 账号态余额取数入口（DSH 账号登录态 `deepseek-account` 专用）。
+   *
+   * 返回一个「用当前 ctx 读取账号服务」的取数函数；服务不存在 / 没有 getBalance 时返回 undefined，
+   * 由 queryBalance 回落成 unsupported（**绝不伪造 0**）。
+   *
+   * 为什么用 `ctx.get('deepseekAccount')` 而**不写进 inject**：老宿主的 DSH 没有这个服务，
+   * 一旦进 inject，整个插件会永远等不到服务而完全不 apply——比"没有余额"严重得多。
+   * token 注入、`x-client-*` 头、401 失效清理都由该服务负责，本插件不自持账号凭证。
+   */
+  const accountBalanceFor = (): AccountBalanceGetter | undefined => {
+    try {
+      const account = typeof ctx?.get === 'function' ? ctx.get('deepseekAccount') : undefined;
+      if (!account || typeof account.getBalance !== 'function') return undefined;
+      return () =>
+        account.getBalance({
+          version: String(process.env.DSH_CLIENT_VERSION ?? process.env.DSH_VERSION ?? '') || 'unknown',
+          locale: String(process.env.DSH_LOCALE ?? '') || 'zh_CN',
+          timezoneOffsetSeconds: -new Date().getTimezoneOffset() * 60, // 东为正的整秒
+        });
+    } catch {
+      return undefined;
+    }
+  };
+
+  /**
    * 刷新余额并写入 S —— host 侧**唯一**的余额查询点。
    *
    * 改造前是每个客户端各自按自己的定时器去查（浏览器一个 + 桌面每窗口一个）：同一份外部 API
@@ -518,10 +543,14 @@ export function apply(ctx: any): void {
     const mark = <T>(v: T): T | (T & { manual: true }) => (manual ? { ...v, manual: true } : v);
     try {
       const sel = ctx.agentDefaultModel.currentSelection();
-      const result = await queryBalance(sel.provider, async (ref) => {
-        const rc = await ctx.credentials.resolve(credentialRef(ref));
-        return rc?.value;
-      });
+      const result = await queryBalance(
+        sel.provider,
+        async (ref) => {
+          const rc = await ctx.credentials.resolve(credentialRef(ref));
+          return rc?.value;
+        },
+        accountBalanceFor(),
+      );
       state.writeSection('balance', mark(result));
     } catch (e) {
       state.writeSection(

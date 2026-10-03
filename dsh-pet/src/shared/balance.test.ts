@@ -19,7 +19,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-import { balanceBubbleView, decideBalanceNotice, type BalanceState } from './balance.ts';
+import { balanceBubbleView, decideBalanceNotice, formatBalanceText, type BalanceState } from './balance.ts';
 
 /** 包内文件源码（守卫用；相对 src/shared/ 解析） */
 const readSource = (rel: string): string => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), 'utf8');
@@ -85,6 +85,50 @@ describe('balanceBubbleView —— 不可用状态必须给出可读的文字说
     assert.equal(ds[0]?.text, '余额（');
     assert.equal(ds[1]?.role, 'tier'); // 峰/谷随时间变化，这里只钉结构与金额
     assert.equal(ds[2]?.text, '）¥8.79');
+  });
+});
+
+describe('formatBalanceText —— 金额展示（两位小数 + 千位分隔，长金额塞得进气泡）', () => {
+  test('账号态浮点长尾：两位小数（鲸鱼挂件同口径）', () => {
+    // 账号态 total 是「充值 + 赠金」两个浮点数相加的结果，原样打印会带长尾
+    assert.equal(formatBalanceText('13.9468696'), '13.95');
+    assert.equal(formatBalanceText(13.9468696), '13.95');
+    // 现场实测值（0.3.2 账号态）：两端都不该出现 8 位小数
+    assert.equal(formatBalanceText('13.48241956'), '13.48');
+  });
+
+  test('千位分隔：大额也不会把气泡顶出宠物宽度', () => {
+    assert.equal(formatBalanceText('1234567.891'), '1,234,567.89');
+    assert.equal(formatBalanceText('1000'), '1,000.00');
+  });
+
+  test('边界：零、负值（透支）、极小额', () => {
+    assert.equal(formatBalanceText('0'), '0.00');
+    assert.equal(formatBalanceText('0.004'), '0.00'); // 四舍五入到分
+    assert.equal(formatBalanceText('-0.02'), '-0.02'); // 透支保留符号，不吞成 0
+  });
+
+  test('无法解析时原样回落，绝不把已有内容吞成 "-"', () => {
+    assert.equal(formatBalanceText(undefined), '-');
+    assert.equal(formatBalanceText(null), '-');
+    assert.equal(formatBalanceText(''), '-');
+    // 非数字：原样回显（比伪装成 0 或 '-' 更诚实，也与旧行为一致）
+    assert.equal(formatBalanceText('n/a'), 'n/a');
+  });
+
+  test('余额行整体渲染：金额已格式化', () => {
+    const rows = balanceBubbleView({
+      provider: 'deepseek-account',
+      ok: true,
+      kind: 'deepseek',
+      total: '13.9468696',
+    });
+    assert.equal(rows[2]?.text, '）¥13.95');
+    // 旧行为回归守卫：不得再出现未格式化的长尾
+    assert.equal(
+      rows.some((r) => r.text.includes('13.9468696')),
+      false,
+    );
   });
 });
 

@@ -52,6 +52,11 @@ const bubbleCss = [
   '.dsh-pet-bubble .pet-bub-tier{font-weight:700}',
   '.dsh-pet-bubble .pet-bub-tier-peak{color:#e53935}',
   '.dsh-pet-bubble .pet-bub-tier-idle{color:#2e9e4f}',
+  // 余额变体：金额可能很长（格式化后仍可能到千分位），默认 nowrap + max-width 0.5 会把整行顶出宠物宽度。
+  // 放宽到 0.92 并允许换行（居中排布），长金额只换行、不溢出。
+  '.dsh-pet-bubble.dsh-pet-balance{max-width:calc(var(--dsh-pet-size)*0.92);white-space:normal;overflow-wrap:break-word}',
+  '.dsh-pet-bubble.dsh-pet-balance .pet-bub-row{flex-wrap:wrap;justify-content:center;gap:0 calc(var(--dsh-pet-size)*0.012)}',
+  '.dsh-pet-bubble.dsh-pet-balance .pet-bub-row>*{text-align:center}',
 ].join('\n');
 
 /** 只注入一次 */
@@ -106,7 +111,7 @@ export function makeBalanceBubble(rt: { h: typeof jsx }): (props: { state: Balan
     // （余额气泡默认 white-space:nowrap，长文案会直接顶出宠物宽度）
     const wrap = state.ok ? '' : ' dsh-pet-whisper';
     return h('div', {
-      className: 'dsh-pet-bubble' + wrap + (on ? ' is-on' : ''),
+      className: 'dsh-pet-bubble dsh-pet-balance' + wrap + (on ? ' is-on' : ''),
       children: rowsToNodes(h, rows),
     });
   };

@@ -22,13 +22,41 @@ export interface BalanceProvider {
   ref: string;
   /** 展示类型：余额 vs 用量 */
   kind: 'opencode' | 'deepseek';
+  /**
+   * 取数通道：`key` = 用凭证引用自行发 HTTP（默认）；`account` = 交给 DSH 的账号服务
+   * （`ctx.get('deepseekAccount').getBalance()`），本模块不发任何请求。
+   */
+  via?: 'key' | 'account';
 }
 
 /** 已知可查询余额的服务商（只登记有公开 API 的；opencode/Zen 暂无官方余额 API，不在此表） */
 export const BALANCE_PROVIDERS: BalanceProvider[] = [
   { ids: ['opencode-go'], ref: 'OPENCODE_GO_API_KEY', kind: 'opencode' },
   { ids: ['deepseek-official'], ref: 'DEEPSEEK_API_KEY', kind: 'deepseek' },
+  // DSH 账号登录态（桌面端默认provider）：没有 API key 可用，余额只能经 DSH 自己的
+  // `deepseekAccount` 服务读取——token 注入、x-client-* 头、401 失效清理都由该服务负责，
+  // 插件不自持凭证（与鲸鱼挂件 dsh-whale-widget 同一数据源与口径）。
+  { ids: ['deepseek-account'], ref: '', kind: 'deepseek', via: 'account' },
 ];
+
+/**
+ * 账号服务的余额钱包（与 DSH `@deepseek-ai/dsh-deepseek-account-platform` 的线上契约对齐：
+ * 金额是十进制字符串，`value` = 充值钱包、`bonusWallets` = 赠金钱包）。
+ */
+export interface AccountWallet {
+  currency?: unknown;
+  balance?: unknown;
+}
+
+/** 账号服务 `getBalance()` 的返回值（只声明本模块用到的字段） */
+export interface AccountBalanceResponse {
+  status?: unknown;
+  value?: unknown;
+  bonusWallets?: unknown;
+}
+
+/** 账号服务取余额的入口（由调用方注入 `ctx.get('deepseekAccount')` 的绑定方法） */
+export type AccountBalanceGetter = () => Promise<AccountBalanceResponse | undefined>;
 
 /** provider id → 唯一匹配定义；未匹配返回 undefined（= 不支持查询） */
 export function matchBalanceProvider(provider: string): BalanceProvider | undefined {
@@ -142,17 +170,76 @@ async function fetchDeepseek(key: string, provider: string): Promise<BalanceResu
 }
 
 /**
+ * 解析账号服务返回值：钱包按币种求和 → 与 API key 路径**同口径**的余额结果。
+ *
+ * 口径说明（与鲸鱼挂件一致）：`total_balance` 本身就是「充值 + 赠金」，
+ * 所以 total = 充值(normal/value) + 赠金(bonusWallets)，否则「按余额差」推算的今日已用会偏小。
+ *
+ * @returns 结构化结果；服务未登录 / 未就绪 / 钱包为空时返回 undefined（调用方回落，绝不伪造 0）
+ */
+function accountBalanceResult(raw: AccountBalanceResponse, provider: string): BalanceResult | undefined {
+  if (raw.status !== 'ready') return undefined;
+  const normal = Array.isArray(raw.value) ? (raw.value as AccountWallet[]) : [];
+  const bonus = Array.isArray(raw.bonusWallets) ? (raw.bonusWallets as AccountWallet[]) : [];
+  if (normal.length === 0) return undefined;
+
+  /** 可数值化的钱包（金额非法直接排除，绝不当 0 计入） */
+  const wallets = normal.filter((w) => w && Number.isFinite(Number(w.balance)));
+  if (wallets.length === 0) return undefined;
+
+  const currency = wallets.some((w) => String(w.currency ?? '').toUpperCase() === 'CNY')
+    ? 'CNY'
+    : String(wallets[0].currency ?? 'CNY').toUpperCase();
+  /** 同币种金额求和（跨币种不相加：无法换算，只取主币种口径） */
+  const sumOf = (list: AccountWallet[]): number =>
+    list
+      .filter((w) => w && String(w.currency ?? 'CNY').toUpperCase() === currency && Number.isFinite(Number(w.balance)))
+      .reduce((s, w) => s + Number(w.balance), 0);
+
+  const toppedUp = sumOf(normal);
+  const granted = sumOf(bonus);
+  return {
+    ok: true,
+    provider,
+    kind: 'deepseek',
+    data: {
+      currency,
+      total: String(toppedUp + granted),
+      granted: String(granted),
+      toppedUp: String(toppedUp),
+    },
+  };
+}
+
+/**
  * 按当前服务商查询余额。
  * @param provider agentDefaultModel.currentSelection().provider
  * @param resolveKey 凭证解析：ref 名 → key（由调用方注入 ctx.credentials.resolve）
+ * @param accountBalance 账号服务取余额（由调用方注入 `ctx.get('deepseekAccount')` 的绑定方法）；
+ *        缺失或返回未就绪 → 回落 `unsupported`，不静默伪装成 0
  * @returns 结构化结果：成功 / 不支持 / 缺凭证 / 抓取失败（失败带 message，绝不返回伪造数字）
  */
 export async function queryBalance(
   provider: string,
   resolveKey: (ref: string) => Promise<string | undefined>,
+  accountBalance?: AccountBalanceGetter,
 ): Promise<BalanceResult> {
   const match = matchBalanceProvider(provider);
   if (!match) return { ok: false, provider, reason: 'unsupported' };
+
+  // 账号态：不自持凭证，也不发 HTTP——交给 DSH 的账号服务（老宿主没有该服务 → 仍然是 unsupported）
+  if (match.via === 'account') {
+    if (!accountBalance) return { ok: false, provider, reason: 'unsupported' };
+    try {
+      const raw = await accountBalance();
+      // 未登录 / 未就绪 / 钱包为空 → undefined，同样回落 unsupported（不伪造 0）
+      return raw
+        ? (accountBalanceResult(raw, provider) ?? { ok: false, provider, reason: 'unsupported' })
+        : { ok: false, provider, reason: 'unsupported' };
+    } catch (e) {
+      return { ok: false, provider, reason: 'fetch-error', message: e instanceof Error ? e.message : String(e) };
+    }
+  }
 
   const rc = await resolveKey(match.ref);
   if (!rc) return { ok: false, provider, reason: 'credential-missing', message: '缺少凭证 ' + match.ref };
