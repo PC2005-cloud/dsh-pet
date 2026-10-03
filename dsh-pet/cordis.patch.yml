@@ -9,6 +9,11 @@
 # 【工作原理】
 #   - insert：往配置树里添加新的插件行（entry）
 #   - 每个 entry 有 id（行标识，patch 覆盖时按它定位）和 name（插件模块）
+#   - id 必须全局唯一且与包名一致：DSH STORE 上架契约按它比对 entryIds，
+#     裸名（如 pet）会与其它插件的行标识冲突，候选会被判为缺少 entry ID
+#   - 插件行那一行（"id: 值"）绝不能写行尾注释：商城预检（check-plugin-submission.mjs）
+#     用正则抓该行的值并要求其后直接换行，行尾注释会让它抓不到 entry ID，
+#     整份提交被判 SUBMISSION_ENTRY_MISSING（与 id 叫什么名字无关）
 #   - name: 'dsh-pet' 会解析包入口 lib/index.js（宿主半侧）
 #   - 因为 package.json 声明了 dsh.client，DSH 的模块系统同时会把
 #     这个包扫描为"浏览器插件"，提供 /plugins/dsh-pet/client.js 给页面
@@ -16,5 +21,5 @@
 # ============================================================================
 
 - insert:
-    - id: pet                     # 插件行 id（唯一）
+    - id: dsh-pet
       name: 'dsh-pet'             # 模块名：解析到 lib/index.js

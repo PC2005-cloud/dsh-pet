@@ -30,11 +30,13 @@
     "exports['./client'] —— 浏览器半侧入口，DSH 模块系统按它提供 /plugins/dsh-pet/client.js",
     "dsh.bundle.patch —— 声明本包是 bundle，patch 文件是 cordis.patch.yml（安装后自动进层栈）",
     "dsh.client —— 声明浏览器半侧的注入依赖和平台（web）",
+    "dsh.compatibility.dshReleases —— 对官方 DSH 完整版本逐项声明 compatible/incompatible/unknown；只写宽泛范围不算证据，商城最新三版至少需要一个 compatible",
     "files —— npm publish 只发这些目录/文件（assets/webm 播放资源（VP9-alpha，浏览器 Chrome/Edge/Firefox 与桌面模式共用）；Safari/HEVC 兼容由仓库流水线支持、fork 定制，不随包发布；assets/preview 的 GIF 仅 README 展示、不入包）",
     "scripts.encode:webm —— 转码管线（step03 母版 → assets/webm 640×360 VP9-alpha）",
     "scripts.prepack —— 发布前自动检查链：types/typecheck/lint/format → prepack-check（素材健康检查）；不构建（构建由 prepare 钩子负责）",
     "scripts.prepare —— npm 生命周期钩子（npm install / npm publish 自动执行，也可手动 npm run prepare）：构建完整产物 + files 收敛",
     "peerDependencies —— 运行时由宿主（DSH）提供的模块，本包不打包它们",
+    "engines —— Node.js 兼容下限（由运行依赖 @electron/get@5.1.0 的 engines 决定）",
     "================================================"
   ],
   "type": "module",
@@ -83,6 +85,9 @@
     "format:check": "prettier --check ."
   },
   "license": "MIT",
+  "engines": {
+    "node": ">=22.12.0"
+  },
   "dependencies": {
     "@electron-internal/extract-zip": "^1.0.5",
     "@electron/get": "^5.1.0"
@@ -90,6 +95,13 @@
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
+    },
+    "compatibility": {
+      "dshReleases": {
+        "0.1.7-rc.2": "incompatible",
+        "0.2.0-rc.1": "compatible",
+        "0.2.0-rc.2": "compatible"
+      }
     },
     "client": {
       "inject": [
