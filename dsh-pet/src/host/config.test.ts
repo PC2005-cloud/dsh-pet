@@ -544,6 +544,45 @@ describe('saveUserConfig —— 碎碎念 / 对话模型（白名单 + 透传保
   });
 });
 
+describe('saveUserConfig —— 对话历史条数 chatMemoryRounds（白名单 + 透传保留）', () => {
+  test('随请求体写入（设置页「AI 模型与对话上下文」的数字输入框）', () => {
+    const out = saveOnce({ pets: PETS, chatMemoryRounds: 9 });
+    assert.equal(out?.chatMemoryRounds, 9, 'chatMemoryRounds 必须在 saveUserConfig 的白名单里');
+  });
+
+  test('0 是合法值（= 不带历史进上下文），照常落盘', () => {
+    assert.equal(saveOnce({ pets: PETS, chatMemoryRounds: 0 })?.chatMemoryRounds, 0);
+  });
+
+  test('落盘时归一化成数字（"9" → 9，与读取侧 topFieldValid 同一口径）', () => {
+    assert.equal(saveOnce({ pets: PETS, chatMemoryRounds: '9' })?.chatMemoryRounds, 9);
+  });
+
+  test('未传时透传磁盘旧值；磁盘上也没有则不凭空造字段', () => {
+    const kept = saveOnce({ pets: PETS }, { pets: PETS, chatMemoryRounds: 3 });
+    assert.equal(kept?.chatMemoryRounds, 3, '未传时必须原样保留磁盘上的手改值');
+    assert.equal('chatMemoryRounds' in (saveOnce({ pets: PETS }) ?? {}), false, '磁盘上也没有时不得凭空写入');
+  });
+
+  test('请求体覆盖磁盘旧值（与四个全局开关同一语义）', () => {
+    const out = saveOnce({ pets: PETS, chatMemoryRounds: 9 }, { pets: PETS, chatMemoryRounds: 3 });
+    assert.equal(out?.chatMemoryRounds, 9, '请求体优先，不被 existing 反向覆盖');
+  });
+
+  test('非法值 → 整体拒绝（宿主回 400；与读取侧 topFieldValid 同一套规则）', () => {
+    const bad: Array<[string, unknown]> = [
+      ['负数', -1],
+      ['非数字字符串', 'many'],
+      ['对象', { rounds: 5 }],
+      ['Infinity', Infinity],
+      ['NaN', NaN],
+    ];
+    for (const [name, value] of bad) {
+      assert.equal(saveOnce({ pets: PETS, chatMemoryRounds: value }), null, `${name} 必须被拒绝`);
+    }
+  });
+});
+
 describe('readAllConfig —— 模型选择合并（缺失取默认 / 非法回退默认）', () => {
   const WM = { provider: 'deepseek', model: 'deepseek-chat' };
 

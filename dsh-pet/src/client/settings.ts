@@ -281,9 +281,9 @@ export const zh = {
   physicsPetCollision: '宠物互撞 petCollision',
   physicsPetCollisionHint: '飞行中的宠物撞到别的宠物按动量守恒弹开（质量 ∝ 尺寸²）',
   invalidPhysics: '请检查物理参数：重力 / 地面摩擦 ≥ 0，弹性 0~1，总力度 > 0。',
-  modelTitle: 'AI 模型（碎碎念 / 对话）',
+  modelTitle: 'AI 模型与对话上下文',
   modelHint:
-    '碎碎念与对话各自用哪个模型；选「跟随当前对话」= 用你当前对话正在用的那个模型（默认）。全局默认：对所有宠物生效，pet pack 可在自己种类文件里单独覆盖。选项与 DSH 的模型选择器同源，由宿主实时提供。',
+    '碎碎念与对话各自用哪个模型，以及对话每次带多少历史进上下文。选「跟随当前对话」= 用你当前对话正在用的那个模型（默认）。全局默认：对所有宠物生效，pet pack 可在自己种类文件里单独覆盖。选项与 DSH 的模型选择器同源，由宿主实时提供。',
   modelFollow: '跟随当前对话',
   modelSearch: '搜索模型…',
   modelEmpty: '没有匹配的模型。',
@@ -297,6 +297,10 @@ export const zh = {
   modelFieldHint: '选「跟随当前对话」= 用当前对话的模型；指定了但调用失败会自动回落到当前对话的模型重试一次。',
   invalidModel: '请检查模型设置：服务商与模型要么都选，要么都留空（跟随当前对话）。',
   modelCatalogFailed: '模型列表加载失败（刷新页面可重试）；当前配置值仍会原样保留。',
+  chatMemoryLabel: '对话历史条数',
+  chatMemoryHint:
+    '每次对话请求携带的最近历史轮数（1 轮 = 1 问 1 答；0 = 不带历史，每句都是全新对话）。对话记忆本身全存不删，此值只决定截多少进上下文——越大越记得住，也越费 token。全局默认，所有宠物共用（pet pack 可在自己种类文件里单独覆盖）。',
+  invalidChatMemory: '请检查对话历史条数：需为 ≥ 0 的数字。',
   notifyTest: '测试弹窗',
   notifyTestOk: '测试通知已发送，请查看桌面右下角。',
   notifyDenyUnsupported: '当前环境不支持系统通知（浏览器无 Notification API）。',
@@ -430,9 +434,9 @@ export const en = {
   physicsPetCollision: 'Pet collisions',
   physicsPetCollisionHint: 'A flying pet bounces off the others with momentum conservation (mass ∝ size²)',
   invalidPhysics: 'Check the physics values: gravity / ground friction ≥ 0, bounciness 0–1, throw power > 0.',
-  modelTitle: 'AI models (whisper / chat)',
+  modelTitle: 'AI models & chat context',
   modelHint:
-    'Which model each of whisper and chat uses; "Follow current conversation" uses the model your current conversation is on (default). Global default: applies to every pet, and a pet pack may override it in its own kind file. The options come from the same source as the DSH model picker, served live by the host.',
+    'Which model each of whisper and chat uses, and how much history every chat request carries. "Follow current conversation" uses the model your current conversation is on (default). Global default: applies to every pet, and a pet pack may override it in its own kind file. The options come from the same source as the DSH model picker, served live by the host.',
   modelFollow: 'Follow current conversation',
   modelSearch: 'Search models…',
   modelEmpty: 'No matching models.',
@@ -449,6 +453,10 @@ export const en = {
     'Check the model settings: pick both a provider and a model, or leave both empty (follow the current conversation).',
   modelCatalogFailed:
     'Failed to load the model list (refresh the page to retry); your current values are kept as they are.',
+  chatMemoryLabel: 'Chat history rounds',
+  chatMemoryHint:
+    'How many recent rounds each chat request carries (1 round = 1 question + 1 answer; 0 = no history, every message starts fresh). The memory itself keeps everything — this only decides how much goes into the context: higher remembers more and costs more tokens. Global default, shared by every pet (a pet pack may override it in its own kind file).',
+  invalidChatMemory: 'Check the chat history rounds: it must be a number ≥ 0.',
   notifyTest: 'Test notification',
   notifyTestOk: 'Test notification sent — check the bottom-right of your desktop.',
   notifyDenyUnsupported: 'System notifications are not supported in this environment (no Notification API).',
@@ -928,6 +936,10 @@ export function makePetConfigSection(rt: {
     // 与四个全局开关同一套语义：只改本地状态，随「保存」整包写入（不做即时写入）。
     const [whisperModel, setWhisperModel] = useState<ModelSelection>({ provider: '', model: '' });
     const [chatModel, setChatModel] = useState<ModelSelection>({ provider: '', model: '' });
+    // 对话历史条数（全局默认：每次对话请求带多少历史进上下文，写用户级配置的 chatMemoryRounds）。
+    // 与两个模型 / 四个开关同一套语义：只改本地状态，随「保存」整包写入（不做即时写入）。
+    // 初值 5 = 内置默认（assets/config.jsonc）；下面的加载效应会用成品 main.chatMemoryRounds 覆盖。
+    const [chatMemory, setChatMemory] = useState(5);
     // 候选清单（GET /models：宿主 llm 服务的实时服务商 + 各自模型，与 DSH 的模型选择器同源）。
     // null = 还没拉到（下拉框只剩「跟随当前对话」）；拉失败置 catalogErr 显示一行提示。
     const [catalog, setCatalog] = useState<ModelCatalogGroup[] | null>(null);
@@ -959,6 +971,9 @@ export function makePetConfigSection(rt: {
           if (cm && typeof cm.provider === 'string' && typeof cm.model === 'string') {
             setChatModel({ provider: cm.provider, model: cm.model });
           }
+          // 对话历史条数：成品同样已填满（内置默认 5 ← 用户层），合法就原样上屏
+          const cmr = Number(m.chatMemoryRounds);
+          if (Number.isFinite(cmr) && cmr >= 0) setChatMemory(cmr);
         })
         .catch(() => {
           /* 成品拉取失败时保持默认（通知开、配图关） */
@@ -1071,6 +1086,11 @@ export function makePetConfigSection(rt: {
         setMsg({ kind: 'err', text: t('invalidModel') });
         return false;
       }
+      // 对话历史条数：与宿主 topFieldValid 同一套规则（有限且 ≥ 0）
+      if (!Number.isFinite(chatMemory) || chatMemory < 0) {
+        setMsg({ kind: 'err', text: t('invalidChatMemory') });
+        return false;
+      }
       return true;
     };
 
@@ -1097,6 +1117,8 @@ export function makePetConfigSection(rt: {
           // 两者都空 = 跟随当前对话的模型
           whisperModel: whisperModel,
           chatModel: chatModel,
+          // 对话历史条数（全局默认白名单字段）：宿主用 topFieldValid 校验（有限且 ≥ 0）
+          chatMemoryRounds: chatMemory,
         };
         // force === true（用户在损坏弹窗里点了确认）：带 ?force=1 才允许按白名单重建损坏文件
         const res = await fetch('/dsh-pet-7340/config' + (force === true ? '?force=1' : ''), {
@@ -1417,8 +1439,10 @@ export function makePetConfigSection(rt: {
           ],
         }),
 
-        // AI 模型卡（需求 5）：碎碎念 / 对话各自的服务商 + 模型，条目级——与四个开关同一套语义，
-        // 只改本地状态、随「保存」整包写入。host 侧生成时优先用它，失败自动回落到当前对话的模型。
+        // AI 模型与对话上下文卡（需求 5）：碎碎念 / 对话各自的服务商 + 模型，条目级——与四个开关
+        // 同一套语义，只改本地状态、随「保存」整包写入。host 侧生成时优先用它，失败自动回落。
+        // 第二行是对话历史条数（全局默认）：与两个模型同属「对话的上下文 / token 成本」，
+        // 所以同卡而不是塞进「全局开关」（那里是布尔开关）。
         h('div', {
           className: 'dsh-pet-cfg__card',
           children: [
@@ -1435,6 +1459,24 @@ export function makePetConfigSection(rt: {
               children: [
                 modelCell('whisperModel', whisperModel, setWhisperModel),
                 modelCell('chatModel', chatModel, setChatModel, true),
+              ],
+            }),
+            h('div', {
+              className: 'dsh-pet-cfg__grid4',
+              children: [
+                field(
+                  t('chatMemoryLabel'),
+                  h('input', {
+                    type: 'number',
+                    className: inputClass,
+                    step: '1',
+                    min: '0',
+                    value: String(chatMemory),
+                    disabled: busy,
+                    onChange: (e: ChangeEvent<HTMLInputElement>) => setChatMemory(Number(e.target.value)),
+                  }),
+                  t('chatMemoryHint'),
+                ),
               ],
             }),
           ],

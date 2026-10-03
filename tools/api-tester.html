@@ -856,6 +856,10 @@
               <label class="chk"><input type="checkbox" id="sw-chat-image"> 对话配图</label>
               <label class="chk"><input type="checkbox" id="sw-confine"> 限制在屏幕内</label>
             </div>
+            <div class="field" style="margin-top:10px;max-width:220px">
+              <label>对话历史条数（轮，1 轮 = 1 问 1 答；0 = 不带历史）</label>
+              <input type="number" id="sw-memory-rounds" min="0" step="1">
+            </div>
           </div>
         </div>
 
@@ -1644,6 +1648,9 @@
       $("sw-whisper-image").checked = main.whisperImageEnabled !== false;
       $("sw-chat-image").checked = main.chatImageEnabled !== false;
       $("sw-confine").checked = main.confineToScreen === true;
+      $("sw-memory-rounds").value = Number.isFinite(Number(main.chatMemoryRounds))
+        ? Number(main.chatMemoryRounds)
+        : 5;
     }
 
     function field(label, control) {
@@ -1709,6 +1716,7 @@
         whisperImageEnabled: $("sw-whisper-image").checked,
         chatImageEnabled: $("sw-chat-image").checked,
         confineToScreen: $("sw-confine").checked,
+        chatMemoryRounds: Number($("sw-memory-rounds").value),
       };
       const force = $("cfg-force").checked ? "?force=1" : "";
       const r = await PUT("/config" + force, { body });
