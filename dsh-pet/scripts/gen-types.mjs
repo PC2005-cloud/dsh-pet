@@ -11,6 +11,7 @@
  */
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, renameSync, rmSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -21,14 +22,18 @@ const HOST_OUT = join(TYPES, 'host');
 rmSync(TYPES, { recursive: true, force: true });
 mkdirSync(TYPES, { recursive: true });
 
-// Windows 下 npm/npx 是 .cmd，spawnSync 无法直接执行；用 cmd /c 跑整条命令。
-// 非 Windows（linux/darwin）直接跑即可——之前这里无条件用 cmd /c，
-// 导致类 unix 平台上 spawnSync 拿到 shell 的 127（cmd: command not found），
-// 而 TYPES 目录在本文件开头已被清空，结果是「声明被删掉却没重新生成」。
-// 写法与 scripts/prepare.js 保持一致。
-const tscRun =
-  process.platform === 'win32' ? 'cmd /c npx tsc -p tsconfig.types.json' : 'npx tsc -p tsconfig.types.json';
-const tsc = spawnSync(tscRun, { cwd: ROOT, stdio: 'inherit', shell: true });
+// 直接调用本仓库的 tsc，不经过 npm/npx：
+// 旧写法是 `cmd /c npx tsc -p tsconfig.types.json`，它要求环境里存在 npm/npx
+// （纯 node / 只有 pnpm 的环境会失败），还额外背着一个 Windows 专用的 cmd /c 分支。
+// tsc 本来就在本地 node_modules 里，用当前 node 跑它即可 —— 跨平台一致、零外部命令依赖。
+// 解析走 createRequire：pnpm 的隔离布局下 typescript 只在 node_modules 里链了一次，
+// 用 require.resolve 比手拼路径更可靠。
+const require = createRequire(import.meta.url);
+const tscEntry = require.resolve('typescript/lib/tsc.js');
+const tsc = spawnSync(process.execPath, [tscEntry, '-p', 'tsconfig.types.json'], {
+  cwd: ROOT,
+  stdio: 'inherit',
+});
 if (tsc.status !== 0) {
   console.error(`[gen-types] 类型声明生成失败 (exit ${tsc.status})`);
   process.exit(tsc.status ?? 1);
