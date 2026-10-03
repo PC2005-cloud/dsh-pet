@@ -29,6 +29,8 @@ dsh plugin --profile desktop add dsh-pet
 
 > 💡 想自己造一只专属宠物？克隆 [PC2005-cloud/dsh-pet](https://github.com/PC2005-cloud/dsh-pet) 仓库，用内置素材链（AI 提示词 → 绿幕视频 → 透明动画，素材由豆包生成）从零生成，全流程可复现。
 
+> 💡 不想每次都开着 DSH？`npx dsh-pet-standalone` 可以**完全不打开 DSH** 让桌宠住在桌面上，见下方「🧍 独立运行（完全不打开 DSH）」。
+
 ## 🖥️ macOS 使用 mov（Safari 透明播放）
 
 macOS 的 Safari/WKWebView 下透明动画需用 `.mov` 素材，三步：
@@ -81,6 +83,37 @@ macOS 的 Safari/WKWebView 下透明动画需用 `.mov` 素材，三步：
   - 桌面模式渲染 `display` 含 `desktop` 的**全部**宠物（多开同屏，与浏览器一致）；大小/位置各自读自己的配置
   - 在 DSH 设置页「桌宠配置」编辑，保存即时生效；`display` 缺失/非法即配置错误，**代码不做兜底**
 - 桌面与浏览器是**同一套动画素材**（`/dsh-pet-7340/thumb/<前缀>/<name>.webm`：main 用用户 `main-animation/` 目录优先 + 包内素材；额外宠物只查自己的 `pet/<前缀>-animation/`，同种类多实例共享）；**配图（表情包）共用同一套素材归属**（`/dsh-pet-7340/pic/memes/<前缀>/<名>.png`：`pet/<前缀>-memes/` 独占 → 用户 `memes/` → 包内 `assets/memes/`）；配置加载失败会**大声报错**（红色错误条 + 每 5 秒自动重试），绝不静默兜底
+
+## 🧍 独立运行（完全不打开 DSH）
+
+上面的桌面形态由 DSH 宿主拉起。独立模式让它**不需要 DSH 在跑**：把插件自己的宿主半边
+（`src/host/index.ts` 的 `apply`）跑在一个最小的伪 ctx 上，再起一个本机 HTTP 服务接管路由 ——
+**路由表仍然只有插件那一份**（同一个 handler 同时服务 HTTP 与桌面助手的 bridge 管道），
+所以不存在"独立模式的实现跟不上宿主"的漂移。
+
+```sh
+# 插件装好后（包内已声明 bin）
+npx dsh-pet-standalone             # 默认 http://127.0.0.1:3080/dsh-pet-7340/
+npx dsh-pet-standalone --check     # 只体检：配置来源 / 宠物清单 / Electron 状态
+npx dsh-pet-standalone --port 3100
+
+# 仓库里（npm install 时 prepare 已构建 lib/）
+npm run standalone
+npm run standalone -- --check
+```
+
+- **能用**：全部动画链、点击/拖拽/甩抛物理、右键菜单、多开、自定义动画与表情包、pet pack。
+- **不可用（明确降级，不假装成功）**：余额、碎碎念、对话、系统通知 —— 它们依赖 DSH 的凭证、
+  模型服务与会话事件。独立模式下这些端点返回结构化失败（带 `reason` 字段），桌面端也不会出现
+  周期性的错误气泡；包内默认配置读不到时 `/config` 直接 500 + 错误正文，绝不静默兜底。
+- **配置**：与 DSH 内读同一份（`$DSH_HOME/dsh-pet/main-config.jsonc` → 包内默认），`pet/` 下的
+  文件宠物照常生效；`--check` 会打印它实际读到的那几个路径。
+- **只显示 `display` 含 `desktop`/`both` 的实例**（`web` 的实例属于浏览器 overlay，见下条）。
+- **端口**：默认 3080，被占用时自动向后顺延（日志会写明实际端口）。
+- **退出**：`Ctrl+C`，或 `POST /shutdown`。
+- **只在 DSH 网页里的东西不在独立模式内**：浏览器 overlay、设置页、斜杠命令、
+  由 `/notify` 驱动的系统通知。
+- 独立模式与 DSH 内运行**互不影响**，也可以同时开（各有自己的桌面窗口）。
 
 ## ⌨️ 斜杠命令
 

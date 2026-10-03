@@ -35,12 +35,16 @@
     "scripts.encode:webm —— 转码管线（step03 母版 → assets/webm 640×360 VP9-alpha）",
     "scripts.prepack —— 发布前自动检查链：types/typecheck/lint/format → prepack-check（素材健康检查）；不构建（构建由 prepare 钩子负责）",
     "scripts.prepare —— npm 生命周期钩子（npm install / npm publish 自动执行，也可手动 npm run prepare）：构建完整产物 + files 收敛",
+    "bin.dsh-pet-standalone —— 独立模式 CLI（构建产物 lib/standalone.js）：不打开 DSH 直接跑桌宠，把插件的宿主半边跑在伪 ctx 上；tsdown 的第二个入口负责构建，源码见 src/standalone/",
     "peerDependencies —— 运行时由宿主（DSH）提供的模块，本包不打包它们",
     "engines —— Node.js 兼容下限（由运行依赖 @electron/get@5.1.0 的 engines 决定）",
     "================================================"
   ],
   "type": "module",
   "main": "lib/index.js",
+  "bin": {
+    "dsh-pet-standalone": "lib/standalone.js"
+  },
   "exports": {
     ".": {
       "types": "./lib/types/index.d.ts",
@@ -73,6 +77,7 @@
     "watch": "tsdown --watch",
     "ensure:electron": "node scripts/ensure-electron.mjs",
     "start:desktop": "node scripts/start-desktop.mjs",
+    "standalone": "node lib/standalone.js",
     "dev:mock": "node scripts/dev/mock-server.mjs",
     "prepack": "npm run types && npm run typecheck && npm run lint && npm run format:check && node scripts/prepack-check.js && npm run check:openapi",
     "check:openapi": "node scripts/check-openapi.mjs",
