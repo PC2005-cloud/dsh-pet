@@ -73,7 +73,12 @@ export interface Animations {
  *  可选段（animations / animationWeights / extra / assetRoot / eventsRefreshSec / physics / confineToScreen /
  *  workStatusTexts / whisperModel / chatModel）为渲染期派生或「文件定义宠物」专用：
  *  - animations / animationWeights / eventsRefreshSec / physics / confineToScreen / whisperModel / chatModel：所属条目的条目级字段，由配置合并
- *    （host readAllConfig / 客户端 flattenConfigPets）在拍平时吹进每只实例——多实例共享；
+ *    （host readAllConfig / 客户端 flattenConfigPets）在拍平时吹进每只实例——多实例共享。
+ *    其中 physics / confineToScreen / whisperImageEnabled / chatImageEnabled / chatMemoryRounds /
+ *    whisperModel / chatModel / eventsRefreshSec 是**全局默认**：文件宠物条目的合并基座取**用户层**
+ *    （main-config.jsonc），即"设置页改一次，所有宠物（含 pet pack）都生效"；种类文件仍可在自己
+ *    顶层覆盖（见 host/config.ts 的 GLOBAL_DEFAULT_KEYS）。其余条目级字段（animations /
+ *    whisperPrompt / memes / workStatusTexts …）的基座是**内置默认**，与用户层无关；
  *  - extra: true 标记该宠物由 pet/ 目录文件定义：设置页不可编辑、保存时排除，
  *    由拍平逻辑统一打标，**永不出现在持久化配置里**；
  *  - assetRoot: 素材目录名（= 配置文件前缀 `<名>`，即 `pet/<名>-animation/`）；素材 URL
@@ -108,19 +113,21 @@ export interface Pet {
   animationWeights?: Weights;
   extra?: boolean;
   assetRoot?: string;
-  /** 渲染派生：所属条目的刷新周期（秒，事件名 → 间隔；合并时已填默认值） */
+  /** 全局默认：事件刷新周期（秒，事件名 → 间隔；整段替换，缺的键由消费端各自兜底）。
+   *  `.whisper` 按所属条目读（种类可覆盖）；`.balance` 的消费端只读 main 条目。 */
   eventsRefreshSec?: Record<string, number>;
-  /** 条目级：拖拽抛掷物理参数（全局共用；host 合并已填默认，拍平时吹入） */
+  /** 全局默认：拖拽抛掷物理参数（用户在 main-config.jsonc 里写一次即对所有宠物生效，
+   *  含 pet pack；种类文件顶层写了则用自己那份。host 合并已填默认，拍平时吹入） */
   physics?: PhysicsParams;
-  /** 条目级：拖拽抛掷是否锁定在当前屏幕（host 合并已填默认，拍平时吹入） */
+  /** 全局默认：拖拽抛掷是否锁定在当前屏幕（归属规则同 physics） */
   confineToScreen?: boolean;
   /** 条目级：工作状态气泡文案（二维数组，外层索引 = workStatus 档位 0..5，内层每档可多句随机抽；
    *  host 合并已填默认，拍平时吹入；整字段缺失 = 不弹工作状态文本，只播动画） */
   workStatusTexts?: string[][];
-  /** 条目级：碎碎念单独指定的服务商 + 模型（host 合并已填默认，拍平时吹入；
+  /** 全局默认：碎碎念单独指定的服务商 + 模型（host 合并已填默认，拍平时吹入；
    *  provider 与 model 都为空 = 跟随当前对话的模型） */
   whisperModel?: ModelSelection;
-  /** 条目级：对话单独指定的服务商 + 模型（同上，都为空 = 跟随当前对话的模型） */
+  /** 全局默认：对话单独指定的服务商 + 模型（同上，都为空 = 跟随当前对话的模型） */
   chatModel?: ModelSelection;
 }
 

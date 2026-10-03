@@ -10,7 +10,7 @@
  */
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 
@@ -685,6 +685,200 @@ describe('syncUserConfigFromDefault —— 同步（内置默认原文写入用�
       assert.equal(existsSync(paths.userFile), false, '失败时不得写出用户层文件');
     } finally {
       rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+/**
+ * 文件宠物条目的基座 —— 「全局默认 + 种类可覆盖」。
+ *
+ * 判据：GLOBAL_DEFAULT_KEYS 那 8 个（physics / confineToScreen / 两个配图开关 /
+ * chatMemoryRounds / whisperModel / chatModel / eventsRefreshSec）是**用户级「成本 / 偏好 /
+ * 环境 / 节奏」参数**，用户层写了就对**所有条目**生效（含 pet pack）；种类文件自己写了就覆盖
+ * 自己那份。其余顶层字段（人设 / 表情包 / 动画池 / 文案）的基座仍是**内置默认**——
+ * 一个种类一份人设、一份池、一个表情包目录，各写一份才是 pet pack 的意义。
+ */
+describe('文件宠物条目 —— 全局默认（用户层作基座）+ 种类可覆盖', () => {
+  /** 内置默认必须含全部顶层键：mergeEntry 只遍历 base 的键，缺键则用户层的值也流不进来 */
+  const BASE_FULL: Record<string, unknown> = {
+    ...BASE,
+    whisperImageEnabled: true,
+    chatImageEnabled: true,
+    confineToScreen: false,
+    whisperModel: { provider: '', model: '' },
+    chatModel: { provider: '', model: '' },
+    memes: { 可爱: '卖萌' },
+  };
+  /** 一个最小可用的种类文件（不含任何顶层条目级字段，全靠基座） */
+  const PACK: Record<string, unknown> = {
+    pets: [
+      {
+        id: 'pig1',
+        name: '小猪',
+        size: 300,
+        balanceEnabled: false,
+        display: 'web',
+        position: { corner: 'top-left', marginX: 10, marginY: 10 },
+      },
+    ],
+  };
+
+  const rec = (v: unknown): Record<string, unknown> => v as Record<string, unknown>;
+
+  /** 建一套路径：内置默认 = BASE_FULL；可选用户层 + 一个种类文件；跑完 readAllConfig 就清理临时目录 */
+  function merged(opts: {
+    overlay?: Record<string, unknown>;
+    pack?: Record<string, unknown>;
+  }): Record<string, Record<string, unknown>> {
+    const dir = mkdtempSync(join(tmpdir(), 'dsh-pet-pack-base-'));
+    try {
+      const petDir = join(dir, 'pet');
+      const paths: ConfigPaths = {
+        defaultFile: join(dir, 'default.jsonc'),
+        userFile: join(dir, 'main-config.jsonc'),
+        petDir,
+      };
+      writeFileSync(paths.defaultFile, JSON.stringify(BASE_FULL));
+      if (opts.overlay) writeFileSync(paths.userFile, JSON.stringify(opts.overlay));
+      if (opts.pack) {
+        mkdirSync(petDir, { recursive: true });
+        writeFileSync(join(petDir, 'pig-config.json'), JSON.stringify(opts.pack));
+      }
+      return readAllConfig(paths);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }
+
+  test('用户层写了这 8 个字段 → 种类条目逐个继承（不再只吃内置默认）', () => {
+    const out = merged({
+      overlay: {
+        physics: { ...(BASE_FULL.physics as Record<string, unknown>), petCollision: true, gravity: 999 },
+        confineToScreen: true,
+        whisperImageEnabled: false,
+        chatImageEnabled: false,
+        chatMemoryRounds: 9,
+        whisperModel: { provider: 'p1', model: 'm1' },
+        chatModel: { provider: 'p2', model: 'm2' },
+        eventsRefreshSec: { balance: 900, whisper: 60 },
+      },
+      pack: PACK,
+    });
+    const pig = out.pig;
+    assert.equal(rec(pig.physics).petCollision, true, 'physics 应继承用户层');
+    assert.equal(rec(pig.physics).gravity, 999);
+    assert.equal(pig.confineToScreen, true);
+    assert.equal(pig.whisperImageEnabled, false);
+    assert.equal(pig.chatImageEnabled, false);
+    assert.equal(pig.chatMemoryRounds, 9);
+    assert.deepEqual(pig.whisperModel, { provider: 'p1', model: 'm1' });
+    assert.deepEqual(pig.chatModel, { provider: 'p2', model: 'm2' });
+    assert.deepEqual(pig.eventsRefreshSec, { balance: 900, whisper: 60 });
+    // 对照：main 条目一直就是用户层（行为不变）
+    assert.equal(rec(out.main.physics).gravity, 999);
+    assert.equal(out.main.chatMemoryRounds, 9);
+  });
+
+  test('种类文件自己写了 → 覆盖自己那份；没写的仍继承用户层', () => {
+    const out = merged({
+      overlay: {
+        physics: { ...(BASE_FULL.physics as Record<string, unknown>), gravity: 999 },
+        confineToScreen: true,
+        chatMemoryRounds: 9,
+        whisperImageEnabled: false,
+      },
+      pack: {
+        ...PACK,
+        physics: { ...(BASE_FULL.physics as Record<string, unknown>), gravity: 111 },
+        chatMemoryRounds: 2,
+        whisperImageEnabled: true,
+      },
+    });
+    const pig = out.pig;
+    assert.equal(rec(pig.physics).gravity, 111, '种类自己写了 physics → 用自己那份');
+    assert.equal(pig.chatMemoryRounds, 2, '种类自己写了 chatMemoryRounds → 用自己那份');
+    assert.equal(pig.whisperImageEnabled, true, '种类自己写了开关 → 用自己那份');
+    assert.equal(pig.confineToScreen, true, '种类没写 → 仍继承用户层');
+    assert.deepEqual(pig.chatModel, { provider: '', model: '' }, '种类没写 → 继承用户层（这里与默认同值）');
+  });
+
+  test('不在白名单的字段：基座仍是内置默认（不继承用户层）', () => {
+    const out = merged({
+      overlay: {
+        whisperPrompt: '用户层的人设',
+        chatMemoryRounds: 9,
+        memes: { 用户图: '用户层的表情包' },
+        workStatusTexts: [['用户层的文案']],
+      },
+      pack: PACK,
+    });
+    const pig = out.pig;
+    assert.equal(pig.whisperPrompt, BASE.whisperPrompt, '人设：种类用内置默认，不吃用户层');
+    assert.deepEqual(pig.memes, BASE_FULL.memes, '表情包：种类用内置默认');
+    assert.deepEqual(pig.workStatusTexts, BASE.workStatusTexts, '文案：种类用内置默认');
+    // 对照：main 拿到的是用户层那份
+    assert.equal(out.main.whisperPrompt, '用户层的人设');
+    assert.deepEqual(out.main.memes, { 用户图: '用户层的表情包' });
+    // 同一个用户层里，白名单字段照样继承
+    assert.equal(pig.chatMemoryRounds, 9);
+  });
+
+  test('没有用户层 → 种类就是内置默认（等价于改动前的行为）', () => {
+    const out = merged({ pack: PACK });
+    const pig = out.pig;
+    assert.deepEqual(pig.physics, BASE_FULL.physics);
+    assert.equal(pig.confineToScreen, BASE_FULL.confineToScreen);
+    assert.equal(pig.whisperImageEnabled, BASE_FULL.whisperImageEnabled);
+    assert.deepEqual(pig.chatModel, BASE_FULL.chatModel);
+  });
+
+  test('用户层写了非法值 → 跳过该字段，种类仍拿内置默认（不抛错）', () => {
+    const out = merged({ overlay: { physics: { gravity: -1 }, confineToScreen: true }, pack: PACK });
+    const pig = out.pig;
+    assert.deepEqual(pig.physics, BASE_FULL.physics, '非法 physics 不得流进种类基座');
+    assert.equal(pig.confineToScreen, true, '同一用户层里的合法字段照常继承');
+  });
+
+  test('种类文件写了非法值 → 回退到「用户层那份」而不是内置默认', () => {
+    const out = merged({
+      overlay: { physics: { ...(BASE_FULL.physics as Record<string, unknown>), petCollision: true } },
+      pack: { ...PACK, physics: { gravity: '不是数字' } },
+    });
+    assert.equal(rec(out.pig.physics).petCollision, true, '非法覆盖 → 回退基座（= 用户层），不是内置默认');
+  });
+
+  test('eventsRefreshSec 也进全局默认：用户层写了 → 种类整段继承', () => {
+    const out = merged({ overlay: { eventsRefreshSec: { balance: 900, whisper: 60 } }, pack: PACK });
+    assert.deepEqual(out.pig.eventsRefreshSec, { balance: 900, whisper: 60 });
+    assert.deepEqual(out.main.eventsRefreshSec, { balance: 900, whisper: 60 });
+  });
+
+  test('eventsRefreshSec 是整段替换：种类写了自己的，就不再逐键合并基座', () => {
+    const out = merged({
+      overlay: { eventsRefreshSec: { balance: 900, whisper: 60 } },
+      pack: { ...PACK, eventsRefreshSec: { balance: 111 } },
+    });
+    // 旧的逐键深合并会把基座的 whisper: 60 补回来；整段替换下缺的键就是缺
+    assert.deepEqual(out.pig.eventsRefreshSec, { balance: 111 });
+  });
+
+  test('eventsRefreshSec 只写一半 → 缺的键不补（消费端各自兜底 1800 / 300）', () => {
+    const out = merged({ overlay: { eventsRefreshSec: { whisper: 60 } }, pack: PACK });
+    assert.deepEqual(out.pig.eventsRefreshSec, { whisper: 60 });
+    assert.equal('balance' in rec(out.pig.eventsRefreshSec), false, '不再自动补 balance');
+    assert.deepEqual(out.main.eventsRefreshSec, { whisper: 60 });
+  });
+
+  test('eventsRefreshSec 里不认识的键不再被静默丢弃', () => {
+    const out = merged({ overlay: { eventsRefreshSec: { balance: 900, foo: 10 } }, pack: PACK });
+    assert.deepEqual(out.pig.eventsRefreshSec, { balance: 900, foo: 10 });
+  });
+
+  test('eventsRefreshSec 整段非法 → 告警 + 回退基座（种类回到内置默认）', () => {
+    for (const bad of [{ whisper: -1 }, { whisper: 'x' }, 'not-an-object', [1, 2]] as unknown[]) {
+      const out = merged({ overlay: { eventsRefreshSec: bad }, pack: PACK });
+      assert.deepEqual(out.pig.eventsRefreshSec, BASE.eventsRefreshSec, JSON.stringify(bad));
+      assert.deepEqual(out.main.eventsRefreshSec, BASE.eventsRefreshSec, JSON.stringify(bad));
     }
   });
 });

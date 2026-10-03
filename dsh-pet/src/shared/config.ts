@@ -3,7 +3,8 @@
 // GET /dsh-pet-7340/config 暴露成品）；本模块只做一件事：把**成品聚合**
 // （{ main: {...}, test1: {...}, ... }，字段已填满、绝对正确）拍平成渲染用宠物列表，
 // 条目级字段（animations / animationWeights / eventsRefreshSec / physics / confineToScreen /
-// workStatusTexts / whisperModel / chatModel）吹进每只实例。
+// workStatusTexts / whisperModel / chatModel）吹进每只实例——它们都是「所属条目一份、多实例共享」；
+// 其中 8 个「全局默认」字段的条目值来自用户层（main-config.jsonc），见 types.ts / host/config.ts。
 // 不依赖 React/DOM；host 因 DSH 单文件加载约束不 import 本目录。
 import type { Animations, ModelSelection, Pet, PetDisplay, PhysicsParams, Weights } from './types';
 
@@ -18,7 +19,8 @@ export const isDesktopVisible = (display: PetDisplay): boolean => display === 'd
 
 /** 把 host 的成品聚合拍平成渲染用宠物列表：
  *  条目级字段（animations / animationWeights / eventsRefreshSec / physics / confineToScreen /
- *  workStatusTexts / whisperModel / chatModel——合并器已填默认）吹进每只实例；
+ *  workStatusTexts / whisperModel / chatModel——合并器已填好；其中 8 个「全局默认」字段的
+ *  条目值来自用户层，见 types.ts / host/config.ts）吹进每只实例；
  *  assetRoot = 条目 key（= 素材根，多实例共享）；非 main 条目的实例打 extra 标记
  *  （文件宠物：设置页不可编辑、保存时排除）。 */
 export function flattenConfigPets(merged: Record<string, Record<string, unknown>>): Pet[] {

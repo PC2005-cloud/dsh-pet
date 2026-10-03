@@ -17,8 +17,14 @@
  *   - 内置默认配置是唯一默认值来源（「代码里的配置绝对正确」）；
  *   - 覆盖文件写了 → 用自己的值；**没写 → 静默填内置默认值**（结构性常态，不告警——
  *     设置页写的用户层本就只含 pets + notificationsEnabled；文件宠物也可以写得很短）；
+ *   - **对象字段也是整段替换**（`physics` / `eventsRefreshSec` / `whisperModel` … 都适用）：
+ *     写了就整段用自己的，缺的子键**不会**从内置默认补回来——消费端各自兜底
+ *     （如余额周期读不到就按 1800、碎碎念按 300）；
  *   - **显式写了但非法**（类型/结构/白名单外）→ 告警 + 填内置默认值
  *     （同一 文件+字段 进程内只告警一次，避免每请求刷屏；保证返回绝不出现残缺/非法值）；
+ *   - **例外：全局默认**（GLOBAL_DEFAULT_KEYS 那 8 个「用户级成本/偏好/环境/节奏」字段）——
+ *     文件宠物条目的基座取**用户层**（main-config.jsonc）而不是内置默认，即"设置页改一次，
+ *     所有宠物都生效"；种类文件仍可在自己顶层覆盖（写了就用自己那份）；
  *   - 身份字段例外（无默认可填）：id 必须存在、全局唯一（缺失/重复/非法/冲突 →
  *     跳过该实例并告警）；name 缺失/空 → 按该宠物 id 处理并告警（既定规则，不继承默认名字）。
  *
@@ -43,6 +49,36 @@ const PET_DISPLAY_SET: ReadonlySet<string> = new Set(PET_DISPLAYS);
  *  同时被 thumb 路由的 petId 校验复用：那里同样是"标识符不得当路径片段"。 */
 // eslint-disable-next-line no-control-regex
 export const ID_FORBIDDEN = /[\\/:\x00-\x1f]/;
+
+/**
+ * 「全局默认 + 种类可覆盖」的顶层字段白名单 —— 用户层（main-config.jsonc）里写下的值会成为
+ * **所有条目**的默认值；种类文件 `pet/<名>-config.json` 仍可在自己顶层覆盖（写了就用自己那份）。
+ *
+ * 判据：这几个是**用户级「成本 / 偏好 / 环境 / 节奏」参数**，不是「这个种类长什么样」——
+ *   - `chatMemoryRounds`：带多少历史进上下文 = token 成本
+ *   - `whisperModel` / `chatModel`：碎碎念 / 对话用哪个模型 = 成本与能力偏好
+ *   - `whisperImageEnabled` / `chatImageEnabled`：要不要把表情包清单附进请求 = token 成本
+ *   - `eventsRefreshSec`：多久调一次模型 / 拉一次余额 = 成本与节奏。注意它内部两个键的**消费端**
+ *     不同：`.whisper` 按宠物所属条目读（种类可覆盖）；`.balance` 只读 main 条目
+ *     （余额数据一份 + host 只有一个定时器，架构上给不了每种类一个周期）
+ *   - `physics`：拖拽抛掷手感；`petCollision` 更是**跨宠物**行为（相撞按动量守恒弹开），
+ *     按种类分在语义上站不住：两只不同种类的宠物相撞时用谁的系数？
+ *   - `confineToScreen`：多屏是用户环境 / 使用习惯，不是宠物属性
+ *
+ * 不在名单里的顶层字段基座仍是**内置默认**：`whisperPrompt`（人设）、`memes`（表情包）、
+ * `animations` / `animationWeights`（与素材根绑定）、`workStatusTexts`（文案）——一个种类一份
+ * 动画池 / 一份人设 / 一个表情包目录，各写一份才是 pet pack 的意义。
+ */
+const GLOBAL_DEFAULT_KEYS = [
+  'physics',
+  'confineToScreen',
+  'whisperImageEnabled',
+  'chatImageEnabled',
+  'chatMemoryRounds',
+  'whisperModel',
+  'chatModel',
+  'eventsRefreshSec',
+] as const;
 
 /** 已告警过的 文件:字段（进程内去重：同一问题只告警一次，避免每请求刷屏；重启重置） */
 const warnedKeys = new Set<string>();
@@ -285,6 +321,8 @@ function topFieldValid(key: string, value: unknown): boolean {
       return animationsValid(value);
     case 'animationWeights':
       return weightsValid(value);
+    case 'eventsRefreshSec':
+      return eventsRefreshSecValid(value);
     case 'physics':
       return physicsValid(value);
     case 'whisperModel':
@@ -297,29 +335,45 @@ function topFieldValid(key: string, value: unknown): boolean {
   }
 }
 
-/** eventsRefreshSec 段：深度合并——每个事件键都要有正数秒值；缺子键 → 静默取默认，显式写但非法 → 告警 + 默认 */
-function mergeEventsRefreshSec(base: unknown, overlay: unknown, label: string): Record<string, number> {
-  const baseErs = base && typeof base === 'object' ? (base as Record<string, unknown>) : {};
-  const out: Record<string, number> = {};
-  for (const [eventName, baseSec] of Object.entries(baseErs)) {
-    const own = overlay && typeof overlay === 'object' ? (overlay as Record<string, unknown>)[eventName] : undefined;
-    // 结构性常态：只写部分事件键（如只写 balance）→ 缺的键静默取默认
-    if (own === undefined) {
-      out[eventName] = Number(baseSec);
-      continue;
-    }
-    const n = Number(own);
-    if (!Number.isFinite(n) || n <= 0) {
-      warnOnce(
-        `${label}:eventsRefreshSec.${eventName}`,
-        `「${label}」的 eventsRefreshSec.${eventName} 非法，已取默认值`,
-      );
-      out[eventName] = Number(baseSec);
-      continue;
-    }
-    out[eventName] = n;
+/**
+ * eventsRefreshSec 段校验：事件名 → 间隔秒（正的有限数字）。
+ *
+ * 只校验「写下的每个值都合法」，**不**要求键集合与内置默认一致——这个字段和别的顶层字段
+ * 一样是**整段替换**：缺的键就是缺（消费端各自兜底 1800 / 300），多写的键原样保留
+ * （不再像旧的逐键深合并那样静默丢弃不认识的键）。空对象合法（等于全走消费端兜底）。
+ */
+function eventsRefreshSecValid(value: unknown): boolean {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  for (const v of Object.values(value as Record<string, unknown>)) {
+    const n = Number(v);
+    if (!Number.isFinite(n) || n <= 0) return false;
   }
-  return out;
+  return true;
+}
+
+/**
+ * 文件宠物条目的合并基座：内置默认 + 白名单字段改用**用户层**的值。
+ *
+ * 为什么：那 8 个字段是用户级成本/偏好/环境/节奏参数，不是种类属性——用户在设置页改一次，
+ * 期望所有宠物（含 pet pack）都生效。没有这一步，文件宠物只能拿到内置默认值，
+ * 于是"设置页写着全局、实际只影响主宠物"（见 GLOBAL_DEFAULT_KEYS 的判据）。
+ *
+ * 语义仍是「种类可覆盖」：种类文件顶层写了自己的值 → 走 overlay 覆盖（mergeEntry 负责）。
+ * 用户层写了但非法的值直接跳过（main 条目那边合并时已告警过一次，这里不再重复刷屏）。
+ */
+function packBase(
+  base: Record<string, unknown>,
+  mainOverlay: Record<string, unknown> | undefined,
+): Record<string, unknown> {
+  if (!mainOverlay) return base;
+  let out: Record<string, unknown> | undefined;
+  for (const key of GLOBAL_DEFAULT_KEYS) {
+    const own = mainOverlay[key];
+    if (own === undefined || !topFieldValid(key, own)) continue;
+    out ??= { ...base };
+    out[key] = own;
+  }
+  return out ?? base;
 }
 
 /** 一个覆盖文件 → 完整条目：顶层逐字段合并（没写/非法 → 内置默认 + 告警），pets 逐实例 */
@@ -334,10 +388,6 @@ function mergeEntry(
   for (const key of Object.keys(base)) {
     if (key === 'pets') {
       out.pets = mergePets(basePets, overlay?.[key], label, seenIds);
-      continue;
-    }
-    if (key === 'eventsRefreshSec') {
-      out[key] = mergeEventsRefreshSec(base[key], overlay?.[key], label);
       continue;
     }
     const own = overlay ? overlay[key] : undefined;
@@ -477,14 +527,16 @@ export function readAllConfig(paths: ConfigPaths): Record<string, Record<string,
   }
   out.main = mergeEntry(base, mainOverlay, 'main-config.jsonc', basePets, seenIds);
 
-  // 文件宠物条目：pet/<名>-config.json，一个文件一个条目（key = 文件名前缀 = 素材根）
+  // 文件宠物条目：pet/<名>-config.json，一个文件一个条目（key = 文件名前缀 = 素材根）。
+  // 基座 = 内置默认，但白名单字段（用户级成本/偏好/环境）取**用户层**——「全局默认 + 种类可覆盖」。
+  const filePetBase = packBase(base, mainOverlay);
   for (const file of scanPetFiles(paths.petDir)) {
     const parsed = readJsonc(file.path);
     if (!parsed) {
       warnOnce('file:' + file.path, '文件宠物配置解析失败，已跳过：' + file.path);
       continue;
     }
-    out[file.prefix] = mergeEntry(base, parsed, file.prefix + '-config.json', basePets, seenIds);
+    out[file.prefix] = mergeEntry(filePetBase, parsed, file.prefix + '-config.json', basePets, seenIds);
   }
   return out;
 }

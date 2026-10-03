@@ -188,7 +188,7 @@ export const zh = {
     '每只宠物独立配置：名字 / 大小 / 显示位置 / 位置 / 偏移 / 四个功能开关。改完点最下面的「保存」即时生效。',
   globalTitle: '全局开关',
   globalHint:
-    '所有宠物共用。这几个开关只改本地状态，随「保存」整包写入用户配置（不做即时写入）；系统通知在保存后即时重读，无需刷新页面。',
+    '所有宠物共用（pet pack 可在自己种类文件里单独覆盖）。这几个开关只改本地状态，随「保存」整包写入用户配置（不做即时写入）；系统通知在保存后即时重读，无需刷新页面。',
   cornerHint: '宠物贴着屏幕的哪个角（桌面端按各自显示器的工作区算）。',
   marginXHint: '距所选角落的水平距离（px），可为任意数字。',
   marginYHint: '距所选角落的垂直距离（px），可为任意数字。',
@@ -267,7 +267,7 @@ export const zh = {
     '多屏用户：甩出去的宠物只在松手时所在那块屏幕内弹（屏缝当墙，不飞到隔壁屏）；关掉则照常跨屏飞行。只影响桌面模式——浏览器 overlay 本来就只在视口内弹。',
   physicsTitle: '物理（拖拽抛掷手感）',
   physicsHint:
-    '全局，所有宠物共用；随「保存」写入用户配置（不做即时写入）。浏览器保存后即时生效，桌面端由保存重载宠物窗口后生效。',
+    '全局默认，所有宠物共用（pet pack 可在自己种类文件里单独覆盖）；随「保存」写入用户配置（不做即时写入）。浏览器保存后即时生效，桌面端由保存重载宠物窗口后生效。',
   'physics.gravity': '重力 gravity',
   'physics.gravityHint': 'px/s²，越大落得越快；0 = 无重力（抛出去匀速直线飞）',
   'physics.restitution': '弹性 restitution',
@@ -283,7 +283,7 @@ export const zh = {
   invalidPhysics: '请检查物理参数：重力 / 地面摩擦 ≥ 0，弹性 0~1，总力度 > 0。',
   modelTitle: 'AI 模型（碎碎念 / 对话）',
   modelHint:
-    '碎碎念与对话各自用哪个模型；选「跟随当前对话」= 用你当前对话正在用的那个模型（默认）。选项与 DSH 的模型选择器同源，由宿主实时提供。',
+    '碎碎念与对话各自用哪个模型；选「跟随当前对话」= 用你当前对话正在用的那个模型（默认）。全局默认：对所有宠物生效，pet pack 可在自己种类文件里单独覆盖。选项与 DSH 的模型选择器同源，由宿主实时提供。',
   modelFollow: '跟随当前对话',
   modelSearch: '搜索模型…',
   modelEmpty: '没有匹配的模型。',
@@ -330,7 +330,7 @@ export const en = {
     'Per-pet settings: name / size / display / corner / offsets / the four feature switches. Click "Save" at the bottom to apply instantly.',
   globalTitle: 'Global switches',
   globalHint:
-    'Shared by every pet. These switches only change local state and are written to the user config on "Save" (never written immediately); system notifications re-read right after saving, no page refresh needed.',
+    'Shared by every pet (a pet pack may override them in its own kind file). These switches only change local state and are written to the user config on "Save" (never written immediately); system notifications re-read right after saving, no page refresh needed.',
   cornerHint: 'Which screen corner the pet sticks to (per-monitor work area in desktop mode).',
   marginXHint: 'Horizontal distance from the chosen corner (px); any number.',
   marginYHint: 'Vertical distance from the chosen corner (px); any number.',
@@ -413,7 +413,7 @@ export const en = {
     'Multi-monitor: a thrown pet bounces only inside the screen it was released on (screen seams act as walls, so it never flies to the neighbouring monitor); turn this off to let it cross screens as usual. Desktop only — the browser overlay always bounces inside the viewport anyway.',
   physicsTitle: 'Physics (drag & throw feel)',
   physicsHint:
-    'Global, shared by every pet; written to the user config on "Save" (never written immediately). Applies instantly in the browser; on the desktop it applies once Save reloads the pet windows.',
+    'Global default, shared by every pet (a pet pack may override it in its own kind file); written to the user config on "Save" (never written immediately). Applies instantly in the browser; on the desktop it applies once Save reloads the pet windows.',
   'physics.gravity': 'Gravity',
   'physics.gravityHint': 'px/s² — the higher, the faster it falls; 0 = weightless (flies straight forever)',
   'physics.restitution': 'Bounciness',
@@ -432,7 +432,7 @@ export const en = {
   invalidPhysics: 'Check the physics values: gravity / ground friction ≥ 0, bounciness 0–1, throw power > 0.',
   modelTitle: 'AI models (whisper / chat)',
   modelHint:
-    'Which model each of whisper and chat uses; "Follow current conversation" uses the model your current conversation is on (default). The options come from the same source as the DSH model picker, served live by the host.',
+    'Which model each of whisper and chat uses; "Follow current conversation" uses the model your current conversation is on (default). Global default: applies to every pet, and a pet pack may override it in its own kind file. The options come from the same source as the DSH model picker, served live by the host.',
   modelFollow: 'Follow current conversation',
   modelSearch: 'Search models…',
   modelEmpty: 'No matching models.',
