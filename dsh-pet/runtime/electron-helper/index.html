@@ -133,6 +133,21 @@
       .pet-bub-tier-idle {
         color: #2e9e4f;
       }
+      /* 余额变体：与浏览器 overlay 一致 —— 金额可能很长（千分位），默认 nowrap + max-width 0.5
+         会把整行顶出宠物宽度；放宽到 0.92 并允许换行（居中排布），长金额只换行、不溢出 */
+      .pet-bubble.is-balance {
+        max-width: calc(var(--pet-size, 462px) * 0.92);
+        white-space: normal;
+        overflow-wrap: break-word;
+      }
+      .pet-bubble.is-balance .pet-bub-row {
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 0 calc(var(--pet-size, 462px) * 0.012);
+      }
+      .pet-bubble.is-balance .pet-bub-row > * {
+        text-align: center;
+      }
       /* 配置错误提示（大声报错，不做静默兜底）：配置缺失/非法时显示，每 5s 自动重试 */
       .pet-error {
         position: fixed;

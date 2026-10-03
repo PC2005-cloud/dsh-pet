@@ -265,6 +265,24 @@ function unavailableRows(state: BalanceUnavailable): BalanceBubbleRow[] {
 }
 
 /**
+ * 余额金额的展示文本：固定两位小数 + 千位分隔。
+ *
+ * 为什么不能直接打印 `state.total`：账号态余额是「充值 + 赠金」两个浮点数相加的结果，
+ * 原样输出会带上浮点长尾（实测 `13.9468696`），在 max-width 受限的气泡里偏长且不像金额；
+ * 两位小数与鲸鱼挂件（dsh-whale-widget）同口径。
+ *
+ * 解析失败（空值/非数字）原样回落，绝不把已有内容吞成 '-'。
+ */
+export function formatBalanceText(value: string | number | undefined | null): string {
+  if (value === null || value === undefined || value === '') return '-';
+  const n = typeof value === 'number' ? value : Number(String(value).replace(/,/g, '').trim());
+  if (!Number.isFinite(n)) return String(value);
+  const two = Math.round(n * 100) / 100;
+  const [int, frac] = two.toFixed(2).split('.');
+  return int.replace(/\B(?=(\d{3})+(?!\d))/g, ',') + '.' + frac;
+}
+
+/**
  * 把 BalanceState 渲染成气泡行数据（纯函数，不碰 DOM/React）：
  * - opencode：两行 —— 「5h/周/月」额度已用 N% + 重置倒计时
  * - deepseek：一行 —— 余额（峰/谷）¥x.xx（峰红/谷绿由 role:'tier' 表达）
@@ -288,7 +306,7 @@ export function balanceBubbleView(state: BalanceState): BalanceBubbleRow[] {
     return [
       { role: 'label', text: '余额（' },
       { role: 'tier', tier, text: tier === 'peak' ? '峰' : '谷' },
-      { role: 'label', text: '）¥' + (state.total ?? '-') },
+      { role: 'label', text: '）¥' + formatBalanceText(state.total) },
     ];
   }
   return unavailableRows(state);

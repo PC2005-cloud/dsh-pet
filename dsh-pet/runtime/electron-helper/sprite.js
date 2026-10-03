@@ -1219,6 +1219,9 @@ class PetSprite {
       // 余额「文字说明」（不可用状态）同样要换行变体：默认 nowrap 会把长文案顶出宠物宽度
       slot === 'whisper' || slot === 'work' || (slot === 'balance' && this.balanceWrap),
     );
+    // 余额变体（仅余额可用状态）：金额可能很长（千分位），放宽 max-width 并允许换行。
+    // 不可用的「文字说明」已经走 is-whisper，不再叠 is-balance。
+    this.bubble.classList.toggle('is-balance', slot === 'balance' && !this.balanceWrap);
     this.bubble.classList.toggle(S.MEME_BUBBLE_CLASS, !!whisperImg);
     if (slot === 'none') {
       // 三者都没有可显示的内容：隐藏（不占位，也就不会挡住任何一层）
