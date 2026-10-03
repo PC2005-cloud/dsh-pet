@@ -724,3 +724,16 @@ export function syncUserConfigFromDefault(paths: ConfigPaths): void {
   mkdirSync(dirname(paths.userFile), { recursive: true });
   writeFileSync(paths.userFile, raw, 'utf8');
 }
+
+/**
+ * 对话记忆截取：从消息列表里取尾部 `rounds` 轮（1 轮 = 1 问 1 答 → 2 条）。
+ *
+ * 为什么单独抽一个函数：`rounds = 0` 表示「不带历史」。若直接写 `messages.slice(-rounds * 2)`，
+ * 会踩 JS 的 `-0` 陷阱——`-0 === 0`，`slice(-0)` 返回**整个数组**而不是空数组，
+ * 于是「关掉历史」反而变成「带全部历史」（用户实测：设 0 后问生日，10 秒后仍答得出）。
+ * 这里显式分支：0 → 空列表；> 0 → 截尾部。`rounds` 由合并器保证为非负有限数，
+ * 负数/NaN 兜底按 0 处理（不产出荒谬的 slice 行为）。
+ */
+export function sliceMemoryRounds<T>(messages: T[], rounds: number): T[] {
+  return rounds > 0 ? messages.slice(-Math.floor(rounds) * 2) : [];
+}

@@ -83,6 +83,7 @@ import {
   readAllConfig,
   readUserConfig,
   saveUserConfig,
+  sliceMemoryRounds,
   syncUserConfigFromDefault,
   userConfigUnparsable,
   type ConfigPaths,
@@ -462,7 +463,9 @@ export function apply(ctx: any): void {
       const bucketKey = found?.entry ?? petId;
       const bucket = (mem[bucketKey] ??= {});
       const entry = (bucket[petId] ??= { messages: [] });
-      const list = entry.messages.slice().slice(-rounds * 2);
+      // rounds = 0（用户关掉历史）→ 空历史；否则截尾部 rounds 轮（1 轮 = 1 问 1 答）。
+      // 不能写 slice(-rounds * 2)：-0 在 JS 里 === 0，slice(-0) 返回整个数组而不是空。
+      const list = sliceMemoryRounds(entry.messages, rounds);
       // 模型：条目配置的 chatModel 优先（留空 = 不指定）；生成侧失败会回落到当前对话的模型重试一次
       const generated = await generateChat(ctx, system, list, text, pool, configuredModel(conf, 'chatModel'));
       if (!generated.ok) return generated;
@@ -1030,7 +1033,9 @@ export function apply(ctx: any): void {
           const bucket = mem[findPetInstance(cfg, petId)?.entry ?? petId] ?? {};
           const list = (bucket[petId]?.messages ?? []).slice();
           const rounds = memoryRounds(petId, cfg);
-          return { kind: 'json', status: 200, obj: { ok: true, messages: list.slice(-rounds * 2), rounds } };
+          // 与 chatWithPet 同一语义：rounds = 0 → 空历史（slice(-0) 会返回整个数组，见上）
+          const messages = sliceMemoryRounds(list, rounds);
+          return { kind: 'json', status: 200, obj: { ok: true, messages, rounds } };
         }
         if (method === 'POST') {
           const parsed = (JSON.parse(body ?? 'null') as Record<string, unknown> | null) ?? {};

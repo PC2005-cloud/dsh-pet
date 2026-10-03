@@ -19,6 +19,7 @@ import {
   readAllConfig,
   readUserConfig,
   saveUserConfig,
+  sliceMemoryRounds,
   syncUserConfigFromDefault,
   userConfigUnparsable,
   type ConfigPaths,
@@ -963,5 +964,36 @@ describe('文件宠物条目 —— 全局默认（用户层作基座）+ 种类
       assert.deepEqual(out.pig.eventsRefreshSec, BASE.eventsRefreshSec, JSON.stringify(bad));
       assert.deepEqual(out.main.eventsRefreshSec, BASE.eventsRefreshSec, JSON.stringify(bad));
     }
+  });
+});
+
+describe('sliceMemoryRounds —— chatMemoryRounds=0 必须真正不带历史（防 -0 陷阱回归）', () => {
+  // 4 条消息 = 2 轮（1 轮 = 1 问 1 答）
+  const msgs = ['u1', 'a1', 'u2', 'a2'];
+
+  test('rounds=0 → 空列表（曾因 slice(-0) 返回整个数组而带上全部历史）', () => {
+    assert.deepEqual(sliceMemoryRounds(msgs, 0), []);
+  });
+
+  test('rounds>0 → 截尾部 rounds 轮', () => {
+    assert.deepEqual(sliceMemoryRounds(msgs, 1), ['u2', 'a2']);
+    assert.deepEqual(sliceMemoryRounds(msgs, 2), msgs);
+  });
+
+  test('rounds 超过消息数 → 全量（不多不少）', () => {
+    assert.deepEqual(sliceMemoryRounds(msgs, 99), msgs);
+  });
+
+  test('负数 / NaN 兜底按 0 → 空列表（不产出荒谬的 slice 行为）', () => {
+    assert.deepEqual(sliceMemoryRounds(msgs, -1), []);
+    assert.deepEqual(sliceMemoryRounds(msgs, Number.NaN), []);
+  });
+
+  test('rounds 为小数 → 先向下取整再截（与 memoryRounds 的 Math.floor 一致）', () => {
+    assert.deepEqual(sliceMemoryRounds(msgs, 1.9), ['u2', 'a2']);
+  });
+
+  test('rounds=0 且消息列表原本为空 → 空', () => {
+    assert.deepEqual(sliceMemoryRounds([], 0), []);
   });
 });
