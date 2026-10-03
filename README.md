@@ -38,11 +38,14 @@ node -v
 npm install -g @deepseek-ai/dsh pnpm
 dsh --version   # 验证 dsh 命令可用
 
-# ③ 安装本插件
-dsh plugin --profile web add dsh-pet
+# ③ 安装本插件：--profile 填你实际在用的那个
+#    桌面应用（Electron 版）→ desktop；dsh web → web
+dsh plugin --profile desktop add dsh-pet
 ```
 
-重启 `dsh web`，宠物出现在界面右上角（默认配置角落，可在设置页修改）。
+装完**重开桌面应用**（`dsh web` 用户则重启 `dsh web`）才生效——运行中的进程持有内存里的旧插件。宠物出现在界面右上角（默认配置角落，可在设置页修改）。
+
+桌面应用也可以不开终端：直接在应用内「插件管理」的安装框里填 `dsh-pet`。
 
 > **兼容性**：本插件当前在 dsh **`0.2.0-rc.2`** 下开发并测试（`dsh --version` 可查看你的版本）。建议使用相同版本；其他版本如遇问题欢迎反馈。
 
@@ -61,8 +64,9 @@ npm install
 # ③ 构建（tsdown → lib）
 npm run prepare     # 构建完整 lib（npm install / npm publish 时会自动执行）
 
-# ④ 安装到 DSH（file: 指向本目录，用构建好的 lib）
-dsh plugin --profile web add file:D:/path/to/dsh-pet
+# ④ 安装到 DSH（file: 指向**插件目录**——上面 cd 进去的那一层，用构建好的 lib）
+#    --profile 同样填实际在用的：桌面应用 desktop、dsh web → web
+dsh plugin --profile desktop add file:D:/path/to/dsh-pet/dsh-pet
 ```
 
 > 注：`prepare`（npm install / npm publish 时自动执行，也可手动 `npm run prepare`）才产出**完整可安装**的 lib——除 tsdown 构建外还构建桌面共享核心（`shared-core.js`）、生成类型声明并收敛发布 `files` 清单；裸 `tsdown` 构建会缺桌面运行时与类型。
@@ -482,8 +486,9 @@ python encode_thumbs.py      # 转码 640×360 播放变体 → step04/
 # 把 step04 的播放变体同步进插件包（webm 直接 cp）
 cp step04/*.webm dsh-pet/assets/webm/   # 播放格式（VP9-alpha）
 
-# 本地安装插件
-dsh plugin --profile web add file:D:/path/to/dsh-pet
+# 本地安装插件（--profile 填实际在用的：桌面应用 desktop、dsh web → web；
+# file: 指向插件目录 dsh-pet/dsh-pet）
+dsh plugin --profile desktop add file:D:/path/to/dsh-pet/dsh-pet
 ```
 
 > 中间产物（step01-04）由脚本生成、不入仓库；`video/` 源视频和脚本是成果、入库维护。
