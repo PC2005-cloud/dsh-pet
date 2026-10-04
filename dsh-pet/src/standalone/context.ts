@@ -136,11 +136,41 @@ export function createStandaloneContext(options: StandaloneContextOptions): Stan
     llm: {
       listProviders: (): unknown[] => [],
       listModels: async (): Promise<unknown[]> => [],
-      resolveModelInfo: (): undefined => undefined,
-      /** 生成入口：独立模式没有模型后端，明确抛错，由插件转成 ok:false 的失败态 */
-      stream: async (): Promise<never> => {
-        throw new Error('dsh-pet standalone: 独立模式未接入模型（碎碎念/对话不可用）');
-      },
+      /**
+       * 模型元数据查询。DSH 的契约是
+       * `resolveModelInfo(provider, model, signal?): Promise<LlmResolvedModelInfo>` —— **异步**。
+       * 替身必须同样返回 Promise：同步返回 undefined 时，任何 `.then()` 或不带 `?.` 的取值
+       * 都会立刻炸（与 stream 同一类形状错误）。
+       *
+       * 目前唯一消费方 `supportsReasoningOff` 用 `await` + `?.` + try/catch 包着，所以不炸——
+       * 但那是靠消费方防御，不是靠形状正确。形状对不上，就不该指望下一个消费方也这么写。
+       */
+      resolveModelInfo: async (): Promise<undefined> => undefined,
+      /**
+       * 生成入口：独立模式没有模型后端。
+       *
+       * 必须是 **AsyncIterable**——DSH 的契约是 `stream(options): AsyncIterable<StreamChunk>`，
+       * 调用方一律 `for await (const chunk of llm.stream(...))` 消费。错误在首次 `next()` 时抛出，
+       * 正好落在调用方已有的 try/catch 里，转成 `ok:false / generate-error` 的结构化失败。
+       *
+       * **不能**写成 `async () => { throw ... }`：那返回 Promise 而非 AsyncIterable，
+       * `for await` 会立刻抛 TypeError（文案由 V8 生成，形如 "llm.stream(...) is not a function
+       * or its return value is not async iterable"），同时那个 rejected promise 无人接管，
+       * 以 unhandled rejection **直接终止进程**。0.3.4 的崩溃根因即此：配置里设了
+       * whisperModel/chatModel 就必崩，因为只有配了模型才会真的走到这里。
+       */
+      // 不用 `async function*`：一个只有 throw、没有 yield 的生成器会被 eslint 的
+      // require-yield 拦下；而这里恰恰不该 yield 任何东西（独立模式没有模型后端）。
+      // 显式给出 AsyncIterable 的形状，也是对契约最直接的表达。
+      stream: (): AsyncIterable<never> => ({
+        [Symbol.asyncIterator](): AsyncIterator<never> {
+          return {
+            next: async (): Promise<IteratorResult<never>> => {
+              throw new Error('dsh-pet standalone: 独立模式未接入模型（碎碎念/对话不可用）');
+            },
+          };
+        },
+      }),
     },
   };
 

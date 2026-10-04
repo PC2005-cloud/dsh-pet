@@ -45,12 +45,14 @@ const llmOf = (
 ): {
   listProviders(): unknown[];
   listModels(provider: string): Promise<unknown[]>;
-  stream(options: unknown): Promise<unknown>;
+  // 形状必须是 AsyncIterable（DSH 的 llm.stream 签名）。这里若写成 Promise，
+  // 就与替身实现犯了同一个错 —— 也正是这个断言让 0.3.4 的类型检查与真实契约脱节。
+  stream(options: unknown): AsyncIterable<unknown>;
 } =>
   context.ctx.llm as {
     listProviders(): unknown[];
     listModels(provider: string): Promise<unknown[]>;
-    stream(options: unknown): Promise<unknown>;
+    stream(options: unknown): AsyncIterable<unknown>;
   };
 
 describe('createStandaloneContext —— 与 Cordis 对齐的语义', () => {
@@ -137,12 +139,19 @@ describe('服务替身的降级口径 —— 显式失败，不假装成功', ()
     assert.deepEqual(result, { ok: false, reason: 'provider-missing', message: '当前对话未配置模型' });
   });
 
-  test('凭证恒不可得；llm 清单为空、生成入口直接抛错', async () => {
+  test('凭证恒不可得；llm 清单为空、生成入口是"迭代即失败"的 async iterable', async () => {
     const context = createStandaloneContext({ port: 1, logger: silentLogger() });
     assert.equal(await credentialsOf(context).resolve('DEEPSEEK_API_KEY'), undefined);
     const llm = llmOf(context);
     assert.deepEqual(llm.listProviders(), []);
     assert.deepEqual(await llm.listModels('deepseek'), []);
-    await assert.rejects(() => llm.stream({}), /独立模式未接入模型/);
+    // 契约：stream() 返回的是 AsyncIterable（DSH 的 llm.stream 签名），不是 Promise。
+    // 旧断言写成 "stream() 自己 reject"，把错误的契约固化了下来：它从未走 for await，
+    // 所以全绿；而真实集成一跑就崩（TypeError + 无人接管的 rejected promise）。
+    const streamed = llm.stream({});
+    assert.equal(typeof streamed[Symbol.asyncIterator], 'function');
+    await assert.rejects(async () => {
+      for await (const chunk of streamed) void chunk;
+    }, /独立模式未接入模型/);
   });
 });

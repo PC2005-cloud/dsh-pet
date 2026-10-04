@@ -1,10 +1,16 @@
 /**
  * `@deepseek-ai/dsh-llm` 的独立模式替身（消息工厂 / 文本块拼装 / reasoning 标识）。
  *
- * 独立模式没有模型后端，所以 `ctx.llm` 的替身（见 ../context.ts）让生成侧在**模型候选链**
- * 阶段就明确失败：`agentDefaultModel.currentSelection()` 返回的 model 为空 →
+ * 独立模式没有模型后端。`ctx.llm` 的替身（见 ../context.ts）让**没有显式配置模型**的调用在
+ * 候选链阶段就失败：`agentDefaultModel.currentSelection()` 返回的 model 为空 →
  * `model-selection.ts` 的 `currentModel()` 判定为「未配置」→ `generateWhisper` / `generateChat`
- * 直接回 `{ ok: false, reason: 'provider-missing' }`，不会走到这里的消息构造与流拼装。
+ * 直接回 `{ ok: false, reason: 'provider-missing' }`。
+ *
+ * **但这不是结构性保证。** 用户在配置里显式写了 `whisperModel` / `chatModel`（设置页选过模型
+ * 就会写进配置）时，候选链非空，生成侧会真的走到本文件的消息构造与 `ctx.llm.stream`。
+ * 所以本文件与 ctx.llm 替身的每一处形状都必须与 DSH 的真实契约一致 —— 0.3.4 的崩溃正是因为
+ * `stream` 被当成"永远不走的那条路"，实现成返回 Promise 而契约要求 AsyncIterable
+ * （细节见 ../context.ts 里 stream / resolveModelInfo 的注释）。
  *
  * 那为什么还要实现它们：`whisper.ts` / `chat.ts` 是**静态 import** 这四个名字的，
  * 模块图能加载是独立模式起得来的前提；同时保持它们是纯本地、零网络的实现，
