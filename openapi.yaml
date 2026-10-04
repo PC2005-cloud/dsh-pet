@@ -1016,8 +1016,10 @@ components:
         kind:
           type: string
           description: |
-            服务商类型。`opencode` 走三窗口用量（百分比），`deepseek` 走账户金额。
-          enum: [opencode, deepseek]
+            服务商类型。`opencode` / `commandcode` 走三窗口用量（百分比），`deepseek` 走账户金额。
+            `opencode` 三窗口均返回；`commandcode` 的 `monthly` 必有，`rolling`（5h）/ `weekly`
+            只在套餐有窗口限制时返回——字段缺省表示「没有这个窗口」，不是「已用 0%」。
+          enum: [opencode, deepseek, commandcode]
         manual:
           type: boolean
           description: |
@@ -1025,25 +1027,34 @@ components:
             时出现。消费端据此决定"余额不可用时要不要必弹文字说明"。
         rolling:
           type: number
-          description: opencode：滚动窗口用量（0-100）
+          description: opencode / commandcode：5h 滚动窗口用量（0-100）
         weekly:
           type: number
-          description: opencode：周窗口用量（0-100）
+          description: opencode / commandcode：周窗口用量（0-100）
         monthly:
           type: number
-          description: opencode：月窗口用量（0-100）
+          description: opencode / commandcode：月窗口用量（0-100）
         rollingResetsAt:
           type: string
           format: date-time
-          description: opencode：滚动窗口重置时间
+          description: opencode / commandcode：滚动窗口（5h）重置时间
         weeklyResetsAt:
           type: string
           format: date-time
-          description: opencode：周窗口重置时间
+          description: opencode / commandcode：周窗口重置时间
         monthlyResetsAt:
           type: string
           format: date-time
-          description: opencode：月窗口重置时间
+          description: opencode / commandcode：月窗口重置时间
+        rollingCapUsd:
+          type: number
+          description: commandcode：滚动窗口（5h）满额度（USD，接口回传）——「最紧迫窗口」判定用
+        weeklyCapUsd:
+          type: number
+          description: commandcode：周窗口满额度（USD，接口回传）
+        monthlyCapUsd:
+          type: number
+          description: commandcode：月窗口满额度（USD）= 当期消耗 + 剩余额度；无额度也无消耗时缺省
         currency:
           type: string
           description: deepseek：币种

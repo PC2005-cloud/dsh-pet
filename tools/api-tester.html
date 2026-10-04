@@ -1316,7 +1316,7 @@
         if (d.granted) rows.appendChild(kv("赠送", d.granted));
         if (d.toppedUp) rows.appendChild(kv("充值", d.toppedUp));
         if (rows.childElementCount) box.appendChild(rows);
-      } else if (data.kind === "opencode") {
+      } else if (data.kind === "opencode" || data.kind === "commandcode") {
         for (const [label, v, reset] of [
           ["滚动窗口", d.rolling, d.rollingResetsAt],
           ["本周", d.weekly, d.weeklyResetsAt],
