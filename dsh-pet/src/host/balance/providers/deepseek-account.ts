@@ -4,9 +4,11 @@
  * 这条路由**没有 API Key**（`credential.mode === 'none'`）：凭证是 DSH 账号服务持有的授权记录，
  * 因此不发任何 HTTP，只经调用方注入的 `resolveAccount`（= `ctx.deepseekAccount.getBalance`）取快照。
  *
- * 展示口径与 `deepseek-official` **完全一致**（同一个 kind）：气泡都是「余额（峰/谷）¥x.xx」，
+ * 展示口径与 `deepseek-official` **完全一致**（同一个 shape）：气泡都是「余额（峰/谷）¥x.xx」，
  * 金额语义也对齐官方定义 —— `total` = 赠送 + 充值（`granted` + `toppedUp`）。差异只在取数。
+ * 档位基准与峰谷档位取自 ./deepseek-common.ts（两条 deepseek 路由同一套口径）。
  */
+import { DEEPSEEK_FULL_BALANCE, deepseekPricingTier } from '../deepseek-common';
 import { money, obj, sumMoney } from '../internal';
 import type { AccountBalanceSnapshot, BalanceProvider, BalanceSuccess } from '../types';
 
@@ -39,7 +41,7 @@ export function parseAccountBalance(
   return {
     ok: true,
     provider,
-    kind: 'deepseek',
+    shape: 'money',
     data: {
       currency,
       // 与官方路由**同构**：官方文档定义 total_balance = "The total available balance,
@@ -49,6 +51,8 @@ export function parseAccountBalance(
       // deepseek-official 的 granted/toppedUp 语义在账号侧对应「赠送 / 充值」两个钱包
       granted,
       toppedUp,
+      fullBalance: DEEPSEEK_FULL_BALANCE,
+      tier: deepseekPricingTier(),
     },
   };
 }

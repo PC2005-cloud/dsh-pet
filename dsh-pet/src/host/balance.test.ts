@@ -20,7 +20,7 @@ import {
   parseCommandCode,
   queryBalance,
   type BalanceResult,
-  type CommandCodeUsage,
+  type WindowsUsage,
 } from './balance/index.ts';
 
 /** 真实 GOAT 套餐报文（字段名与取值照抄线上响应；`resetAt: 0` 是空闲窗口的占位值） */
@@ -45,8 +45,8 @@ const GOAT_SUBSCRIPTION = {
 const GOAT_SUMMARY = { totalCost: 0, periodBasis: 'billing-period' };
 
 /** 取成功的 commandcode 数据；形状不对直接失败（省得每个用例都写一遍收窄） */
-function dataOf(result: BalanceResult): CommandCodeUsage {
-  if (!result.ok || result.kind !== 'commandcode') {
+function dataOf(result: BalanceResult): WindowsUsage {
+  if (!result.ok || result.shape !== 'windows') {
     assert.fail('期望 commandcode 的成功结果，实际：' + JSON.stringify(result));
   }
   return result.data;
@@ -343,7 +343,7 @@ describe('deepseek-account —— DSH 账号路由（走账号服务，不是 HT
     bonusWallets: [{ currency: 'CNY', balance: '5.00' }],
   };
 
-  test('provider id 命中 deepseek-account，kind 与 deepseek-official 相同，凭证模式为 none（无 API Key）', () => {
+  test('provider id 命中 deepseek-account，shape 与 deepseek-official 相同，凭证模式为 none（无 API Key）', () => {
     const def = matchBalanceProvider('deepseek-account');
     assert.deepEqual(def?.ids, ['deepseek-account']);
     assert.deepEqual(def?.credential, { mode: 'none' }, '账号路由没有 API Key，凭证由账号服务持有');
@@ -351,12 +351,21 @@ describe('deepseek-account —— DSH 账号路由（走账号服务，不是 HT
   });
 
   test('ready：total = 充值 + 赠送（与官方 total_balance 同构），两者分别进 toppedUp / granted', () => {
-    assert.deepEqual(parseAccountBalance(READY, 'deepseek-account'), {
-      ok: true,
-      provider: 'deepseek-account',
-      kind: 'deepseek',
-      data: { currency: 'CNY', total: '13.79', granted: '5.00', toppedUp: '8.79' },
-    });
+    const r = parseAccountBalance(READY, 'deepseek-account');
+    assert.ok(r.ok && r.shape === 'money');
+    assert.equal(r.provider, 'deepseek-account');
+    assert.deepEqual(
+      { ...r.data, tier: undefined }, // 峰/谷随时间变化，这里不钉它的值
+      {
+        currency: 'CNY',
+        total: '13.79',
+        granted: '5.00',
+        toppedUp: '8.79',
+        fullBalance: '20',
+        tier: undefined,
+      },
+    );
+    assert.ok(r.data.tier === 'peak' || r.data.tier === 'idle', '档位由服务商算好后随数据带出');
   });
 
   test('没有赠送钱包 → granted 为 0.00，total 等于充值（不因缺赠送而漏算或虚增）', () => {
@@ -364,7 +373,7 @@ describe('deepseek-account —— DSH 账号路由（走账号服务，不是 HT
       { status: 'ready', value: [{ currency: 'CNY', balance: '8.79' }] },
       'deepseek-account',
     );
-    assert.ok(r.ok && r.kind === 'deepseek');
+    assert.ok(r.ok && r.shape === 'money');
     assert.equal(r.data.total, '8.79');
     assert.equal(r.data.granted, '0.00');
     assert.equal(r.data.toppedUp, '8.79');
@@ -375,7 +384,7 @@ describe('deepseek-account —— DSH 账号路由（走账号服务，不是 HT
       { status: 'ready', value: [{ currency: 'USD', balance: '12.5' }], bonusWallets: [] },
       'deepseek-account',
     );
-    assert.ok(r.ok && r.kind === 'deepseek');
+    assert.ok(r.ok && r.shape === 'money');
     assert.equal(r.data.currency, 'USD');
     assert.equal(r.data.total, '12.50');
   });
@@ -389,7 +398,7 @@ describe('deepseek-account —— DSH 账号路由（走账号服务，不是 HT
       },
       'deepseek-account',
     );
-    assert.ok(r.ok && r.kind === 'deepseek');
+    assert.ok(r.ok && r.shape === 'money');
     assert.equal(r.data.total, '9.99');
     assert.equal(r.data.granted, '0.00');
   });
@@ -403,7 +412,7 @@ describe('deepseek-account —— DSH 账号路由（走账号服务，不是 HT
       },
       'deepseek-account',
     );
-    assert.ok(r.ok && r.kind === 'deepseek');
+    assert.ok(r.ok && r.shape === 'money');
     assert.equal(r.data.granted, '0.00');
     assert.equal(r.data.total, '8.79');
   });
@@ -438,7 +447,7 @@ describe('deepseek-account —— DSH 账号路由（走账号服务，不是 HT
         },
         async () => READY,
       );
-      assert.ok(r.ok && r.kind === 'deepseek');
+      assert.ok(r.ok && r.shape === 'money');
       assert.equal(r.data.total, '13.79', '与 parseAccountBalance 同一口径：赠送 5.00 + 充值 8.79');
       assert.equal(asked, 0, '账号路由没有 API Key 可解析');
       assert.deepEqual(stub.calls, [], '账号路由不走 fetch');

@@ -81,9 +81,10 @@ export type {
   BalanceFetchContext,
   BalanceProvider,
   BalanceResult,
+  BalanceShape,
   BalanceSuccess,
-  CommandCodeUsage,
   CredentialSpec,
-  DeepseekBalance,
-  OpencodeUsage,
+  MoneyBalance,
+  PricingTier,
+  WindowsUsage,
 } from './types';

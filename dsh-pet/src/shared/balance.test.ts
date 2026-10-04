@@ -25,6 +25,7 @@ import {
   balancePercent,
   decideBalanceNotice,
   toBalanceState,
+  urgentWindow,
   type BalanceState,
   type BalanceView,
 } from './balance.ts';
@@ -81,30 +82,71 @@ describe('balanceBubbleView —— 不可用状态必须给出可读的文字说
     const rows = balanceBubbleView({
       provider: 'opencode-go',
       ok: true,
-      kind: 'opencode',
+      shape: 'windows',
       rolling: 10,
+      rollingCapUsd: 12,
       weekly: 75,
+      weeklyCapUsd: 30,
       monthly: 20,
+      monthlyCapUsd: 60,
+      rollingLabel: '5h',
     });
     assert.equal(rows[0]?.text, '周额度已用 75%');
     assert.equal(rows[1]?.role, 'sub');
 
-    const ds = balanceBubbleView({ provider: 'deepseek-official', ok: true, kind: 'deepseek', total: '8.79' });
+    const ds = balanceBubbleView({
+      provider: 'deepseek-official',
+      ok: true,
+      shape: 'money',
+      total: '8.79',
+      tier: 'idle',
+    });
     assert.equal(ds[0]?.text, '余额（');
-    assert.equal(ds[1]?.role, 'tier'); // 峰/谷随时间变化，这里只钉结构与金额
+    assert.equal(ds[1]?.role, 'tier'); // 峰/谷由数据带出，这里只钉结构与金额
     assert.equal(ds[2]?.text, '）¥8.79');
+  });
+
+  test('money：服务商没给档位装饰时不编峰谷，退化成「余额 ¥x.xx」', () => {
+    const rows = balanceBubbleView({
+      provider: 'some-wallet',
+      ok: true,
+      shape: 'money',
+      currency: 'CNY',
+      total: '8.79',
+    });
+    assert.deepEqual(rows, [{ role: 'label', text: '余额 ¥8.79' }]);
+  });
+
+  test('windows：滚动窗展示名由数据带出，缺省回落 5h', () => {
+    const base = {
+      provider: 'some-windows',
+      shape: 'windows' as const,
+      ok: true as const,
+      rolling: 10,
+      monthly: 1,
+      monthlyResetsAt: '2999-01-01T00:00:00.000Z',
+    };
+    assert.equal(urgentWindow(base)?.label, '5h', '缺 rollingLabel → 回落 5h');
+    assert.equal(urgentWindow({ ...base, rollingLabel: '24h' })?.label, '24h', '数据自报的窗口名优先');
   });
 
   test('deepseek-account 与 deepseek-official 气泡完全同构，只有币种符号按 currency 变', () => {
     // 官方路由：CNY → ¥（现有行为，逐字不变）
-    const official = balanceBubbleView({ provider: 'deepseek-official', ok: true, kind: 'deepseek', total: '8.79' });
-    // 账号路由：同一 kind、同一结构
+    const official = balanceBubbleView({
+      provider: 'deepseek-official',
+      ok: true,
+      shape: 'money',
+      total: '8.79',
+      tier: 'idle',
+    });
+    // 账号路由：同一 shape、同一结构
     const account = balanceBubbleView({
       provider: 'deepseek-account',
       ok: true,
-      kind: 'deepseek',
+      shape: 'money',
       currency: 'CNY',
       total: '9.99',
+      tier: 'idle',
     });
     assert.deepEqual(
       account.map((r) => r.role),
@@ -118,9 +160,10 @@ describe('balanceBubbleView —— 不可用状态必须给出可读的文字说
     const usd = balanceBubbleView({
       provider: 'deepseek-account',
       ok: true,
-      kind: 'deepseek',
+      shape: 'money',
       currency: 'USD',
       total: '12.50',
+      tier: 'idle',
     });
     assert.equal(usd[2]?.text, '）$12.50');
   });
@@ -130,7 +173,7 @@ describe('decideBalanceNotice —— 弹不弹文字说明（两端共用同一�
   test('ok 状态：不弹，并把 key 清零（下次不可用视为新原因）', () => {
     assert.deepEqual(
       decideBalanceNotice(
-        { provider: 'opencode-go', ok: true, kind: 'opencode', rolling: 1, weekly: 2, monthly: 3 },
+        { provider: 'opencode-go', ok: true, shape: 'windows', rolling: 1, weekly: 2, monthly: 3 },
         'unsupported:unregistered-provider',
         false,
       ),
@@ -191,7 +234,7 @@ describe('commandcode —— 三窗口用量走与 opencode 同一套展示口�
     const s = toBalanceState({
       ok: true,
       provider: 'commandcode',
-      kind: 'commandcode',
+      shape: 'windows',
       data: {
         monthly: 30,
         monthlyCapUsd: 70,
@@ -204,7 +247,7 @@ describe('commandcode —— 三窗口用量走与 opencode 同一套展示口�
     });
     assert.ok(s && s.ok, 'commandcode 叶子必须解析出可用视图');
     if (!s || !s.ok) throw new Error('unreachable');
-    assert.equal(s.kind, 'commandcode');
+    assert.equal(s.shape, 'windows');
     assert.equal(s.monthly, 30);
     assert.equal(s.monthlyCapUsd, 70);
     assert.equal(s.monthlyResetsAt, '2026-10-13T01:01:27.000Z');
@@ -218,7 +261,7 @@ describe('commandcode —— 三窗口用量走与 opencode 同一套展示口�
   test('无窗口限制时只带月度窗（不补 0）：百分比与气泡都只说月度', () => {
     const view: BalanceView = {
       provider: 'commandcode',
-      kind: 'commandcode',
+      shape: 'windows',
       ok: true,
       monthly: 40,
       monthlyCapUsd: 70,
@@ -234,7 +277,7 @@ describe('commandcode —— 三窗口用量走与 opencode 同一套展示口�
     const leaf = (data: Record<string, unknown>) => ({
       ok: true,
       provider: 'commandcode',
-      kind: 'commandcode',
+      shape: 'windows',
       data,
     });
     assert.equal(toBalanceState(leaf({ rolling: 10 })), null, '缺月度窗 = 认不出响应');
@@ -247,7 +290,7 @@ describe('commandcode —— 三窗口用量走与 opencode 同一套展示口�
     // 5h 剩 12.6 / 周 剩 8.75 / 月 剩 56（USD）→ 周最告急
     const rows = balanceBubbleView({
       provider: 'commandcode',
-      kind: 'commandcode',
+      shape: 'windows',
       ok: true,
       rolling: 10,
       rollingCapUsd: 14,
@@ -264,7 +307,7 @@ describe('commandcode —— 三窗口用量走与 opencode 同一套展示口�
     // 但硬按绝对口径会报「5h 已用 10%」——规则是缺额度就走百分比：周 50% 更告急
     const rows = balanceBubbleView({
       provider: 'commandcode',
-      kind: 'commandcode',
+      shape: 'windows',
       ok: true,
       rolling: 10,
       rollingCapUsd: 14,
@@ -277,8 +320,59 @@ describe('commandcode —— 三窗口用量走与 opencode 同一套展示口�
 
   test('balancePercent：三窗口取最大（档位动画与 opencode 同一条数学）', () => {
     assert.equal(
-      balancePercent({ provider: 'commandcode', kind: 'commandcode', ok: true, rolling: 10, weekly: 75, monthly: 20 }),
+      balancePercent({ provider: 'commandcode', shape: 'windows', ok: true, rolling: 10, weekly: 75, monthly: 20 }),
       75,
     );
+  });
+});
+
+describe('money —— 档位基准由数据带出（展示层不再写死任何服务商的额度）', () => {
+  const view = (fullBalance?: string, total = '10.00'): BalanceView => ({
+    provider: 'some-wallet',
+    shape: 'money',
+    ok: true,
+    total,
+    fullBalance,
+  });
+
+  test('基准 20：余额 20 → 0%，10 → 50%，0 → 100%，负数按已用完', () => {
+    assert.equal(balancePercent(view('20', '20.00')), 0);
+    assert.equal(balancePercent(view('20', '10.00')), 50);
+    assert.equal(balancePercent(view('20', '0.00')), 100);
+    assert.equal(balancePercent(view('20', '-0.02')), 100, '透支与 0 等价');
+  });
+
+  test('基准换一个值：同一余额算出不同百分比（证明基准真的来自数据）', () => {
+    assert.equal(balancePercent(view('10', '5.00')), 50);
+    assert.equal(balancePercent(view('100', '5.00')), 95);
+  });
+
+  test('没有基准 / 基准非法 / 金额非法 → undefined（不播档位动画，不替服务商猜）', () => {
+    assert.equal(balancePercent(view(undefined)), undefined);
+    assert.equal(balancePercent(view('0')), undefined);
+    assert.equal(balancePercent(view('-5')), undefined);
+    assert.equal(balancePercent(view('abc')), undefined);
+    assert.equal(balancePercent(view('20', 'abc')), undefined);
+  });
+
+  test('toBalanceState：money 叶子带出基准与档位装饰；非法档位值视为没给', () => {
+    const s = toBalanceState({
+      ok: true,
+      provider: 'some-wallet',
+      shape: 'money',
+      data: { currency: 'CNY', total: '8.79', fullBalance: '20', tier: 'peak' },
+    });
+    assert.ok(s && s.ok && s.shape === 'money');
+    assert.equal(s.fullBalance, '20');
+    assert.equal(s.tier, 'peak');
+    const bad = toBalanceState({
+      ok: true,
+      provider: 'some-wallet',
+      shape: 'money',
+      data: { currency: 'CNY', total: '8.79', tier: '???', fullBalance: 20 },
+    });
+    assert.ok(bad && bad.ok && bad.shape === 'money');
+    assert.equal(bad.tier, undefined, '不认识的档位值 → 不渲染峰谷');
+    assert.equal(bad.fullBalance, undefined, '非字符串基准 → 视为没给');
   });
 });

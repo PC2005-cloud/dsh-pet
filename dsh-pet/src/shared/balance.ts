@@ -1,14 +1,19 @@
 // 余额数据层与展示视图（src/shared 纯逻辑，浏览器 bundle 与桌面 shared-core 共用）：
 // 解析 S 的余额叶子（host 的 BalanceResult）→ 客户端视图 → 档位计算 → 气泡行数据。
-// 取数不在本模块：改造后余额由 host 定时器刷新并写进 /state（两端共享同一份结果），
-// 本模块只做纯解析/展示。不依赖 React/DOM；host/balance.ts 的 BalanceResult 与本模块的
-// RawBalanceResult 同构（HTTP 契约两端各自声明，host 无需 import 本目录——DSH 单文件加载约束）。
+// 取数不在本模块：余额由 host 定时器刷新并写进 /state（两端共享同一份结果），本模块只做纯解析/展示。
+// 不依赖 React/DOM；host/balance/ 的 BalanceResult 与本模块的 RawBalanceResult 同构（HTTP 契约两端
+// 各自声明，host 无需 import 本目录——DSH 单文件加载约束）。
+//
+// **本模块不认识任何服务商**：只认叶子里的 `shape`（展示形态）与数据自带的业务事实
+// （各窗口满额度、滚动窗时长、档位基准、峰谷档位）。服务商名字只用于日志与去重键。
+// 加一个服务商只要落到 `windows` / `money` 之一，这里与两端展示层一行都不用改。
 
-/** 余额叶子里的原始响应（与 host/balance.ts 的 BalanceResult 同构；两端按此结构校验） */
+/** 余额叶子里的原始响应（与 host/balance/ 的 BalanceResult 同构；两端按此结构校验） */
 export interface RawBalanceResult {
   ok: boolean;
   provider?: string;
-  kind?: 'opencode' | 'deepseek' | 'commandcode';
+  /** 展示形态（host 写叶子时带上）：windows = 三窗口用量，money = 账户金额 */
+  shape?: 'windows' | 'money';
   reason?: string;
   message?: string;
   data?: {
@@ -21,21 +26,27 @@ export interface RawBalanceResult {
     rollingCapUsd?: unknown;
     weeklyCapUsd?: unknown;
     monthlyCapUsd?: unknown;
+    rollingLabel?: unknown;
     currency?: unknown;
     total?: unknown;
     granted?: unknown;
     toppedUp?: unknown;
+    fullBalance?: unknown;
+    tier?: unknown;
   };
 }
+
+/** 计价档位装饰（气泡上的「峰/谷」）：由服务商算好后随数据带出，展示层原样渲染 */
+export type PricingTier = 'peak' | 'idle';
 
 /** 已解析的余额视图（展示 + 档位计算用） */
 export interface BalanceView {
   provider: string;
-  kind: 'opencode' | 'deepseek' | 'commandcode';
+  shape: 'windows' | 'money';
   ok: true;
   /**
-   * 三窗口已用百分比（0-100 数字）+ 各自的重置时间：
-   * opencode 三窗必有；commandcode 的 `monthly` 必有，`rolling`（5h）/`weekly` 可缺省（无窗口限制时）。
+   * 三窗口已用百分比（0-100 数字）+ 各自的重置时间。
+   * `monthly` 必有（月度窗口是数据的底线）；`rolling` / `weekly` 可缺省 = 该服务商没有这个窗口。
    */
   rolling?: number;
   weekly?: number;
@@ -44,17 +55,26 @@ export interface BalanceView {
   weeklyResetsAt?: string;
   monthlyResetsAt?: string;
   /**
-   * 各窗口满额度（USD）：只有 commandcode 需要（额度由接口回传，opencode 用固定常量
-   * OPENCODE_QUOTA_USD，不在这里重复）。用于「最紧迫窗口」的绝对口径；缺省 → 退化为百分比口径。
+   * 各窗口满额度（USD），由服务商随数据带出（opencode 是业务常量、commandcode 是接口回报）。
+   * 用于「最紧迫窗口」的绝对口径；缺省 → 退化为百分比口径。展示层不再写死任何服务商的额度。
    */
   rollingCapUsd?: number;
   weeklyCapUsd?: number;
   monthlyCapUsd?: number;
-  /** deepseek：余额金额（字符串，与接口一致） */
+  /** 滚动窗展示名（服务商自报，如 `5h`）；缺省回落 DEFAULT_ROLLING_LABEL */
+  rollingLabel?: string;
+  /** money：余额金额（字符串，与接口一致） */
   currency?: string;
   total?: string;
   granted?: string;
   toppedUp?: string;
+  /**
+   * money：档位基准（同 currency 单位）。余额 ≥ 该值视为未消耗。
+   * 缺省 = 该服务商不给基准 → 不折算百分比、不播档位动画（不替它猜一个基准）。
+   */
+  fullBalance?: string;
+  /** money：计价档位装饰；缺省 = 渲染成不带峰谷的「余额 ¥x.xx」 */
+  tier?: PricingTier;
 }
 
 /** 无效（不支持/缺凭证/抓取失败）：显式标记，不静默 */
@@ -68,8 +88,7 @@ export interface BalanceUnavailable {
 export type BalanceState = BalanceView | BalanceUnavailable;
 
 /**
- * 可选数字：缺省 → undefined；出现但非法 → null（调用方据此整拍跳过——与 opencode
- * 「非数字 → null」同一口径，不把 NaN/字符串送进展示层）。
+ * 可选数字：缺省 → undefined；出现但非法 → null（调用方据此整拍跳过——不把 NaN/字符串送进展示层）。
  */
 function optNum(value: unknown): number | undefined | null {
   if (value === undefined || value === null) return undefined;
@@ -80,9 +99,9 @@ function optNum(value: unknown): number | undefined | null {
 /**
  * host 的余额原始响应（`BalanceResult`，经 `/state` 的 `sections.balance` 叶子送达）→ 客户端视图。
  *
- * 形状非法 / kind 不认识 → **null**（消费端跳过这一拍）——注意这里**不抛**：它跑在 1s 轮询里，
- * 抛异常会把整拍打断（其余叶子也跟着不渲染）。取数失败（HTTP/网络）在改造后不再发生在这里：
- * 取数在 host，失败会以 `ok:false` 写进 S，由这里正常映射成"不可用"状态。
+ * 形状非法 / shape 不认识 → **null**（消费端跳过这一拍）——注意这里**不抛**：它跑在 1s 轮询里，
+ * 抛异常会把整拍打断（其余叶子也跟着不渲染）。取数失败（HTTP/网络）不在这里发生：取数在 host，
+ * 失败会以 `ok:false` 写进 S，由这里正常映射成"不可用"状态。
  */
 export function toBalanceState(raw: unknown): BalanceState | null {
   if (!raw || typeof raw !== 'object') return null;
@@ -99,32 +118,16 @@ export function toBalanceState(raw: unknown): BalanceState | null {
   const d = r.data;
   if (!d || typeof d !== 'object') return null;
 
-  if (r.kind === 'opencode') {
-    const rolling = Number(d.rolling);
-    const weekly = Number(d.weekly);
-    const monthly = Number(d.monthly);
-    if (![rolling, weekly, monthly].every(Number.isFinite)) return null;
-    return {
-      provider,
-      kind: 'opencode',
-      ok: true,
-      rolling,
-      weekly,
-      monthly,
-      rollingResetsAt: typeof d.rollingResetsAt === 'string' ? d.rollingResetsAt : undefined,
-      weeklyResetsAt: typeof d.weeklyResetsAt === 'string' ? d.weeklyResetsAt : undefined,
-      monthlyResetsAt: typeof d.monthlyResetsAt === 'string' ? d.monthlyResetsAt : undefined,
-    };
-  }
-  if (r.kind === 'commandcode') {
+  if (r.shape === 'windows') {
     const monthly = optNum(d.monthly);
     const rolling = optNum(d.rolling);
     const weekly = optNum(d.weekly);
     const rollingCapUsd = optNum(d.rollingCapUsd);
     const weeklyCapUsd = optNum(d.weeklyCapUsd);
     const monthlyCapUsd = optNum(d.monthlyCapUsd);
-    // 月度窗口是这份数据的底线：缺了/非法 = 认不出响应（5h、周窗口与三个额度都是可选）
+    // 月度窗口是这份数据的底线：缺了/非法 = 认不出响应（滚动窗与周窗口、各窗口额度都是可选）
     if (monthly === undefined || monthly === null) return null;
+    // 出现但非法（optNum 返回 null）→ 整拍跳过，不把坏数字送进展示层
     if (
       rolling === null ||
       weekly === null ||
@@ -136,7 +139,7 @@ export function toBalanceState(raw: unknown): BalanceState | null {
     }
     return {
       provider,
-      kind: 'commandcode',
+      shape: 'windows',
       ok: true,
       rolling,
       weekly,
@@ -144,43 +147,45 @@ export function toBalanceState(raw: unknown): BalanceState | null {
       rollingCapUsd,
       weeklyCapUsd,
       monthlyCapUsd,
+      rollingLabel: typeof d.rollingLabel === 'string' && d.rollingLabel.length > 0 ? d.rollingLabel : undefined,
       rollingResetsAt: typeof d.rollingResetsAt === 'string' ? d.rollingResetsAt : undefined,
       weeklyResetsAt: typeof d.weeklyResetsAt === 'string' ? d.weeklyResetsAt : undefined,
       monthlyResetsAt: typeof d.monthlyResetsAt === 'string' ? d.monthlyResetsAt : undefined,
     };
   }
-  if (r.kind === 'deepseek') {
+  if (r.shape === 'money') {
     return {
       provider,
-      kind: 'deepseek',
+      shape: 'money',
       ok: true,
       currency: typeof d.currency === 'string' ? d.currency : undefined,
       total: typeof d.total === 'string' ? d.total : undefined,
       granted: typeof d.granted === 'string' ? d.granted : undefined,
       toppedUp: typeof d.toppedUp === 'string' ? d.toppedUp : undefined,
+      fullBalance: typeof d.fullBalance === 'string' ? d.fullBalance : undefined,
+      tier: d.tier === 'peak' || d.tier === 'idle' ? d.tier : undefined,
     };
   }
   return null;
 }
 
-/** DeepSeek 满额基准（¥）：余额 ≥ 该值视为 100%（未消耗），余额按比例折算为已用百分比 */
-export const DEEPSEEK_FULL_BALANCE_CNY = 20;
-
 /**
  * 事件档位百分比（已用百分比语义：0 = 未消耗，100 = 耗尽）：
- * - opencode / commandcode：取三窗口最大（风险最高者为准）
- * - deepseek：余额按 DEEPSEEK_FULL_BALANCE_CNY（¥20 = 100%）折算为已用百分比
- *   （余额 20 元 → 0%，10 元 → 50%，0 元 → 100%）
+ * - windows：取三窗口最大（风险最高者为准）
+ * - money：余额按**数据自带的基准**（`fullBalance`）折算（基准 20 → 余额 20 元 → 0%，10 元 → 50%，
+ *   0 元 → 100%）。没有基准 → undefined（不播档位动画，不替服务商猜一个）
  */
 export function balancePercent(v: BalanceView): number | undefined {
-  if (v.kind === 'deepseek') {
+  if (v.shape === 'money') {
     const total = Number(v.total);
+    const full = Number(v.fullBalance);
     if (!Number.isFinite(total)) return undefined; // 金额非法（非数字）：不触发（上层校验已兜底，此处双保险）
+    if (!Number.isFinite(full) || full <= 0) return undefined; // 无基准：该服务商不给档位语义
     // 负数 = 透支，与 0 等价按「已用完」折算：-0.02 → 剩余 0 → 已用 100%（播「分文不剩」档）
-    const remaining = (Math.max(0, total) / DEEPSEEK_FULL_BALANCE_CNY) * 100; // 剩余百分比 0~100+
+    const remaining = (Math.max(0, total) / full) * 100; // 剩余百分比 0~100+
     return Math.max(0, Math.min(100, 100 - remaining)); // 折算为已用百分比
   }
-  // opencode / commandcode：三窗口取最大（只有月窗口时就是它自己）
+  // windows：三窗口取最大（只有月窗口时就是它自己）
   return Math.max(v.rolling ?? 0, v.weekly ?? 0, v.monthly ?? 0);
 }
 
@@ -194,51 +199,57 @@ export function balanceEventIndex(p: number): number {
   return i < 5 ? i : 4;
 }
 
-/** OpenCode 各窗口满额度金额（USD）。业务常量：12 = 5h（5 小时滚动窗口）、30 = 周、60 = 月 */
-export const OPENCODE_QUOTA_USD = {
-  rolling: 12,
-  weekly: 30,
-  monthly: 60,
-} as const;
+/** 窗口键（三种窗口类别，与服务商无关） */
+export type WindowKey = 'rolling' | 'weekly' | 'monthly';
 
-/** 窗口展示名（联想框文案用）：5h = 5 小时额度窗口、周、月 */
+/**
+ * 窗口展示名（联想框文案用）：周、月。
+ * 滚动窗的时长是**服务商自己的业务事实**（如 5 小时），不走这张表，见 DEFAULT_ROLLING_LABEL。
+ */
 export const WINDOW_LABELS = {
-  rolling: '5h',
   weekly: '周',
   monthly: '月',
 } as const;
 
-export type WindowKey = keyof typeof OPENCODE_QUOTA_USD;
+/**
+ * 滚动窗展示名的兜底：服务商应随数据带 `rollingLabel`，缺省时才用它。
+ * 之所以要有兜底：缺一个标签会让气泡出现空档，而 5h 是当前两个滚动窗口服务商的共同取值。
+ */
+export const DEFAULT_ROLLING_LABEL = '5h';
 
 /** 一个窗口的额度概况（用于联想框一句话判定） */
 export interface WindowUsage {
   label: string;
   percent: number;
-  /** 满额度（USD）：opencode 是固定业务常量；commandcode 由接口回传，算不出时缺省 */
+  /** 满额度（USD），由服务商随数据带出；算不出时缺省 */
   quotaUsd?: number;
   /** 剩余额度（USD）= 满额度 × (100 − percent) / 100；满额度未知时缺省 */
   remainingUsd?: number;
   resetsAt?: string;
 }
 
-/** 各窗口的满额度（USD）：opencode 固定常量；commandcode 用接口回传的 cap */
+/** 窗口展示名：滚动窗取服务商自报值（缺省 5h），周/月走固定表 */
+function windowLabel(v: BalanceView, w: WindowKey): string {
+  if (w === 'rolling') return v.rollingLabel ?? DEFAULT_ROLLING_LABEL;
+  return WINDOW_LABELS[w];
+}
+
+/** 各窗口的满额度（USD）：全部来自数据（展示层不写死任何服务商的额度） */
 function windowQuotas(v: BalanceView): Record<WindowKey, number | undefined> {
-  if (v.kind === 'opencode') return OPENCODE_QUOTA_USD;
   return { rolling: v.rollingCapUsd, weekly: v.weeklyCapUsd, monthly: v.monthlyCapUsd };
 }
 
 /**
- * 取最先告急的一个窗口（opencode 与 commandcode 共用）：
- * - 满额度齐全 → 绝对口径：剩余额度（USD）最少者（opencode 一直是这个口径）；
- * - 有窗口给不出满额度（commandcode 月度池为 0 时）→ 退化为相对口径：已用百分比最大者
+ * 取最先告急的一个窗口（所有 windows 形态的服务商共用同一套，无服务商判断）：
+ * - 满额度齐全 → 绝对口径：剩余额度（USD）最少者；
+ * - 有窗口给不出满额度 → 退化为相对口径：已用百分比最大者
  *   （两窗额度量级不同，缺一个还硬比绝对剩余会反直觉）。
- * 不存在的窗口（commandcode 无窗口限制时）直接跳过，不补 0。
+ * 不存在的窗口直接跳过，不补 0。
  *
- * 绝对口径的副作用（刻意保留）：5h 额度最小，通常先报 5h；与 opencode 共用同一口径，
- * 完整读数见 tools/api-tester.html。
+ * 绝对口径的副作用（刻意保留）：滚动窗额度最小，通常先报它；两端一致，完整读数见 tools/api-tester.html。
  */
 export function urgentWindow(v: BalanceView): WindowUsage | undefined {
-  if (v.kind === 'deepseek') return undefined;
+  if (v.shape === 'money') return undefined;
   const quotas = windowQuotas(v);
   const resets: Record<WindowKey, string | undefined> = {
     rolling: v.rollingResetsAt,
@@ -257,7 +268,7 @@ export function urgentWindow(v: BalanceView): WindowUsage | undefined {
     const percent = v[w] ?? 0;
     const quota = quotas[w];
     const cand: WindowUsage = {
-      label: WINDOW_LABELS[w],
+      label: windowLabel(v, w),
       percent,
       quotaUsd: quota,
       remainingUsd: allQuotas && quota !== undefined ? (quota * (100 - percent)) / 100 : undefined,
@@ -288,28 +299,6 @@ export function resetInText(iso?: string): string {
   const hoursF = delta / 3_600_000;
   if (hoursF >= 96) return (Math.round((hoursF / 24) * 10) / 10).toFixed(1) + ' 天';
   return Math.max(0.1, Math.round(hoursF * 10) / 10).toFixed(1) + ' 小时';
-}
-
-/**
- * DeepSeek 峰谷计价档位（北京时间）：
- * - 高峰：工作日 9:00–12:00、14:00–18:00；其余为空闲（低谷）
- * - 周六/周日全天按低谷价计费（自 2026-08-23 起，周末不再区分峰谷）
- */
-export type PricingTier = 'peak' | 'idle';
-
-/** 当前时刻的 DeepSeek 计价档位（按北京时间 Asia/Shanghai，UTC+8 无夏令时） */
-export function deepseekPricingTier(now: Date = new Date()): PricingTier {
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'Asia/Shanghai',
-    weekday: 'short',
-    hour: '2-digit',
-    hourCycle: 'h23', // h23 避免午夜被格式化为 "24:00"
-  }).formatToParts(now);
-  const pick = (type: Intl.DateTimeFormatPartTypes): string | undefined => parts.find((p) => p.type === type)?.value;
-  const weekday = pick('weekday');
-  const hour = Number(pick('hour'));
-  if (weekday === 'Sat' || weekday === 'Sun') return 'idle'; // 周末全天低谷
-  return (hour >= 9 && hour < 12) || (hour >= 14 && hour < 18) ? 'peak' : 'idle';
 }
 
 // ---------- 富余额气泡展示视图（浏览器与桌面共用同一份内容/文案/数学） ----------
@@ -349,14 +338,15 @@ function unavailableRows(state: BalanceUnavailable): BalanceBubbleRow[] {
 
 /**
  * 把 BalanceState 渲染成气泡行数据（纯函数，不碰 DOM/React）：
- * - opencode / commandcode：两行 —— 「5h/周/月」额度已用 N% + 重置倒计时
- * - deepseek：一行 —— 余额（峰/谷）¥x.xx（峰红/谷绿由 role:'tier' 表达）
+ * - windows：两行 —— 「X额度已用 N%」+ 重置倒计时
+ * - money：一行 —— 「余额（峰/谷）¥x.xx」（峰红/谷绿由 role:'tier' 表达）；
+ *   服务商没给档位装饰时退化成「余额 ¥x.xx」，不替它编一个峰谷
  * - 无效：显式展示不可用原因（见 unavailableRows），绝不伪造数字
  */
 export function balanceBubbleView(state: BalanceState): BalanceBubbleRow[] {
   if (state.ok) {
-    if (state.kind !== 'deepseek') {
-      // opencode / commandcode：三窗口中先告急的一个
+    if (state.shape !== 'money') {
+      // windows：三窗口中先告急的一个
       const w = urgentWindow(state);
       if (w) {
         const reset = resetInText(w.resetsAt);
@@ -368,14 +358,15 @@ export function balanceBubbleView(state: BalanceState): BalanceBubbleRow[] {
       }
       return [{ role: 'label', text: '额度数据不可用' }];
     }
-    const tier = deepseekPricingTier();
-    // 币种符号：deepseek-official 是 CNY（¥）；DSH 账号侧钱包可能是 USD（$）。
-    // 其余逐字一致 —— 两个 deepseek 路由共用同一套气泡。
+    // money：币种符号由数据带出（CNY → ¥，USD → $）
     const symbol = state.currency === 'USD' ? '$' : '¥';
+    const amount = symbol + (state.total ?? '-');
+    // 档位装饰（峰/谷）只有提供该计价规则的服务商才有；没有就不加括号那一段
+    if (!state.tier) return [{ role: 'label', text: '余额 ' + amount }];
     return [
       { role: 'label', text: '余额（' },
-      { role: 'tier', tier, text: tier === 'peak' ? '峰' : '谷' },
-      { role: 'label', text: '）' + symbol + (state.total ?? '-') },
+      { role: 'tier', tier: state.tier, text: state.tier === 'peak' ? '峰' : '谷' },
+      { role: 'label', text: '）' + amount },
     ];
   }
   return unavailableRows(state);

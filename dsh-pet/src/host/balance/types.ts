@@ -1,8 +1,8 @@
 /**
  * 余额查询的契约层：服务商定义、取数上下文、路由结果、各形态的数据形状。
  *
- * 这里**只放形状与契约**，不放任何具体服务商的知识 —— 接口地址、业务额度、响应解析都在
- * `./providers/<名>.ts` 里各自一份。加一个服务商 = 加一个 provider 文件 + 在 `./index.ts`
+ * 这里**只放形状与契约**，不放任何具体服务商的知识 —— 接口地址、业务额度、计价规则、响应解析
+ * 都在 `./providers/<名>.ts` 里各自一份。加一个服务商 = 加一个 provider 文件 + 在 `./index.ts`
  * 的注册表里加一行；本文件与 src/shared 都不用动。
  */
 
@@ -48,46 +48,66 @@ export interface BalanceProvider {
   fetch(ctx: BalanceFetchContext): Promise<BalanceSuccess>;
 }
 
-// ---------- 各形态的数据（host → client 的叶子数据） ----------
+// ---------- 展示形态（wire 契约：host 写进叶子，两端展示层按它选渲染分支） ----------
 
 /**
- * Command Code 的三窗口用量。
- * 字段名与 opencode 对齐，展示层共用同一套「取最紧迫窗口」逻辑：`rolling` = `windowLimits.fiveHour`、
- * `weekly` = `windowLimits.weekly`、`monthly` = 套餐月度额度（消耗 /（消耗 + 剩余））。
- * `rolling`/`weekly` 只在 `windowLimits.limited === true` 且 `cap > 0` 时出现（缺省 = 无此窗口，不是 0）；
- * `*CapUsd` 为窗口满额度（月度池为 0 时缺省）；`*ResetsAt` 缺省按「已重置」处理。
+ * 展示形态 —— 只有两种，且**不含任何服务商信息**：
+ * - `windows`：三窗口用量（百分比 + 重置倒计时）→ 气泡「X额度已用 N%」
+ * - `money`：账户金额 → 气泡「余额（峰/谷）¥x.xx」
+ *
+ * 加一个服务商只要落到这两种形态之一，src/shared 与两端展示层就完全不用动。
  */
-export interface CommandCodeUsage {
+export type BalanceShape = 'windows' | 'money';
+
+/** 计价档位装饰（气泡上的「峰/谷」）：由服务商按自己的计价规则算好后随数据带出 */
+export type PricingTier = 'peak' | 'idle';
+
+// ---------- 两种形态的数据 ----------
+
+/**
+ * 三窗口用量（`shape: 'windows'`）。opencode 与 commandcode 共用同一个形状，展示层因而共用同一套
+ * 「取最紧迫窗口」逻辑。
+ *
+ * 字段语义：
+ * - `monthly` **必有**（月度窗口是这份数据的底线）；`rolling`（滚动窗）/`weekly` 可缺省 ——
+ *   缺省 = 该服务商没有这个窗口，**不是 0**。各服务商自己可以更严（如 opencode 在 provider 侧
+ *   就要求三窗齐全），但展示层的底线只有月度；
+ * - `*CapUsd` 为窗口满额度（USD）。三个都给得出时才按「剩余额度最少」做绝对口径比较，
+ *   否则退化为「已用百分比最大」的相对口径；
+ * - `rollingLabel` 为滚动窗的展示名（缺省 `5h`）。滚动窗时长是**服务商自己的业务事实**
+ *   （opencode 与 commandcode 都是 5 小时），故由数据带出，展示层不写死；
+ * - `*ResetsAt` 缺省按「已重置」处理。
+ */
+export interface WindowsUsage {
   monthly: number;
   rolling?: number;
   weekly?: number;
   rollingCapUsd?: number;
   weeklyCapUsd?: number;
   monthlyCapUsd?: number;
+  rollingLabel?: string;
   rollingResetsAt?: string;
   weeklyResetsAt?: string;
   monthlyResetsAt?: string;
 }
 
-/** OpenCode Go 三窗口（该接口保证三窗都在，故三个窗口与三个重置时间都是必填） */
-export interface OpencodeUsage {
-  rolling: number;
-  weekly: number;
-  monthly: number;
-  rollingResetsAt: string;
-  weeklyResetsAt: string;
-  monthlyResetsAt: string;
-}
-
 /**
- * DeepSeek 账户金额。官方 `/user/balance` 路由与 DSH 账号路由（./providers/deepseek-account.ts）
- * **同构**：两条路由都是这个形状，展示层因而共用同一套气泡。
+ * 账户金额（`shape: 'money'`）。DeepSeek 官方路由与 DSH 账号路由**同构**，展示层共用同一套气泡。
+ *
+ * - `total` / `granted` / `toppedUp`：金额字符串，与接口一致（不做换算、不重算）；
+ * - `fullBalance`：**档位基准**（同 currency 单位）—— 余额 ≥ 该值视为未消耗，据此把余额折算成
+ *   「已用百分比」以驱动档位动画。缺省 = 该服务商不提供基准，此时**不播档位动画**
+ *   （不替它猜一个基准）。基准是服务商自己的业务事实（DeepSeek 用 ¥20），故由数据带出；
+ * - `tier`：计价档位装饰（峰/谷）。**只有提供该规则的服务商会带**（DeepSeek 的高峰时段计价），
+ *   不带就渲染成不带峰谷的「余额 ¥x.xx」。
  */
-export interface DeepseekBalance {
+export interface MoneyBalance {
   currency: string;
   total: string;
   granted: string;
   toppedUp: string;
+  fullBalance?: string;
+  tier?: PricingTier;
 }
 
 /**
@@ -105,11 +125,10 @@ export interface AccountBalanceSnapshot {
 
 // ---------- 路由结果 ----------
 
-/** 成功结果（client 端与 host 端同构使用）：`kind` 是展示形态，`provider` 是当前到底是谁 */
+/** 成功结果（client 端与 host 端同构使用）：`shape` 是展示形态，`provider` 是当前到底是谁 */
 export type BalanceSuccess =
-  | { ok: true; provider: string; kind: 'opencode'; data: OpencodeUsage }
-  | { ok: true; provider: string; kind: 'commandcode'; data: CommandCodeUsage }
-  | { ok: true; provider: string; kind: 'deepseek'; data: DeepseekBalance };
+  | { ok: true; provider: string; shape: 'windows'; data: WindowsUsage }
+  | { ok: true; provider: string; shape: 'money'; data: MoneyBalance };
 
 /**
  * 按当前服务商查询余额的结果。

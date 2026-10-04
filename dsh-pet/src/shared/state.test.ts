@@ -93,34 +93,41 @@ describe('takeChanged —— counter 变了才算变化', () => {
 });
 
 describe('readBalance —— 余额叶子 → 客户端视图', () => {
-  test('deepseek：raw.data 摊平到视图顶层', () => {
+  test('money：raw.data 摊平到视图顶层（含数据自带的档位基准与峰谷装饰）', () => {
     const hit = readBalance({
       counter: 1,
-      data: { ok: true, provider: 'deepseek', kind: 'deepseek', data: { currency: 'CNY', total: '10.00' } },
+      data: {
+        ok: true,
+        provider: 'deepseek',
+        shape: 'money',
+        data: { currency: 'CNY', total: '10.00', fullBalance: '20', tier: 'idle' },
+      },
     });
     assert.deepEqual(hit, {
       state: {
         provider: 'deepseek',
-        kind: 'deepseek',
+        shape: 'money',
         ok: true,
         currency: 'CNY',
         total: '10.00',
         granted: undefined,
         toppedUp: undefined,
+        fullBalance: '20',
+        tier: 'idle',
       },
       manual: false,
     });
   });
 
-  test('opencode：三窗口用量是数字才认，非数字 → null（不把 NaN 送进展示层）', () => {
+  test('windows：三窗口用量是数字才认，非数字 → null（不把 NaN 送进展示层）', () => {
     const good = readBalance({
       counter: 1,
-      data: { ok: true, provider: 'opencode', kind: 'opencode', data: { rolling: 1, weekly: 2, monthly: 3 } },
+      data: { ok: true, provider: 'opencode', shape: 'windows', data: { rolling: 1, weekly: 2, monthly: 3 } },
     });
     assert.equal(good?.state.ok, true);
     const bad = readBalance({
       counter: 1,
-      data: { ok: true, provider: 'opencode', kind: 'opencode', data: { rolling: 'x', weekly: 2, monthly: 3 } },
+      data: { ok: true, provider: 'opencode', shape: 'windows', data: { rolling: 'x', weekly: 2, monthly: 3 } },
     });
     assert.equal(bad, null);
   });
@@ -147,7 +154,7 @@ describe('readBalance —— 余额叶子 → 客户端视图', () => {
   test('脏数据 → null（消费端跳过这一拍，不抛）', () => {
     assert.equal(readBalance({ counter: 1, data: null }), null);
     assert.equal(readBalance({ counter: 1, data: 'nope' }), null);
-    assert.equal(readBalance({ counter: 1, data: { ok: true, provider: 'p', kind: '未知' } }), null);
-    assert.equal(readBalance({ counter: 1, data: { ok: true, provider: 'p', kind: 'deepseek' } }), null, '缺 data 段');
+    assert.equal(readBalance({ counter: 1, data: { ok: true, provider: 'p', shape: '未知' } }), null);
+    assert.equal(readBalance({ counter: 1, data: { ok: true, provider: 'p', shape: 'money' } }), null, '缺 data 段');
   });
 });

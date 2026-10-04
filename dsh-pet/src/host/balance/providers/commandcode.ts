@@ -10,13 +10,16 @@
  * - `usage/summary` 的 `totalCost` = 当期已消耗 → 月度百分比 = 消耗 /（消耗 + 剩余）；
  * - 订阅接口（可选）只提供月度重置时间（`currentPeriodEnd`）。
  *
- * 展示口径与 opencode 对齐（同一套「取最紧迫窗口」逻辑），故 kind 之外字段名完全一致。
+ * 展示形态与 opencode 相同（`shape: 'windows'`），展示层因而共用同一套「取最紧迫窗口」逻辑。
  */
 import { fetchWithRetry, looseNum, num, obj, queryString, readWindow } from '../internal';
-import type { BalanceProvider, BalanceSuccess, CommandCodeUsage } from '../types';
+import type { BalanceProvider, BalanceSuccess, WindowsUsage } from '../types';
 
 /** 控制面基址（`/alpha/*` 固定在根域名） */
 const API_BASE = 'https://api.commandcode.ai';
+
+/** 滚动窗时长（展示名）：本服务商的 5h 窗口就是 `windowLimits.fiveHour` */
+const ROLLING_LABEL = '5h';
 
 /** 抓一次 JSON（GET + Bearer），HTTP 非 2xx 抛错；`label` 是接口路径，只进错误信息（便于自查哪一个失败） */
 async function fetchJson(url: string, key: string, label: string): Promise<unknown> {
@@ -54,7 +57,7 @@ export function parseCommandCode(
   const spent = Math.max(0, num(spentRaw, 'totalCost'));
 
   const pool = spent + remaining;
-  const data: CommandCodeUsage = { monthly: pool > 0 ? (spent / pool) * 100 : 0 };
+  const data: WindowsUsage = { monthly: pool > 0 ? (spent / pool) * 100 : 0 };
   if (pool > 0) data.monthlyCapUsd = pool;
 
   const subscription = obj(obj(subscriptionBody)?.data);
@@ -68,6 +71,7 @@ export function parseCommandCode(
     if (fiveHour) {
       data.rolling = fiveHour.percent;
       data.rollingCapUsd = fiveHour.capUsd;
+      data.rollingLabel = ROLLING_LABEL;
       if (fiveHour.resetsAt) data.rollingResetsAt = fiveHour.resetsAt;
     }
     const weekly = readWindow(limits.weekly);
@@ -78,7 +82,7 @@ export function parseCommandCode(
     }
   }
 
-  return { ok: true, provider, kind: 'commandcode', data };
+  return { ok: true, provider, shape: 'windows', data };
 }
 
 export const commandCode: BalanceProvider = {
