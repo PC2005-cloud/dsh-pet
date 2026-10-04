@@ -94,6 +94,36 @@ describe('balanceBubbleView —— 不可用状态必须给出可读的文字说
     assert.equal(ds[1]?.role, 'tier'); // 峰/谷随时间变化，这里只钉结构与金额
     assert.equal(ds[2]?.text, '）¥8.79');
   });
+
+  test('deepseek-account 与 deepseek-official 气泡完全同构，只有币种符号按 currency 变', () => {
+    // 官方路由：CNY → ¥（现有行为，逐字不变）
+    const official = balanceBubbleView({ provider: 'deepseek-official', ok: true, kind: 'deepseek', total: '8.79' });
+    // 账号路由：同一 kind、同一结构
+    const account = balanceBubbleView({
+      provider: 'deepseek-account',
+      ok: true,
+      kind: 'deepseek',
+      currency: 'CNY',
+      total: '9.99',
+    });
+    assert.deepEqual(
+      account.map((r) => r.role),
+      official.map((r) => r.role),
+      '两端的行结构必须逐位一致',
+    );
+    assert.equal(account[0]?.text, '余额（');
+    assert.equal(account[2]?.text, '）¥9.99');
+
+    // USD 钱包：同一位置换成 $（其余逐字不变）
+    const usd = balanceBubbleView({
+      provider: 'deepseek-account',
+      ok: true,
+      kind: 'deepseek',
+      currency: 'USD',
+      total: '12.50',
+    });
+    assert.equal(usd[2]?.text, '）$12.50');
+  });
 });
 
 describe('decideBalanceNotice —— 弹不弹文字说明（两端共用同一份判定）', () => {

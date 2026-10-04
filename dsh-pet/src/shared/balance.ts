@@ -369,10 +369,13 @@ export function balanceBubbleView(state: BalanceState): BalanceBubbleRow[] {
       return [{ role: 'label', text: '额度数据不可用' }];
     }
     const tier = deepseekPricingTier();
+    // 币种符号：deepseek-official 是 CNY（¥）；DSH 账号侧钱包可能是 USD（$）。
+    // 其余逐字一致 —— 两个 deepseek 路由共用同一套气泡。
+    const symbol = state.currency === 'USD' ? '$' : '¥';
     return [
       { role: 'label', text: '余额（' },
       { role: 'tier', tier, text: tier === 'peak' ? '峰' : '谷' },
-      { role: 'label', text: '）¥' + (state.total ?? '-') },
+      { role: 'label', text: '）' + symbol + (state.total ?? '-') },
     ];
   }
   return unavailableRows(state);

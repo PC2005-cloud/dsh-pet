@@ -60,7 +60,7 @@
  * TODO(类型)：peer 依赖类型包本地暂不可解析，ctx/req/res 暂用 any；
  *             依赖可解析后替换为 DSH 官方类型。
  */
-import { createReadStream, existsSync, fstatSync } from 'node:fs';
+import { createReadStream, existsSync, fstatSync, readFileSync } from 'node:fs';
 import { readFile, mkdir, writeFile } from 'node:fs/promises';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { homedir } from 'node:os';
@@ -517,14 +517,44 @@ export function apply(ctx: any): void {
    *   标记随数据一起写进叶子：只有 host 知道是谁要的，前端据此决定余额不可用时要不要**必弹**
    *   文字说明（decideBalanceNotice 的 explicit；周期刷新则只在原因变化时弹一次，免得反复刷屏）。
    */
+  /**
+   * 账号服务要求的调用方身份（`AccountClientMetadata`）：Platform 用它派生五个客户端头，
+   * 只影响**请求来源标识**与**服务端本地化文案**，不参与余额数值与币种。
+   *
+   * - version：本插件版本（读自身 package.json；读不到回落 '0.0.0'——该字段只是标识）
+   * - locale：本插件是中文产品，固定 `zh-CN`（Platform 侧归一到 zh_CN）
+   * - timezoneOffsetSeconds：本机 UTC 偏移（东八区为 +28800）
+   */
+  const accountClientMetadata = (): { version: string; locale: string; timezoneOffsetSeconds: number } => {
+    let version = '0.0.0';
+    try {
+      const raw = JSON.parse(readFileSync(join(PACKAGE_ROOT, 'package.json'), 'utf8')) as { version?: unknown };
+      if (typeof raw.version === 'string' && raw.version.length > 0) version = raw.version;
+    } catch {
+      // 读不到不影响查询：version 只是平台侧的来源标识
+    }
+    return { version, locale: 'zh-CN', timezoneOffsetSeconds: -new Date().getTimezoneOffset() * 60 };
+  };
+
   const refreshBalance = async (manual = false): Promise<void> => {
     const mark = <T>(v: T): T | (T & { manual: true }) => (manual ? { ...v, manual: true } : v);
     try {
       const sel = ctx.agentDefaultModel.currentSelection();
-      const result = await queryBalance(sel.provider, async (ref) => {
-        const rc = await ctx.credentials.resolve(credentialRef(ref));
-        return rc?.value;
-      });
+      const result = await queryBalance(
+        sel.provider,
+        async (ref) => {
+          const rc = await ctx.credentials.resolve(credentialRef(ref));
+          return rc?.value;
+        },
+        // `deepseek-account`（免费额度 / 平台登录）没有 API Key：它的凭证是 DSH 账号服务
+        // 持有的授权记录，只能经 getBalance 查询。账号服务是**可选**服务（软取，不放进
+        // inject）——没装账号插件时它不在场，此时该路由报 credential-missing 而不是崩。
+        async () => {
+          const account = ctx.get('deepseekAccount', false);
+          if (!account) return undefined;
+          return account.getBalance(accountClientMetadata());
+        },
+      );
       state.writeSection('balance', mark(result));
     } catch (e) {
       state.writeSection(

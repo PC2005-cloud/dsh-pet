@@ -16,6 +16,7 @@ import assert from 'node:assert/strict';
 
 import {
   matchBalanceProvider,
+  parseAccountBalance,
   parseCommandCode,
   queryBalance,
   type BalanceResult,
@@ -332,5 +333,144 @@ describe('queryBalance —— 网络链路（fetch stub）', () => {
     } finally {
       stub.restore();
     }
+  });
+});
+
+describe('deepseek-account —— DSH 账号路由（走账号服务，不是 HTTP + API Key）', () => {
+  /** 真实 `AccountDetails['balance']` 形状：ready 带 value（充值）/ bonusWallets（赠送）两个钱包数组 */
+  const READY = {
+    status: 'ready' as const,
+    value: [{ currency: 'CNY', balance: '8.79' }],
+    bonusWallets: [{ currency: 'CNY', balance: '5.00' }],
+  };
+
+  test('provider id 命中 deepseek-account，kind 与 deepseek-official 相同，ref 为空（无 API Key）', () => {
+    assert.deepEqual(matchBalanceProvider('deepseek-account'), {
+      ids: ['deepseek-account'],
+      ref: '',
+      kind: 'deepseek',
+    });
+  });
+
+  test('ready：total = 充值 + 赠送（与官方 total_balance 同构），两者分别进 toppedUp / granted', () => {
+    assert.deepEqual(parseAccountBalance(READY, 'deepseek-account'), {
+      ok: true,
+      provider: 'deepseek-account',
+      kind: 'deepseek',
+      data: { currency: 'CNY', total: '13.79', granted: '5.00', toppedUp: '8.79' },
+    });
+  });
+
+  test('没有赠送钱包 → granted 为 0.00，total 等于充值（不因缺赠送而漏算或虚增）', () => {
+    const r = parseAccountBalance(
+      { status: 'ready', value: [{ currency: 'CNY', balance: '8.79' }] },
+      'deepseek-account',
+    );
+    assert.ok(r.ok && r.kind === 'deepseek');
+    assert.equal(r.data.total, '8.79');
+    assert.equal(r.data.granted, '0.00');
+    assert.equal(r.data.toppedUp, '8.79');
+  });
+
+  test('USD 钱包：币种原样带出（展示层据此选符号），金额不做换算', () => {
+    const r = parseAccountBalance(
+      { status: 'ready', value: [{ currency: 'USD', balance: '12.5' }], bonusWallets: [] },
+      'deepseek-account',
+    );
+    assert.ok(r.ok && r.kind === 'deepseek');
+    assert.equal(r.data.currency, 'USD');
+    assert.equal(r.data.total, '12.50');
+  });
+
+  test('真实平台精度串（16 位小数）→ 收敛到两位，与官方路由的 ¥8.79 风格一致', () => {
+    const r = parseAccountBalance(
+      {
+        status: 'ready',
+        value: [{ currency: 'CNY', balance: '9.9902690000000000' }],
+        bonusWallets: [{ currency: 'CNY', balance: '0' }],
+      },
+      'deepseek-account',
+    );
+    assert.ok(r.ok && r.kind === 'deepseek');
+    assert.equal(r.data.total, '9.99');
+    assert.equal(r.data.granted, '0.00');
+  });
+
+  test('赠送钱包币种不同 → 不硬配（granted 记 0.00，不拿另一种币种凑数）', () => {
+    const r = parseAccountBalance(
+      {
+        status: 'ready',
+        value: [{ currency: 'CNY', balance: '8.79' }],
+        bonusWallets: [{ currency: 'USD', balance: '1' }],
+      },
+      'deepseek-account',
+    );
+    assert.ok(r.ok && r.kind === 'deepseek');
+    assert.equal(r.data.granted, '0.00');
+    assert.equal(r.data.total, '8.79');
+  });
+
+  test('null（未登录）/ failed（查询失败）/ 空钱包 → 一律抛错，绝不伪造 0 余额', () => {
+    assert.throws(() => parseAccountBalance(null, 'deepseek-account'), /未登录/);
+    assert.throws(() => parseAccountBalance(undefined, 'deepseek-account'), /未登录/);
+    assert.throws(() => parseAccountBalance({ status: 'failed' }, 'deepseek-account'), /查询失败/);
+    assert.throws(
+      () => parseAccountBalance({ status: 'ready', value: [], bonusWallets: [] }, 'deepseek-account'),
+      /没有充值钱包/,
+    );
+    assert.throws(
+      () => parseAccountBalance({ status: 'ready', value: [{ currency: 'CNY', balance: '' }] }, 'deepseek-account'),
+      /非法|balance/,
+    );
+    assert.throws(
+      () => parseAccountBalance({ status: 'ready', value: [{ currency: 'CNY', balance: 'abc' }] }, 'deepseek-account'),
+      /非法/,
+    );
+  });
+
+  test('queryBalance：账号路由不去解析凭证、不发任何 HTTP，只调 resolveAccount', async () => {
+    const stub = stubFetch(goatRoute);
+    let asked = 0;
+    try {
+      const r = await queryBalance(
+        'deepseek-account',
+        async () => {
+          asked += 1;
+          return 'should-not-be-used';
+        },
+        async () => READY,
+      );
+      assert.ok(r.ok && r.kind === 'deepseek');
+      assert.equal(r.data.total, '13.79', '与 parseAccountBalance 同一口径：赠送 5.00 + 充值 8.79');
+      assert.equal(asked, 0, '账号路由没有 API Key 可解析');
+      assert.deepEqual(stub.calls, [], '账号路由不走 fetch');
+    } finally {
+      stub.restore();
+    }
+  });
+
+  test('queryBalance：账号服务不在场（未注入）→ credential-missing，不退化成 unsupported', async () => {
+    assert.deepEqual(await queryBalance('deepseek-account', async () => 'k'), {
+      ok: false,
+      provider: 'deepseek-account',
+      reason: 'credential-missing',
+      message: '缺少账号服务（deepseek-account）',
+    });
+  });
+
+  test('queryBalance：账号查询抛错 → fetch-error，错误信息透传', async () => {
+    const r = await queryBalance(
+      'deepseek-account',
+      async () => 'k',
+      async () => {
+        throw new Error('dsh-pet: 账号余额查询失败');
+      },
+    );
+    assert.deepEqual(r, {
+      ok: false,
+      provider: 'deepseek-account',
+      reason: 'fetch-error',
+      message: 'dsh-pet: 账号余额查询失败',
+    });
   });
 });
