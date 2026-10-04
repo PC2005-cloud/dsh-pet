@@ -68,7 +68,7 @@ import { join, normalize, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths';
 import { credentialRef } from '@deepseek-ai/dsh-credentials';
-import { queryBalance } from './balance';
+import { queryBalance } from './balance/index';
 import { generateWhisper } from './whisper';
 import { generateChat, type ChatMemoryMessage } from './chat';
 import { configuredModel } from './model-selection';

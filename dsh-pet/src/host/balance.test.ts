@@ -21,7 +21,7 @@ import {
   queryBalance,
   type BalanceResult,
   type CommandCodeUsage,
-} from './balance.ts';
+} from './balance/index.ts';
 
 /** 真实 GOAT 套餐报文（字段名与取值照抄线上响应；`resetAt: 0` 是空闲窗口的占位值） */
 const GOAT_CREDITS = {
@@ -97,12 +97,11 @@ function goatRoute(url: string): Response {
 }
 
 describe('BALANCE_PROVIDERS —— commandcode 已登记（凭证 COMMANDCODE_API_KEY）', () => {
-  test('provider id 命中 commandcode，展示类型是 commandcode，凭证 ref 是 COMMANDCODE_API_KEY', () => {
-    assert.deepEqual(matchBalanceProvider('commandcode'), {
-      ids: ['commandcode'],
-      ref: 'COMMANDCODE_API_KEY',
-      kind: 'commandcode',
-    });
+  test('provider id 命中 commandcode，凭证 ref 是 COMMANDCODE_API_KEY，且定义自带取数', () => {
+    const def = matchBalanceProvider('commandcode');
+    assert.deepEqual(def?.ids, ['commandcode']);
+    assert.deepEqual(def?.credential, { mode: 'ref', ref: 'COMMANDCODE_API_KEY' });
+    assert.equal(typeof def?.fetch, 'function', '服务商定义必须自带取数（加服务商只写一个文件）');
   });
 
   test('未登记的服务商仍然不命中（→ unsupported，不静默伪造 0）', () => {
@@ -344,12 +343,11 @@ describe('deepseek-account —— DSH 账号路由（走账号服务，不是 HT
     bonusWallets: [{ currency: 'CNY', balance: '5.00' }],
   };
 
-  test('provider id 命中 deepseek-account，kind 与 deepseek-official 相同，ref 为空（无 API Key）', () => {
-    assert.deepEqual(matchBalanceProvider('deepseek-account'), {
-      ids: ['deepseek-account'],
-      ref: '',
-      kind: 'deepseek',
-    });
+  test('provider id 命中 deepseek-account，kind 与 deepseek-official 相同，凭证模式为 none（无 API Key）', () => {
+    const def = matchBalanceProvider('deepseek-account');
+    assert.deepEqual(def?.ids, ['deepseek-account']);
+    assert.deepEqual(def?.credential, { mode: 'none' }, '账号路由没有 API Key，凭证由账号服务持有');
+    assert.equal(typeof def?.fetch, 'function');
   });
 
   test('ready：total = 充值 + 赠送（与官方 total_balance 同构），两者分别进 toppedUp / granted', () => {
