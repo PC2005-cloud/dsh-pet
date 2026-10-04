@@ -88,32 +88,22 @@ macOS 的 Safari/WKWebView 下透明动画需用 `.mov` 素材，三步：
 
 上面的桌面形态由 DSH 宿主拉起。独立模式让它**不需要 DSH 在跑**：把插件自己的宿主半边
 （`src/host/index.ts` 的 `apply`）跑在一个最小的伪 ctx 上，再起一个本机 HTTP 服务接管路由 ——
-**路由表仍然只有插件那一份**（同一个 handler 同时服务 HTTP 与桌面助手的 bridge 管道），
-所以不存在"独立模式的实现跟不上宿主"的漂移。
+**路由表仍然只有插件那一份**（同一个 handler 同时服务 HTTP 与桌面助手的 bridge 管道）。
 
 ```sh
-# 插件装好后（包内已声明 bin）
-npx dsh-pet-standalone             # 默认 http://127.0.0.1:3080/dsh-pet-7340/
-npx dsh-pet-standalone --check     # 只体检：配置来源 / 宠物清单 / Electron 状态
-npx dsh-pet-standalone --port 3100
+npm install -g dsh-pet        # 必须 npm 装；dsh plugin add 装进 profile，bin 不在 PATH 上
+dsh-pet-standalone            # http://127.0.0.1:3080/dsh-pet-7340/（占用则顺延）
+dsh-pet-standalone --check    # 只体检
+dsh-pet-standalone --port 3100
 
-# 仓库里（npm install 时 prepare 已构建 lib/）
-npm run standalone
-npm run standalone -- --check
+npm run build && npm run standalone   # 仓库里（先构建）
 ```
 
-- **能用**：全部动画链、点击/拖拽/甩抛物理、右键菜单、多开、自定义动画与表情包、pet pack。
-- **不可用（明确降级，不假装成功）**：余额、碎碎念、对话、系统通知 —— 它们依赖 DSH 的凭证、
-  模型服务与会话事件。独立模式下这些端点返回结构化失败（带 `reason` 字段），桌面端也不会出现
-  周期性的错误气泡；包内默认配置读不到时 `/config` 直接 500 + 错误正文，绝不静默兜底。
-- **配置**：与 DSH 内读同一份（`$DSH_HOME/dsh-pet/main-config.jsonc` → 包内默认），`pet/` 下的
-  文件宠物照常生效；`--check` 会打印它实际读到的那几个路径。
-- **只显示 `display` 含 `desktop`/`both` 的实例**（`web` 的实例属于浏览器 overlay，见下条）。
-- **端口**：默认 3080，被占用时自动向后顺延（日志会写明实际端口）。
-- **退出**：`Ctrl+C`，或 `POST /shutdown`。
-- **只在 DSH 网页里的东西不在独立模式内**：浏览器 overlay、设置页、斜杠命令、
-  由 `/notify` 驱动的系统通知。
-- 独立模式与 DSH 内运行**互不影响**，也可以同时开（各有自己的桌面窗口）。
+- **能用**：动画链、点击/拖拽/甩抛、右键菜单、多开、自定义动画与表情包、pet pack。
+- **不可用**：余额、碎碎念、对话、系统通知——返回带 `reason` 的结构化失败，不假装成功。
+- **配置**：与 DSH 同一份（`$DSH_HOME/dsh-pet/main-config.jsonc` → 包内默认）。
+- **只显示 `display` 含 `desktop`/`both` 的实例**；端口默认 3080；`Ctrl+C` 或 `POST /shutdown` 退出。
+- **与 DSH 内运行可同时开**，但共用 `%APPDATA%\dsh-pet-electron-helper`，可能互相踩缓存（仅告警）。
 
 ## ⌨️ 斜杠命令
 

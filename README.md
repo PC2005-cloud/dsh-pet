@@ -61,15 +61,15 @@ cd dsh-pet/dsh-pet
 # ② 安装依赖
 npm install
 
-# ③ 构建（tsdown → lib）
-npm run prepare     # 构建完整 lib（npm install / npm publish 时会自动执行）
+# ③ 构建（完整 lib：tsdown → lib + 桌面共享核心 + 类型声明）
+npm run build       # 必须手动跑一次（克隆后 npm install 不再自动构建）
 
 # ④ 安装到 DSH（file: 指向**插件目录**——上面 cd 进去的那一层，用构建好的 lib）
 #    --profile 同样填实际在用的：桌面应用 desktop、dsh web → web
 dsh plugin --profile desktop add file:D:/path/to/dsh-pet/dsh-pet
 ```
 
-> 注：`prepare`（npm install / npm publish 时自动执行，也可手动 `npm run prepare`）才产出**完整可安装**的 lib——除 tsdown 构建外还构建桌面共享核心（`shared-core.js`）、生成类型声明并收敛发布 `files` 清单；裸 `tsdown` 构建会缺桌面运行时与类型。
+> 注：`npm run build`（即 `scripts/prepare.js`）才产出**完整可安装**的 lib——除 tsdown 构建外还构建桌面共享核心（`shared-core.js`）、生成类型声明并收敛发布 `files` 清单；裸 `tsdown` 构建会缺桌面运行时与类型。发布与打包（`npm publish` / `npm pack`）时由 `prepack` 自动调用它，克隆仓库后需手动跑一次。
 
 ## 插件功能
 
@@ -120,6 +120,25 @@ dsh plugin --profile desktop add file:D:/path/to/dsh-pet/dsh-pet
 - **开关 = 每只宠物的必填字段 `display`**：`web` = 仅浏览器 / `desktop` = 仅桌面 / `both` = 两者 / `none` = 都不显示；桌面模式渲染 display 含 desktop 的**全部**宠物（多开同屏，与浏览器一致），设置页「桌宠配置」编辑即时生效
 - 桌面端数据走独立进程管道，不依赖 DSH 的 HTTP 路由，不受 web 访问闸门影响
 - 本地调试：`cd dsh-pet && npm run start:desktop -- http://127.0.0.1:3080/dsh-pet-7340/config`（无宿主时自动回落 HTTP 路径）
+
+## 🧍 独立运行（完全不打开 DSH）
+
+连 DSH 都不用开：插件的宿主半边跑在伪 ctx 上，由一个本机 HTTP 服务接管路由（**路由表仍是插件那一份**）。
+
+```sh
+npm install -g dsh-pet        # 必须 npm 装；dsh plugin add 装进 profile，bin 不在 PATH 上
+dsh-pet-standalone            # http://127.0.0.1:3080/dsh-pet-7340/（占用则顺延）
+dsh-pet-standalone --check    # 只体检
+dsh-pet-standalone --port 3100
+
+npm run build && npm run standalone   # 仓库里（先构建）
+```
+
+- **能用**：动画链、点击/拖拽/甩抛、右键菜单、多开、自定义动画与表情包、pet pack。
+- **不可用**：余额、碎碎念、对话、系统通知——返回带 `reason` 的结构化失败（见 [`API.md`](API.md)）。
+- **配置**：与 DSH 同一份（`$DSH_HOME/dsh-pet/main-config.jsonc` → 包内默认）。
+- **只显示 `display` 含 `desktop`/`both` 的实例**；端口默认 3080；`Ctrl+C` 或 `POST /shutdown` 退出。
+- **与 DSH 内运行可同时开**，但共用 `%APPDATA%\dsh-pet-electron-helper`，可能互相踩缓存（仅告警）。
 
 ## ⚙️ 余额展示（Balance）
 
@@ -499,7 +518,7 @@ dsh plugin --profile desktop add file:D:/path/to/dsh-pet/dsh-pet
 
 ```sh
 cd dsh-pet
-npm publish --tag latest   # npm publish 自动执行 prepare 钩子（构建完整产物 + 收敛 files），无需手动构建
+npm publish --tag latest   # prepack 自动执行构建（完整产物 + 收敛 files），无需手动构建
 ```
 
 - client 端不做运行时浏览器判断——唯一播放格式 webm 在源码写死，无发布期注入
@@ -520,10 +539,10 @@ npm publish --tag latest   # npm publish 自动执行 prepare 钩子（构建完
 ├── .github/workflows/ # CI：Safari/HEVC 转码流水线（macOS runner，手动触发 → 发布 assets-mov Release）
 ├── dsh-pet/           # ③ 插件（可独立 npm 发布）
 │   ├── src/           #   TS 源码：host（配置/路由/工作状态）、client（动画链）、shared（双端共用纯逻辑）
-│   ├── lib/           #   构建产物（prepare 自动构建，不入库）
+│   ├── lib/           #   构建产物（npm run build 生成，不入库）
 │   ├── runtime/       #   桌面模式运行壳（Electron 透明窗）
 │   ├── assets/        #   webm 动画 / preview GIF / 字体 / 图标 / config.jsonc 默认配置
-│   └── scripts/       #   构建与发布脚本（prepare / prepack-check / ensure-electron 等）
+│   └── scripts/       #   构建与发布脚本（prepare.js / prepack-check / ensure-electron 等）
 └── LICENSE            # MIT
 ```
 

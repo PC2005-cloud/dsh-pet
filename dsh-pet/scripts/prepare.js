@@ -16,7 +16,7 @@
  *   2. 改写 package.json：files 收敛为发布清单（含桌面模式运行时 runtime/electron-helper、
  *      表情包 assets/memes）—— 幂等：跑一次即定格为当前状态，再跑结果不变，无需备份/恢复
  *
- * 用法：node scripts/prepare.js（npm run prepare；npm install / npm publish 自动执行）
+ * 用法：node scripts/prepare.js（npm run build；npm publish / npm pack 经 prepack 自动执行）
  * 发布：npm publish --tag latest
  */
 import { spawnSync } from 'node:child_process';
