@@ -8,7 +8,7 @@
 export interface RawBalanceResult {
   ok: boolean;
   provider?: string;
-  kind?: 'opencode' | 'deepseek';
+  kind?: 'opencode' | 'deepseek' | 'commandcode';
   reason?: string;
   message?: string;
   data?: {
@@ -18,6 +18,9 @@ export interface RawBalanceResult {
     rollingResetsAt?: unknown;
     weeklyResetsAt?: unknown;
     monthlyResetsAt?: unknown;
+    rollingCapUsd?: unknown;
+    weeklyCapUsd?: unknown;
+    monthlyCapUsd?: unknown;
     currency?: unknown;
     total?: unknown;
     granted?: unknown;
@@ -28,15 +31,25 @@ export interface RawBalanceResult {
 /** 已解析的余额视图（展示 + 档位计算用） */
 export interface BalanceView {
   provider: string;
-  kind: 'opencode' | 'deepseek';
+  kind: 'opencode' | 'deepseek' | 'commandcode';
   ok: true;
-  /** opencode：三窗口用量（0-100 数字）+ 各自的重置时间 */
+  /**
+   * 三窗口已用百分比（0-100 数字）+ 各自的重置时间：
+   * opencode 三窗必有；commandcode 的 `monthly` 必有，`rolling`（5h）/`weekly` 可缺省（无窗口限制时）。
+   */
   rolling?: number;
   weekly?: number;
   monthly?: number;
   rollingResetsAt?: string;
   weeklyResetsAt?: string;
   monthlyResetsAt?: string;
+  /**
+   * 各窗口满额度（USD）：只有 commandcode 需要（额度由接口回传，opencode 用固定常量
+   * OPENCODE_QUOTA_USD，不在这里重复）。用于「最紧迫窗口」的绝对口径；缺省 → 退化为百分比口径。
+   */
+  rollingCapUsd?: number;
+  weeklyCapUsd?: number;
+  monthlyCapUsd?: number;
   /** deepseek：余额金额（字符串，与接口一致） */
   currency?: string;
   total?: string;
@@ -53,6 +66,16 @@ export interface BalanceUnavailable {
 }
 
 export type BalanceState = BalanceView | BalanceUnavailable;
+
+/**
+ * 可选数字：缺省 → undefined；出现但非法 → null（调用方据此整拍跳过——与 opencode
+ * 「非数字 → null」同一口径，不把 NaN/字符串送进展示层）。
+ */
+function optNum(value: unknown): number | undefined | null {
+  if (value === undefined || value === null) return undefined;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
 
 /**
  * host 的余额原始响应（`BalanceResult`，经 `/state` 的 `sections.balance` 叶子送达）→ 客户端视图。
@@ -93,6 +116,39 @@ export function toBalanceState(raw: unknown): BalanceState | null {
       monthlyResetsAt: typeof d.monthlyResetsAt === 'string' ? d.monthlyResetsAt : undefined,
     };
   }
+  if (r.kind === 'commandcode') {
+    const monthly = optNum(d.monthly);
+    const rolling = optNum(d.rolling);
+    const weekly = optNum(d.weekly);
+    const rollingCapUsd = optNum(d.rollingCapUsd);
+    const weeklyCapUsd = optNum(d.weeklyCapUsd);
+    const monthlyCapUsd = optNum(d.monthlyCapUsd);
+    // 月度窗口是这份数据的底线：缺了/非法 = 认不出响应（5h、周窗口与三个额度都是可选）
+    if (monthly === undefined || monthly === null) return null;
+    if (
+      rolling === null ||
+      weekly === null ||
+      rollingCapUsd === null ||
+      weeklyCapUsd === null ||
+      monthlyCapUsd === null
+    ) {
+      return null;
+    }
+    return {
+      provider,
+      kind: 'commandcode',
+      ok: true,
+      rolling,
+      weekly,
+      monthly,
+      rollingCapUsd,
+      weeklyCapUsd,
+      monthlyCapUsd,
+      rollingResetsAt: typeof d.rollingResetsAt === 'string' ? d.rollingResetsAt : undefined,
+      weeklyResetsAt: typeof d.weeklyResetsAt === 'string' ? d.weeklyResetsAt : undefined,
+      monthlyResetsAt: typeof d.monthlyResetsAt === 'string' ? d.monthlyResetsAt : undefined,
+    };
+  }
   if (r.kind === 'deepseek') {
     return {
       provider,
@@ -112,12 +168,11 @@ export const DEEPSEEK_FULL_BALANCE_CNY = 20;
 
 /**
  * 事件档位百分比（已用百分比语义：0 = 未消耗，100 = 耗尽）：
- * - opencode：取三窗口最大（风险最高者为准）
+ * - opencode / commandcode：取三窗口最大（风险最高者为准）
  * - deepseek：余额按 DEEPSEEK_FULL_BALANCE_CNY（¥20 = 100%）折算为已用百分比
  *   （余额 20 元 → 0%，10 元 → 50%，0 元 → 100%）
  */
 export function balancePercent(v: BalanceView): number | undefined {
-  if (v.kind === 'opencode') return Math.max(v.rolling ?? 0, v.weekly ?? 0, v.monthly ?? 0);
   if (v.kind === 'deepseek') {
     const total = Number(v.total);
     if (!Number.isFinite(total)) return undefined; // 金额非法（非数字）：不触发（上层校验已兜底，此处双保险）
@@ -125,7 +180,8 @@ export function balancePercent(v: BalanceView): number | undefined {
     const remaining = (Math.max(0, total) / DEEPSEEK_FULL_BALANCE_CNY) * 100; // 剩余百分比 0~100+
     return Math.max(0, Math.min(100, 100 - remaining)); // 折算为已用百分比
   }
-  return undefined;
+  // opencode / commandcode：三窗口取最大（只有月窗口时就是它自己）
+  return Math.max(v.rolling ?? 0, v.weekly ?? 0, v.monthly ?? 0);
 }
 
 /**
@@ -152,40 +208,67 @@ export const WINDOW_LABELS = {
   monthly: '月',
 } as const;
 
-export type OpenCodeWindow = keyof typeof OPENCODE_QUOTA_USD;
+export type WindowKey = keyof typeof OPENCODE_QUOTA_USD;
 
 /** 一个窗口的额度概况（用于联想框一句话判定） */
 export interface WindowUsage {
   label: string;
   percent: number;
-  quotaUsd: number;
-  /** 剩余额度（USD）= 满额度 × (100 − percent) / 100 */
-  remainingUsd: number;
+  /** 满额度（USD）：opencode 是固定业务常量；commandcode 由接口回传，算不出时缺省 */
+  quotaUsd?: number;
+  /** 剩余额度（USD）= 满额度 × (100 − percent) / 100；满额度未知时缺省 */
+  remainingUsd?: number;
   resetsAt?: string;
 }
 
-/** 取三窗口剩余额度最少的那个（最先到达满额度/最先用完） */
+/** 各窗口的满额度（USD）：opencode 固定常量；commandcode 用接口回传的 cap */
+function windowQuotas(v: BalanceView): Record<WindowKey, number | undefined> {
+  if (v.kind === 'opencode') return OPENCODE_QUOTA_USD;
+  return { rolling: v.rollingCapUsd, weekly: v.weeklyCapUsd, monthly: v.monthlyCapUsd };
+}
+
+/**
+ * 取最先告急的一个窗口（opencode 与 commandcode 共用）：
+ * - 满额度齐全 → 绝对口径：剩余额度（USD）最少者（opencode 一直是这个口径）；
+ * - 有窗口给不出满额度（commandcode 月度池为 0 时）→ 退化为相对口径：已用百分比最大者
+ *   （两窗额度量级不同，缺一个还硬比绝对剩余会反直觉）。
+ * 不存在的窗口（commandcode 无窗口限制时）直接跳过，不补 0。
+ *
+ * 绝对口径的副作用（刻意保留）：5h 额度最小，通常先报 5h；与 opencode 共用同一口径，
+ * 完整读数见 tools/api-tester.html。
+ */
 export function urgentWindow(v: BalanceView): WindowUsage | undefined {
-  if (v.kind !== 'opencode') return undefined;
-  const windows: OpenCodeWindow[] = ['rolling', 'weekly', 'monthly'];
-  const resets: Record<OpenCodeWindow, string | undefined> = {
+  if (v.kind === 'deepseek') return undefined;
+  const quotas = windowQuotas(v);
+  const resets: Record<WindowKey, string | undefined> = {
     rolling: v.rollingResetsAt,
     weekly: v.weeklyResetsAt,
     monthly: v.monthlyResetsAt,
   };
+  const present = (['rolling', 'weekly', 'monthly'] as WindowKey[]).filter((w) => v[w] !== undefined);
+  if (present.length === 0) return undefined;
+  const allQuotas = present.every((w) => {
+    const quota = quotas[w];
+    return quota !== undefined && quota > 0;
+  });
+
   let best: WindowUsage | undefined;
-  for (const w of windows) {
+  for (const w of present) {
     const percent = v[w] ?? 0;
-    const quota = OPENCODE_QUOTA_USD[w];
-    const remaining = (quota * (100 - percent)) / 100;
+    const quota = quotas[w];
     const cand: WindowUsage = {
       label: WINDOW_LABELS[w],
       percent,
       quotaUsd: quota,
-      remainingUsd: remaining,
+      remainingUsd: allQuotas && quota !== undefined ? (quota * (100 - percent)) / 100 : undefined,
       resetsAt: resets[w],
     };
-    if (best === undefined || remaining < best.remainingUsd) best = cand;
+    if (best === undefined) {
+      best = cand;
+      continue;
+    }
+    const moreUrgent = allQuotas ? (cand.remainingUsd ?? 0) < (best.remainingUsd ?? 0) : cand.percent > best.percent;
+    if (moreUrgent) best = cand;
   }
   return best;
 }
@@ -266,13 +349,14 @@ function unavailableRows(state: BalanceUnavailable): BalanceBubbleRow[] {
 
 /**
  * 把 BalanceState 渲染成气泡行数据（纯函数，不碰 DOM/React）：
- * - opencode：两行 —— 「5h/周/月」额度已用 N% + 重置倒计时
+ * - opencode / commandcode：两行 —— 「5h/周/月」额度已用 N% + 重置倒计时
  * - deepseek：一行 —— 余额（峰/谷）¥x.xx（峰红/谷绿由 role:'tier' 表达）
  * - 无效：显式展示不可用原因（见 unavailableRows），绝不伪造数字
  */
 export function balanceBubbleView(state: BalanceState): BalanceBubbleRow[] {
   if (state.ok) {
-    if (state.kind === 'opencode') {
+    if (state.kind !== 'deepseek') {
+      // opencode / commandcode：三窗口中先告急的一个
       const w = urgentWindow(state);
       if (w) {
         const reset = resetInText(w.resetsAt);
@@ -298,7 +382,7 @@ export function balanceBubbleView(state: BalanceState): BalanceBubbleRow[] {
 export interface BalanceNoticeDecision {
   /** true = 本次应弹气泡（文字说明）；false = 静默（同一原因已提示过，且非显式请求） */
   show: boolean;
-  /** 本次提示的原因标识（形如 `unsupported:commandcode`；ok 状态为 null）：调用方存下，供下次比较 */
+  /** 本次提示的原因标识（形如 `unsupported:unregistered-provider`；ok 状态为 null）：调用方存下，供下次比较 */
   key: string | null;
 }
 
