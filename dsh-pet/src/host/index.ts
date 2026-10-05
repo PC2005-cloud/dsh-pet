@@ -23,6 +23,9 @@
  *   /dsh-pet-7340/reload              → 桌面端「重载配置」（右键菜单，POST）：重启桌面 Helper，全部桌面
  *                                宠物窗口按最新配置重建（改配置文件后不必回设置页点保存）；与保存走
  *                                **同一条**重启路径（syncDesktop），宠物数量/display/size 变化同样生效
+ *   /dsh-pet-7340/raise               → 桌面窗口前置（POST 动作端点，仅 Windows）：借 DSH 自己注册的
+ *                                `dsh://` 协议再启动一次，单实例锁让已有实例 restore+show+focus；
+ *                                渲染端 window.focus() 无法还原最小化窗口，故点系统通知走这条（见 desktop-raise.ts）
  *   /dsh-pet-7340/config/meta         → 配置文件与素材目录路径 + 全部存储位置清单
  *                                       （设置页「高级配置」「卸载与存储」展示用）
  *   /dsh-pet-7340/models              → 可选「服务商 + 模型」清单（设置页「AI 模型」下拉框数据源；
@@ -75,6 +78,7 @@ import { configuredModel } from './model-selection';
 import { limitPool, pickMeme, readMemePool } from './memes';
 import { decideBroadcast, normalizeBroadcastText } from './broadcast';
 import { decideAnim } from './anim';
+import { raiseDesktopWindow } from './desktop-raise';
 import {
   findPetInstance,
   flattenPetList,
@@ -851,6 +855,15 @@ export function apply(ctx: any): void {
       if (method !== 'POST') return { kind: 'json', status: 405, obj: { error: 'method not allowed' } };
       void syncDesktop();
       return { kind: 'json', status: 200, obj: { reloading: true } };
+    }
+
+    // 桌面窗口前置：/dsh-pet-7340/raise（POST 动作端点，仅 Windows）
+    // 浏览器半侧点击系统通知后调它：渲染端 `window.focus()` 无法还原最小化窗口（还原必须由主进程
+    // `restore()/show()` 做），所以由宿主借 DSH 自己注册的 `dsh://` 协议把窗口前置（细节见 desktop-raise.ts）。
+    // 动作端点，只回 {ok}：ok = 是否成功发起（真正的还原由已有实例完成；节流 / 非 Windows / spawn 失败均为 false）。
+    if (rest === 'raise') {
+      if (method !== 'POST') return { kind: 'json', status: 405, obj: { error: 'method not allowed' } };
+      return { kind: 'json', status: 200, obj: { ok: raiseDesktopWindow() } };
     }
 
     // 配置文件路径 + 存储位置清单（设置页「高级配置」与「卸载与存储」展示用）

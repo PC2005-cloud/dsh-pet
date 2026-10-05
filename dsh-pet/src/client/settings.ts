@@ -13,7 +13,7 @@
  */
 import { PET_DISPLAYS } from '../shared/config';
 import { DEFAULT_PHYSICS } from '../shared/physics';
-import { NOTIFY_ICONS, reloadNotifications, requestNotificationPermission } from './notify';
+import { NOTIFY_ICONS, bindNotificationClick, reloadNotifications, requestNotificationPermission } from './notify';
 import type { Corner, ModelSelection, Pet, PetDisplay, PhysicsParams } from '../shared/types';
 import type { ChangeEvent, Dispatch, FunctionComponent, SetStateAction } from 'react';
 import type * as ReactNS from 'react';
@@ -1048,8 +1048,10 @@ export function makePetConfigSection(rt: {
         return;
       }
       try {
-        // 成功即发一条测试通知验证链路（绕过聚焦门，直接确认）
-        new Notification('测试通知', { body: '【dsh-pet】系统通知已就绪。', icon: NOTIFY_ICONS.test });
+        // 成功即发一条测试通知验证链路（绕过聚焦门，直接确认）；
+        // 点击语义与正式通知一致（浏览器聚焦 / 桌面壳请宿主前置窗口）
+        const n = new Notification('测试通知', { body: '【dsh-pet】系统通知已就绪。', icon: NOTIFY_ICONS.test });
+        bindNotificationClick(n);
       } catch {
         /* 个别环境构造失败：仍按已授权提示 */
       }

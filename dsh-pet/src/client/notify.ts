@@ -51,6 +51,41 @@ function isPageActive(): boolean {
   return pageVisible && pageFocused;
 }
 
+// ---------- 桌面壳：把 DSH 窗口提到前台 ----------
+
+/** 是否运行在 DSH 桌面壳（Electron 窗口）里。
+ *  判据用 preload 只在 `dsh-app://app` 页面暴露的 `dshDesktop`（协议/主机名同源，最可靠），
+ *  兜底再看 location.protocol——浏览器（http/https）下两者都不成立，保持纯浏览器行为。 */
+function inDesktopShell(): boolean {
+  try {
+    if (location.protocol === 'dsh-app:') return true;
+    const api = (window as unknown as { dshDesktop?: { protocolVersion?: unknown } }).dshDesktop;
+    return typeof api?.protocolVersion === 'number';
+  } catch {
+    return false; // 极端环境（无 location/window）：按非桌面处理，绝不因环境探测抛错打断通知
+  }
+}
+
+/** 请宿主把 DSH 桌面窗口前置（含从最小化还原）。
+ *  Electron 渲染端 `window.focus()` 只聚焦、**不还原最小化窗口**（还原必须由主进程
+ *  `restore()/show()` 做），而 DSH 页面没有前置窗口的 IPC——因此交给宿主经 `dsh://`
+ *  协议再启动一次（见 host 的 `/dsh-pet-7340/raise`）。浏览器里是空操作；
+ *  请求失败静默：通知本身已经发出，不该因为前置失败报错。 */
+function raiseDesktopWindow(): void {
+  if (!inDesktopShell()) return;
+  void fetch('/dsh-pet-7340/raise', { method: 'POST' }).catch(() => {});
+}
+
+/** 通知点击后的统一行为：聚焦页面（浏览器语义）+ 请宿主前置桌面窗口 + 关闭这条通知。
+ *  导出给设置页的「测试通知」复用——两处点击语义必须一致，不各写一份。 */
+export function bindNotificationClick(n: Notification): void {
+  n.onclick = () => {
+    window.focus();
+    raiseDesktopWindow();
+    n.close();
+  };
+}
+
 // ---------- 发送 ----------
 
 /** 图标 URL（pic 路由由宿主提供：assets/pic → /dsh-pet-7340/pic/<file>） */
@@ -80,12 +115,10 @@ function toast(title: string, body?: string, icon?: string): void {
     const opts: NotificationOptions = {};
     if (body) opts.body = truncate(body);
     if (icon) opts.icon = icon;
-    // 点击通知：聚焦回 DSH 页面并关闭该通知（图标加载失败只降级为无图标，绝不关闭弹窗）
+    // 点击通知：聚焦回 DSH 页面（桌面壳下还要请宿主还原/前置窗口）并关闭该通知
+    //（图标加载失败只降级为无图标，绝不关闭弹窗）
     const n = new Notification(title, opts);
-    n.onclick = () => {
-      window.focus();
-      n.close();
-    };
+    bindNotificationClick(n);
   } catch {
     /* 个别环境（e.g. 部分桌面壳）可能在构造时抛错：忽略，不打断业务 */
   }
