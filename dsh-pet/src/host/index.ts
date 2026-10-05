@@ -96,7 +96,7 @@ import {
   WorkStatusStore,
   type WorkStatusTurnContext,
 } from './work-status';
-import { agentErrorFrame, reduceNotifyFrame, type HostNotifyFrame } from './notify-events';
+import { agentErrorFrame, reduceNotifyFrame, shouldNotifySession, type HostNotifyFrame } from './notify-events';
 import { profileNameFrom, storageEntries } from './storage-paths';
 import { PollStateStore } from './state';
 import {
@@ -1300,13 +1300,18 @@ export function apply(ctx: any): void {
     const sessionDispose = ctx.on(
       'session/event',
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (_session: any, event: any) => {
+      (session: any, event: any) => {
+        // 会话门（issue #82）：子代理 / 委派会话不发通知——你等的是父对话，不是某一路子代理跑完。
+        // 判据用 header.origin（不是 parentSession，那会把普通 fork 的主对话一起静音），
+        // 判据不可用时放行，绝不把通知整体打哑。详见 notify-events.ts 的 shouldNotifySession。
+        if (!shouldNotifySession(session)) return;
         const frame = reduceNotifyFrame(event as Parameters<typeof reduceNotifyFrame>[0]);
         if (frame) pushNotifyFrame(frame);
       },
     );
     // agent/error（agent-loop dispatch.emit）：无回合位置的生成失败；0.1.5 新增，
     // 旧版无此事件 = 少一条通知（turn/end error 分支已覆盖大部分失败场景），不报错。
+    // **这道门管不到它**：载荷只有 { turn, step, error }，不带会话标识，无从判定来源。
     const errorDispose = ctx.on(
       'agent/error',
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
