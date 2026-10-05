@@ -95,6 +95,7 @@ class PetSprite {
     this.bubbleTimer = null;
     this.balanceView = null;
     this.balanceWrap = false; // true = 当前余额气泡是不可用的「文字说明」（多行，需换行变体）
+    this.lastBodyClickBalanceAt = 0; // 左键点身体「顺带」触发余额的上次时间（节流用，见 triggerBalanceFromBodyClick）
     this.prevTick = 0;
     // 说话（碎碎念 / 命令气泡 / 对话回复三合一）：文本/配图由容器统一轮询 /state 后经
     // showWhisper 送进来，本精灵不再自己轮询（改造前的 whisperLoopTimer / broadcastLoopTimer 已删）
@@ -975,6 +976,9 @@ class PetSprite {
   onClick() {
     const d = this.dragState;
     if (d.active || d.dragging || this.justDragged) return;
+    // 左键点身体**顺带**触发一次余额（与右键菜单「查看余额」同一条路径；带节流）。
+    // 这是纯并行动作：下面的原有点击交互（积分已在下按触发、点击动画照播）完全不变。
+    this.triggerBalanceFromBodyClick();
     // 积分判定已在 onPointerDown（按下即触发）完成：
     // 本次按下已触发过积分 → 只收手停住、**不**再播普通点击动画（粒子+弹窗即反馈，与浏览器同构）
     if (this.pressScoreFired) {
@@ -1110,19 +1114,36 @@ class PetSprite {
     this.syncInputBusy(); // 菜单关：若没有别的占用（拖拽/弹窗）则交还常规判定
   }
 
-  // 「查看余额」菜单：POST 动作让 host 刷新余额（写进 S），随即**立刻跑一拍 /state** 拿结果展示
-  // （0 延迟，不用等下一个 1s；展示走 showBalanceNow/showBalanceNotice 同一路径）。
-  // 注意这里不再直接拉余额：数据只有一个出口（S），菜单只负责"让它刷新"。
+  // 「查看余额」菜单 / 左键点身体：**同一条**触发路径（triggerBalanceNow）。
+  // 菜单这条路不节流——用户明确点了菜单，点一次就该有一次答复。
   showBalanceFromMenu() {
+    this.triggerBalanceNow();
+  }
+
+  // 触发一次余额刷新并**立刻**取结果展示：
+  // POST 动作让 host 刷新余额（写进 S），随即跑一拍 /state 拿结果展示（0 延迟，不用等下一个 1s；
+  // 展示走 showBalanceNow/showBalanceNotice 同一路径）。这里不直接拉余额：数据只有一个出口（S）。
+  triggerBalanceNow() {
     if (!this.pet.balanceEnabled) return;
     S.postAction(BALANCE_URL)
       .then((ok) => {
-        if (!ok) console.warn('[dsh-pet] 菜单查看余额：刷新动作未成功');
+        if (!ok) console.warn('[dsh-pet] 查看余额：刷新动作未成功');
         pollStateNow(); // 立即拉一拍：结果 0 延迟可见（失败也会由 /state 里的 ok:false 弹文字说明）
       })
       .catch((e) => {
-        console.error('[dsh-pet] 菜单查看余额异常', e);
+        console.error('[dsh-pet] 查看余额异常', e);
       });
+  }
+
+  // 左键点身体**顺带**触发余额：与菜单同一个 triggerBalanceNow，只多一层节流。
+  // 为什么身体点击要节流：点击是高频动作，而每次触发都会让宿主真打一次余额接口（外部 API 成本）；
+  // 节流值两端共用（shared 的 BODY_CLICK_BALANCE_THROTTLE_MS）。原有点击交互不受影响。
+  triggerBalanceFromBodyClick() {
+    if (!this.pet.balanceEnabled) return;
+    const now = Date.now();
+    if (now - this.lastBodyClickBalanceAt < S.BODY_CLICK_BALANCE_THROTTLE_MS) return;
+    this.lastBodyClickBalanceAt = now;
+    this.triggerBalanceNow();
   }
 
   // 「碎碎念」菜单：POST 动作让 host 立即新生成一句（写进 S），随即立刻跑一拍 /state 拿文本展示
@@ -1220,6 +1241,8 @@ class PetSprite {
       slot === 'whisper' || slot === 'work' || (slot === 'balance' && this.balanceWrap),
     );
     this.bubble.classList.toggle(S.MEME_BUBBLE_CLASS, !!whisperImg);
+    // 余额气泡显示在**角色下方**（碎碎念/工作气泡仍在上方）：位置差异只由这一个类表达
+    this.bubble.classList.toggle('is-below', slot === 'balance');
     if (slot === 'none') {
       // 三者都没有可显示的内容：隐藏（不占位，也就不会挡住任何一层）
       this.bubble.classList.remove('is-on');

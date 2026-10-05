@@ -30,7 +30,15 @@ import {
 import { WORK_STATUS_INDEX, type WorkStatusSnapshot } from '../shared/work-status';
 import { makeBalanceBubble, makeWhisperBubble } from './bubble';
 import { clickScore, SCORE_MIN_SPEED, mountScorePopup, spawnScoreBurst } from '../shared/score-popup';
-import { CANVAS_H, FEET_Y, HIT_BOX, DRAG_THRESHOLD, PET_REF_WIDTH, ANIMATION_EXT } from '../shared/constants';
+import {
+  CANVAS_H,
+  FEET_Y,
+  HIT_BOX,
+  DRAG_THRESHOLD,
+  PET_REF_WIDTH,
+  ANIMATION_EXT,
+  BODY_CLICK_BALANCE_THROTTLE_MS,
+} from '../shared/constants';
 // 统一右键菜单：与桌面共用同一份组件（树 + 渲染 + 样式，src/shared/menu.ts）
 import {
   buildMenuTree,
@@ -232,6 +240,8 @@ export function makePetUI(rt: {
     const throwStateRef = useRef<ThrowState | null>(null);
     // 按下瞬间已触发过积分（pointerdown 即触发；防止松开的 click 再触发一次/再播点击动画）
     const pressScoreFiredRef = useRef(false);
+    /** 左键点身体「顺带」触发余额的上次时间（节流用，见 triggerBalanceFromBodyClick） */
+    const lastBodyClickBalanceRef = useRef(0);
     // Q 弹挤压（点击回应 / 抛掷落地）：rAF + 待压标记（等新动画真正成为前台再压，压的是新首帧）
     const squashRef = useRef<number | null>(null);
     const squashTokenRef = useRef(0);
@@ -1245,9 +1255,28 @@ export function makePetUI(rt: {
         }
       }
     };
+    // 左键点身体**顺带**触发一次余额：与 /balance 命令、桌面「查看余额」**同一条**路径——
+    // POST 动作让宿主刷新余额，随即叫醒一拍 /state（数据只从 S 来），气泡 0 延迟出现。
+    // 纯并行动作：原有点击交互（积分弹窗 + 点击动画）完全不变。
+    // 节流：点击是高频动作，而每次触发都会让宿主真打一次余额接口（外部 API 成本），
+    // 节流值两端共用（shared 的 BODY_CLICK_BALANCE_THROTTLE_MS）；菜单/命令那条路不受此限。
+    const triggerBalanceFromBodyClick = () => {
+      if (!cfg.balanceEnabled) return;
+      const now = Date.now();
+      if (now - lastBodyClickBalanceRef.current < BODY_CLICK_BALANCE_THROTTLE_MS) return;
+      lastBodyClickBalanceRef.current = now;
+      postAction('/dsh-pet-7340/balance')
+        .then((ok: boolean) => {
+          if (!ok) console.warn('[dsh-pet] 点击身体触发余额：刷新动作未成功');
+          statePoller.now();
+        })
+        .catch((e: unknown) => console.warn('[dsh-pet] 点击身体触发余额异常', e));
+    };
+
     const handleClick = () => {
       const d = dragRef.current;
       if (d.active || d.dragging || justDraggedRef.current) return;
+      triggerBalanceFromBodyClick(); // 顺带触发余额（下面的原有点击交互一字未改）
       // 积分判定已在 pointerdown（按下即触发）完成：
       // 本次按下已触发过积分 → 只收手停住、**不**再播普通点击动画（粒子+弹窗即反馈）
       if (pressScoreFiredRef.current) {

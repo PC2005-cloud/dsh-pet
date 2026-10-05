@@ -33,6 +33,12 @@ const bubbleCss = [
   '.dsh-pet-bubble::after{content:"";position:absolute;left:50%;bottom:calc(var(--dsh-pet-size)*-0.017);' +
     'transform:translateX(-50%);border:calc(var(--dsh-pet-size)*0.017) solid transparent;' +
     'border-top-color:rgba(255,255,255,.92);border-bottom:none}',
+  // 余额气泡显示在**角色下方**（碎碎念/工作气泡仍在上方——两者共用 .dsh-pet-bubble，只靠这个类区分）：
+  // 与上方版本镜像——bottom→top、尖角由朝下改为朝上，其余尺寸/配色全部沿用
+  '.dsh-pet-bubble.is-below{bottom:auto;top:calc(100% - var(--dsh-pet-size)*0.108)}',
+  '.dsh-pet-bubble.is-below::after{bottom:auto;top:calc(var(--dsh-pet-size)*-0.017);' +
+    'border-top:none;border-bottom:calc(var(--dsh-pet-size)*0.017) solid transparent;' +
+    'border-bottom-color:rgba(255,255,255,.92)}',
   '.dsh-pet-bubble.is-on{opacity:1}',
   // 碎碎念变体：字号缩到余额气泡的 0.75（0.0455→0.034）、取消 nowrap 允许换行、
   // 宽度随文字数量自适应（短句窄框、长句封顶绕行），高度随行数自然增长
@@ -106,7 +112,8 @@ export function makeBalanceBubble(rt: { h: typeof jsx }): (props: { state: Balan
     // （余额气泡默认 white-space:nowrap，长文案会直接顶出宠物宽度）
     const wrap = state.ok ? '' : ' dsh-pet-whisper';
     return h('div', {
-      className: 'dsh-pet-bubble' + wrap + (on ? ' is-on' : ''),
+      // is-below：余额气泡固定在**角色下方**（碎碎念气泡不加这个类，仍在角色上方）
+      className: 'dsh-pet-bubble is-below' + wrap + (on ? ' is-on' : ''),
       children: rowsToNodes(h, rows),
     });
   };

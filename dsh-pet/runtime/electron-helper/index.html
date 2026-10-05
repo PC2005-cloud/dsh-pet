@@ -99,6 +99,19 @@
         border-top-color: rgba(255, 255, 255, 0.92);
         border-bottom: none;
       }
+      /* 余额气泡显示在**角色下方**（碎碎念/工作气泡仍在上方——两者共用 .pet-bubble，只靠这个类区分）：
+         与上方版本镜像——bottom→top、尖角由朝下改为朝上，其余尺寸/配色全部沿用 */
+      .pet-bubble.is-below {
+        bottom: auto;
+        top: calc(100% - var(--pet-size, 462px) * 0.108);
+      }
+      .pet-bubble.is-below::after {
+        bottom: auto;
+        top: calc(var(--pet-size, 462px) * -0.017);
+        border-top: none;
+        border-bottom: calc(var(--pet-size, 462px) * 0.017) solid transparent;
+        border-bottom-color: rgba(255, 255, 255, 0.92);
+      }
       .pet-bubble.is-on {
         opacity: 1;
       }

@@ -18,3 +18,9 @@ export const PET_REF_WIDTH = 462;
  *    素材从仓库 GitHub Release（固定 tag assets-mov）下载放入 main-animation/mov/，
  *    并把本常量改为 '.mov' 后重新构建（自构建用户改这里；npm 包用户改产物 lib/client.js 中同名常量）。 */
 export const ANIMATION_EXT = '.webm';
+
+/** 左键点身体「顺带」触发余额查询的最小间隔（ms），浏览器与桌面共用同一值。
+ *  为什么需要节流：点击身体是**高频**动作（每次点击都会弹积分/播点击动画），而每次触发都会让宿主
+ *  真正打一次余额接口（有外部 API 成本）；3 秒内的重复点击只触发第一次。
+ *  右键菜单「查看余额」与 /balance 命令**不受**此限——那是用户明确要的，点一次就该有一次答复。 */
+export const BODY_CLICK_BALANCE_THROTTLE_MS = 3000;
