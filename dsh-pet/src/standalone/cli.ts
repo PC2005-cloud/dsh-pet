@@ -31,13 +31,21 @@ import {
   type RegisteredRoute,
   type StandaloneLogger,
 } from './context';
-import { configPathsFor, describePets, isDesktopVisible, parseArgs, USAGE } from './options';
+import { configPathsFor, describePets, isDesktopVisible, parseArgs, standaloneUserDataDir, USAGE } from './options';
 import { listenStandaloneServer } from './server';
 
 /** 启动独立模式：先起服务拿到端口，再 `apply`（插件据此拼桌面 Helper 的 configUrl） */
 async function run(logger: StandaloneLogger, options: { port: number }): Promise<void> {
   const home = dshHomeDir();
   const paths = configPathsFor(packageRoot, home);
+
+  // 独立模式默认用**自己的** Electron 用户数据目录：DSH 内运行与独立模式会同时存在，而 helper 的
+  // userData 由它自己的 app.setName 决定（与宿主无关）—— 共用默认目录会互抢 Chromium 的 profile 锁，
+  // 真机实测后启动的那只拿不到 profile、渲染端一个素材都不拉、宠物画不出来。
+  // 必须在 apply()（= 拉起桌面助手）之前设：helper 继承本进程环境；用户显式设了就尊重用户的。
+  if (!process.env.DSH_PET_USER_DATA_DIR) {
+    process.env.DSH_PET_USER_DATA_DIR = standaloneUserDataDir(home);
+  }
 
   // 预检：包内默认配置读不到时宿主半边必然每请求失败；早给可操作的诊断，别让用户对着空桌面猜
   if (!existsSync(paths.defaultFile)) {
@@ -111,6 +119,7 @@ async function run(logger: StandaloneLogger, options: { port: number }): Promise
     `  插件        dsh-pet@${packageVersion(packageRoot)}  ${packageRoot}`,
     `  路由        http://127.0.0.1:${server.port}/dsh-pet-7340/`,
     `  配置        ${configSource}`,
+    `  数据目录    ${process.env.DSH_PET_USER_DATA_DIR ?? '（Electron 默认）'}`,
     `  宠物        ${describePets(pets)}`,
     desktopVisible.length === 0
       ? '  桌面小窗    0 只：display 需要 desktop 或 both 才会出现透明小窗（服务仍在运行）'

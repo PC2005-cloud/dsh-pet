@@ -18,7 +18,7 @@ import {
   resolveElectronPath,
 } from '../host/helper-process';
 import type { StandaloneLogger } from './context';
-import { configPathsFor, describePets, isDesktopVisible } from './options';
+import { configPathsFor, describePets, isDesktopVisible, standaloneUserDataDir } from './options';
 
 /** 包版本（读不到就 unknown）—— 体检报告与启动横幅共用 */
 export function packageVersion(root: string): string {
@@ -43,6 +43,7 @@ export function runCheck(logger: StandaloneLogger): number {
     `Node            ${process.version}（${process.platform}-${process.arch}）`,
     `插件            dsh-pet@${packageVersion(packageRoot)}  ${packageRoot}`,
     `DSH_HOME        ${home}`,
+    `独立数据目录    ${standaloneUserDataDir(home)}（独立模式专用 Electron profile；DSH 内运行用默认目录，两者不互抢）`,
     `用户配置        ${paths.userFile}${existsSync(paths.userFile) ? '' : '（不存在 → 用包内默认）'}`,
     `文件宠物目录    ${paths.petDir}${existsSync(paths.petDir) ? '' : '（不存在）'}`,
     `内置默认配置    ${paths.defaultFile}${existsSync(paths.defaultFile) ? '' : '  ✗ 缺失'}`,

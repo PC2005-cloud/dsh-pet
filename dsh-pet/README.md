@@ -103,7 +103,10 @@ npm run build && npm run standalone   # 仓库里（先构建）
 - **不可用**：余额、碎碎念、对话、系统通知——返回带 `reason` 的结构化失败，不假装成功。
 - **配置**：与 DSH 同一份（`$DSH_HOME/dsh-pet/main-config.jsonc` → 包内默认）。
 - **只显示 `display` 含 `desktop`/`both` 的实例**；端口默认 3080；`Ctrl+C` 或 `POST /shutdown` 退出。
-- **与 DSH 内运行可同时开**，但共用 `%APPDATA%\dsh-pet-electron-helper`，可能互相踩缓存（仅告警）。
+- **与 DSH 内运行可同时开**：独立模式用**自己的** Electron 数据目录
+  （`$DSH_HOME/dsh-pet/standalone-electron`，可用 `DSH_PET_USER_DATA_DIR` 改到别处）。
+  两者共用默认目录（`%APPDATA%\dsh-pet-electron-helper`）时，后启动的那只拿不到 Chromium profile：
+  缓存报 `拒绝访问 (0x5)`、助手起不齐（正常 1 主 + 3 子）、渲染端连素材都不拉、宠物画不出来。
 
 ## ⌨️ 斜杠命令
 

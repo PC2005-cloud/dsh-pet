@@ -95,3 +95,20 @@ export function isDesktopVisible(pet: Record<string, unknown>): boolean {
   const display = pet.display;
   return display === 'desktop' || display === 'both';
 }
+
+/**
+ * 独立模式专用的 Electron 用户数据目录（Chromium profile 与 DPI 缓存）。
+ *
+ * 为什么需要：helper 的 userData 由它自己的 `app.setName('dsh-pet-electron-helper')` 决定，
+ * **与哪个宿主把它拉起来无关** —— 于是「DSH 内那只」与「独立模式那只」默认共用同一个目录，
+ * 后启动的拿不到 Chromium 的 profile 锁（真机实测：`Unable to move the cache: 拒绝访问。 (0x5)`、
+ * helper 只起来 1 个子进程、渲染端一个素材都不拉、宠物画不出来）。
+ *
+ * 放在 DSH_HOME 的 dsh-pet 下：与配置文件、文件宠物同根，备份/清理/排障都在一处。
+ * 用户可用 `DSH_PET_USER_DATA_DIR` 覆盖（见 cli.ts，那里尊重用户显式设置）。
+ *
+ * @param home DSH_HOME
+ */
+export function standaloneUserDataDir(home: string): string {
+  return join(home, 'dsh-pet', 'standalone-electron');
+}

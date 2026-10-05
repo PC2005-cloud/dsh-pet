@@ -54,6 +54,8 @@ const fsPromises = require('node:fs/promises');
 const { decideWindowIgnore } = require('./pointer-target.js');
 // 宿主存活判定（issue #56：宿主退出 → 管道断开 → 自己退，绝不弹框、绝不留僵尸）
 const { HOST_POLL_MS, hostIsGone, isBrokenPipeError, parseHostPid } = require('./host-liveness.js');
+// 用户数据目录覆盖（独立模式与 DSH 内运行各用一份 Chromium profile，避免互抢锁；见该文件头）
+const { resolveUserDataDir } = require('./user-data-dir.js');
 
 // 允许无用户手势直接播放（余额动画等）
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
@@ -62,6 +64,29 @@ app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 // "Electron"，userData 便落到 %APPDATA%\Electron —— 那是所有这么跑的 Electron 脚本的公共目录，
 // 我们的 DPI 缓存与 Chromium profile 都会和别人混在一起。必须赶在任何 getPath('userData') 之前设。
 app.setName('dsh-pet-electron-helper');
+
+// 用户数据目录：定名只解决"别落到 %APPDATA%\Electron"，但**两个宿主仍会共用同一个目录**
+// （DSH 内那只 + 独立模式那只），后启动的那只拿不到 Chromium 的 profile 锁 —— 真机实测：
+// 缓存 `Unable to move the cache: 拒绝访问。 (0x5)`、helper 只起来 1 个子进程（正常 3 个）、
+// 渲染端一个素材都不拉、宠物画不出来（不是"良性缓存警告"，是硬冲突）。
+// 独立模式因此用 DSH_PET_USER_DATA_DIR 声明自己的目录（src/standalone/cli.ts）；未设置时
+// userDataDir 为 null，行为与以前完全一致（DSH 内运行不受影响）。同样必须赶在任何
+// getPath('userData') 之前设：DPI 缓存与 Chromium profile 都用它。
+const userDataDir = resolveUserDataDir(process.env);
+if (userDataDir) {
+  try {
+    app.setPath('userData', userDataDir);
+  } catch (error) {
+    // 设不进去也不该让桌宠起不来：报一句能定位原因的话，退回 Electron 默认目录
+    process.stderr.write(
+      '[dsh-pet helper] DSH_PET_USER_DATA_DIR=' +
+        JSON.stringify(userDataDir) +
+        ' 设置失败，改用默认用户数据目录（可能与另一个 dsh-pet 宿主互抢 Chromium profile）：' +
+        (error instanceof Error ? error.message.split('\n')[0] : String(error)) +
+        '\n',
+    );
+  }
+}
 
 /** DPI 探测子进程模式：不建窗口，只把主屏 scaleFactor 打到 stdout 就退出（见 probePrimaryScale） */
 const DPI_PROBE = process.env.DSH_PET_DPI_PROBE === '1';
