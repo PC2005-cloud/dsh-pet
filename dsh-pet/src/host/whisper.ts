@@ -15,11 +15,14 @@
  *   关闭深度思考：碎碎念只求随口一句，不开推理（省时省 token）。无 reasoning 元数据的
  *   模型（如 reasoningEfforts: false）显式传 off 会被 dsh-llm 判为 UNSUPPORTED_REASONING_EFFORT
  *   并折叠成空流（表现为"模型未返回文本"），因此这类模型省略该字段（语义等价于不传）；
+ * - sessionId: PET_CALL_IDENTITY —— 调用身份（见 llm-call.ts）；
+ * - 无正文时读 BlockAssembler.finish 报真实失败原因（dsh-llm 把适配器抛错折进终止块）；
  * - 流式收集 + BlockAssembler 拼装文本；生成失败显式返回结构化原因，不伪造文案；
  * - 短超时（LLM 冷启动/慢响应时快速放弃，不留挂起请求）。
  */
 
 import { BlockAssembler, createUserMessage, ReasoningEffortId } from '@deepseek-ai/dsh-llm';
+import { PET_CALL_IDENTITY, noTextReason } from './llm-call';
 import { supportsReasoningOff } from './llm-reasoning';
 import { modelCandidates, modelLabel, type ModelRef } from './model-selection';
 
@@ -77,7 +80,8 @@ export async function generateWhisper(
   }
   // 依次尝试：配置的模型失败（凭据被删 / 模型下架 / 该服务商没配 key）时**回落到当前对话的模型
   // 重试一次**，仍失败才抛出失败原因——最后一次是用户当前真正在用的模型，报错更有意义。
-  let last: WhisperGenerateResult = { ok: false, reason: 'generate-error', message: '模型未返回文本' };
+  // 兜底文案与失败分支同源，避免两处字面量漂移
+  let last: WhisperGenerateResult = { ok: false, reason: 'generate-error', message: noTextReason(undefined) };
   for (const [i, sel] of candidates.entries()) {
     const result = await generateWith(ctx, llm, sel, system, meme);
     if (result.ok) return result;
@@ -108,6 +112,8 @@ async function generateWith(
   const options = {
     provider: sel.provider,
     model: sel.model,
+    // 调用身份（见 llm-call.ts）：缺它时 opencode-go 回 400
+    sessionId: PET_CALL_IDENTITY,
     messages: [
       createUserMessage({
         content: [{ type: 'text', text: meme ? userTextWithMeme(meme) : USER_TEXT }],
@@ -141,6 +147,6 @@ async function generateWith(
     .map((b) => ('text' in b ? (b as { text: string }).text : ''))
     .join('')
     .trim();
-  if (!text) return { ok: false, reason: 'generate-error', message: '模型未返回文本' };
+  if (!text) return { ok: false, reason: 'generate-error', message: noTextReason(assembler.finish) };
   return meme ? { ok: true, text, image: meme.name } : { ok: true, text };
 }

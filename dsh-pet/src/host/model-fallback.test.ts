@@ -6,6 +6,8 @@
  * 用假 ctx.llm.stream 驱动（不碰真服务商、不联网）：按 provider 决定这次是抛错、返回空流还是正常文本，
  * 并记录每次调用的 provider/model——回落的顺序与次数就是本文件要钉的不变式。
  *
+ * 另外钉住调用形状：每次调用都带调用身份 sessionId；「没拿到正文」时报流终止块里的真实原因。
+ *
  * 跑法：node --experimental-strip-types --test src/host/model-fallback.test.ts
  */
 import { test, describe } from 'node:test';
@@ -13,10 +15,11 @@ import assert from 'node:assert/strict';
 
 import { generateWhisper } from './whisper.ts';
 import { generateChat } from './chat.ts';
+import { PET_CALL_IDENTITY } from './llm-call.ts';
 import type { ModelRef } from './model-selection.ts';
 
-/** 一次调用的行为：ok = 正常出文本；throw = 流里抛错；empty = 空流（"模型未返回文本"） */
-type Behavior = 'ok' | 'throw' | 'empty';
+/** 一次调用的行为：ok = 正常出文本；throw = 流里抛错；empty = 空流且无终止块；fail = 流以 error 终止且无正文 */
+type Behavior = 'ok' | 'throw' | 'empty' | 'fail';
 
 const CONFIGURED: ModelRef = { provider: 'configured', model: 'cheap-model' };
 const CURRENT: ModelRef = { provider: 'current', model: 'main-model' };
@@ -24,6 +27,8 @@ const CURRENT: ModelRef = { provider: 'current', model: 'main-model' };
 /** 造一个假 ctx：currentSelection 返回 current（'throw' = 抛错），llm.stream 按 provider 决定行为 */
 function fakeCtx(current: ModelRef | 'throw', behavior: Record<string, Behavior>) {
   const calls: ModelRef[] = [];
+  /** 每次调用的完整参数（含 sessionId） */
+  const options: Record<string, unknown>[] = [];
   const ctx = {
     agentDefaultModel: {
       currentSelection: (): ModelRef => {
@@ -36,16 +41,27 @@ function fakeCtx(current: ModelRef | 'throw', behavior: Record<string, Behavior>
       resolveModelInfo: async () => ({}),
       stream: (o: ModelRef) => {
         calls.push({ provider: o.provider, model: o.model });
+        options.push(o as unknown as Record<string, unknown>);
         const b = behavior[o.provider] ?? 'throw';
         return (async function* () {
           if (b === 'throw') throw new Error(o.provider + ' 不可用');
           if (b === 'empty') return;
+          if (b === 'fail') {
+            yield {
+              type: 'finish',
+              reason: {
+                kind: 'error',
+                failure: { message: o.provider + ' 400：缺少必需的路由头', code: 'HTTP_400' },
+              },
+            };
+            return;
+          }
           yield { type: 'text-delta', index: 0, text: '你好呀' };
         })();
       },
     },
   };
-  return { ctx, calls };
+  return { ctx, calls, options };
 }
 
 describe('generateWhisper —— 配置模型优先、失败回落当前对话', () => {
@@ -121,5 +137,37 @@ describe('generateChat —— 同一套回落规则（chatModel）', () => {
     const r = await generateChat(ctx, '人设', [], '在吗', [], undefined);
     assert.deepEqual(r, { ok: false, reason: 'provider-missing', message: '当前对话未配置模型' });
     assert.deepEqual(calls, []);
+  });
+});
+
+describe('调用形状 —— 调用身份与真实失败原因', () => {
+  test('对话调用带调用身份 sessionId', async () => {
+    const { ctx, options } = fakeCtx(CURRENT, { current: 'ok' });
+    await generateChat(ctx, '人设', [], '在吗', [], undefined);
+    assert.equal(options.length, 1);
+    assert.equal(options[0].sessionId, PET_CALL_IDENTITY);
+  });
+
+  test('碎碎念调用带同一身份，回落两次也不换值', async () => {
+    const { ctx, options } = fakeCtx(CURRENT, { configured: 'empty', current: 'ok' });
+    await generateWhisper(ctx, '人设', undefined, CONFIGURED);
+    assert.deepEqual(
+      options.map((o) => o.sessionId),
+      [PET_CALL_IDENTITY, PET_CALL_IDENTITY],
+      '回落两次也必须用同一个身份',
+    );
+  });
+
+  test('流以 error 终止且无正文 → 报终止块里的真实原因', async () => {
+    const { ctx } = fakeCtx(CURRENT, { current: 'fail' });
+    const r = await generateChat(ctx, '人设', [], '在吗', [], undefined);
+    assert.equal(r.ok, false);
+    assert.equal(r.ok === false && r.message, 'current 400：缺少必需的路由头');
+  });
+
+  test('空流且无终止块 → 仍是"模型未返回文本"（旧行为逐字不变）', async () => {
+    const { ctx } = fakeCtx(CURRENT, { configured: 'empty', current: 'empty' });
+    const r = await generateChat(ctx, '人设', [], '在吗', [], CONFIGURED);
+    assert.equal(r.ok === false && r.message, '模型未返回文本');
   });
 });
