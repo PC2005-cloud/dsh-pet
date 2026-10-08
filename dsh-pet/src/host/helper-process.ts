@@ -309,8 +309,12 @@ export class HelperProcess {
     const command = launch.command;
     const args = this.options.args || launch.args;
 
+    // issue #88：cwd 必须落在包目录之外 —— Windows 不允许重命名/删除活进程的当前目录，
+    // 否则 pnpm 无法 rename 覆盖 node_modules/dsh-pet。助手侧资源解析与 CWD 无关，故用 $DSH_HOME。
+    const cwd = this.options.cwd || dshHomeDir();
+    mkdirSync(cwd, { recursive: true }); // spawn 的 cwd 不存在会直接 ENOENT
     const child = spawn(command, args, {
-      cwd: this.options.cwd || packageRoot,
+      cwd,
       // DSH_PET_HOST_PID：把**宿主自己的** pid 交给 helper，让它能判断"宿主还在不在"
       // （helper 侧 host-liveness.js 每 2s kill(pid, 0) 一次；ESRCH 就自行退出，见 issue #56）。
       // 放在唯一的 spawn 点，所有调用方（含自定义 command）自动获得。
