@@ -99,6 +99,7 @@ import {
 import { agentErrorFrame, reduceNotifyFrame, shouldNotifySession, type HostNotifyFrame } from './notify-events';
 import { profileNameFrom, storageEntries } from './storage-paths';
 import { PollStateStore } from './state';
+import { timeContextOf } from './time-context';
 import {
   HelperProcess,
   defaultElectronExe,
@@ -391,14 +392,19 @@ export function apply(ctx: any): void {
   // ---- 配置消费：唯一入口 readAllConfig（./config）——返回值绝对正确，这里只读字段，零校验 ----
 
   /** 某宠物的最终人设 system：所属条目（非文件宠物 → main 条目）的 whisperPrompt（合并器已填默认）
-   *  + 无条件追加一句名字声明（name，缺失已按 id）——碎碎念与对话共用同一拼装。 */
+   *  + 无条件追加一句名字声明（name，缺失已按 id）——碎碎念与对话共用同一拼装。
+   *  + 末尾追加一行**时间背景**（time-context.ts：日期/星期/时刻/时段/工作日或周末）：
+   *    碎碎念与对话各自每次生成都会重新走这里，所以拿到的永远是**当前**时刻，不需要额外的刷新机制；
+   *    非法 Date 时它为空串，此时整行不加（宁可没有时间信息，也不把 NaN 拼进提示词）。 */
   const petSystemPrompt = (petId: string, cfg: Record<string, Record<string, unknown>>): string => {
     const found = findPetInstance(cfg, petId);
     const conf = found ? found.conf : (cfg.main ?? {});
     const prompt = typeof conf.whisperPrompt === 'string' ? conf.whisperPrompt : '';
     const name = found ? String(found.pet.name || found.pet.id || petId) : petId;
     const nameLine = '你的名字是“' + name + '”。';
-    return prompt ? prompt + '\n' + nameLine : nameLine;
+    const base = prompt ? prompt + '\n' + nameLine : nameLine;
+    const time = timeContextOf(new Date());
+    return time ? base + '\n' + time : base;
   };
 
   /** 对话记忆轮数（1 轮 = 1 问 1 答）：所属条目/主条目的 chatMemoryRounds（合并器已填默认非负数字） */
