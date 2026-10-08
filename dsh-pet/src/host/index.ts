@@ -110,8 +110,8 @@ import {
 
 /** 插件行 id（与 cordis.patch.yml 一致） */
 export const name = 'pet';
-/** 需要注入的服务：webServer（路由）+ agentDefaultModel（当前服务商）+ credentials（凭证）+ llm（对话模型调用）+ commands（/balance 斜杠命令） */
-export const inject = ['webServer', 'agentDefaultModel', 'credentials', 'llm', 'commands'];
+/** 需要注入的服务：webServer（路由）+ agentDefaultModel（当前服务商）+ credentials（凭证）+ llm（对话模型调用）+ commands（/balance 斜杠命令）+ connection（桌面 Helper「打开网站」用的已鉴权站点 URL） */
+export const inject = ['webServer', 'agentDefaultModel', 'credentials', 'llm', 'commands', 'connection'];
 
 /** 本包目录：宿主构建产物位于 lib/，其上一级即包根。 */
 const PACKAGE_ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)));
@@ -633,6 +633,11 @@ export function apply(ctx: any): void {
       return;
     }
     const origin = `http://127.0.0.1:${port}`;
+    // 右键「打开网站」交出去的是裸 origin：DSH 只在 `GET /` 接受本进程的启动令牌，换发绑定 authority 的
+    // 签名 Cookie，其余请求一律 401 —— 默认浏览器没有该 authority 的 Cookie 时必然打不开（#87）。
+    // 令牌等价登录态：只经子进程环境变量递到 helper 内存，不落盘、不进日志；authority 必须保持
+    // 127.0.0.1（与 localhost 算两套 Cookie），故这里传 origin 而不是另拼地址。
+    const siteUrl = ctx.connection.authenticatedUrl(origin);
     // 桌面渲染端也从同一份 handlePetRoute 拿成品配置（每只宠物一个局部小窗口；经管道，不走 HTTP——
     // DSH Desktop 2.0.3+ 会拦插件自拉进程的裸 HTTP 请求，浏览器访问闸门只放行带令牌的请求）
     const configUrl = `${origin}${ROUTE_PREFIX}/config`;
@@ -641,6 +646,8 @@ export function apply(ctx: any): void {
         electronPath,
         env: {
           DSH_PET_CONFIG_URL: configUrl,
+          // 已鉴权站点 URL（含本进程启动令牌）：只供 helper 的「打开网站」使用，任何日志都不许出现它
+          DSH_PET_SITE_URL: siteUrl,
           DSH_PET_SCALE: '1',
           // 打开 bridge 协议：main.js 注册 dsh-pet-bridge scheme，把渲染端请求经管道转给宿主
           DSH_PET_BRIDGE: '1',

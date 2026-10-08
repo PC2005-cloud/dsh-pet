@@ -128,6 +128,12 @@ export function createStandaloneContext(options: StandaloneContextOptions): Stan
     },
     logger,
     webServer,
+    /**
+     * 独立模式没有 DSH 的浏览器会话闸门（`./server` 只按前缀匹配路由，裸地址本来就可达），
+     * 所以没有令牌可加，原样返回 baseUrl —— 与 DSH 侧 `ctx.connection.authenticatedUrl(baseUrl)`
+     * （附加本进程启动令牌，供桌面 Helper 的「打开网站」用）语义对应，只是这一步在独立模式下恒等。
+     */
+    connection: { authenticatedUrl: (baseUrl: string): string => baseUrl },
     commands: { register: (): (() => void) => () => {} },
     agentDefaultModel: {
       currentSelection: (): { provider: string; model: string } => ({ provider: STANDALONE_PROVIDER, model: '' }),

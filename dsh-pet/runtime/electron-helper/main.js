@@ -738,7 +738,20 @@ app.whenReady().then(() => {
   ipcMain.on('pet:open-site', (event, payload) => {
     const url = payload && typeof payload === 'object' ? String(payload.url || '') : '';
     if (!/^https?:[/][/]/.test(url)) return;
-    shell.openExternal(url).catch((error) => {
+    // 宿主注入的已鉴权站点 URL（含本进程启动令牌）：DSH 只在 `GET /` 接受它并换发绑定 authority 的
+    // 浏览器 Cookie，裸 origin 在默认浏览器里必然 401（#87）。令牌等价登录态，所以**只在与目标同
+    // origin 时**才启用——绝不让它被带去别的站点；取不到该变量（旧宿主 / standalone / 手写
+    // start-desktop）时，行为与以前完全一致。
+    let target = url;
+    const authed = process.env.DSH_PET_SITE_URL || '';
+    if (/^https?:[/][/]/.test(authed)) {
+      try {
+        if (new URL(authed).origin === new URL(url).origin) target = authed;
+      } catch {
+        /* 形状不对：保持裸地址（原行为） */
+      }
+    }
+    shell.openExternal(target).catch((error) => {
       console.error('[dsh-pet-desktop-helper] openExternal failed:', error);
     });
   });
