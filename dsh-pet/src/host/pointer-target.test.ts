@@ -21,9 +21,16 @@ import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
 const helper = '../../runtime/electron-helper/';
-const { HIT_BOX, CANVAS_H, STAGE_W, POINTER_POLL_MS, spriteHitRect, decideWindowIgnore } = require(
-  helper + 'pointer-target.js',
-);
+const {
+  HIT_BOX,
+  CANVAS_H,
+  STAGE_W,
+  POINTER_POLL_MS,
+  OFF_BODY_RELEASE_MS,
+  spriteHitRect,
+  pointerZone,
+  decideWindowIgnore,
+} = require(helper + 'pointer-target.js');
 
 /** 包内文件源码（守卫用；相对 src/host/ 解析） */
 const readSource = (rel: string): string => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), 'utf8');
@@ -43,6 +50,41 @@ describe('decideWindowIgnore —— 兜底通道的判定规则（issue #55 报�
     const margin = { x: bounds.x + 20, y: bounds.y + 20 }; // 窗口左上角余量区（宠物外）
     assert.equal(decideWindowIgnore(bounds, margin, false), false, '菜单打开时鼠标移到余量区不得翻回穿透');
     assert.equal(decideWindowIgnore(bounds, margin, true), true, '没交互时余量区必须保持穿透，不挡桌面图标');
+  });
+
+  test('余量区停留超时 → 恢复穿透；未到点仍保持当前状态', () => {
+    const margin = { x: bounds.x + 20, y: bounds.y + 20 };
+    assert.equal(
+      decideWindowIgnore(bounds, margin, false, false, OFF_BODY_RELEASE_MS - 1),
+      false,
+      '未到点：保持可交互',
+    );
+    assert.equal(decideWindowIgnore(bounds, margin, false, false, OFF_BODY_RELEASE_MS), true, '到点：恢复穿透');
+    assert.equal(decideWindowIgnore(bounds, margin, true, false, OFF_BODY_RELEASE_MS), true, '已穿透：维持穿透');
+  });
+
+  test('busy 仍优先于超时：租约期内不得因超时翻回穿透', () => {
+    const margin = { x: bounds.x + 20, y: bounds.y + 20 };
+    assert.equal(decideWindowIgnore(bounds, margin, false, true, OFF_BODY_RELEASE_MS * 100), false);
+    assert.equal(decideWindowIgnore(bounds, margin, true, true, OFF_BODY_RELEASE_MS * 100), false);
+  });
+
+  test('超时不越界：身体上不因超时穿透，窗外不因零时长保持可交互', () => {
+    const r = spriteHitRect(bounds);
+    const center = { x: (r.left + r.right) / 2, y: (r.top + r.bottom) / 2 };
+    assert.equal(decideWindowIgnore(bounds, center, false, false, OFF_BODY_RELEASE_MS * 100), false);
+    assert.equal(decideWindowIgnore(bounds, { x: bounds.x - 1, y: bounds.y + 100 }, false, false, 0), true);
+  });
+
+  test('pointerZone：窗口分区的唯一来源', () => {
+    const r = spriteHitRect(bounds);
+    assert.equal(pointerZone(bounds, { x: (r.left + r.right) / 2, y: (r.top + r.bottom) / 2 }), 'body');
+    assert.equal(pointerZone(bounds, { x: bounds.x + 2, y: bounds.y + 2 }), 'margin');
+    assert.equal(pointerZone(bounds, { x: bounds.x - 1, y: bounds.y + 100 }), 'outside');
+  });
+
+  test('余量区释放阈值是命名常量（400ms）', () => {
+    assert.equal(OFF_BODY_RELEASE_MS, 400);
   });
 
   test('光标在窗口外 → 恢复穿透（四个方向）', () => {
@@ -183,13 +225,14 @@ describe('源码守卫 —— helper 的两个兜底必须在位', () => {
   test('输入租约闭环：渲染端上报 busy，主进程据此判定，且只走唯一出口', () => {
     assert.ok(/const inputBusy = new Map\(\)/.test(main), '必须有每窗口的 busy 标记表');
     assert.ok(/ipcMain\.on\('pet:input-busy'/.test(main), 'busy 上报必须被接收');
-    assert.ok(
-      /decideWindowIgnore\(b, screen\.getCursorScreenPoint\(\), ignoring, inputBusy\.get\(win\.id\) === true\)/.test(
-        main,
-      ),
-      '兜底轮询必须把 busy 带进判定——这正是 0.2.10 缺的一环（拖拽中被翻回穿透）',
-    );
+    // 兜底轮询必须把 busy 与余量区停留时长一起带进判定（按语义断言，不钉死调用行的字面量）
+    const poll = /setInterval\(\(\) => \{([\s\S]*?)\}, POINTER_POLL_MS\);/.exec(main);
+    assert.ok(poll, '找不到兜底轮询体');
+    assert.ok(/decideWindowIgnore\(/.test(poll[1]), '轮询必须调用纯判定（不依赖 forward 鼠标钩子）');
+    assert.ok(/inputBusy\.get\(win\.id\) === true/.test(poll[1]), '必须把 busy 带进判定');
+    assert.ok(/offBodyMs\.get\(win\.id\)/.test(poll[1]), '必须把余量区停留时长带进判定');
     assert.ok(/inputBusy\.delete\(win\.id\)/.test(main), '窗口关闭时必须清掉 busy 标记（防 id 复用串味）');
+    assert.ok(/offBodyMs\.delete\(win\.id\)/.test(main), '窗口关闭时必须清掉停留计时（防 id 复用串味）');
     // busy 只能经兜底轮询生效，不得在 IPC 里直接翻窗口——否则两条通道抢着翻同一个窗口
     assert.ok(
       !/ipcMain\.on\('pet:input-busy'[\s\S]{0,400}?setWindowIgnore\(/.test(main),
