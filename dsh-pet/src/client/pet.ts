@@ -40,6 +40,8 @@ import {
   type MenuLeaf,
   type MenuNode,
 } from '../shared/menu';
+// 悬浮提示：与桌面共用同一份样式与摆位判据（替代原先挂在命中层上的原生 title 提示）
+import { TOOLTIP_CLASS, TOOLTIP_CSS, TOOLTIP_GAP_RATIO, tooltipPlacement } from '../shared/tooltip';
 // 对话弹窗：与桌面共用同一份组件（数据经 host /chat 读写同一份记忆）
 import { mountChatDialog } from '../shared/chat';
 import { petBridge } from './settings';
@@ -102,6 +104,8 @@ const css = [
   '@media (prefers-reduced-motion: reduce){.dsh-pet-video{transition:none}}',
   // 统一右键菜单样式（与桌面注入同一份 MENU_CSS）
   MENU_CSS,
+  // 悬浮提示样式（与桌面注入同一份 TOOLTIP_CSS）
+  TOOLTIP_CSS,
 ].join('\n');
 const cssTag = 'dsh-pet/style.css';
 function injectCss(): void {
@@ -179,6 +183,9 @@ export function makePetUI(rt: {
     const [once, setOnce] = useState(true);
     const [facing, setFacing] = useState('left' as 'left' | 'right');
     const [dragging, setDragging] = useState(false);
+    // 悬浮提示显隐（鼠标进/出命中区翻转；指针捕获期间由拖拽逻辑主动收起，见 handlePointerDown）
+    const [tipOn, setTipOn] = useState(false);
+    const tipRef = useRef<HTMLDivElement | null>(null);
     const [customPos, setCustomPos] = useState<null | { rx: number; ry: number }>(null);
     // 初始角落与边距（来自配置；可被容器更新覆盖）
     const [corner, setCorner] = useState<Corner>(cfg.position.corner);
@@ -1109,6 +1116,25 @@ export function makePetUI(rt: {
     const facingRef = useRef<'left' | 'right'>(facing);
     facingRef.current = facing;
 
+    // ---- 悬浮提示：贴光标显示（与原生 title 的观感一致） ----
+    /** 把提示框摆到光标右下（右边/下边装不下自动翻边并夹回视口内）。
+     *  直接写 DOM style 而不走 React 状态：鼠标每动一下都更新状态会让整个 PetCard 重渲染，
+     *  代价远大于这一次样式写入（root 的位置也是这么直接写的）。
+     *  bounds 用视口——提示是 position:fixed，坐标就是 clientX/clientY 这一套。 */
+    const placeTip = (clientX: number, clientY: number): void => {
+      const tipEl = tipRef.current;
+      if (!tipEl) return;
+      const viewport = document.documentElement;
+      const p = tooltipPlacement(
+        { x: clientX, y: clientY },
+        { w: tipEl.offsetWidth, h: tipEl.offsetHeight },
+        { x: 0, y: 0, w: viewport.clientWidth, h: viewport.clientHeight },
+        size * TOOLTIP_GAP_RATIO,
+      );
+      tipEl.style.left = p.x + 'px';
+      tipEl.style.top = p.y + 'px';
+    };
+
     // ---- 点击 vs 拖拽 ----
     const handlePointerDown = (e: ReactNS.PointerEvent<HTMLDivElement>) => {
       // 只认左键：右键进入拖拽判定会与右键菜单打架（右键不拖拽，两端一致）
@@ -1159,6 +1185,8 @@ export function makePetUI(rt: {
       dragTrailRef.current = [];
       e.currentTarget.classList.add('dragging');
       e.currentTarget.setPointerCapture(e.pointerId);
+      // 收起悬浮提示：指针捕获期间 pointerleave 不会触发，不主动收就会一直挂在宠物头上跟着跑
+      setTipOn(false);
       const rootEl = rootRef.current;
       let offX = 0;
       let offY = 0;
@@ -1171,6 +1199,8 @@ export function makePetUI(rt: {
       dragRef.current = { active: true, dragging: false, sx: e.clientX, sy: e.clientY, offX, offY };
     };
     const handlePointerMove = (e: ReactNS.PointerEvent<HTMLDivElement>) => {
+      // 提示跟随光标：必须在拖拽早退之前——拖拽期间提示本来就收起了，但非拖拽的每次移动都要跟上
+      if (tipOn) placeTip(e.clientX, e.clientY);
       const d = dragRef.current;
       if (!d.active) return;
       const dx = e.clientX - d.sx;
@@ -1243,6 +1273,19 @@ export function makePetUI(rt: {
           // 原地放下：提交 customPos → React 按 rootStyle（含边界夹取）重排位置
           setCustomPos({ rx: (px + halfW) / window.innerWidth, ry: (py + halfH) / window.innerHeight });
         }
+      }
+      // 提示复位：点击/拖拽期间收起的悬浮提示，指针仍在命中区内就恢复——指针捕获期间
+      // pointerleave 不触发，不复位就得把鼠标移出去再移回来才重现（与桌面 onPointerUp 同一处理）。
+      // 先按松手位置摆好再显示，否则会重现上一次的位置。
+      const hitRect = e.currentTarget.getBoundingClientRect();
+      if (
+        e.clientX >= hitRect.left &&
+        e.clientX <= hitRect.right &&
+        e.clientY >= hitRect.top &&
+        e.clientY <= hitRect.bottom
+      ) {
+        placeTip(e.clientX, e.clientY);
+        setTipOn(true);
       }
     };
     const handleClick = () => {
@@ -1412,7 +1455,7 @@ export function makePetUI(rt: {
       }
       return null;
     })();
-    const commonVideoProps = { muted: true, playsInline: true, autoPlay: true, title: cfg.name };
+    const commonVideoProps = { muted: true, playsInline: true, autoPlay: true };
     const hitProps = {
       className: 'dsh-pet-hit',
       style: {
@@ -1426,8 +1469,14 @@ export function makePetUI(rt: {
       onPointerMove: handlePointerMove,
       onPointerUp: handlePointerUp,
       onPointerCancel: handlePointerUp,
+      onPointerEnter: (e: ReactNS.PointerEvent<HTMLDivElement>) => {
+        placeTip(e.clientX, e.clientY); // 先摆位再显示：否则会先在兜底坐标闪一帧
+        setTipOn(true);
+      },
+      onPointerLeave: () => setTipOn(false),
       onContextMenu: handleContextMenu,
-      title: cfg.name,
+      // 原先这里挂 title（原生系统提示）：已换成自绘浮层，但无障碍名称不能跟着丢
+      'aria-label': cfg.name,
     };
     return h('div', {
       ref: rootRef,
@@ -1453,6 +1502,16 @@ export function makePetUI(rt: {
             h('video', Object.assign({}, commonVideoProps, { ref: videoBRef, className: 'dsh-pet-video' })),
             h('div', hitProps),
           ],
+        }),
+        // 悬浮提示（替代原生 title）：元素常驻、只切 class——挂卸节点吃不到 .12s 淡入过渡；
+        // 坐标由 placeTip 按光标直接写 style（这里刻意不传 style，免得 React 覆盖）。
+        // 文本 = 宠物显示名（host 已保证非空）；pointer-events:none 见 TOOLTIP_CSS，
+        // 否则它会挡住命中区，mouseenter/leave 互相打架导致闪烁。
+        h('div', {
+          ref: tipRef,
+          className: TOOLTIP_CLASS + (tipOn ? ' is-on' : ''),
+          'aria-hidden': 'true',
+          children: cfg.name,
         }),
       ],
     });

@@ -109,6 +109,10 @@ function injectAssets() {
   const menuStyle = document.createElement('style');
   menuStyle.textContent = S.MENU_CSS;
   document.head.appendChild(menuStyle);
+  // 悬浮提示样式（与浏览器注入同一份 TOOLTIP_CSS；替代原先挂在命中层 title 上的原生提示）
+  const tipStyle = document.createElement('style');
+  tipStyle.textContent = S.TOOLTIP_CSS;
+  document.head.appendChild(tipStyle);
 }
 
 // 显示器几何变化（改分辨率/缩放、插拔屏、旋转）：主进程重算后推来，渲染端就地重挂视口与边界。

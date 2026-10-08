@@ -93,6 +93,9 @@ class PetSprite {
     // 余额气泡
     this.bubbleOn = false;
     this.bubbleTimer = null;
+    // 悬浮提示（替代原生 title 属性）：显隐 + 最近一次光标位置（**视口坐标**，见 renderTip）
+    this.tipOn = false;
+    this.tipCursor = null;
     this.balanceView = null;
     this.balanceWrap = false; // true = 当前余额气泡是不可用的「文字说明」（多行，需换行变体）
     this.prevTick = 0;
@@ -137,7 +140,6 @@ class PetSprite {
       v.muted = true;
       v.playsInline = true;
       v.autoplay = true;
-      v.title = this.pet.name;
     }
     this.hit = document.createElement('div');
     this.hit.className = 'pet-hit';
@@ -145,14 +147,21 @@ class PetSprite {
     this.hit.style.top = (S.HIT_BOX.y0 / 360) * 100 + '%';
     this.hit.style.width = ((S.HIT_BOX.x1 - S.HIT_BOX.x0) / 640) * 100 + '%';
     this.hit.style.height = ((S.HIT_BOX.y1 - S.HIT_BOX.y0) / 360) * 100 + '%';
-    this.hit.title = this.pet.name;
+    // 原先这里挂 title（原生系统提示）：已换成自绘浮层，但无障碍名称不能跟着丢
+    this.hit.setAttribute('aria-label', this.pet.name);
     this.bubble = document.createElement('div');
     this.bubble.className = 'pet-bubble';
+    // 悬浮提示：与气泡同处 this.el 内的绝对定位浮层，位置/翻转由 renderTip 决定，
+    // 样式走 shared 的 TOOLTIP_CSS（renderer.js 注入，与浏览器端同一份）
+    this.tip = document.createElement('div');
+    this.tip.className = S.TOOLTIP_CLASS;
+    this.tip.setAttribute('aria-hidden', 'true');
 
     stage.appendChild(this.videoA);
     stage.appendChild(this.videoB);
     stage.appendChild(this.hit);
     this.el.appendChild(this.bubble);
+    this.el.appendChild(this.tip);
     this.el.appendChild(stage);
     rootEl.appendChild(this.el);
     this.position();
@@ -259,6 +268,10 @@ class PetSprite {
         fly ? toScreen(fly.vy) : 0,
       );
     }
+    // 位置变了（宠物漫游/拖拽/飞行，窗口跟着动）：提示若正显示必须重摆一次——它跟的是光标，
+    // 而光标存的是视口坐标，窗口一移，光标相对窗口的位置就变了，不重摆提示会跟着窗口漂走。
+    // 只在显示时重摆：漫游逐帧调本函数，没显示提示时不做无谓的 DOM 写入。
+    if (this.tipOn) this.renderTip();
   }
 
   // 角落/边距 → 窗口位置；拖拽后按会话内位置（比例）还原——**松手无任何边界夹取**，
@@ -801,6 +814,9 @@ class PetSprite {
     this.stopMove();
     this.dragTrail = [];
     this.hit.classList.add('dragging');
+    // 收起悬浮提示：拖拽期间窗口逐帧跟随光标，指针始终在身体内、onMouseMove 的 inBody 恒为真，
+    // 不主动收就会让提示跟着宠物一路飘（松开后由 onPointerUp 按指针位置复位）
+    this.setTip(false);
     this.stopMove();
     try {
       this.hit.setPointerCapture(e.pointerId);
@@ -861,6 +877,21 @@ class PetSprite {
     this.stopDragFollow(); // 弹簧跟随立即停（位置定格在实时 this.pos）
     this.stage.style.transform = 'translateY(' + this.bottomPad + 'px)';
     this.syncInputBusy(); // 拖拽结束：交还给常规判定（幂等，非拖拽时多调一次不发 IPC）
+    // 提示复位：点击/拖拽期间收起的悬浮提示，指针仍在命中区内就恢复（与浏览器 handlePointerUp 同一处理）。
+    // 用 hitRect 几何判定而不是 getBoundingClientRect：命中区是窗口坐标里的权威几何，与 onMouseMove 同源。
+    // 位置有讲究：必须留在 syncInputBusy() 之后——pointer-target.test.ts 只扫本函数开头 400 字符
+    // 来找上报调用，插到它前面会把上报挤出窗口（该断言守的是"松手必上报，否则窗口粘在可交互"）。
+    if (e && Number.isFinite(e.clientX)) {
+      const r = this.hitRect;
+      const px = e.clientX - this.margin.l;
+      const py = e.clientY - this.margin.t;
+      // 先按松手位置更新光标再摆位/显示，否则会重现拖拽前的位置（与浏览器 placeTip 同一处理）
+      this.tipCursor = {
+        x: this.pos.x - this.margin.l + e.clientX,
+        y: this.pos.y - this.margin.t + e.clientY,
+      };
+      this.setTip(px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h);
+    }
     if (wasDragging) {
       this.justDragged = true;
       setTimeout(() => {
@@ -951,6 +982,58 @@ class PetSprite {
     if (window.petBridge) window.petBridge.setInteractive(next);
   }
 
+  /**
+   * 悬浮提示显隐（替代原先挂在命中层 title 上的原生系统提示）。
+   *
+   * 由 onMouseMove 的「光标在不在身体命中区」驱动，而不是 pointerenter/pointerleave：
+   * 身体外整窗是穿透的（main 的 setIgnoreMouseEvents(true, {forward:true})），光标离开身体时
+   * pointerleave 未必派发，提示会赖在屏幕上不走；几何判定与点击穿透翻转同源，才不会有第二种口径。
+   */
+  setTip(on) {
+    const next = !!on;
+    if (next === this.tipOn) return;
+    this.tipOn = next;
+    this.renderTip();
+  }
+
+  /**
+   * 悬浮提示渲染：文本 = 宠物显示名（host 已保证 name = rawName || id，不会空）；
+   * 位置 = 光标右下（装不下自动翻边），摆位判据与浏览器端共用 shared 的 tooltipPlacement。
+   *
+   * 坐标要绕一次：光标存的是**视口坐标**（this.tipCursor），而提示是 position:fixed、
+   * DOM 坐标相对**窗口**，所以这里减掉窗口原点（= 宠物包围盒左上角 − 四周余量）。
+   * 为什么要存视口坐标而不是窗口坐标：宠物自己走动/被抛出时窗口会移动，存视口坐标就只需
+   * 在这里按当前窗口原点重算一次，贴光标不会漂（sendBounds 每帧会调本函数）。
+   */
+  renderTip() {
+    if (this.tip.textContent !== this.pet.name) this.tip.textContent = this.pet.name;
+    const cursor = this.tipCursor;
+    if (cursor) {
+      const winX = this.pos.x - this.margin.l;
+      const winY = this.pos.y - this.margin.t;
+      const winW = this.size + this.margin.l + this.margin.r;
+      const winH = this.winH + this.margin.t + this.margin.b;
+      // 允许显示范围 = 窗口 ∩ 光标所在屏的工作区，两者必须取交集：
+      // 只按窗口夹，窗口能贴到屏幕外，提示会被画到看不见的地方；只按工作区夹，提示会落到窗口外
+      // （index.html 的 html,body 是 overflow:hidden，一样看不见）。
+      const area = S.resolveRect(AREAS, cursor.x, cursor.y) ?? { x: winX, y: winY, width: winW, height: winH };
+      const x0 = Math.max(winX, area.x);
+      const y0 = Math.max(winY, area.y);
+      const x1 = Math.min(winX + winW, area.x + area.width);
+      const y1 = Math.min(winY + winH, area.y + area.height);
+      const p = S.tooltipPlacement(
+        { x: cursor.x - winX, y: cursor.y - winY },
+        { w: this.tip.offsetWidth, h: this.tip.offsetHeight },
+        { x: x0 - winX, y: y0 - winY, w: Math.max(0, x1 - x0), h: Math.max(0, y1 - y0) },
+        this.size * S.TOOLTIP_GAP_RATIO,
+      );
+      this.tip.style.left = p.x + 'px';
+      this.tip.style.top = p.y + 'px';
+    }
+    this.tip.classList.toggle('is-on', this.tipOn);
+    window.__dshPetDebug.tooltipOn = this.tipOn;
+  }
+
   onMouseMove(e) {
     // 拖拽态下所有按键已松开：说明 pointerup/pointercancel/lostpointercapture 全部丢失，
     // 就地按松手收尾，否则 dragState.active 与 inputBusy 永久为 true（穿透永不恢复）。
@@ -966,6 +1049,7 @@ class PetSprite {
     // 右键菜单/对话弹窗开启：整窗保持可交互（悬停菜单项/点输入框都不触发穿透翻转）；关闭后恢复命中区判定
     if (this.menuOpen || this.chatOpen) {
       this.setInteractive(true);
+      this.setTip(false); // 菜单/弹窗期间提示让位：光标已不在身体上，也不该跟浮层抢注意力
       return;
     }
     const r = this.hitRect;
@@ -976,7 +1060,15 @@ class PetSprite {
     const wy = Number.isFinite(e.clientY) ? e.clientY : toLocal(e.screenY) - (this.pos.y + VIEW.y - this.margin.t);
     const px = wx - this.margin.l;
     const py = wy - this.margin.t;
-    this.setInteractive(px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h);
+    const inBody = px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h;
+    // 光标位置存**视口坐标**（窗口原点 + 窗口内坐标）：窗口随宠物移动时贴光标不会漂，见 renderTip。
+    // 必须在 setTip 之前更新：setTip 变显隐时会立刻渲染一次，晚一步就会用上一次的光标摆位。
+    if (inBody) this.tipCursor = { x: this.pos.x - this.margin.l + wx, y: this.pos.y - this.margin.t + wy };
+    this.setInteractive(inBody);
+    // 悬浮提示与可交互判定同源（同一个 inBody）：光标进身体 → 提示出现，离开 → 收起
+    this.setTip(inBody);
+    // 跟随光标：位置依赖光标，所以每次移动都得重摆一次（setTip 只在显隐变化时才渲染）
+    if (this.tipOn) this.renderTip();
   }
 
   onClick() {
