@@ -52,6 +52,8 @@ const { readFileSync, writeFileSync } = require('node:fs');
 const fsPromises = require('node:fs/promises');
 // 点击穿透兜底通道的纯判定（不依赖 Electron 的 forward 鼠标钩子；见文件头注释）
 const { decideWindowIgnore, pointerZone } = require('./pointer-target.js');
+// 置顶看门狗：WS_EX_TOPMOST 只是样式位，不等于窗口真的在置顶带（见 topmost-watchdog.js 头部）
+const { TOPMOST_WATCHDOG_TICK_MS, shouldReassertTopmost } = require('./topmost-watchdog.js');
 // 宿主存活判定（issue #56：宿主退出 → 管道断开 → 自己退，绝不弹框、绝不留僵尸）
 const { HOST_POLL_MS, hostIsGone, isBrokenPipeError, parseHostPid } = require('./host-liveness.js');
 
@@ -486,8 +488,28 @@ function createPetWindows() {
       const next = decideWindowIgnore(b, point, ignoring, busy, nextMs);
       if (next !== ignoring) setWindowIgnore(win, next);
     }, POINTER_POLL_MS);
+    // [置顶看门狗] 建窗时那次 setAlwaysOnTop 之后再没人复查过：外部任何一次 z 序扰动都能让桌宠
+    // 沉到普通窗下面——而 `WS_EX_TOPMOST` 位还在（点击穿透的读-改-写会把它写回来），于是
+    // "是不是置顶"永远查得出 true、宠物却再也看不见，用户侧只能重启 helper 才回来。
+    // 这里低频重钉一次：落地就是 SetWindowPos(HWND_TOPMOST, SWP_NOMOVE|SWP_NOSIZE|SWP_NOACTIVATE)，
+    // 不移动、不重绘、不抢焦点（判定的纯逻辑与全部依据见 topmost-watchdog.js）。
+    let lastTopmostAssertMs = Date.now();
+    const topmostTimer = setInterval(() => {
+      const nowMs = Date.now();
+      const due = shouldReassertTopmost({
+        nowMs,
+        lastAssertMs: lastTopmostAssertMs,
+        destroyed: win.isDestroyed(),
+        visible: win.isVisible(),
+        paused: pointerFallbackPaused,
+      });
+      if (!due) return;
+      lastTopmostAssertMs = nowMs;
+      win.setAlwaysOnTop(true, 'screen-saver');
+    }, TOPMOST_WATCHDOG_TICK_MS);
     win.on('closed', () => {
       clearInterval(pointerTimer);
+      clearInterval(topmostTimer);
       windows.delete(pet.id);
       lastRequestedBounds.delete(win.id);
       windowIgnore.delete(win.id);
