@@ -56,6 +56,8 @@ const { decideWindowIgnore, pointerZone } = require('./pointer-target.js');
 const { TOPMOST_WATCHDOG_TICK_MS, shouldReassertTopmost } = require('./topmost-watchdog.js');
 // 宿主存活判定（issue #56：宿主退出 → 管道断开 → 自己退，绝不弹框、绝不留僵尸）
 const { HOST_POLL_MS, hostIsGone, isBrokenPipeError, parseHostPid } = require('./host-liveness.js');
+// 全局 DPI 线性化的纯判定与换算（含平台例外：macOS 的 DIP 已是「点」，无需补偿；见该文件头）
+const { shouldLinearize, resolveForcedScale, resolvePetScale } = require('./dpi-linearization.js');
 
 // 允许无用户手势直接播放（余额动画等）
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
@@ -150,6 +152,10 @@ if (process.platform === 'win32') {
 //
 // 环境变量 DSH_PET_FORCE_DSF：'0' = 关闭本机制；其它正数 = 强制该值（排障用，会踩上面的 bug）。
 //
+// 「要不要启用 / 强制成几 / 渲染端乘几」三条规则已抽到 dpi-linearization.js（纯函数、带单测）——
+// 其中包含一个平台例外：上面这套补偿的前提是「force-device-scale-factor 会把 DIP 换算成物理像素」，
+// 那是 Windows 的行为，macOS 上不成立。原因与实测数据见该文件头，本文件不再复述。
+//
 // 取值时机是个麻烦：switch 必须在 app ready 之前设，而那时 screen 模块还不可用。
 // 所以首次启动 spawn 一个自己的探测子进程（DSH_PET_DPI_PROBE=1，只打印 scaleFactor 就退出，
 // ~0.5s）并把结果落盘；之后每次启动直接读缓存，零开销。
@@ -223,10 +229,10 @@ function probePrimaryScale() {
 let PRIMARY_SCALE = 0;
 /** 实际生效的强制缩放（0 = 未启用，坐标系维持修复前的逐屏 DIP） */
 let FORCED_SCALE = 0;
-if (!DPI_PROBE && process.env.DSH_PET_FORCE_DSF !== '0') {
+const FORCE_DSF = process.env.DSH_PET_FORCE_DSF;
+if (shouldLinearize({ platform: process.platform, dpiProbe: DPI_PROBE, forceDsf: FORCE_DSF })) {
   PRIMARY_SCALE = readCachedPrimaryScale() || probePrimaryScale();
-  const override = Number(process.env.DSH_PET_FORCE_DSF);
-  const forced = Number.isFinite(override) && override > 0 ? override : PRIMARY_SCALE > 0 ? 1 : 0;
+  const forced = resolveForcedScale({ forceDsf: FORCE_DSF, primaryScale: PRIMARY_SCALE });
   if (forced > 0) {
     app.commandLine.appendSwitch('force-device-scale-factor', String(forced));
     FORCED_SCALE = forced;
@@ -238,8 +244,11 @@ if (!DPI_PROBE && process.env.DSH_PET_FORCE_DSF !== '0') {
  * 线性化开启后 1 逻辑像素 = 1 物理像素，宠物按主屏缩放放大回原来的观感。
  */
 function petScale() {
-  const base = Number(process.env.DSH_PET_SCALE || '1') || 1;
-  return FORCED_SCALE > 0 && PRIMARY_SCALE > 0 ? base * (PRIMARY_SCALE / FORCED_SCALE) : base;
+  return resolvePetScale({
+    baseScale: process.env.DSH_PET_SCALE,
+    primaryScale: PRIMARY_SCALE,
+    forcedScale: FORCED_SCALE,
+  });
 }
 
 /** bridge 模式：DSH_PET_BRIDGE=1（宿主注入）。开启时注册 dsh-pet-bridge scheme + 管道转发 */
