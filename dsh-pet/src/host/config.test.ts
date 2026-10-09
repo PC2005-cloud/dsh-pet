@@ -27,6 +27,8 @@ import {
 
 /** 内置默认配置的完整最小形态（animations 整段必须合法——合并是整段替换/整段回退） */
 const BASE = {
+  spendCurrency: 'CNY',
+  spendEnabled: true,
   pets: [
     {
       id: 'main',
@@ -71,6 +73,57 @@ const BASE = {
   eventsRefreshSec: { balance: 1800, whisper: 300 },
   workStatusTexts: [['在干活']],
 };
+
+test('消耗开关保存、旧请求保留、旧配置默认及非法值回退', () => {
+  const saved = saveUserConfig({ pets: BASE.pets, spendEnabled: false, spendCurrency: 'USD' });
+  assert.equal(saved?.spendEnabled, false);
+  assert.equal(saveUserConfig({ pets: BASE.pets }, saved!)?.spendEnabled, false);
+  assert.equal(saveUserConfig({ pets: BASE.pets, spendEnabled: true }, saved!)?.spendEnabled, true);
+  assert.equal(saveUserConfig({ pets: BASE.pets, spendEnabled: true }, saved!)?.spendCurrency, 'USD');
+  for (const value of ['false', 0, null, {}])
+    assert.equal(saveUserConfig({ pets: BASE.pets, spendEnabled: value }), null);
+  const dir = mkdtempSync(join(tmpdir(), 'dsh-pet-spend-enabled-'));
+  try {
+    const paths = {
+      defaultFile: join(dir, 'default.jsonc'),
+      userFile: join(dir, 'user.json'),
+      petDir: join(dir, 'pet'),
+    };
+    writeFileSync(paths.defaultFile, JSON.stringify(BASE));
+    assert.equal(readAllConfig(paths).main.spendEnabled, true);
+    writeFileSync(paths.userFile, JSON.stringify(saved));
+    assert.equal(readAllConfig(paths).main.spendEnabled, false);
+    writeFileSync(paths.userFile, JSON.stringify({ spendEnabled: 'false' }));
+    assert.equal(readAllConfig(paths).main.spendEnabled, true);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('费用币种保存、保留、重置默认与非法值校验', () => {
+  const saved = saveUserConfig({ pets: BASE.pets, spendCurrency: 'USD' });
+  assert.equal(saved?.spendCurrency, 'USD');
+  assert.equal(saveUserConfig({ pets: BASE.pets }, saved!)?.spendCurrency, 'USD');
+  assert.equal(saveUserConfig({ pets: BASE.pets, spendCurrency: 'CNY' }, saved!)?.spendCurrency, 'CNY');
+  for (const value of ['EUR', 'usd', '', null, 42])
+    assert.equal(saveUserConfig({ pets: BASE.pets, spendCurrency: value }), null);
+  const dir = mkdtempSync(join(tmpdir(), 'dsh-pet-currency-'));
+  try {
+    const paths = {
+      defaultFile: join(dir, 'default.jsonc'),
+      userFile: join(dir, 'user.json'),
+      petDir: join(dir, 'pet'),
+    };
+    writeFileSync(paths.defaultFile, JSON.stringify(BASE));
+    assert.equal(readAllConfig(paths).main.spendCurrency, 'CNY');
+    writeFileSync(paths.userFile, JSON.stringify(saved));
+    assert.equal(readAllConfig(paths).main.spendCurrency, 'USD');
+    writeFileSync(paths.userFile, JSON.stringify({ spendCurrency: 'EUR' }));
+    assert.equal(readAllConfig(paths).main.spendCurrency, 'CNY');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
 
 /** 与 BASE.animations 同构、仅替换 events 的用户层 animations（顶层字段整段替换，故必须完整） */
 function animationsWithEvents(events: unknown): Record<string, unknown> {

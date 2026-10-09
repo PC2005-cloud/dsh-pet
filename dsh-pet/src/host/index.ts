@@ -69,6 +69,9 @@ import { fileURLToPath } from 'node:url';
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths';
 import { credentialRef } from '@deepseek-ai/dsh-credentials';
 import { queryBalance } from './balance/index';
+import { createPricingManager } from './pricing-catalog';
+import { createHolidayManager, peakAt } from './holidays';
+import { createTurnSpendStore, type SpendSession, type SpendEvent } from './turn-spend';
 import { generateWhisper } from './whisper';
 import { generateChat, type ChatMemoryMessage } from './chat';
 import { configuredModel } from './model-selection';
@@ -287,6 +290,42 @@ export function apply(ctx: any): void {
   // 会话存**——task 曾是全局单值，写过一次就跟着此后所有会话活动一直显示（issue #59）。
   // 进程内内存态：重启回空闲；每次会话事件有实际状态变化才更新（签名比对防刷屏）。
   const workStatus = new WorkStatusStore();
+  const pricing = createPricingManager(join(userRoot, 'cache', 'pricing.json'));
+  const holidays = createHolidayManager(join(userRoot, 'cache', 'holidays.json'));
+  const turnSpend = createTurnSpendStore(pricing, (time) => peakAt(time, holidays.isHoliday));
+  let startupReady: Promise<unknown> = Promise.resolve();
+  ctx.effect(() => {
+    let active = true;
+    let ready = false;
+    startupReady = Promise.all([pricing.start(), holidays.start()]).then(() => {
+      ready = true;
+    });
+    const off = ctx.on('session/event', (session: SpendSession, event: SpendEvent) => {
+      if (
+        !['turn/start', 'turn/end', 'step/start', 'request/header', 'request/context', 'assistant/message'].includes(
+          event.type ?? '',
+        )
+      )
+        return;
+      if (ready) {
+        turnSpend.consume(session, event);
+        return;
+      }
+      // 仅首次刷新完成前延后结算；保存当时路由，避免等待期间 session 的模型发生变化。
+      const header = session.requestHeader?.();
+      const captured = { id: session.id, header: session.header, requestHeader: () => header };
+      void startupReady.then(() => {
+        if (active) turnSpend.consume(captured, event);
+      });
+    });
+    return () => {
+      off();
+      active = false;
+      pricing.dispose();
+      holidays.dispose();
+    };
+  }, 'dsh-pet: turn spend');
+
   // 工作状态快照 → 写进 S（前端 1s 轮询 /state 后按 counter 变化渲染）。
   // **只在内容真的变了时才写**：每次写都会推进 counter，前端据此重播档位动画——
   // 会话事件很密（每个 tool/call 都来），无条件写会把动画刷成幻灯片。
@@ -780,6 +819,35 @@ export function apply(ctx: any): void {
   /** 用户动画根：按扩展名取子目录（main-animation/webm 或 main-animation/mov）。 */
   const userRootFor = (ext: string): string => join(thumbUserRoot, animSubdirFor(ext));
 
+  const spendViews = new Map<string, { signature: string; counter: number }>();
+  let spendCounter = 0;
+  const spendSnapshot = (params: URLSearchParams) => {
+    let enabled = true;
+    let currency: 'CNY' | 'USD' = 'CNY';
+    try {
+      const config = readAllConfig(configPaths).main;
+      enabled = config.spendEnabled !== false;
+      currency = config.spendCurrency === 'USD' ? 'USD' : 'CNY';
+    } catch {
+      /* 使用内置兼容默认值 */
+    }
+    const id = params.get('sessionId') ?? (params.get('desktop') === '1' ? turnSpend.latestSession() : '');
+    return { enabled, scope: enabled ? id : '', spend: enabled && id ? turnSpend.get(id, currency) : null };
+  };
+  const spendLeaf = (params: URLSearchParams) => {
+    const data = spendSnapshot(params);
+    const key = params.get('sessionId') ?? 'desktop';
+    const signature = JSON.stringify(data);
+    let previous = spendViews.get(key);
+    if (previous?.signature !== signature) {
+      spendCounter = Math.max(Date.now(), spendCounter + 1);
+      previous = { signature, counter: spendCounter };
+      spendViews.set(key, previous);
+      while (spendViews.size > 200) spendViews.delete(spendViews.keys().next().value!);
+    }
+    return { counter: previous!.counter, data };
+  };
+
   /** 单次业务路由(WebServer 注册 → HTTP 落盘 / 桌面 Helper 管道 → scheme 应答,共用同一份实现):
    *  输入只需 rawUrl(/dsh-pet-7340/... + 查询) + method + body 文本;返回 RouteResult(JSON/文本/文件),
    *  消费方各自落盘——业务逻辑只有一份,两端天然一致(硬契约:浏览器/桌面行为严格对齐)。 */
@@ -788,6 +856,53 @@ export function apply(ctx: any): void {
     const rest = decodeURIComponent(url.pathname.slice(ROUTE_PREFIX.length + 1));
 
     // 成品配置：/dsh-pet-7340/config（GET 读取合并成品 / PUT 保存用户层 / POST 同步内置默认）
+    if (rest === 'turn-spend' || rest === 'turn-spend/debug') {
+      if (method !== 'GET') return { kind: 'json', status: 405, obj: { error: 'method not allowed' } };
+      let enabled = true;
+      let currency: 'CNY' | 'USD' = 'CNY';
+      try {
+        const config = readAllConfig(configPaths).main;
+        enabled = config.spendEnabled !== false;
+        currency = config.spendCurrency === 'USD' ? 'USD' : 'CNY';
+      } catch {
+        /* 配置不可读时仍使用明确的默认人民币价，绝不混用币种。 */
+      }
+      if (rest === 'turn-spend/debug')
+        return {
+          kind: 'json',
+          status: 200,
+          obj: {
+            enabled,
+            currency,
+            updates: { pricing: pricing.status(), holidays: holidays.status() },
+            pricing: pricing.snapshot(currency),
+            sources: Object.fromEntries(
+              Object.keys(pricing.snapshot(currency)).map((m) => [m, pricing.source(m, currency)]),
+            ),
+          },
+          headers: { 'cache-control': 'no-store' },
+        };
+      if (!enabled)
+        return {
+          kind: 'json',
+          status: 200,
+          obj: { enabled: false, scope: '', spend: null },
+          headers: { 'cache-control': 'no-store' },
+        };
+      // 网页必须指定会话；桌面没有会话选择器，跟随最近开始的会话。
+      await startupReady;
+      const id =
+        url.searchParams.get('sessionId') ?? (url.searchParams.get('desktop') === '1' ? turnSpend.latestSession() : '');
+      if (!id)
+        return { kind: 'json', status: 200, obj: { scope: '', spend: null }, headers: { 'cache-control': 'no-store' } };
+      return {
+        kind: 'json',
+        status: 200,
+        obj: { scope: id, spend: turnSpend.get(id, currency) },
+        headers: { 'cache-control': 'no-store' },
+      };
+    }
+
     if (rest === 'config') {
       if (method === 'GET') {
         // 唯一配置入口：readAllConfig 返回绝对正确的完成品聚合（{ main:{...}, test1:{...} }），
@@ -939,11 +1054,21 @@ export function apply(ctx: any): void {
     // 只读、纯内存、**零副作用**：绝不在这里触发外部调用或模型生成——那会把所有人的 1s 轮询拖死。
     if (rest === 'state') {
       if (method !== 'GET') return { kind: 'json', status: 405, obj: { error: 'method not allowed' } };
+      const snapshot = state.read();
+      const scoped = url.searchParams.has('sessionId') || url.searchParams.get('desktop') === '1';
       return {
         kind: 'json',
         status: 200,
-        obj: state.read(),
-        headers: { 'cache-control': 'no-cache, no-store' },
+        obj: scoped
+          ? {
+              ...snapshot,
+              sections: {
+                ...snapshot.sections,
+                turnSpend: spendLeaf(url.searchParams),
+              },
+            }
+          : snapshot,
+        headers: { 'cache-control': 'no-store' },
       };
     }
 

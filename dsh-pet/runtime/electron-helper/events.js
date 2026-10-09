@@ -260,8 +260,9 @@ function applyAnimLeaf(petId, leaf) {
 /** 跑一拍 /state（1s 定时与「前端动作后立刻刷新」共用同一份实现） */
 async function pollStateOnce() {
   try {
-    const s = await S.fetchState(STATE_URL);
+    const s = await S.fetchState(STATE_URL + '?desktop=1');
     if (!s) return;
+    for (const sprite of sprites) sprite.updateSpendBubble?.(s.sections.turnSpend?.data);
     if (stateBaseline === null) {
       stateBaseline = S.flattenCounters(s); // 首拉：只记基线，不渲染（避免启动/重载时重放旧气泡）
       return;

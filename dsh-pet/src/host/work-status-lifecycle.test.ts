@@ -26,6 +26,7 @@ type Listener = (session: unknown, event: unknown) => void;
 type Harness = {
   emit: (sessionId: string, event: Record<string, unknown>) => void;
   snapshot: () => Promise<Snapshot>;
+  spend: (id: string, unified?: boolean) => Promise<{ spend: { amount: number; count: number } | null }>;
   dispose: () => void;
 };
 
@@ -101,6 +102,22 @@ function setup(): Harness {
         });
         void handler?.({ method: 'GET', url: '/dsh-pet-7340/state', on: noop }, res);
       }),
+    spend: (id, unified) =>
+      new Promise((done) => {
+        const res = new FakeRes();
+        res.on('finish', () => {
+          const body = JSON.parse(Buffer.concat(res.chunks).toString('utf8'));
+          done(unified ? body.sections.turnSpend.data : body);
+        });
+        void handler?.(
+          {
+            method: 'GET',
+            url: '/dsh-pet-7340/' + (unified ? 'state' : 'turn-spend') + '?sessionId=' + encodeURIComponent(id),
+            on: noop,
+          },
+          res,
+        );
+      }),
     dispose: () => {
       // 插件收尾：清掉待执行的定时器（终态清理 60s；余额周期刷新是常驻的）——
       // 不释放的话测试进程跑完不退出。splice 先取走再执行：重复 dispose 是安全的空操作。
@@ -138,6 +155,24 @@ after(() => {
 });
 
 const TURN_START = (seq: number): Record<string, unknown> => ({ type: 'turn/start', seq, data: { turn: seq } });
+
+test('费用监听接通 HTTP 路由，按会话读取且不影响工作状态', async (t) => {
+  const h = setup();
+  t.after(h.dispose);
+  h.emit('spend-A', TURN_START(1));
+  h.emit('spend-A', { type: 'request/context', data: { provider: 'deepseek-official', model: 'deepseek-flash' } });
+  h.emit('spend-A', {
+    type: 'assistant/message',
+    time: Date.parse('2026-09-28T12:00:00+08:00'),
+    data: { turn: 1, step: 1, usage: { inputTokens: 1000, outputTokens: 1000, cacheReadTokens: 1000 } },
+  });
+  h.emit('spend-A', { type: 'turn/end', data: { turn: 1, reason: { kind: 'completed' } } });
+  assert.ok(Math.abs((await h.spend('spend-A')).spend!.amount - 0.00502) < 1e-10);
+  assert.equal((await h.spend('spend-B')).spend, null);
+  assert.equal((await h.spend('spend-A', true)).spend?.amount, (await h.spend('spend-A')).spend?.amount);
+  assert.equal((await h.spend('spend-B', true)).spend, null);
+  assert.equal((await h.snapshot()).state, 'success');
+});
 const TOOL_CALL = (seq: number): Record<string, unknown> => ({ type: 'tool/call', seq, data: { name: 'read' } });
 const TURN_END = (seq: number, kind: string): Record<string, unknown> => ({
   type: 'turn/end',

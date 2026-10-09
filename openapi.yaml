@@ -82,6 +82,44 @@ tags:
     description: 字体、通知图标、表情包、动画素材
 
 paths:
+  /dsh-pet-7340/turn-spend:
+    get:
+      tags: [State]
+      operationId: getTurnSpend
+      summary: 按会话查询本轮对话消耗估算
+      description: 仅支持 DeepSeek 官方 API。首次启动可能等待价格与日历刷新；展示端复用 /state，直接查询用于集成与诊断。
+      parameters:
+        - name: sessionId
+          in: query
+          schema: { type: string }
+          description: 当前 DSH 会话 ID；优先于 desktop。
+        - name: desktop
+          in: query
+          schema: { type: string, enum: ["1"] }
+          description: 跟随最近开始的 DSH 会话。
+      responses:
+        "200":
+          description: 当前估算，关闭或不可估算时 spend 为 null
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TurnSpendPayload"
+        "405":
+          description: 仅允许 GET
+  /dsh-pet-7340/turn-spend/debug:
+    get:
+      tags: [State]
+      operationId: getTurnSpendDebug
+      summary: 查询公共计价资料更新状态
+      description: 包括当前开关、币种、价格来源和节假日更新状态，不返回会话 ID 或聊天内容。
+      responses:
+        "200":
+          description: 计价资料诊断
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        "405":
+          description: 仅允许 GET
   /dsh-pet-7340/state:
     get:
       tags: [State]
@@ -116,6 +154,15 @@ paths:
           **不要按 `.` 切分**：宠物 id 允许包含点号（例如 `a.b`），切分必然出错。
           要提取 id 请用固定前缀/后缀做切片。
         - 宠物 id 是配置里 `pets[].id`，默认是 `main`。要拿到全部 id 请看 `GET /config`。
+      parameters:
+        - name: sessionId
+          in: query
+          schema: { type: string }
+          description: 可选，返回该会话的 sections.turnSpend 投影；不等待联网刷新。
+        - name: desktop
+          in: query
+          schema: { type: string, enum: ["1"] }
+          description: 可选，跟随最近开始的会话，返回 sections.turnSpend 投影。
       responses:
         "200":
           description: 当前状态
@@ -939,6 +986,14 @@ components:
               $ref: "#/components/schemas/WorkStatusLeaf"
             notify:
               $ref: "#/components/schemas/NotifyLeaf"
+            turnSpend:
+              type: object
+              description: 仅会话查询时出现；开关、币种或费用变化推进 counter。
+              required: [counter, data]
+              properties:
+                counter: { type: number }
+                data:
+                  $ref: "#/components/schemas/TurnSpendPayload"
         pets:
           type: object
           description: 每只宠物各自一份；键是宠物 id（**可含点号，勿切分**）
@@ -986,6 +1041,28 @@ components:
                   data:
                     text: 主人今天也要加油哦～
                     image: 可爱
+
+    TurnSpendPayload:
+      type: object
+      required: [scope, spend]
+      properties:
+        enabled: { type: boolean, default: true }
+        scope: { type: string }
+        spend:
+          type: [object, "null"]
+          required: [count, amount, currency, at]
+          properties:
+            count: { type: number }
+            amount: { type: number, minimum: 0 }
+            currency: { type: string, enum: [CNY, USD] }
+            at: { type: number }
+            estimated: { type: boolean, const: true }
+            models:
+              type: array
+              items: { type: string }
+            source:
+              type: array
+              items: { type: string }
 
     BalanceLeaf:
       type: object
@@ -1409,6 +1486,15 @@ components:
           minItems: 1
           items:
             $ref: "#/components/schemas/PetEntry"
+        spendEnabled:
+          type: boolean
+          default: true
+          description: 本轮消耗估算总开关，目前仅支持 DeepSeek 官方 API。
+        spendCurrency:
+          type: string
+          enum: [CNY, USD]
+          default: CNY
+          description: 分别按官方人民币或美元单价估算，不做汇率换算。
         notificationsEnabled:
           type: boolean
         whisperImageEnabled:

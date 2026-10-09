@@ -29,6 +29,7 @@ import {
 } from '../shared/state';
 import { WORK_STATUS_INDEX, type WorkStatusSnapshot } from '../shared/work-status';
 import { makeBalanceBubble, makeWhisperBubble } from './bubble';
+import { startSpendBubble, type SpendPayload } from '../shared/turn-spend';
 import { clickScore, SCORE_MIN_SPEED, mountScorePopup, spawnScoreBurst } from '../shared/score-popup';
 import { CANVAS_H, FEET_Y, HIT_BOX, DRAG_THRESHOLD, PET_REF_WIDTH, ANIMATION_EXT } from '../shared/constants';
 // 统一右键菜单：与桌面共用同一份组件（树 + 渲染 + 样式，src/shared/menu.ts）
@@ -124,6 +125,7 @@ function injectCss(): void {
  * @returns PetMulti 多开容器组件（内部渲染多个 PetCard）
  */
 export function makePetUI(rt: {
+  sessionList?: { getSnapshot(): { current?: string }; subscribe(fn: () => void): () => void };
   h: typeof jsx;
   useState: <T>(init: T) => [T, Dispatch<SetStateAction<T>>];
   // 用 React 命名空间类型而非 typeof：type-only import 的 hook 无法进入声明导出（TS4078）
@@ -146,6 +148,8 @@ export function makePetUI(rt: {
     balanceNoticeTick,
     workStatus,
     workStatusTick,
+    spendSession,
+    spendData,
     say,
     sayTick,
     animCue,
@@ -158,6 +162,8 @@ export function makePetUI(rt: {
     balanceNoticeTick: number;
     workStatus: WorkStatusSnapshot | null;
     workStatusTick: number;
+    spendSession?: string;
+    spendData?: SpendPayload;
     /** 本宠物的「说一句话」（碎碎念/命令气泡/对话回复三合一；容器从 S 分发下来） */
     say?: { text: string; image?: string; seq: number };
     sayTick: number;
@@ -218,6 +224,20 @@ export function makePetUI(rt: {
 
     // ---- DOM / 状态 refs ----
     const rootRef = useRef<HTMLDivElement | null>(null);
+    const spendReceiver = useRef<((data: SpendPayload) => void) | undefined>(undefined);
+    useEffect(() => {
+      if (!rootRef.current || !spendSession) return;
+      return startSpendBubble(rootRef.current, '', size, 'dsh-pet-bubble', undefined, (receive) => {
+        spendReceiver.current = receive;
+        return () => {
+          spendReceiver.current = undefined;
+        };
+      });
+    }, [spendSession, size]);
+    useEffect(() => {
+      if (spendData && (spendData.scope === spendSession || spendData.enabled === false))
+        spendReceiver.current?.(spendData);
+    }, [spendData, spendSession, size]);
     const stageRef = useRef<HTMLDivElement | null>(null);
     const videoARef = useRef<HTMLVideoElement | null>(null);
     const videoBRef = useRef<HTMLVideoElement | null>(null);
@@ -1519,6 +1539,15 @@ export function makePetUI(rt: {
 
   /** 多开容器：一次拉取成品配置 → 拍平 → 渲染多个 PetCard */
   function PetMulti() {
+    const [spendSession, setSpendSession] = useState<string | undefined>(rt.sessionList?.getSnapshot().current);
+    useEffect(() => {
+      const sync = () => setSpendSession(rt.sessionList?.getSnapshot().current);
+      sync();
+      return rt.sessionList?.subscribe(sync);
+    }, []);
+    const [spendData, setSpendData] = useState<SpendPayload | undefined>(undefined);
+    const currentSpendSession = useRef(spendSession);
+    currentSpendSession.current = spendSession;
     const [pets, setPets] = useState<Pet[]>([]);
     const [ready, setReady] = useState(false);
     // 共享碰撞站场（宠物间碰撞）：每只 PetCard 注册自己的槽位；飞行中的宠物在 startThrow
@@ -1627,7 +1656,10 @@ export function makePetUI(rt: {
       let baseline: Record<string, number> | null = null;
       const poll = async () => {
         try {
-          const s = await fetchState();
+          const s = await fetchState(
+            '/dsh-pet-7340/state?sessionId=' + encodeURIComponent(currentSpendSession.current ?? ''),
+          );
+          if (alive && s?.sections.turnSpend?.data) setSpendData(s.sections.turnSpend.data as SpendPayload);
           if (!alive || !s) return;
           if (baseline === null) {
             baseline = flattenCounters(s); // 首拉：只记基线，不渲染
@@ -1692,6 +1724,8 @@ export function makePetUI(rt: {
             balanceNoticeTick,
             workStatus,
             workStatusTick,
+            spendSession: p.id === visiblePets.find((pet) => pet.balanceEnabled)?.id ? spendSession : undefined,
+            spendData,
             say: sayRef.current[p.id],
             sayTick,
             animCue: animCueRef.current[p.id],

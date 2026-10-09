@@ -107,3 +107,21 @@ BASE=http://127.0.0.1:3080/dsh-pet-7340   # 独立模式默认端口 3080（被�
 - [`openapi.yaml`](openapi.yaml) —— 完整契约（OpenAPI 3.1，可直接导入 Swagger UI / Postman）
 - [`tools/api-tester.html`](tools/api-tester.html) —— 桌宠控制台：扮演第三方消费方的示例页面，
   可直观试用上述接口（用 `node tools/api-tester.cjs` 启动，它会带上本地代理解决跨域）
+
+
+## 每轮对话消耗估算
+
+Web 与 Electron 继续通过现有 `GET /state` 轮询获取数据，不新增展示轮询：
+
+```bash
+curl -s "$BASE/state?sessionId=<当前DSH会话ID>"
+curl -s "$BASE/state?desktop=1"
+```
+
+带上述参数时额外返回 `sections.turnSpend: {counter,data}`，`data` 包含 `enabled`、`scope` 和 `spend`。未指定会话或没有完整结果时 `spend` 为 `null`；关闭时 `enabled:false`、`scope:""`、`spend:null`。普通不带参数的 `/state` 保持原结构，不等待价格刷新。
+
+`spend` 包含 `count`（轮次结果标识）、`amount`、`currency`（CNY/USD）、`at`（结算时间）、`models`、`source`、`estimated:true`。费用或开关/币种变化会推进该会话投影的 `counter`；展示组件仍按轮次标识和时间判定是否播放，币种切换只更新尚在显示的金额，不补播旧结果。
+
+`GET /turn-spend?sessionId=...` 或 `?desktop=1` 提供相同估算的直接查询，首次启动可能等待公共价格/日历刷新结束。`GET /turn-spend/debug` 提供币种、开关及公共计价资料的来源、尝试时间、成功时间和错误；诊断不包含会话标识和聊天内容。
+
+`PUT /config` 可选字段 `spendEnabled`（布尔，默认 true）与 `spendCurrency`（CNY/USD，默认 CNY），写入 `main-config.jsonc`；旧 JSON 文件沿用新版已有迁移逻辑。估算仅支持 `deepseek-official` 完整正常结束的 DSH 对话，不作为官方扣费凭证。

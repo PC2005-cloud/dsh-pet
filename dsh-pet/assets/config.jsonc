@@ -10,10 +10,13 @@
 //     chatMemoryRounds / whisperModel / chatModel / eventsRefreshSec
 //   · 条目级（每个条目一份：main 一份、每个种类各一份；种类文件顶层可覆盖）：
 //     whisperPrompt / memes / workStatusTexts / animations / animationWeights
-//   · 只读 main（写了也只认 main 条目那份）：notificationsEnabled / eventsRefreshSec.balance
+//   · 只读 main（写了也只认 main 条目那份）：notificationsEnabled / spendEnabled / spendCurrency / eventsRefreshSec.balance
 // 合并口径：所有顶层字段都是**整段替换**——写了就整段用自己的，缺的子键不会从本文件补回来
 //   （消费端各自兜底：余额周期读不到按 1800、碎碎念按 300）。
 {
+  // 本轮消耗（估算）：目前仅支持 DeepSeek 官方 API；Web 设置保存后两端同步。
+  "spendEnabled": true,
+  "spendCurrency": "CNY",
   // ===================== 碎碎念（系统提示词人设，条目级——每个种类一份；种类文件 pet/<名>-config.json 顶层可覆盖） =====================
   // 宠物开启碎碎念（pets[].whisperEnabled = true）时，按 eventsRefreshSec.whisper 周期
   // 用此提示词调用当前服务商生成一句话，气泡显示。说人话、不啰嗦、不解释自己、不提 AI。
