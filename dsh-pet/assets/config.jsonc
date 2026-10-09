@@ -3,18 +3,18 @@
 //       （结构性缺失静默、显式写错告警），返回给消费端的永远是填满的成品。
 // 字段归属（三层，改配置前先看这里）：
 //   · 实例级（写在 pets[] 里，每只独立）：name / id / size / balanceEnabled / whisperEnabled /
-//     workStatusEnabled / fixedEnabled / display / position
+//     workStatusEnabled / fixedEnabled / spendEnabled / spendCurrency / display / position
 //   · 全局默认（本文件是默认值；用户在 main-config.jsonc 里写一次就对**所有宠物**生效，
 //     含 pet/<名>-config.json 定义的种类；种类文件自己写了则覆盖自己那份）：
 //     physics / confineToScreen / whisperImageEnabled / chatImageEnabled /
 //     chatMemoryRounds / whisperModel / chatModel / eventsRefreshSec
 //   · 条目级（每个条目一份：main 一份、每个种类各一份；种类文件顶层可覆盖）：
 //     whisperPrompt / memes / workStatusTexts / animations / animationWeights
-//   · 只读 main（写了也只认 main 条目那份）：notificationsEnabled / spendEnabled / spendCurrency / eventsRefreshSec.balance
+//   · 只读 main（写了也只认 main 条目那份）：notificationsEnabled / eventsRefreshSec.balance
 // 合并口径：所有顶层字段都是**整段替换**——写了就整段用自己的，缺的子键不会从本文件补回来
 //   （消费端各自兜底：余额周期读不到按 1800、碎碎念按 300）。
 {
-  // 本轮消耗（估算）：目前仅支持 DeepSeek 官方 API；Web 设置保存后两端同步。
+  // 旧版顶层费用字段：仅兼容旧配置；新设置写入每只宠物的 pets[].spendEnabled / spendCurrency。
   "spendEnabled": true,
   "spendCurrency": "CNY",
   // ===================== 碎碎念（系统提示词人设，条目级——每个种类一份；种类文件 pet/<名>-config.json 顶层可覆盖） =====================
@@ -154,6 +154,9 @@
       "id": "main",
       "size": 462,
       "balanceEnabled": true,
+      // 本宠物费用提示独立于余额；仅支持 DeepSeek 官方 API。
+      "spendEnabled": true,
+      "spendCurrency": "CNY",
       // 碎碎念默认开启：每次生成都会调用当前对话的模型。本地 LLM 单并发时，
       // 后台碎碎念会顶掉正在跑的任务的 KV cache（与 DSH 多子代理同因）。
       // 不需要碎碎念的宠物改为 false（设置页也可开关）。

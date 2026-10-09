@@ -1,6 +1,8 @@
 import { HIT_BOX } from './constants';
 
 export interface SpendPayload {
+  /** 统一状态提供每只宠物独立币种与开关的投影。 */
+  pets?: Record<string, Omit<SpendPayload, 'pets'>>;
   enabled?: boolean;
   scope: string;
   spend: { count: number; amount: number; currency: 'CNY' | 'USD'; at: number } | null;

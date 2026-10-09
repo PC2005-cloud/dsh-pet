@@ -226,18 +226,18 @@ export function makePetUI(rt: {
     const rootRef = useRef<HTMLDivElement | null>(null);
     const spendReceiver = useRef<((data: SpendPayload) => void) | undefined>(undefined);
     useEffect(() => {
-      if (!rootRef.current || !spendSession) return;
+      if (!rootRef.current || !spendSession || cfg.spendEnabled === false) return;
       return startSpendBubble(rootRef.current, '', size, 'dsh-pet-bubble', undefined, (receive) => {
         spendReceiver.current = receive;
         return () => {
           spendReceiver.current = undefined;
         };
       });
-    }, [spendSession, size]);
+    }, [spendSession, size, cfg.spendEnabled]);
     useEffect(() => {
-      if (spendData && (spendData.scope === spendSession || spendData.enabled === false))
-        spendReceiver.current?.(spendData);
-    }, [spendData, spendSession, size]);
+      const data = spendData?.pets?.[cfg.id];
+      if (data && (data.scope === spendSession || data.enabled === false)) spendReceiver.current?.(data);
+    }, [spendData, spendSession, size, cfg.id, cfg.spendEnabled, cfg.spendCurrency]);
     const stageRef = useRef<HTMLDivElement | null>(null);
     const videoARef = useRef<HTMLVideoElement | null>(null);
     const videoBRef = useRef<HTMLVideoElement | null>(null);
@@ -1724,7 +1724,7 @@ export function makePetUI(rt: {
             balanceNoticeTick,
             workStatus,
             workStatusTick,
-            spendSession: p.id === visiblePets.find((pet) => pet.balanceEnabled)?.id ? spendSession : undefined,
+            spendSession,
             spendData,
             say: sayRef.current[p.id],
             sayTick,

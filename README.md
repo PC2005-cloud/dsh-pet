@@ -71,6 +71,8 @@ dsh plugin --profile desktop add file:D:/path/to/dsh-pet/dsh-pet
 
 > 注：`npm run build`（即 `scripts/prepare.js`）才产出**完整可安装**的 lib——除 tsdown 构建外还构建桌面共享核心（`shared-core.js`）、生成类型声明并收敛发布 `files` 清单；裸 `tsdown` 构建会缺桌面运行时与类型。发布与打包（`npm publish` / `npm pack`）时由 `prepack` 自动调用它，克隆仓库后需手动跑一次。
 
+> 本地同版本更新：若再次安装同一个 `file:` 目录仍提示 `Already up to date`，界面可能继续使用已缓存的旧文件（即使加 `--force`）。可在插件目录运行 `npm pack`，将输出的 `.tgz` 安装包用 `dsh plugin --profile desktop add "file:D:/实际路径/安装包.tgz"` 安装，再完全退出并重开 DSH。包内已经包含构建产物；`web` 用户使用对应 profile。
+
 ## 💬 反馈与发版节奏
 
 欢迎提 [issue](https://github.com/PC2005-cloud/dsh-pet/issues) 与 PR——bug、体验问题、优化想法都行。但动手前请先翻一眼 [提交记录](https://github.com/PC2005-cloud/dsh-pet/commits/main)，确认不是已经修掉的同款问题（有些问题可能已经在 `main` 上修好了，只是还没发版）。
@@ -91,7 +93,7 @@ dsh plugin --profile desktop add file:D:/path/to/dsh-pet/dsh-pet
 - **朝向与落地**：全部动画可镜像（可朝左 / 朝右）；脚底线统一，宠物始终站在地面上
 - **流畅切换**：双缓冲交叉淡入，切换无空白帧
 - **余额展示**：按已用百分比分档播余额动画 + 头顶联想气泡（10 秒自动消失）；DeepSeek 显示账户余额，OpenCode Zen Go 与 Command Code 显示最紧迫的一个额度窗口；**未登记余额接口的服务商改为弹文字说明**（不静默）；按宠物独立开关
-- **每轮消耗估算**：DeepSeek 官方对话完成后弹出桌宠侧面的独立白色半透明气泡（5 秒自动消失，靠屏边自动换侧）；Web 设置提供勾选开关（目前仅支持 DeepSeek 官方 API）及 **CNY / USD** 选择，保存后网页与桌面同步使用对应官方单价
+- **每轮消耗估算**：DeepSeek 官方对话完成后弹出桌宠侧面的独立白色半透明气泡（5 秒自动消失，靠屏边自动换侧）；每只宠物配置提供勾选开关（目前仅支持 DeepSeek 官方 API）及独立 **CNY / USD** 选择，保存后网页与桌面同步使用对应官方单价
 - **碎碎念与对话**：碎碎念按周期自动生成一句（说话动画 + 气泡，也可手动触发）；对话在右键弹输入框与宠物聊天，记忆持久化（浏览器 / 桌面共享同一份）
 - **工作状态联动**：监听 DSH 会话事件，切「思考 / 工作 / 整理 / 等待 / 成功 / 出错」档位动画 + 常驻气泡；目标多轮任务只在真正收尾轮庆祝
 - **系统通知**：窗口失焦时弹系统 toast（对话完成 / 生成失败 / 输出截断 / 权限申请 / 用户选择）
@@ -157,23 +159,19 @@ npm run build && npm run standalone   # 仓库里（先构建）
 - **OpenCode Zen Go（`opencode-go`）**：气泡显示 5h/周/月 三个额度窗口中最先告急的一个（如 `周额度已用 88%` / `2.5 天重置`），同样按已用百分比分档
 - **Command Code（`commandcode`，含 GOAT 等套餐）**：气泡显示 5h/周/月 三个额度窗口中最先告急的一个（与 opencode 同一口径：剩余额度最少者，通常先报 5h）；套餐无窗口限制时只报月度窗
 - **暂不支持的服务商**：未登记余额接口的服务商**不播档位动画，改为弹一句文字说明**——第一行「当前服务商暂不支持余额查询」，第二行报出当前 provider id（便于自查）；缺凭证 / 抓取失败同理（原因写在第二行）。自动轮询只在**原因变化**时弹一次（不反复打扰），手动 `/balance` 或桌面右键「查看余额」则每次都会弹
-- **本轮消耗提示**：Web 设置中的「本轮消耗（估算）（目前仅支持 DeepSeek 官方 API）」提供独立总开关；关闭不影响账户余额，提示仍由第一只启用余额的可见宠物承载
+- **本轮消耗提示**：每只宠物配置中的「本轮消耗（估算）（目前仅支持 DeepSeek 官方 API）」提供独立开关；关闭不影响账户余额，提示仍由第一只启用余额的可见宠物承载
 - **按宠物开关**：`pets[i].balanceEnabled`（必填布尔）控制该宠物是否触发余额动画/显示气泡
 - **所需凭据**：对应 provider 的 API key（`deepseek-official` → `DEEPSEEK_API_KEY`；`opencode-go` → `OPENCODE_GO_API_KEY`；`commandcode` → `COMMANDCODE_API_KEY`），在 DSH 凭据中配置后启用；未匹配的服务商不触发动画，改为弹上面的文字说明气泡
 
 ## ⚙️ 每轮对话消耗提示
 
-- **功能开关**：Web 设置 →「桌宠配置」勾选「本轮消耗（估算）（目前仅支持 DeepSeek 官方 API）」后保存，网页与桌面同步生效；默认开启，旧配置无需迁移。关闭后在下次轮询收起费用气泡，重新开启不补播旧提示；关闭时币种选择禁用但保留原值。此开关独立控制费用提示，不影响账户余额展示；仍由第一只启用余额的可见宠物承载气泡
-- **本轮消耗（估算）**：每轮 DSH 对话正常结束后，以桌宠侧面的独立白色半透明气泡显示 `本轮消耗（估算） / CNY x.xxxx` 或 `USD x.xxxx`；持续 **5 秒**，鼠标移到桌宠上立即收起。每端仅第一只启用余额的可见宠物显示；网页按当前会话隔离，桌面跟随最近开始的会话，切换网页会话或刷新不会重放旧提示
-- **估算币种**：Web 设置 →「桌宠配置」→「本轮消耗（估算）币种」选择 **CNY（人民币）/ USD（美元）**后保存（默认 CNY）。CNY 使用[官网中文人民币价](https://api-docs.deepseek.com/zh-cn/quick_start/pricing/)，USD 使用[官网英文美元价](https://api-docs.deepseek.com/quick_start/pricing/)；切换时整轮按对应价格结果展示，**不按汇率换算、不只替换货币标签**。设置同时作用于网页和桌面，账户余额仍显示接口返回的原币种
+- **功能开关**：Web 设置 →「桌宠配置」→ 选择宠物 →「宠物配置」勾选「本轮消耗（估算）（目前仅支持 DeepSeek 官方 API）」后保存，网页与桌面同步生效；默认开启；旧顶层开关与币种作为缺失实例字段的兼容默认，保存后写入每只宠物。关闭后在下次轮询收起费用气泡，重新开启不补播旧提示；关闭时币种选择禁用但保留原值。此开关独立控制费用提示，不影响账户余额展示；每只开启此功能的可见宠物独立显示，不依赖余额开关
+- **本轮消耗（估算）**：每轮 DSH 对话正常结束后，以桌宠侧面的独立白色半透明气泡显示 `本轮消耗（估算） / CNY x.xxxx` 或 `USD x.xxxx`；持续 **5 秒**，鼠标移到桌宠上立即收起。每只开启此功能的可见宠物均可显示，币种与开关互不影响；网页按当前会话隔离，桌面跟随最近开始的会话，切换网页会话或刷新不会重放旧提示
+- **估算币种**：Web 设置 →「桌宠配置」→ 选择宠物 →「宠物配置」→「本轮消耗（估算）币种」选择 **CNY（人民币）/ USD（美元）**后保存（默认 CNY）。CNY 使用[官网中文人民币价](https://api-docs.deepseek.com/zh-cn/quick_start/pricing/)，USD 使用[官网英文美元价](https://api-docs.deepseek.com/quick_start/pricing/)；切换时整轮按对应价格结果展示，**不按汇率换算、不只替换货币标签**。设置只作用于当前宠物，并同步其网页和桌面展示；不同宠物可同时显示不同币种，账户余额仍显示接口返回的原币种
 - **估算口径**：累计本轮全部调用的未缓存输入、缓存写入、缓存命中和输出 token，按实际模型及各次请求开始时的峰谷价计算；高峰为北京时间周一至周五（不含中国节假日）09:00–12:00、14:00–18:00，其余半价。价格和节假日每次启动时更新，运行期间每 **6 小时**刷新；抓取失败保留最近有效缓存或已知内置数据；未知模型、其他服务商、缺失用量或异常中断不展示不完整金额，最终费用以官方账单为准
-- **配置与设置**：开关保存在 `$DSH_HOME/dsh-pet/main-config.jsonc` 顶层 `spendEnabled`（布尔，默认 `true`），币种保存在 `$DSH_HOME/dsh-pet/main-config.jsonc` 顶层 `spendCurrency`（`"CNY"` / `"USD"`）；默认配置在 `dsh-pet/assets/config.jsonc`，Web 设置入口在 `dsh-pet/src/client/settings.ts`，保存校验在 `dsh-pet/src/host/config.ts`
 - **价格与计费**：`dsh-pet/src/host/pricing-catalog.ts` 分别维护中英文官方价格，内置快照核对于 **2026-09-28**；`dsh-pet/src/host/turn-spend.ts` 按会话与回合累计双币种金额，Flash 旧别名使用现行 Flash 价，Pro 独立计价
-- **启动更新与缓存**：每次加载插件都立即重新请求 DeepSeek 中英文官网价格及北京时间当年、次年的节假日数据，不因已有缓存跳过更新；运行期间每 **6 小时**再次更新。`dsh-pet/src/host/holidays.ts` 使用 [holiday-cn](https://github.com/NateScarlet/holiday-cn) 整理的国务院公告日历（第三方数据源，保留公告来源链接），自动处理跨年；`dsh-pet/src/host/startup-data.ts` 将校验通过的结果保存到 `$DSH_HOME/dsh-pet/cache/pricing.json`、`holidays.json`。网络失败保留最近有效缓存，首次离线可用内置价格与 2026 年日历；未取得其他年份的日历时，不猜测工作日高峰费用
+- **启动更新与缓存**：每次加载插件都立即重新请求 DeepSeek 中英文官网价格及北京时间当年、次年的节假日数据，不因已有缓存跳过更新；运行期间每 **6 小时**再次更新。`dsh-pet/src/host/holidays.ts` 使用 [holiday-cn](https://github.com/NateScarlet/holiday-cn) 整理的公告日历（第三方数据源，保留公告来源链接），自动处理跨年；`dsh-pet/src/host/startup-data.ts` 将校验通过的结果保存到 `$DSH_HOME/dsh-pet/cache/pricing.json`、`holidays.json`。网络失败保留最近有效缓存，首次离线可用内置价格与 2026 年日历；未取得其他年份的日历时，不猜测工作日高峰费用
 - **侧面避让**：费用气泡优先显示在桌宠右侧，右侧空间不足时自动切换到左侧，避开头顶的任务完成提示；显示期间跟随位置更新，桌面模式按宠物所在显示器工作区和窗口的交集判断边缘，保留余额气泡的背景、颜色和字体
-- **统一状态接入**：两端沿用新版每秒一次的 `/state` 轮询：网页传 `sessionId`，桌面传 `desktop=1`，从 `sections.turnSpend.data` 接收当前会话的估算结果；不新增每只宠物的费用轮询。普通不带参数的 `/state` 保持原有结构；独立模式没有 DSH 会话事件时不显示费用气泡
-- **两端展示**：`dsh-pet/src/shared/turn-spend.ts` 共用气泡样式与统一状态订阅；币种保存后下次轮询更新尚未消失的金额，不重放旧气泡、不延长显示时长
-- **诊断与安装**：`/dsh-pet-7340/turn-spend/debug` 返回当前币种、价格来源，以及价格/节假日的最后尝试时间、成功更新时间、失败原因和今日节假日判定，不返回会话 ID 或聊天内容。首次启动刷新完成前到达的事件延后结算；源码修改后执行 `npm run build`，重新安装本地插件并重启 DSH
 
 ## ⚙️ 碎碎念与对话
 
@@ -257,26 +255,54 @@ $DSH_HOME/dsh-pet/
   "notificationsEnabled": true,
   "pets": [
     {
-      "id": "pig1",              // 实例 id（可多只；不必等于文件名前缀）
+      "id": "pig1", // 实例 id（可多只；不必等于文件名前缀）
       "size": 420,
       "balanceEnabled": true,
-      "display": "both",        // web / desktop / both / none
-      "position": { "corner": "top-right", "marginX": 24, "marginY": 100 }
+      "display": "both", // web / desktop / both / none
+      "position": { "corner": "top-right", "marginX": 24, "marginY": 100 },
     },
-    { "id": "pig2", "size": 360, "balanceEnabled": false, "display": "web", "position": { "corner": "top-left", "marginX": 24, "marginY": 100 } }
+    {
+      "id": "pig2",
+      "size": 360,
+      "balanceEnabled": false,
+      "display": "web",
+      "position": { "corner": "top-left", "marginX": 24, "marginY": 100 },
+    },
   ],
   "animations": {
-    "idle": ["待机"], "turn": [], "drag": [], "clicks": ["打滚"],
-    "moves": { "default": { "minDist": 80, "maxDist": 360, "margin": 20, "leadSec": 2, "tailSec": 2 }, "actions": [] },
+    "idle": ["待机"],
+    "turn": [],
+    "drag": [],
+    "clicks": ["打滚"],
+    "moves": {
+      "default": {
+        "minDist": 80,
+        "maxDist": 360,
+        "margin": 20,
+        "leadSec": 2,
+        "tailSec": 2,
+      },
+      "actions": [],
+    },
     "categories": [],
-    "events": { "balance": ["余额-钱袋满溢", "余额-金袋叮当", "余额-钱袋如常", "余额-数金皱眉", "余额-袋空如洗", "余额-分文不剩"] }
+    "events": {
+      "balance": [
+        "余额-钱袋满溢",
+        "余额-金袋叮当",
+        "余额-钱袋如常",
+        "余额-数金皱眉",
+        "余额-袋空如洗",
+        "余额-分文不剩",
+      ],
+    },
   },
   "animationWeights": { "idle": 80, "turn": 0, "move": 0 },
-  "eventsRefreshSec": { "balance": 1800 }
+  "eventsRefreshSec": { "balance": 1800 },
 }
 ```
 
 规则（与主宠物**严格隔离**，绝不混用）：
+
 - **素材只查自己的**：素材目录名 = 文件名前缀（`pet/pig-config.json` → `pet/pig-animation/`），该种类所有实例共用；动画 URL `/thumb/<前缀>/<名>.webm`，查不到即 404——绝不落到 `main-animation` 或包内素材
 - **动画池不回落全局**：`animations` / `animationWeights` 必须写全（缺失即配置错误）
 - 与主配置同构的约束：`pets` 每只字段完整合法、数组内 id 唯一、`animations` / `animationWeights` 结构校验同一套规则；`notificationsEnabled` / `eventsRefreshSec` 是全局属性，不归宠物文件管（写了忽略、不写不报错）

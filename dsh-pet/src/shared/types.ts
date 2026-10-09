@@ -93,6 +93,10 @@ export interface Pet {
   size: number;
   /** 是否启用余额功能：true=触发余额动画+显示余额气泡；false=该宠物完全禁用余额。缺失即配置错误 */
   balanceEnabled: boolean;
+  /** 本宠物的费用提示独立开关，与余额无关。 */
+  spendEnabled?: boolean;
+  /** 按对应官网单价估算，不做汇率换算。 */
+  spendCurrency?: 'CNY' | 'USD';
   /** 是否启用碎碎念：true=按 eventsRefreshSec.whisper 周期生成一句话并播碎碎念动画；false=禁用。
    *  缺失默认 true（内置默认开启：碎碎念每次生成会调用当前对话的模型，本地 LLM 单并发时
    *  会顶掉正在跑的任务的 KV cache，见 config.jsonc 注释——不需要的宠物请显式写 false） */

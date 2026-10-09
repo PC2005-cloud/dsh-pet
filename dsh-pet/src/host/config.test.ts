@@ -74,6 +74,63 @@ const BASE = {
   workStatusTexts: [['在干活']],
 };
 
+test('每只宠物独立保存开关与币种，旧调用保留设置并拒绝非法实例值', () => {
+  const pets = [
+    { ...BASE.pets[0], spendEnabled: true, spendCurrency: 'CNY' },
+    { ...BASE.pets[0], id: 'second', spendEnabled: false, spendCurrency: 'USD' },
+  ];
+  const saved = saveUserConfig({ pets });
+  assert.deepEqual(
+    (saved?.pets as typeof pets).map((p) => [p.spendEnabled, p.spendCurrency]),
+    [
+      [true, 'CNY'],
+      [false, 'USD'],
+    ],
+  );
+  const oldRequest = [BASE.pets[0], { ...BASE.pets[0], id: 'second' }];
+  assert.deepEqual(saveUserConfig({ pets: oldRequest }, saved!)?.pets, saved?.pets);
+  for (const value of [null, 'false', 0])
+    assert.equal(saveUserConfig({ pets: [{ ...pets[0], spendEnabled: value }] }), null);
+  for (const value of [null, 'EUR', false])
+    assert.equal(saveUserConfig({ pets: [{ ...pets[0], spendCurrency: value }] }), null);
+});
+
+test('旧全局设置作为缺失实例字段的兼容默认，实例设置优先且不依赖余额', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'dsh-pet-spend-instances-'));
+  try {
+    const paths = {
+      defaultFile: join(dir, 'default.jsonc'),
+      userFile: join(dir, 'user.jsonc'),
+      petDir: join(dir, 'pet'),
+    };
+    writeFileSync(paths.defaultFile, JSON.stringify(BASE));
+    writeFileSync(
+      paths.userFile,
+      JSON.stringify({
+        spendEnabled: false,
+        spendCurrency: 'USD',
+        pets: [BASE.pets[0], { ...BASE.pets[0], id: 'second', spendEnabled: true, spendCurrency: 'CNY' }],
+      }),
+    );
+    const pets = readAllConfig(paths).main.pets as Array<Record<string, unknown>>;
+    assert.deepEqual(
+      pets.map((p) => [p.spendEnabled, p.spendCurrency]),
+      [
+        [false, 'USD'],
+        [true, 'CNY'],
+      ],
+    );
+    assert.equal(pets[1].balanceEnabled, false);
+    mkdirSync(paths.petDir);
+    writeFileSync(join(paths.petDir, 'pack-config.json'), JSON.stringify({ pets: [{ ...BASE.pets[0], id: 'pack' }] }));
+    const pack = (readAllConfig(paths).pack.pets as Array<Record<string, unknown>>)[0];
+    assert.equal(pack.spendEnabled, false, '旧总开关兼容文件宠物');
+    assert.equal(pack.spendCurrency, 'USD');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('消耗开关保存、旧请求保留、旧配置默认及非法值回退', () => {
   const saved = saveUserConfig({ pets: BASE.pets, spendEnabled: false, spendCurrency: 'USD' });
   assert.equal(saved?.spendEnabled, false);

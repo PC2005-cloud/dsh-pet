@@ -89,6 +89,10 @@ paths:
       summary: 按会话查询本轮对话消耗估算
       description: 仅支持 DeepSeek 官方 API。首次启动可能等待价格与日历刷新；展示端复用 /state，直接查询用于集成与诊断。
       parameters:
+        - name: petId
+          in: query
+          description: 按宠物实例读取开关与币种；未知 id 返回 404，省略时保留旧查询兼容。
+          schema: { type: string }
         - name: sessionId
           in: query
           schema: { type: string }
@@ -957,7 +961,15 @@ components:
             失败原因分类。`bad-request` 参数不合法（空文本/超长）、`provider-missing` 没有可用
             的对话服务商、`generate-error` 生成或 IO 失败、`unknown-pet` 指定的桌宠不存在、
             `unknown-image` 配图不在包内表情包池内。
-          enum: [bad-request, provider-missing, generate-error, unknown-pet, unknown-image, unknown-animation]
+          enum:
+            [
+              bad-request,
+              provider-missing,
+              generate-error,
+              unknown-pet,
+              unknown-image,
+              unknown-animation,
+            ]
         message:
           type: string
           description: 人类可读的补充说明（可选）
@@ -1046,6 +1058,11 @@ components:
       type: object
       required: [scope, spend]
       properties:
+        pets:
+          type: object
+          description: 按宠物 id 索引的独立费用结果；根字段仅兼容旧查询。
+          additionalProperties:
+            $ref: "#/components/schemas/TurnSpendPayload"
         enabled: { type: boolean, default: true }
         scope: { type: string }
         spend:
@@ -1459,6 +1476,15 @@ components:
           description: 宠物尺寸（像素）
         balanceEnabled:
           type: boolean
+        spendEnabled:
+          type: boolean
+          default: true
+          description: 此宠物独立费用提示开关，不依赖余额功能。
+        spendCurrency:
+          type: string
+          enum: [CNY, USD]
+          default: CNY
+          description: 此宠物对应官网单价的估算币种。
         whisperEnabled:
           type: boolean
           description: 是否开启周期碎碎念（**不门控** `POST /whisper`）
@@ -1489,12 +1515,14 @@ components:
         spendEnabled:
           type: boolean
           default: true
-          description: 本轮消耗估算总开关，目前仅支持 DeepSeek 官方 API。
+          deprecated: true
+          description: 旧字段；仅作为缺失宠物实例字段的兼容默认，不是总开关。
         spendCurrency:
           type: string
           enum: [CNY, USD]
           default: CNY
-          description: 分别按官方人民币或美元单价估算，不做汇率换算。
+          deprecated: true
+          description: 旧字段；仅作为缺失 pets[].spendCurrency 的兼容默认。
         notificationsEnabled:
           type: boolean
         whisperImageEnabled:
@@ -1536,6 +1564,15 @@ components:
           type: number
         balanceEnabled:
           type: boolean
+        spendEnabled:
+          type: boolean
+          default: true
+          description: 此宠物独立费用提示开关，不依赖余额功能。
+        spendCurrency:
+          type: string
+          enum: [CNY, USD]
+          default: CNY
+          description: 此宠物对应官网单价的估算币种。
         whisperEnabled:
           type: boolean
         workStatusEnabled:

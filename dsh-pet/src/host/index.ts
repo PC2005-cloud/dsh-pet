@@ -824,15 +824,32 @@ export function apply(ctx: any): void {
   const spendSnapshot = (params: URLSearchParams) => {
     let enabled = true;
     let currency: 'CNY' | 'USD' = 'CNY';
+    let configuredPets: Record<string, unknown>[] = [];
     try {
-      const config = readAllConfig(configPaths).main;
+      const merged = readAllConfig(configPaths);
+      const config = merged.main;
+      configuredPets = flattenPetList(merged);
       enabled = config.spendEnabled !== false;
       currency = config.spendCurrency === 'USD' ? 'USD' : 'CNY';
     } catch {
       /* 使用内置兼容默认值 */
     }
     const id = params.get('sessionId') ?? (params.get('desktop') === '1' ? turnSpend.latestSession() : '');
-    return { enabled, scope: enabled ? id : '', spend: enabled && id ? turnSpend.get(id, currency) : null };
+    const pets = Object.fromEntries(
+      configuredPets.map((pet) => {
+        const petEnabled = pet.spendEnabled !== false;
+        const petCurrency = pet.spendCurrency === 'USD' ? 'USD' : 'CNY';
+        return [
+          pet.id,
+          {
+            enabled: petEnabled,
+            scope: petEnabled ? id : '',
+            spend: petEnabled && id ? turnSpend.get(id, petCurrency) : null,
+          },
+        ];
+      }),
+    );
+    return { enabled, scope: enabled ? id : '', spend: enabled && id ? turnSpend.get(id, currency) : null, pets };
   };
   const spendLeaf = (params: URLSearchParams) => {
     const data = spendSnapshot(params);
@@ -882,6 +899,16 @@ export function apply(ctx: any): void {
           },
           headers: { 'cache-control': 'no-store' },
         };
+      if (url.searchParams.has('petId')) {
+        await startupReady;
+        const data = spendSnapshot(url.searchParams).pets[url.searchParams.get('petId')!];
+        return {
+          kind: 'json',
+          status: data ? 200 : 404,
+          obj: data ?? { error: 'pet not found' },
+          headers: { 'cache-control': 'no-store' },
+        };
+      }
       if (!enabled)
         return {
           kind: 'json',

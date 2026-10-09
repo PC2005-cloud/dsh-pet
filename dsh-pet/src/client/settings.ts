@@ -210,9 +210,9 @@ export const zh = {
   nameLabel: '名字',
   nameHint: '显示名：鼠标悬浮宠物时弹出，也会加进 AI 人设（你的名字是 X）。可重复，留空按宠物 id 处理。',
   balanceEnabled: '余额功能',
-  spendEnabled: '本轮消耗（估算）（目前仅支持 DeepSeek 官方 API）',
+  spendEnabled: '本轮消耗（估算）',
   spendEnabledHint:
-    '保存后网页与桌面同步生效；关闭时收起消耗气泡，重新开启不会补播旧提示。提示由第一只启用余额的可见宠物显示。',
+    '启用后每轮对话将会弹出本轮对话费用消耗估计的气泡框。（目前仅支持 DeepSeek 官方 API）仅控制当前宠物，独立于余额功能。',
   spendCurrency: '本轮消耗（估算）币种',
   spendCurrencyHint: 'CNY 按官网人民币单价、USD 按官网美元单价估算。保存后网页与桌面同步生效，账户余额保持原币种。',
   balanceEnabledHint: '启用后该宠物触发余额动画并显示余额气泡。',
@@ -368,7 +368,7 @@ export const en = {
   balanceEnabled: 'Balance',
   spendEnabled: 'Estimated turn cost (currently supports the official DeepSeek API only)',
   spendEnabledHint:
-    'Save to apply on web and desktop. Disabling hides the bubble; enabling does not replay old results. Shown by the first visible pet with Balance enabled.',
+    'Controls this pet independently of balance. Save to apply on web and desktop; enabling does not replay old results.',
   spendCurrency: 'Estimated turn cost currency',
   spendCurrencyHint:
     'CNY uses official yuan prices; USD uses official dollar prices. Save to apply to web and desktop. Account balance keeps its original currency.',
@@ -942,8 +942,6 @@ export function makePetConfigSection(rt: {
     // 拖拽落点清空、宠物跳回配置角落），于是"改个通知开关，桌面被重置"，与其它开关行为不一致。
     // 引擎重读放在 save() 成功之后（reloadNotifications）：保存后即时生效，无需刷新页面。
     const [notifyEnabled, setNotifyEnabled] = useState(true);
-    const [spendEnabled, setSpendEnabled] = useState(true);
-    const [spendCurrency, setSpendCurrency] = useState<'CNY' | 'USD'>('CNY');
     // 表情包配图开关（全局：写用户级配置；与「保存」一起提交，不做即时写入）
     const [whisperImage, setWhisperImage] = useState(false);
     const [chatImage, setChatImage] = useState(false);
@@ -979,8 +977,6 @@ export function makePetConfigSection(rt: {
         .then((d) => {
           if (!alive || !d || !d.main) return;
           const m = d.main as Record<string, unknown>;
-          setSpendEnabled(m.spendEnabled !== false);
-          setSpendCurrency(m.spendCurrency === 'USD' ? 'USD' : 'CNY');
           if (typeof m.notificationsEnabled === 'boolean') setNotifyEnabled(m.notificationsEnabled);
           if (typeof m.whisperImageEnabled === 'boolean') setWhisperImage(m.whisperImageEnabled);
           if (typeof m.chatImageEnabled === 'boolean') setChatImage(m.chatImageEnabled);
@@ -1143,8 +1139,6 @@ export function makePetConfigSection(rt: {
         const body: Record<string, unknown> = {
           pets: pets,
           notificationsEnabled: notifyEnabled,
-          spendEnabled,
-          spendCurrency,
           whisperImageEnabled: whisperImage,
           chatImageEnabled: chatImage,
           confineToScreen: confineScreen,
@@ -1201,8 +1195,6 @@ export function makePetConfigSection(rt: {
         if (!res.ok) throw new Error('HTTP ' + res.status);
         const merged = (await res.json()) as Record<string, Record<string, unknown>>;
         const defs = (merged.main?.pets ?? []) as Pet[];
-        setSpendEnabled(merged.main?.spendEnabled !== false);
-        setSpendCurrency(merged.main?.spendCurrency === 'USD' ? 'USD' : 'CNY');
         setPets(defs.map((p) => ({ ...p, position: { ...p.position } })));
         setSelId(defs[0]?.id ?? '');
         // 同一份成品交给容器拍平：编辑列表（裸实例）与渲染列表（含条目级字段）都由成品派生
@@ -1227,6 +1219,8 @@ export function makePetConfigSection(rt: {
           name: id,
           size: tpl.size,
           balanceEnabled: tpl.balanceEnabled,
+          spendEnabled: tpl.spendEnabled ?? true,
+          spendCurrency: tpl.spendCurrency ?? 'CNY',
           whisperEnabled: tpl.whisperEnabled,
           workStatusEnabled: tpl.workStatusEnabled,
           fixedEnabled: tpl.fixedEnabled,
@@ -1333,28 +1327,6 @@ export function makePetConfigSection(rt: {
           ],
         }),
 
-        h('div', {
-          className: 'dsh-pet-cfg__grid2',
-          children: [
-            toggleCell('spendEnabled', spendEnabled, busy, setSpendEnabled),
-            field(
-              t('spendCurrency'),
-              h('select', {
-                className: inputClass,
-                value: spendCurrency,
-                disabled: busy || !spendEnabled,
-                onChange: (e: ChangeEvent<HTMLSelectElement>) =>
-                  setSpendCurrency(e.target.value === 'USD' ? 'USD' : 'CNY'),
-                children: [
-                  h('option', { value: 'CNY', children: 'CNY — 人民币' }),
-                  h('option', { value: 'USD', children: 'USD — US Dollar' }),
-                ],
-              }),
-              t('spendCurrencyHint'),
-              true,
-            ),
-          ],
-        }),
         // 宠物列表 + 添加
         h('div', {
           className: 'dsh-pet-cfg__tabs',
@@ -1488,6 +1460,28 @@ export function makePetConfigSection(rt: {
                       updateSel({ workStatusEnabled: v }),
                     ),
                     toggleCell('fixedEnabled', !!cur.fixedEnabled, busy, (v) => updateSel({ fixedEnabled: v }), true),
+                  ],
+                }),
+                h('div', {
+                  className: 'dsh-pet-cfg__grid2',
+                  children: [
+                    toggleCell('spendEnabled', cur.spendEnabled !== false, busy, (v) => updateSel({ spendEnabled: v })),
+                    field(
+                      t('spendCurrency'),
+                      h('select', {
+                        className: inputClass,
+                        value: cur.spendCurrency ?? 'CNY',
+                        disabled: busy || cur.spendEnabled === false,
+                        onChange: (e: ChangeEvent<HTMLSelectElement>) =>
+                          updateSel({ spendCurrency: e.target.value === 'USD' ? 'USD' : 'CNY' }),
+                        children: [
+                          h('option', { value: 'CNY', children: 'CNY — 人民币' }),
+                          h('option', { value: 'USD', children: 'USD — US Dollar' }),
+                        ],
+                      }),
+                      t('spendCurrencyHint'),
+                      true,
+                    ),
                   ],
                 }),
               ],

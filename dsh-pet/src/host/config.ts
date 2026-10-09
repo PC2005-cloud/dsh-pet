@@ -398,7 +398,16 @@ function mergeEntry(
   const out: Record<string, unknown> = {};
   for (const key of Object.keys(base)) {
     if (key === 'pets') {
-      out.pets = mergePets(basePets, overlay?.[key], label, seenIds);
+      // 旧顶层字段仅为没有实例字段的宠物提供迁移默认；显式实例设置优先。
+      const migratedPets = basePets.map((pet) => ({
+        ...pet,
+        spendEnabled: typeof overlay?.spendEnabled === 'boolean' ? overlay.spendEnabled : (pet.spendEnabled ?? true),
+        spendCurrency:
+          overlay?.spendCurrency === 'USD' || overlay?.spendCurrency === 'CNY'
+            ? overlay.spendCurrency
+            : (pet.spendCurrency ?? 'CNY'),
+      }));
+      out.pets = mergePets(migratedPets, overlay?.[key], label, seenIds);
       continue;
     }
     const own = overlay ? overlay[key] : undefined;
@@ -506,6 +515,15 @@ function mergePet(
     name,
     size: petNumber(p.size, base.size, 1, label, 'size', id),
     balanceEnabled: petBool(p.balanceEnabled, base.balanceEnabled, label, 'balanceEnabled', id),
+    spendEnabled: petBool(p.spendEnabled, base.spendEnabled ?? true, label, 'spendEnabled', id),
+    spendCurrency: petEnum(
+      p.spendCurrency,
+      new Set(['CNY', 'USD']),
+      base.spendCurrency ?? 'CNY',
+      label,
+      'spendCurrency',
+      id,
+    ),
     whisperEnabled: petBool(p.whisperEnabled, base.whisperEnabled, label, 'whisperEnabled', id),
     workStatusEnabled: petBool(p.workStatusEnabled, base.workStatusEnabled, label, 'workStatusEnabled', id),
     fixedEnabled: petBool(p.fixedEnabled, base.fixedEnabled, label, 'fixedEnabled', id),
@@ -547,7 +565,12 @@ export function readAllConfig(paths: ConfigPaths): Record<string, Record<string,
       warnOnce('file:' + file.path, '文件宠物配置解析失败，已跳过：' + file.path);
       continue;
     }
-    out[file.prefix] = mergeEntry(filePetBase, parsed, file.prefix + '-config.json', basePets, seenIds);
+    const legacySpendOverlay = {
+      ...parsed,
+      spendEnabled: parsed.spendEnabled ?? mainOverlay?.spendEnabled,
+      spendCurrency: parsed.spendCurrency ?? mainOverlay?.spendCurrency,
+    };
+    out[file.prefix] = mergeEntry(filePetBase, legacySpendOverlay, file.prefix + '-config.json', basePets, seenIds);
   }
   return out;
 }
@@ -609,6 +632,15 @@ export function saveUserConfig(
     }
     const balanceEnabled = pp.balanceEnabled;
     if (typeof balanceEnabled !== 'boolean') return null;
+    const previousPet = Array.isArray(existing?.pets)
+      ? (existing.pets as Record<string, unknown>[]).find((pet) => pet.id === id)
+      : undefined;
+    const petSpendEnabled = pp.spendEnabled ?? previousPet?.spendEnabled;
+    if ('spendEnabled' in pp && typeof pp.spendEnabled !== 'boolean') return null;
+    if (petSpendEnabled !== undefined && typeof petSpendEnabled !== 'boolean') return null;
+    const petSpendCurrency = pp.spendCurrency ?? previousPet?.spendCurrency;
+    if ('spendCurrency' in pp && pp.spendCurrency !== 'CNY' && pp.spendCurrency !== 'USD') return null;
+    if (petSpendCurrency !== undefined && petSpendCurrency !== 'CNY' && petSpendCurrency !== 'USD') return null;
     const whisperEnabled = pp.whisperEnabled;
     if (whisperEnabled !== undefined && typeof whisperEnabled !== 'boolean') return null;
     const workStatusEnabled = pp.workStatusEnabled;
@@ -630,6 +662,8 @@ export function saveUserConfig(
       name,
       size,
       balanceEnabled,
+      ...(petSpendEnabled !== undefined ? { spendEnabled: petSpendEnabled } : {}),
+      ...(petSpendCurrency !== undefined ? { spendCurrency: petSpendCurrency } : {}),
       whisperEnabled,
       workStatusEnabled,
       fixedEnabled,

@@ -79,7 +79,7 @@ async function boot() {
     }
     for (const s of sprites) s.dispose();
     sprites = [new PetSprite(pet)];
-    if (pet.id === pets.find((p) => p.balanceEnabled)?.id) {
+    if (pet.spendEnabled !== false) {
       sprites[0].stopSpendBubble = S.startSpendBubble(
         sprites[0].el,
         '',

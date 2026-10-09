@@ -262,7 +262,7 @@ async function pollStateOnce() {
   try {
     const s = await S.fetchState(STATE_URL + '?desktop=1');
     if (!s) return;
-    for (const sprite of sprites) sprite.updateSpendBubble?.(s.sections.turnSpend?.data);
+    for (const sprite of sprites) sprite.updateSpendBubble?.(s.sections.turnSpend?.data?.pets?.[sprite.pet.id]);
     if (stateBaseline === null) {
       stateBaseline = S.flattenCounters(s); // 首拉：只记基线，不渲染（避免启动/重载时重放旧气泡）
       return;
