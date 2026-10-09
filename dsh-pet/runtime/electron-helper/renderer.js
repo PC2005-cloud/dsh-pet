@@ -85,6 +85,7 @@ async function boot() {
         BASE + '/turn-spend?desktop=1',
         pet.size,
         'pet-bubble',
+        () => sprites[0].visibleClampRect(),
       );
     }
     window.__dshPetDebug.configOk = true;
