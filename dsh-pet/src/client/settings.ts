@@ -89,7 +89,7 @@ const SETTINGS_CSS = [
   // 类名统一 dsh-pet-cfg__ 前缀，不会撞 DSH 自己的类名。
 
   // 页面根容器与标题
-  '.dsh-pet-cfg{display:flex;flex-direction:column;gap:12px;color:var(--dsw-alias-label-primary);font-size:13px;line-height:20px}',
+  '.dsh-pet-cfg{container-type:inline-size;display:flex;flex-direction:column;gap:12px;color:var(--dsw-alias-label-primary);font-size:13px;line-height:20px}',
   '.dsh-pet-cfg__title{display:flex;align-items:center;gap:6px;margin:0;font-size:16px;font-weight:500;line-height:24px}',
 
   // 卡片：宠物配置 / 全局开关 / AI 模型 / 物理 / 高级配置 / 卸载与存储 统一用这一个框
@@ -101,6 +101,9 @@ const SETTINGS_CSS = [
   '.dsh-pet-cfg__grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px 16px;align-items:end}',
   '.dsh-pet-cfg__grid4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px 16px;align-items:end}',
   '.dsh-pet-cfg__grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 16px;align-items:end}',
+
+  '@container (max-width:600px){.dsh-pet-cfg__grid4{grid-template-columns:repeat(2,minmax(0,1fr))}}',
+  '@container (max-width:400px){.dsh-pet-cfg__grid2,.dsh-pet-cfg__grid3,.dsh-pet-cfg__grid4{grid-template-columns:minmax(0,1fr)}}',
 
   // 字段：标签（+ 问号）在上、控件在下
   '.dsh-pet-cfg__field{display:flex;flex-direction:column;gap:4px;min-width:0}',
@@ -114,7 +117,7 @@ const SETTINGS_CSS = [
   // 开关（勾选框 + 标题 + 问号）
   '.dsh-pet-cfg__toggle{display:flex;align-items:center;gap:6px;min-width:0;font-size:13px;color:var(--dsw-alias-label-primary)}',
   '.dsh-pet-cfg__toggle>label{display:inline-flex;align-items:center;gap:6px;cursor:pointer;min-width:0}',
-  '.dsh-pet-cfg__toggle>label>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+  '.dsh-pet-cfg__toggle>label>span{overflow-wrap:anywhere}',
   '.dsh-pet-cfg__toggle input[type=checkbox]{flex:none;width:16px;height:16px;margin:0;accent-color:var(--dsw-alias-state-business-primary);cursor:pointer}',
 
   // 问号 + 悬浮说明：解释小字全部收进这里（data-tip → ::after）
@@ -123,8 +126,8 @@ const SETTINGS_CSS = [
   // 为什么不能居中：问号常常贴着卡片左缘（卡片头、栅格第一列、页标题），居中会让气泡
   // 往左伸出一大截，被设置页的滚动容器（overflow 会连带裁掉横向）切掉——看起来就是
   // 「气泡左边被左边框遮住」。左对齐则一律向右展开，左侧永不出界。
-  '.dsh-pet-cfg__q::after{content:attr(data-tip);position:absolute;left:-4px;bottom:calc(100% + 8px);width:max-content;max-width:260px;padding:6px 10px;border-radius:8px;background:var(--dsw-alias-tooltip-bg);color:#fff;font-size:12px;font-style:normal;font-weight:400;line-height:18px;text-align:left;white-space:normal;opacity:0;visibility:hidden;pointer-events:none;transition:opacity .12s ease;box-shadow:0 6px 20px rgba(0,0,0,.22);z-index:2147483000}',
-  '.dsh-pet-cfg__q:hover::after{opacity:1;visibility:visible}',
+  '.dsh-pet-cfg__q::after{display:none;content:attr(data-tip);position:absolute;left:-4px;bottom:calc(100% + 8px);width:max-content;max-width:260px;padding:6px 10px;border-radius:8px;background:var(--dsw-alias-tooltip-bg);color:#fff;font-size:12px;font-style:normal;font-weight:400;line-height:18px;text-align:left;white-space:normal;opacity:0;visibility:hidden;pointer-events:none;transition:opacity .12s ease;box-shadow:0 6px 20px rgba(0,0,0,.22);z-index:2147483000}',
+  '.dsh-pet-cfg__q:hover::after{display:block;opacity:1;visibility:visible}',
   // 最右一列：改为右对齐，避免气泡顶出设置页右缘
   '.dsh-pet-cfg__q.is-end::after{left:auto;right:-4px}',
 
@@ -250,6 +253,8 @@ export const zh = {
   memesDir: '表情包目录（可自定义/扩充配图）',
   saved: '已保存，桌宠即时生效。',
   loadError: '加载配置失败',
+  loading: '正在加载配置…',
+  retry: '重试',
   invalid: '请检查输入：大小需为正数，边距可为任意数字。',
   busy: '保存中…',
   extraPetsHint:
@@ -403,6 +408,8 @@ export const en = {
   memesDir: 'Meme images dir (add/customize images here)',
   saved: 'Saved — the pets updated instantly.',
   loadError: 'Failed to load config',
+  loading: 'Loading config…',
+  retry: 'Retry',
   invalid: 'Check your input: size must be positive; margins can be any number.',
   busy: 'Saving…',
   extraPetsHint:
@@ -519,9 +526,10 @@ export function makePetConfigSection(rt: {
   // 用 React 命名空间类型而非 typeof：type-only import 的 hook 无法进入声明导出（TS4078）
   useEffect: (effect: ReactNS.EffectCallback, deps?: ReactNS.DependencyList) => void;
   useRef: <T>(initial: T) => ReactNS.MutableRefObject<T>;
+  useCallback: typeof ReactNS.useCallback;
   t: (key: string) => string;
 }): FunctionComponent<{ close?: () => void }> {
-  const { h, useState, useEffect, useRef, t } = rt;
+  const { h, useState, useEffect, useRef, useCallback, t } = rt;
 
   // 设置页样式（只有模型选择器用得上：hover/焦点环/箭头旋转这些伪类行内样式表达不了）
   injectSettingsCss();
@@ -894,7 +902,10 @@ export function makePetConfigSection(rt: {
     const extraCount = petBridge.current.filter((p) => p.extra).length;
     const [pets, setPets] = useState<Pet[]>(initPets.map((p) => ({ ...p, position: { ...p.position } })));
     const [selId, setSelId] = useState<string>(initPets[0]?.id ?? '');
-    const [busy, setBusy] = useState(false);
+    const [saving, setBusy] = useState(false);
+    const [loadState, setLoadState] = useState<'loading' | 'ready' | 'error'>('loading');
+    const [loadAttempt, setLoadAttempt] = useState(0);
+    const busy = saving || loadState !== 'ready';
     const [msg, setMsg] = useState<{ kind: 'ok' | 'err' | ''; text: string }>({ kind: '', text: '' });
     // 确认/提示弹窗（仿官方弹窗：遮罩 + 居中卡片 + 按钮）：
     //   remove  —— 删除宠物（双按钮：取消 / 删除）
@@ -938,7 +949,7 @@ export function makePetConfigSection(rt: {
     const [confineScreen, setConfineScreen] = useState(false);
     // 物理参数（全局：拖拽抛掷手感，写用户级配置 main-config.jsonc 的 physics 段）。
     // 与四个开关同一套语义：只改本地状态，随「保存」整包写入（不做即时写入）。
-    // 初值 = 成品 main.physics（用户层优先、缺省回落内置默认），拉取失败时用内置默认兜底。
+    // 初值仅作占位；成品配置加载成功后才允许编辑和保存。
     const [physics, setPhysics] = useState<PhysicsParams>({ ...DEFAULT_PHYSICS });
     // AI 模型（条目级：碎碎念 / 对话各自的服务商 + 模型，两者都留空 = 跟随当前对话的模型）。
     // 与四个全局开关同一套语义：只改本地状态，随「保存」整包写入（不做即时写入）。
@@ -958,45 +969,59 @@ export function makePetConfigSection(rt: {
     const [catalogErr, setCatalogErr] = useState(false);
     // 权限申请按钮的反馈（就地显示在按钮旁，与全局保存反馈分离）
     const [permMsg, setPermMsg] = useState<{ kind: 'ok' | 'err' | ''; text: string }>({ kind: '', text: '' });
+    // 首次读取与恢复默认必须更新同一组控件，避免下一次保存回写过期值。
+    const applyConfig = useCallback((merged: Record<string, Record<string, unknown>>) => {
+      const m = merged.main;
+      if (!m || !Array.isArray(m.pets)) throw new Error('Invalid config response');
+      const loadedPets = m.pets as Pet[];
+      setPets(loadedPets.map((p) => ({ ...p, position: { ...p.position } })));
+      setSelId((id) => (loadedPets.some((p) => p.id === id) ? id : (loadedPets[0]?.id ?? '')));
+      if (typeof m.notificationsEnabled === 'boolean') setNotifyEnabled(m.notificationsEnabled);
+      if (typeof m.whisperImageEnabled === 'boolean') setWhisperImage(m.whisperImageEnabled);
+      if (typeof m.chatImageEnabled === 'boolean') setChatImage(m.chatImageEnabled);
+      if (typeof m.confineToScreen === 'boolean') setConfineScreen(m.confineToScreen);
+      // physics 段：成品已按「内置默认 ← 用户层」整段填满，直接取用（缺子键再用默认兜底一次）
+      if (m.physics && typeof m.physics === 'object') {
+        setPhysics({ ...DEFAULT_PHYSICS, ...(m.physics as PhysicsParams) });
+      }
+      // 模型选择：成品同样已填满（内置默认 = 两者都空 = 跟随当前对话），读得出就原样上屏
+      const wm = m.whisperModel as Partial<ModelSelection> | undefined;
+      if (wm && typeof wm.provider === 'string' && typeof wm.model === 'string') {
+        setWhisperModel({ provider: wm.provider, model: wm.model });
+      }
+      const cm = m.chatModel as Partial<ModelSelection> | undefined;
+      if (cm && typeof cm.provider === 'string' && typeof cm.model === 'string') {
+        setChatModel({ provider: cm.provider, model: cm.model });
+      }
+      // 对话历史条数：成品同样已填满（内置默认 5 ← 用户层），合法就原样上屏
+      const cmr = Number(m.chatMemoryRounds);
+      if (Number.isFinite(cmr) && cmr >= 0) setChatMemory(cmr);
+      // 对话配图张数上限：同上（内置默认 0 = 不限制）
+      const cil = Number(m.chatImageLimit);
+      if (Number.isFinite(cil) && cil >= 0) setChatImageLimit(cil);
+    }, []);
+
     useEffect(() => {
       let alive = true;
-      // 成品聚合的 main 条目已带合并后的全局字段（用户手写值优先）
-      fetch('/dsh-pet-7340/config')
-        .then((r) => (r.ok ? r.json() : null))
-        .then((d) => {
-          if (!alive || !d || !d.main) return;
-          const m = d.main as Record<string, unknown>;
-          if (typeof m.notificationsEnabled === 'boolean') setNotifyEnabled(m.notificationsEnabled);
-          if (typeof m.whisperImageEnabled === 'boolean') setWhisperImage(m.whisperImageEnabled);
-          if (typeof m.chatImageEnabled === 'boolean') setChatImage(m.chatImageEnabled);
-          if (typeof m.confineToScreen === 'boolean') setConfineScreen(m.confineToScreen);
-          // physics 段：成品已按「内置默认 ← 用户层」整段填满，直接取用（缺子键再用默认兜底一次）
-          if (m.physics && typeof m.physics === 'object') {
-            setPhysics({ ...DEFAULT_PHYSICS, ...(m.physics as PhysicsParams) });
-          }
-          // 模型选择：成品同样已填满（内置默认 = 两者都空 = 跟随当前对话），读得出就原样上屏
-          const wm = m.whisperModel as Partial<ModelSelection> | undefined;
-          if (wm && typeof wm.provider === 'string' && typeof wm.model === 'string') {
-            setWhisperModel({ provider: wm.provider, model: wm.model });
-          }
-          const cm = m.chatModel as Partial<ModelSelection> | undefined;
-          if (cm && typeof cm.provider === 'string' && typeof cm.model === 'string') {
-            setChatModel({ provider: cm.provider, model: cm.model });
-          }
-          // 对话历史条数：成品同样已填满（内置默认 5 ← 用户层），合法就原样上屏
-          const cmr = Number(m.chatMemoryRounds);
-          if (Number.isFinite(cmr) && cmr >= 0) setChatMemory(cmr);
-          // 对话配图张数上限：同上（内置默认 0 = 不限制）
-          const cil = Number(m.chatImageLimit);
-          if (Number.isFinite(cil) && cil >= 0) setChatImageLimit(cil);
+      const controller = new AbortController();
+      fetch('/dsh-pet-7340/config', { signal: controller.signal })
+        .then((r) => {
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          return r.json();
+        })
+        .then((merged) => {
+          if (!alive) return;
+          applyConfig(merged);
+          setLoadState('ready');
         })
         .catch(() => {
-          /* 成品拉取失败时保持默认（通知开、配图关） */
+          if (alive) setLoadState('error');
         });
       return () => {
         alive = false;
+        controller.abort();
       };
-    }, []);
+    }, [applyConfig, loadAttempt]);
 
     // 候选模型清单：一次性拉取（下拉框数据源）。失败只提示、不阻塞——已有配置值照常显示与保存。
     useEffect(() => {
@@ -1119,6 +1144,7 @@ export function makePetConfigSection(rt: {
     // 实参传进来 → 真值 → 每次都拼上 ?force=1 → 宿主的损坏预检被绕过 →
     // 静默白名单重建、字段全丢、永不弹窗（真实事故，已由源码守卫钉住）。
     const save = async (force = false) => {
+      if (busy) return;
       const isOk = validated();
       if (!isOk) return;
       setBusy(true);
@@ -1183,11 +1209,10 @@ export function makePetConfigSection(rt: {
         const res = await fetch('/dsh-pet-7340/config', { method: 'POST' });
         if (!res.ok) throw new Error('HTTP ' + res.status);
         const merged = (await res.json()) as Record<string, Record<string, unknown>>;
-        const defs = (merged.main?.pets ?? []) as Pet[];
-        setPets(defs.map((p) => ({ ...p, position: { ...p.position } })));
-        setSelId(defs[0]?.id ?? '');
+        applyConfig(merged);
         // 同一份成品交给容器拍平：编辑列表（裸实例）与渲染列表（含条目级字段）都由成品派生
         petBridge.reload(merged);
+        void reloadNotifications();
         setMsg({ kind: 'ok', text: t('saved') });
       } catch {
         setMsg({ kind: 'err', text: t('loadError') });
@@ -1313,6 +1338,27 @@ export function makePetConfigSection(rt: {
             q(extraCount > 0 ? t('intro') + '\n' + t('extraPetsHint').replace('{n}', String(extraCount)) : t('intro')),
           ],
         }),
+
+        loadState !== 'ready'
+          ? h('div', {
+              role: loadState === 'error' ? 'alert' : 'status',
+              className: 'dsh-pet-cfg__actions',
+              children: [
+                h('span', { children: t(loadState === 'error' ? 'loadError' : 'loading') }),
+                loadState === 'error'
+                  ? h('button', {
+                      type: 'button',
+                      className: 'dsh-pet-cfg__btn',
+                      onClick: () => {
+                        setLoadState('loading');
+                        setLoadAttempt((attempt) => attempt + 1);
+                      },
+                      children: t('retry'),
+                    })
+                  : null,
+              ],
+            })
+          : null,
 
         // 宠物列表 + 添加
         h('div', {

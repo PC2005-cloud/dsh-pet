@@ -19,7 +19,7 @@ export function makeFactory(): (require: (mod: string) => any) => any {
     const module = { exports: {} };
 
     const react: typeof ReactNS = require('react');
-    const { useEffect, useRef, useState } = react;
+    const { useEffect, useRef, useState, useCallback } = react;
     const { jsx: h } = require('react/jsx-runtime');
 
     // 平台种子模块（DSH web 前端壳提供，与 react / cordis 并列）：取不到就退化成
@@ -149,7 +149,7 @@ export function makeFactory(): (require: (mod: string) => any) => any {
 
       // 设置页：「桌宠配置」（大小/位置/模型，保存即时生效）。
       // useRef 用于「AI 模型」单下拉选择器（浮层定位与外部点击判定），与宠物页面同一份注入。
-      const PetConfigSection = makePetConfigSection({ h, useState, useEffect, useRef, t });
+      const PetConfigSection = makePetConfigSection({ h, useState, useEffect, useRef, useCallback, t });
       ctx.slots.inject('settings.section', function* () {
         yield ctx.slots.register(
           { name: 'settings.section', id: 'pet-config', order: 30, label: () => t('nav'), inject: () => ({ t }) },
