@@ -208,3 +208,22 @@ for (const lang of ['en', 'zh']) {
     });
   }
 }
+
+test('model picker remains anchored while the responsive settings panel is scrolled', async (t) => {
+  const { page, writes } = await open(t, { viewport: { width: 900, height: 700 } });
+  const trigger = page.locator('.dsh-pet-mp__trigger').first();
+  await trigger.click();
+  const panel = page.getByRole('menu');
+  await panel.waitFor();
+  for (const scrollY of [0, 120]) {
+    await page.evaluate((y) => window.scrollTo(0, y), scrollY);
+    await page.waitForFunction(() => {
+      const trigger = document.querySelector('.dsh-pet-mp__trigger').getBoundingClientRect();
+      const panel = document.querySelector('.dsh-pet-mp__panel').getBoundingClientRect();
+      return Math.abs(panel.left - trigger.left) < 2 && panel.top >= 0 && panel.bottom <= innerHeight;
+    });
+  }
+  await page.getByRole('menuitemradio', { name: 'Follow current conversation' }).click();
+  await save(page);
+  assert.deepEqual(writes[0].whisperModel, { provider: '', model: '' });
+});
