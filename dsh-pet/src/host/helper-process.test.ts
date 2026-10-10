@@ -22,6 +22,7 @@ import {
   HelperProcess,
   dshHomeDir,
   defaultElectronExe,
+  ensureElectronDownload,
   hasGraphicalDisplay,
   helperRunIsStable,
   helperSpawnEnv,
@@ -29,6 +30,25 @@ import {
   resolveElectronPath,
   shouldCircuitBreak,
 } from './helper-process.ts';
+
+test('Electron 安装目录无法创建时返回 undefined，不产生未处理拒绝', async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'dsh-pet-install-'));
+  const savedHome = process.env.DSH_HOME;
+  t.after(() => {
+    if (savedHome === undefined) delete process.env.DSH_HOME;
+    else process.env.DSH_HOME = savedHome;
+    rmSync(dir, { recursive: true, force: true });
+  });
+  process.env.DSH_HOME = dir;
+  // 跨平台复现：同名普通文件阻止创建目录，不依赖 chmod 或管理员权限。
+  writeFileSync(join(dir, 'electron'), 'occupied');
+  const warnings: string[] = [];
+  t.mock.method(console, 'warn', (message: string) => warnings.push(message));
+  t.mock.method(console, 'log', () => {});
+  assert.equal(await ensureElectronDownload(), undefined);
+  assert.ok(warnings.some((message) => message.includes('ensure failed:')));
+  assert.ok(warnings.some((message) => message.includes('DSH_PET_ELECTRON_PATH')));
+});
 
 /** 建一个隔离的临时目录,并归还原 DSH_HOME / DSH_PET_ELECTRON_PATH 环境变量 */
 function withIsolatedHome(fn: (dir: string) => void): void {
