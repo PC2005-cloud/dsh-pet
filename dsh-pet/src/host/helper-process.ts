@@ -188,9 +188,10 @@ export async function ensureElectronDownload(options: EnsureElectronOptions = {}
   const startedAt = Date.now();
 
   log(`Electron not found, downloading v${version} (${PLAT}-${process.arch}) ...`);
-  mkdirSync(targetDir, { recursive: true });
 
   try {
+    // 目录创建也可能失败（权限不足、同名文件等），与下载失败一样降级到浏览器宠物。
+    mkdirSync(targetDir, { recursive: true });
     // 官方 @electron/get 下载：负责 URL 拼装、镜像、SHA256 校验（sumchecker）、下载缓存
     // （同一版本只下载一次，之后命中缓存秒回）。超时用 AbortController 传给 fetch。
     const controller = new AbortController();
