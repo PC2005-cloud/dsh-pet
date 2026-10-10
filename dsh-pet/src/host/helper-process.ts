@@ -331,6 +331,13 @@ export class HelperProcess {
     this.child = child;
     child.once('error', (error) => {
       this.logger.error?.(`dsh-pet desktop helper failed to start: ${error.message}`);
+      // Failed spawn (ENOENT/EACCES) emits error, but no exit. Do not leave
+      // a non-running child blocking every later start. Errors from a live
+      // process (for example a failed kill) must still wait for its exit.
+      if (child.pid === undefined && this.child === child) {
+        this.child = undefined;
+        this.scheduleRestart();
+      }
     });
     child.once('exit', (code, signal) => {
       if (this.child !== child) return;
