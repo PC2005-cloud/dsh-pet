@@ -13,7 +13,7 @@ import { test, describe, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter, once } from 'node:events';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 import {
@@ -140,7 +140,7 @@ describe('resolveElectronPath —— 候选优先级', () => {
             ? join('Electron.app', 'Contents', 'MacOS', 'Electron')
             : 'electron';
       const landed = join(dir, 'dshhome', 'electron', rel);
-      mkdirSync(join(dir, 'dshhome', 'electron'), { recursive: true });
+      mkdirSync(dirname(landed), { recursive: true });
       writeFileSync(landed, '');
       assert.equal(resolveElectronPath([]), landed);
     });
