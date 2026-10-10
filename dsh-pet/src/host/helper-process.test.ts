@@ -11,13 +11,14 @@
  */
 import { test, describe, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { EventEmitter } from 'node:events';
+import { EventEmitter, once } from 'node:events';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 import {
   HELPER_STABLE_MS,
+  HELPER_STOP_GRACE_MS,
   HelperProcess,
   dshHomeDir,
   defaultElectronExe,
@@ -351,13 +352,22 @@ describe('HelperProcess.stopAndWait —— 停止要等进程真正退出（issu
     );
   });
 
-  test('连 SIGKILL 都不退 → 宽限期后仍 resolve（绝不挂住配置保存）', async () => {
-    const { stop } = fakeHelper(20);
-    const started = Date.now();
-    await stop(); // 全程没有 exit 事件
-    const spent = Date.now() - started;
-    assert.ok(spent >= 20, `至少等满超时再升级（实际 ${spent}ms）`);
-    assert.ok(spent < 3000, `应在宽限期内放弃等待，而不是无限挂住（实际 ${spent}ms）`);
+  test('连 SIGKILL 都不退 → 宽限期后仍 resolve（绝不挂住配置保存）', async (t) => {
+    // FakeChild has no process handle to keep the event loop alive while
+    // production's unref'ed watchdogs wait. Advance both deadlines explicitly.
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const { fake, stop } = fakeHelper(20);
+    let settled = false;
+    const pending = stop().then(() => {
+      settled = true;
+    });
+    t.mock.timers.tick(20);
+    assert.deepEqual(fake.signals, ['SIGTERM', 'SIGKILL']);
+    await Promise.resolve();
+    assert.equal(settled, false);
+    t.mock.timers.tick(HELPER_STOP_GRACE_MS);
+    await pending;
+    assert.equal(settled, true);
   });
 
   test('已经退出的子进程 → 立即 resolve，不挂监听', async () => {
@@ -368,4 +378,72 @@ describe('HelperProcess.stopAndWait —— 停止要等进程真正退出（issu
     assert.ok(Date.now() - started < 50);
     assert.deepEqual(fake.signals, ['SIGTERM']);
   });
+});
+
+describe('HelperProcess failed spawn recovery', () => {
+  test('keeps a running child after a non-spawn error', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'dsh-pet-live-child-'));
+    const hp = new HelperProcess(
+      { command: process.execPath, args: ['-e', 'setInterval(() => {}, 1000)'], cwd: dir },
+      {},
+    );
+    try {
+      const child = hp.start()!;
+      await once(child, 'spawn');
+      child.emit('error', Object.assign(new Error('kill denied'), { code: 'EPERM' }));
+      assert.equal(hp.start(), child, 'a live child must not be replaced after a failed operation');
+    } finally {
+      await hp.stopAndWait('test-cleanup', 100);
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  for (const code of ['ENOENT', 'EACCES']) {
+    test(
+      `retries ${code} after the executable is repaired`,
+      { skip: code === 'EACCES' && process.platform === 'win32', timeout: 10000 },
+      async () => {
+        const dir = mkdtempSync(join(tmpdir(), 'dsh-pet-spawn-'));
+        const command = join(dir, 'electron');
+        if (code === 'EACCES') writeFileSync(command, '#!/bin/sh\nexit 0\n', { mode: 0o600 });
+        const options = { command, args: ['-e', 'console.log("helper-recovered")'], cwd: dir };
+        const logs: string[] = [];
+        let recovered!: () => void;
+        const ready = new Promise<void>((resolve) => {
+          recovered = resolve;
+        });
+        const hp = new HelperProcess(options, {
+          warn: (message) => {
+            logs.push(String(message));
+          },
+          error: (message) => {
+            logs.push(String(message));
+          },
+          debug: (message) => {
+            if (String(message).includes('helper-recovered')) recovered();
+          },
+        });
+        let timeout: ReturnType<typeof setTimeout> | undefined;
+        try {
+          const child = hp.start()!;
+          const [error] = await once(child, 'error');
+          assert.equal(error.code, code);
+          // Repair the configured executable before the existing backoff expires.
+          options.command = process.execPath;
+          await Promise.race([
+            ready,
+            new Promise<never>((_, reject) => {
+              timeout = setTimeout(() => reject(new Error('helper did not recover after failed spawn')), 5000);
+            }),
+          ]);
+          assert.equal(logs.filter((line) => line.includes('failed to start')).length, 1);
+          assert.equal(logs.filter((line) => line.includes('restarting in')).length, 1);
+        } finally {
+          clearTimeout(timeout);
+          await hp.stopAndWait('test-cleanup', 100);
+          rmSync(dir, { recursive: true, force: true });
+        }
+      },
+    );
+  }
 });
