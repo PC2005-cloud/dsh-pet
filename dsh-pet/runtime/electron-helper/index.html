@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self' http: https: data: blob:; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' http: https: data:; media-src 'self' http: https: blob:; font-src 'self' http: https: data:"
+    />
+    <title>dsh-pet 桌宠（桌面模式）</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        background: transparent;
+        overflow: hidden;
+        font-family: 'Microsoft YaHei UI', 'Segoe UI', sans-serif;
+        user-select: none;
+      }
+      #root {
+        position: relative;
+        width: 100%;
+        height: 100%;
+      }
+      /* 宠物 sprite：绝对定位在画布内，由 renderer 按角落/边距或拖拽位置计算 left/top */
+      .pet-sprite {
+        position: absolute;
+        left: 0;
+        top: 0;
+        pointer-events: none;
+      }
+      .pet-stage {
+        position: relative;
+        width: var(--pet-size, 462px);
+        height: calc(var(--pet-size, 462px) * 9 / 16);
+        pointer-events: none;
+      }
+      video.pet-video {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity 0.18s ease;
+      }
+      video.pet-video.is-front {
+        opacity: 1;
+      }
+      .pet-hit {
+        position: absolute;
+        pointer-events: auto;
+        cursor: grab;
+        z-index: 1;
+      }
+      .pet-hit.dragging {
+        cursor: grabbing;
+      }
+      /* 余额气泡：与浏览器 overlay 同一套视觉（白色圆润泡 + 峰/谷/错误着色），
+         尺寸随宠物宽度 var(--pet-size) 等比缩放；字体经 renderer 注入上首软糖体 @font-face */
+      .pet-bubble {
+        position: absolute;
+        left: 50%;
+        transform: translateX(-50%);
+        bottom: calc(100% - var(--pet-size, 462px) * 0.108);
+        min-width: calc(var(--pet-size, 462px) * 0.26);
+        max-width: calc(var(--pet-size, 462px) * 0.5);
+        padding: calc(var(--pet-size, 462px) * 0.022) calc(var(--pet-size, 462px) * 0.03);
+        border-radius: calc(var(--pet-size, 462px) * 0.035);
+        background: rgba(255, 255, 255, 0.92);
+        color: #2b2b2b;
+        font-family:
+          'ShangshouSoftCandy', 'Yuanti SC', 'YouYuan', '幼圆', 'Comic Sans MS', 'PingFang SC', 'Microsoft YaHei',
+          sans-serif;
+        font-size: calc(var(--pet-size, 462px) * 0.0455);
+        line-height: 1.6;
+        z-index: 3;
+        pointer-events: none;
+        box-shadow:
+          0 calc(var(--pet-size, 462px) * 0.009) calc(var(--pet-size, 462px) * 0.035) rgba(0, 0, 0, 0.14),
+          0 1px 3px rgba(0, 0, 0, 0.08);
+        opacity: 0;
+        transition: opacity 0.25s ease;
+        white-space: nowrap;
+      }
+      .pet-bubble::after {
+        content: '';
+        position: absolute;
+        left: 50%;
+        bottom: calc(var(--pet-size, 462px) * -0.017);
+        transform: translateX(-50%);
+        border: calc(var(--pet-size, 462px) * 0.017) solid transparent;
+        border-top-color: rgba(255, 255, 255, 0.92);
+        border-bottom: none;
+      }
+      .pet-bubble.is-on {
+        opacity: 1;
+      }
+      /* 碎碎念变体：与浏览器 overlay 一致 —— 字号缩到余额气泡的 0.75、取消 nowrap 允许换行、
+         宽度随文字数量自适应（短句窄框、长句封顶绕行），高度随行数自然增长 */
+      .pet-bubble.is-whisper {
+        font-size: calc(var(--pet-size, 462px) * 0.034);
+        min-width: calc(var(--pet-size, 462px) * 0.1);
+        max-width: calc(var(--pet-size, 462px) * 0.5);
+        white-space: normal;
+        overflow-wrap: anywhere;
+      }
+      .pet-bub-row {
+        display: flex;
+        justify-content: space-between;
+        gap: calc(var(--pet-size, 462px) * 0.03);
+      }
+      .pet-bub-sub {
+        font-size: calc(var(--pet-size, 462px) * 0.035);
+        color: rgba(43, 43, 43, 0.6);
+      }
+      .pet-bub-err {
+        color: #d94f3d;
+        font-size: calc(var(--pet-size, 462px) * 0.035);
+      }
+      .pet-bub-tier {
+        font-weight: 700;
+      }
+      .pet-bub-tier-peak {
+        color: #e53935;
+      }
+      .pet-bub-tier-idle {
+        color: #2e9e4f;
+      }
+      /* 配置错误提示（大声报错，不做静默兜底）：配置缺失/非法时显示，每 5s 自动重试 */
+      .pet-error {
+        position: fixed;
+        left: 50%;
+        top: 24px;
+        transform: translateX(-50%);
+        max-width: 80vw;
+        background: rgba(217, 79, 61, 0.95);
+        color: #fff;
+        border-radius: 12px;
+        padding: 10px 16px;
+        font-size: 13px;
+        line-height: 1.5;
+        display: none;
+        z-index: 999;
+        pointer-events: none;
+        word-break: break-all;
+      }
+      .pet-error.visible {
+        display: block;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        video.pet-video {
+          transition: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <div id="pet-error" class="pet-error"></div>
+    <!-- 共享纯逻辑（src/shared 的 iife 构建产物，window.PetShared）——经经典 script，避开 file:// ESM 的 CORS 限制。
+         桌面端同模式拆分：constants（基础设施）→ sprite（宠物本体）→ events（事件联动）→ renderer（启动入口） -->
+    <script src="./shared-core.js"></script>
+    <script src="./constants.js"></script>
+    <script src="./sprite.js"></script>
+    <script src="./events.js"></script>
+    <script src="./renderer.js"></script>
+  </body>
+</html>

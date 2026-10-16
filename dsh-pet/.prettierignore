@@ -1,0 +1,8 @@
+lib
+node_modules
+assets
+runtime/electron-helper/shared-core.js
+cordis.patch.yml
+package-lock.json
+pnpm-lock.yaml
+pnpm-workspace.yaml

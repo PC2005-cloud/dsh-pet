@@ -1,0 +1,50 @@
+# ── 素材处理链中间产物（跑 scripts/*.py 可再生，不入仓库） ──
+step01/
+step02/
+step03/
+step04/
+
+# ── 素材源（托管在 GitHub Releases assets-videos，不入仓库） ──
+video/*.mp4
+
+# ── PR 手工抠像工作数据（本地工作数据，同 step 中间产物，不入库） ──
+#   pr/      PR 导出的透明 .mov（路线 B 的输入）
+#   prproj/  PR 工程目录（.prproj + 遮罩缓存 + 自动保存，约 2GB）
+pr/
+prproj/
+
+# ── 本地工具（机器相关，不入仓库） ──
+.tools/
+
+# ── Python ──
+__pycache__/
+*.py[cod]
+.venv/
+.uv-cache/
+
+# ── Node ──
+node_modules/
+.npm-cache/
+.npm-tmp-cache/
+npm-debug.log*
+*.tgz
+
+# ── 临时/备份目录 ──
+temp/
+
+# ── dsh-pet 构建产物（全部由 src/ 构建生成，不入仓库；克隆后先 npm run prepare:webm）──
+#   lib/                      tsdown bundle（lib/index.js、lib/client.js）+ tsc 声明（lib/types/*.d.ts，npm run types）
+#   runtime/electron-helper/shared-core.js  桌面共享纯逻辑（scripts/build-desktop-core.mjs 产出，window.PetShared）
+# （lib/types 曾是手写声明才保留跟踪；自 gen-types.mjs 起为生成产物，与 lib/*.js 同等对待）
+dsh-pet/lib/
+dsh-pet/runtime/electron-helper/shared-core.js
+
+# ── IDE / 编辑器 ──
+.idea/
+.vscode/
+*.swp
+
+# ── 系统文件 ──
+.DS_Store
+Thumbs.db
+desktop.ini

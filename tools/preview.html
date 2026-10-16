@@ -1,0 +1,340 @@
+<!doctype html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>透明 WebM 效果预览</title>
+  <style>
+    :root {
+      --bg: #f4f5f7;
+      --panel: #ffffff;
+      --text: #1f2329;
+      --muted: #6b7280;
+      --border: #d9dce1;
+      --accent: #2f6fed;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+      letter-spacing: 0;
+    }
+
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      padding: 10px 16px;
+      background: rgba(244, 245, 247, 0.94);
+      border-bottom: 1px solid var(--border);
+      backdrop-filter: blur(6px);
+    }
+
+    h1 {
+      margin: 0 12px 0 0;
+      font-size: 16px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    .toolbar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    button,
+    input,
+    select {
+      height: 32px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--panel);
+      color: var(--text);
+      font-size: 13px;
+      padding: 0 10px;
+    }
+
+    button {
+      cursor: pointer;
+    }
+
+    button:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    button.active {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #ffffff;
+    }
+
+    input {
+      width: 220px;
+    }
+
+    .count {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    main {
+      padding: 14px 16px 40px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+      gap: 14px;
+    }
+
+    .card {
+      display: flex;
+      flex-direction: column;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .card-title {
+      padding: 8px 10px;
+      font-size: 13px;
+      line-height: 1.35;
+      color: var(--text);
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .compare {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      padding: 8px;
+    }
+
+    .slot {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .slot-label {
+      font-size: 12px;
+      color: var(--muted);
+      text-align: center;
+      padding: 2px 0 6px;
+    }
+
+    .stage {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 9 / 8;
+      background-color: #ffffff;
+    }
+
+    .stage[data-bg="checker"] {
+      background-color: #ffffff;
+      background-image: conic-gradient(#d4d4d4 25%, #ffffff 0 50%, #d4d4d4 0 75%, #ffffff 0);
+      background-size: 16px 16px;
+    }
+
+    .stage[data-bg="black"] {
+      background-color: #000000;
+    }
+
+    video {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+
+    .empty {
+      display: none;
+      padding: 60px 20px;
+      text-align: center;
+      color: var(--muted);
+    }
+
+    .empty.show {
+      display: block;
+    }
+  </style>
+</head>
+
+<body>
+  <header>
+    <h1>透明 WebM 效果预览</h1>
+    <div class="toolbar">
+      <button type="button" id="play-all">全部播放</button>
+      <button type="button" id="pause-all">全部暂停</button>
+      <span class="count" id="count"></span>
+      <button type="button" id="bg-checker" class="active">棋盘格</button>
+      <button type="button" id="bg-white">白色</button>
+      <button type="button" id="bg-black">黑色</button>
+      <input id="filter" type="search" placeholder="搜索文件名">
+    </div>
+  </header>
+
+  <main>
+    <div class="grid" id="grid"></div>
+    <div class="empty" id="empty">没有匹配的视频</div>
+  </main>
+
+  <script>
+    const files = [
+      "被鼠标拖拽悬空反馈.webm",
+      "被吓一跳（炸毛）.webm",
+      "超大伸懒腰.webm",
+      "吃白饭.webm",
+      "吹气球.webm",
+      "打瞌睡被惊醒.webm",
+      "大口吃零食.webm",
+      "待机呼吸休闲.webm",
+      "点击回应 - 傲娇生气（侧身展示）.webm",
+      "点击回应 - 害羞惊讶.webm",
+      "点击回应 - 开心跃动.webm",
+      "动物环绕.webm",
+      "东张西望.webm",
+      "哈欠连天.webm",
+      "鲸鱼吐泡泡特效.webm",
+      "可爱宅舞.webm",
+      "蓝鲸现世.webm",
+      "螃蟹走路.webm",
+      "女仆屈膝礼仪.webm",
+      "轻快记录.webm",
+      "轻快摇摆舞.webm",
+      "深度思考碎碎念.webm",
+      "偷吃零食被抓住.webm",
+      "玩水枪.webm",
+      "玩游戏气急败坏.webm",
+      "小幅度原地 360 度旋转展示.webm",
+      "小提琴演奏.webm",
+      "写代码.webm",
+      "用鲸鱼尾巴拍打地面.webm",
+      "悠闲哼歌.webm",
+      "优雅女仆舞.webm",
+      "原地蹲下玩玩具汽车.webm",
+      "原地漂浮踏步.webm",
+      "原地敲击桌面互动.webm",
+      "原地跳跃抓碎头顶物品.webm",
+      "原地小憩沉眠.webm",
+      "原地重力下蹲压缩.webm",
+      "原地专心玩魔方.webm",
+      "原地左转奔跑.webm",
+      "照镜子.webm",
+      "整体换装试色.webm"
+    ];
+
+    const grid = document.getElementById("grid");
+    const count = document.getElementById("count");
+    const empty = document.getElementById("empty");
+    const filterInput = document.getElementById("filter");
+
+    function updateFilter() {
+      const query = filterInput.value.trim();
+      let visible = 0;
+      document.querySelectorAll(".card").forEach((card) => {
+        const match = !query || card.dataset.name.includes(query);
+        card.hidden = !match;
+        if (match) {
+          visible += 1;
+        }
+      });
+      empty.classList.toggle("show", visible === 0);
+      count.textContent = visible + " / " + files.length;
+    }
+
+    function render() {
+      grid.innerHTML = "";
+      files.forEach((name) => {
+        const card = document.createElement("div");
+        card.className = "card";
+        card.dataset.name = name;
+
+        const title = document.createElement("div");
+        title.className = "card-title";
+        title.textContent = name;
+
+        const compare = document.createElement("div");
+        compare.className = "compare";
+        ["step02", "step03","step04"].forEach((dir) => {
+          const slot = document.createElement("div");
+          slot.className = "slot";
+
+          const label = document.createElement("div");
+          label.className = "slot-label";
+          label.textContent = dir;
+
+          const stage = document.createElement("div");
+          stage.className = "stage";
+          stage.dataset.bg = "checker";
+          stage.style.aspectRatio = dir === "step03" ? "1 / 1" : "9 / 8";
+
+          const video = document.createElement("video");
+          video.src = "../" + dir + "/" + name;
+          video.muted = true;
+          video.loop = true;
+          video.playsInline = true;
+          video.autoplay = true;
+          video.controls = true;
+
+          stage.appendChild(video);
+          slot.append(label, stage);
+          compare.appendChild(slot);
+        });
+
+        card.append(title, compare);
+        grid.appendChild(card);
+      });
+      updateFilter();
+    }
+
+    render();
+
+    document.getElementById("play-all").addEventListener("click", () => {
+      document.querySelectorAll("video").forEach((video) => video.play());
+    });
+
+    document.getElementById("pause-all").addEventListener("click", () => {
+      document.querySelectorAll("video").forEach((video) => video.pause());
+    });
+
+    const bgButtons = [
+      ["bg-checker", "checker"],
+      ["bg-white", "white"],
+      ["bg-black", "black"]
+    ];
+
+    bgButtons.forEach(([id, bg]) => {
+      document.getElementById(id).addEventListener("click", () => {
+        document.querySelectorAll(".stage").forEach((stage) => {
+          stage.dataset.bg = bg;
+        });
+        bgButtons.forEach(([otherId, otherBg]) => {
+          document.getElementById(otherId).classList.toggle("active", otherBg === bg);
+        });
+      });
+    });
+
+    filterInput.addEventListener("input", updateFilter);
+  </script>
+</body>
+
+</html>

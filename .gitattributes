@@ -1,0 +1,3 @@
+# 统一行尾：所有文本文件 LF 入库 + LF 检出，杜绝 CRLF 落盘（prettier 全绿）
+# text=auto：二进制文件（png/webm/gif/ttf 等）自动识别、不做转换
+* text=auto eol=lf
