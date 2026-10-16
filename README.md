@@ -456,6 +456,12 @@ $DSH_HOME/dsh-pet/
 
 > 注：动画为透明背景；GIF 预览中透明部分显示为页面底色，实际 webm 播放为透明。
 
+
+## 许可
+
+- 代码：MIT
+- 素材（动画/提示词/源视频）：允许开源使用，**禁止商用**
+- **二次创作（二创）约定**：基于本项目的衍生 / 改版 / 换皮作品，在**任何介绍、展示、分发该作品的地方**，须附上原作者 GitHub 地址：<https://github.com/PC2005-cloud/dsh-pet>
 ## 从零生成你自己的宠物（完整流程）
 
 ### ① 提示词 → 源视频
@@ -484,15 +490,9 @@ cd scripts
 # 路线 A（默认）：自动绿幕抠像（HSV 色相，无需人工）
 python watermark_step01.py   # 水印遮罩填充 → step01/
 python chroma_step02.py      # 绿幕抠像转透明 → step02/
-
-# 路线 B（可选）：PR 手工抠像覆盖（针对含第三方物品/自动抠像效果不佳的动作）
-#   1. 在 PR 里手工抠像，导出带 alpha 的透明 .mov（如 ProRes 4444 with Alpha）
-#   2. 放入 pr/，文件名与动作名一致（如 吃白饭.mov）
-python pr_import_step02.py   # pr/*.mov → step02/（透明 webm，覆盖该动作自动抠像结果）
-
-# 后续步骤两条路线共用：
 python normalize_step03.py   # 归一化 2160×1215 统一站立居中 → step03/
 python encode_thumbs.py      # 转码 640×360 播放变体 → step04/
+python publish_step05.py     # ⑤ 收尾（见下方）
 ```
 
 **依赖**：Python 3 + ffmpeg + numpy + scipy（素材链脚本自动用工作区 `.tools/` 下的 ffmpeg）。
@@ -509,18 +509,18 @@ python encode_thumbs.py      # 转码 640×360 播放变体 → step04/
 
 宿主路由已固定双扩展名兜底（白名单 `webm|mov`、MIME、素材根按扩展名分派），无需改宿主。详情见插件 README「macOS 使用 mov」。
 
-### ③ 动画 → 插件
+### ③ 动画 → 插件（已由步骤 ⑤ 自动完成）
+
+`publish_step05.py`（步骤 ⑤）收尾后，插件素材与归档已就位，无需手动拷贝；剩下只需本地装插件：
 
 ```sh
-# 把 step04 的播放变体同步进插件包（webm 直接 cp）
-cp step04/*.webm dsh-pet/assets/webm/   # 播放格式（VP9-alpha）
-
 # 本地安装插件（--profile 填实际在用的：桌面应用 desktop、dsh web → web；
 # file: 指向插件目录 dsh-pet/dsh-pet）
 dsh plugin --profile desktop add file:D:/path/to/dsh-pet/dsh-pet
 ```
 
-> 中间产物（step01-04）由脚本生成、不入仓库；`video/` 源视频和脚本是成果、入库维护。
+> 中间产物（step01-04）是临时目录，步骤 ⑤ 成功后自动删除；`video/` 根下只留待处理的原片（不入库），
+> 原片与成品长期归档在 `video/source/`（绿幕 mp4）与 `video/done/`（透明 webm），与脚本一起是成果、入库维护。
 
 ### 🎯 发布（单一 webm 格式）
 
@@ -540,9 +540,10 @@ npm publish --tag latest   # prepack 自动执行构建（完整产物 + 收敛 
 
 ```
 ├── prompts/           # ① 动画生成提示词配方（绿幕规范 + 按秒分解）
-├── video/             # ② 素材源视频（绿幕 mp4；不入库，Releases 提供压缩包）
-├── scripts/           # ② 素材生成链（Python/ffmpeg：水印 → 抠像 → 归一化 → 转码 → GIF 预览）
-├── step01~04/         # ② 素材链中间产物（不入库）
+├── video/             # ② 原片/成品归档：source/（绿幕 mp4）+ done/（透明 webm 成品）
+│   └── *.mp4          #   根目录只留待处理原片（不入库，Releases 提供压缩包）
+├── scripts/           # ② 素材生成链（Python/ffmpeg：水印 → 抠像 → 归一化 → 转码 → 发布/归档/清理）
+├── step01~04/         # ② 素材链中间产物（临时，步骤 ⑤ 成功后自动删除；不入库）
 ├── pr/  prproj/       # ② 路线 B：PR 手工抠像输入与工程（本地工作数据，不入库）
 ├── tools/             # 开发小工具（素材链各阶段预览等）
 ├── assets/            # 仓库展示用截图
@@ -555,9 +556,3 @@ npm publish --tag latest   # prepack 自动执行构建（完整产物 + 收敛 
 │   └── scripts/       #   构建与发布脚本（prepare.js / prepack-check / ensure-electron 等）
 └── LICENSE            # MIT
 ```
-
-## 许可
-
-- 代码：MIT
-- 素材（动画/提示词/源视频）：允许开源使用，**禁止商用**
-- **二次创作（二创）约定**：基于本项目的衍生 / 改版 / 换皮作品，在**任何介绍、展示、分发该作品的地方**，须附上原作者 GitHub 地址：<https://github.com/PC2005-cloud/dsh-pet>
