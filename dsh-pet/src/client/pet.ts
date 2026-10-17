@@ -1746,6 +1746,14 @@ export function makePetUI(rt: {
     // 之后 counter 变了才渲染。分发到各功能（余额 / 工作状态 / 通知 / 说话）。
     // 为什么不再按"有没有启用某功能"决定要不要轮询：说话（命令触发）与宠物开关无关，
     // 今天每只宠物的 /broadcast 轮询本来就不受开关门控——统一后至少不比现在多。
+    /**
+     * 【临时关闭】宿主内存态（桌面端右键「临时关闭桌宠」→ POST /pause 置位，托盘点「显示桌宠」复位）。
+     * 置位期间浏览器 overlay 一并停渲染（与桌面的"窗口全关"语义一致）；这是**状态**不是事件，
+     * 所以每次轮询无条件读，不参与 counter 基线比对。
+     */
+    const [powerClosed, setPowerClosed] = useState(false);
+    /** 上一拍看到的关闭态：只在**变化**时才 setState（否则每秒一次同值 setState 会白白触发渲染） */
+    const powerClosedRef = useRef(false);
     const [sayTick, setSayTick] = useState(0);
     const sayRef = useRef<Record<string, { text: string; image?: string; seq: number }>>({});
     const [animCueTick, setAnimCueTick] = useState(0);
@@ -1760,6 +1768,12 @@ export function makePetUI(rt: {
         try {
           const s = await fetchState();
           if (!alive || !s) return;
+          // 【临时关闭】：每次轮询无条件同步（首拉也算），随宿主 sections.power 变化停/复渲染
+          const closedNow = (s.sections.power?.data as { closed?: unknown } | undefined)?.closed === true;
+          if (powerClosedRef.current !== closedNow) {
+            powerClosedRef.current = closedNow;
+            setPowerClosed(closedNow);
+          }
           // 配置被别处改过（桌面端右键改 display / 另一个标签页保存 / 用户手改配置文件）→ 重拉配置重拍平。
           // 这是「桌面端改了、浏览器端要刷新才可见」的解药：宿主把配置 mtime 挂在 /state 上，1s 内自动跟随。
           if (configBaseline === undefined) {
@@ -1821,7 +1835,7 @@ export function makePetUI(rt: {
       };
     }, [ready]);
 
-    return ready
+    return ready && !powerClosed
       ? visiblePets.map((p) =>
           h(PetCard, {
             key: p.id,

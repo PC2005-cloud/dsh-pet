@@ -198,7 +198,7 @@ describe('/state + /balance —— 轮询统一状态与余额动作端点', () 
       sections: Record<string, { counter: number; data: unknown }>;
       pets: Record<string, unknown>;
     };
-    assert.deepEqual(Object.keys(body.sections).sort(), ['balance', 'notify', 'workStatus']);
+    assert.deepEqual(Object.keys(body.sections).sort(), ['balance', 'notify', 'power', 'workStatus']);
     assert.equal(body.sections.balance.counter, 0, '没人写过时 counter=0（前端首拉当基线）');
     assert.equal(body.sections.balance.data, null);
     assert.deepEqual(body.pets, {});
@@ -412,6 +412,73 @@ describe('pic/memes 路由 —— 表情包素材归属（与 thumb 同一套语
   test('通知图标（/pic/<名>.png）不受影响：仍只从包内 assets/pic 取', async () => {
     // 源码形态下包内 assets 不可达 → 404（关键是不被 memes 分支吞掉）
     assert.equal((await call('/dsh-pet-7340/pic/logo.png')).status, 404);
+  });
+});
+
+describe('/pause + /resume —— 临时关闭桌宠（宿主内存态）', () => {
+  // 「临时关闭」是**内存态**（不落盘，DSH 重启即恢复）：桌面端右键菜单 → POST /pause 置位，
+  // 托盘点「显示桌宠」→ POST /resume 复位。置位期间桌宠全关，并且是"完全停掉"：
+  // 余额/碎碎念/对话这些**手动动作**也一并拒绝，状态同步写进 S 的 sections.power 供浏览器端停渲染。
+  // 本块放在最后：它会短暂把宿主置于关闭态，必须自己收尾复位，不能影响前面的路由断言。
+  const powerClosed = async (): Promise<boolean> => {
+    const r = await call('/dsh-pet-7340/state');
+    const leaf = (JSON.parse(r.body) as { sections: { power: { data: { closed?: boolean } | null } } }).sections.power;
+    return leaf.data?.closed === true;
+  };
+
+  test('GET → 405（关闭/恢复都是动作端点，不是读端点）', async () => {
+    assert.equal((await call('/dsh-pet-7340/pause', 'GET')).status, 405);
+    assert.equal((await call('/dsh-pet-7340/resume', 'GET')).status, 405);
+  });
+
+  test('POST /pause → { ok:true, closed:true }，并把状态写进 S 的 sections.power', async () => {
+    const r = await call('/dsh-pet-7340/pause', 'POST');
+    assert.equal(r.status, 200);
+    assert.deepEqual(JSON.parse(r.body), { ok: true, closed: true });
+    assert.equal(await powerClosed(), true, '浏览器 overlay 靠这条叶子一并停渲染');
+  });
+
+  test('关闭期间手动动作统一拒绝（同一句话、同一个形状）', async () => {
+    const balance = JSON.parse((await call('/dsh-pet-7340/balance', 'POST')).body) as {
+      ok: boolean;
+      reason: string;
+      message: string;
+    };
+    assert.equal(balance.ok, false);
+    assert.equal(balance.reason, 'paused');
+    assert.match(balance.message, /临时关闭/);
+    const whisper = JSON.parse((await call('/dsh-pet-7340/whisper?pet=main', 'POST')).body) as { reason: string };
+    assert.equal(whisper.reason, 'paused');
+    const chat = JSON.parse(
+      (await call('/dsh-pet-7340/chat?pet=main', 'POST', JSON.stringify({ text: '在吗' }))).body,
+    ) as { reason: string };
+    assert.equal(chat.reason, 'paused');
+  });
+
+  test('关闭期间 /balance 不再推进余额叶子（不查、不写 S）', async () => {
+    const before = (
+      JSON.parse((await call('/dsh-pet-7340/state')).body) as { sections: { balance: { counter: number } } }
+    ).sections.balance.counter;
+    await call('/dsh-pet-7340/balance', 'POST');
+    const after = (
+      JSON.parse((await call('/dsh-pet-7340/state')).body) as { sections: { balance: { counter: number } } }
+    ).sections.balance.counter;
+    assert.equal(after, before, '关闭期间的余额请求不得落到 S');
+  });
+
+  test('重复 /pause 幂等：仍是 closed:true（避免托盘点两下连起重启）', async () => {
+    const again = JSON.parse((await call('/dsh-pet-7340/pause', 'POST')).body) as { closed: boolean };
+    assert.equal(again.closed, true);
+    assert.equal(await powerClosed(), true);
+  });
+
+  test('POST /resume → closed:false，恢复后手动动作重新可用', async () => {
+    const r = await call('/dsh-pet-7340/resume', 'POST');
+    assert.equal(r.status, 200);
+    assert.deepEqual(JSON.parse(r.body), { ok: true, closed: false });
+    assert.equal(await powerClosed(), false);
+    const balance = JSON.parse((await call('/dsh-pet-7340/balance', 'POST')).body) as { ok: boolean };
+    assert.equal(balance.ok, true, '恢复后 /balance 应照常工作');
   });
 });
 

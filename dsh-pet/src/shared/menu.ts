@@ -33,9 +33,11 @@ export interface MenuLeaf {
    * chat=打开对话弹窗；home=回到初始位置；reload=重载配置（桌面端专属：重启桌面 Helper，
    * 全部桌面宠物窗口按最新配置重建——浏览器端刷新页面即可，不注入此项）；
    * set-display=改这只宠物的显示位置（目标值见 display 字段；**两端都注入**——桌面端拿它把
-   * 宠物送走、浏览器端拿它把宠物送到桌面，菜单项统一由 displayMenuBranch() 提供）。
+   * 宠物送走、浏览器端拿它把宠物送到桌面，菜单项统一由 displayMenuBranch() 提供）；
+   * close-all=临时关闭全部桌宠（桌面端专属：请宿主进入内存态关闭并重启 Helper 只留托盘，
+   * 浏览器端 overlay 会同步停止渲染，但刷新页面即可回来，同样不注入此项）。
    * 手动触发均不受 whisperEnabled 影响（该字段只关自动周期轮询） */
-  action?: 'open-site' | 'show-balance' | 'whisper' | 'chat' | 'home' | 'reload' | 'set-display';
+  action?: 'open-site' | 'show-balance' | 'whisper' | 'chat' | 'home' | 'reload' | 'set-display' | 'close-all';
   /** set-display 的目标显示位置（与设置页「显示位置」下拉框同一套取值） */
   display?: PetDisplay;
 }

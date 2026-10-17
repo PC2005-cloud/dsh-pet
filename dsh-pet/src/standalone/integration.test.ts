@@ -96,7 +96,7 @@ describe('插件宿主半边在独立模式下跑起来了', () => {
       sections: Record<string, { counter: number; data: unknown }>;
       pets: Record<string, unknown>;
     };
-    assert.deepEqual(Object.keys(body.sections).sort(), ['balance', 'notify', 'workStatus']);
+    assert.deepEqual(Object.keys(body.sections).sort(), ['balance', 'notify', 'power', 'workStatus']);
     assert.equal(body.sections.balance?.counter, 0);
     assert.equal(body.sections.balance?.data, null);
     assert.deepEqual(body.pets, {});

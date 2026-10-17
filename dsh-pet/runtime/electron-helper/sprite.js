@@ -1208,8 +1208,12 @@ class PetSprite {
       // 一次性建的——就地增删窗口既改不了磁盘配置（下次启动又回来）也改不了窗口数量。
       S.displayMenuBranch(),
       // 改配置文件后免去回设置页点保存：请宿主重启桌面 Helper（全部桌面宠物窗口按最新配置重建）。
-      // 放在最后：它是"重新加载"这类维护动作，与上面几个宠物互动项语义不同。
+      // 放在"临时关闭桌宠"前：它是"重新加载"这类维护动作，与上面几个宠物互动项语义不同。
       { label: '重载配置', action: 'reload' },
+      // 【临时关闭】全关：宿主进入内存态关闭（不写配置文件，DSH 重启即恢复），
+      // 本 Helper 连同全部窗口被换成一个托盘图标；点托盘「显示桌宠」恢复（见 main.js）。
+      // 放最后：它是"把桌宠收起来"的收尾动作。
+      { label: '临时关闭桌宠', action: 'close-all' },
     );
     const tree = tools.concat(S.buildMenuTree(this.animations));
     if (!tree.length) return;
@@ -1265,6 +1269,10 @@ class PetSprite {
     }
     if (leaf.action === 'reload') {
       this.reloadDesktop(); // 请宿主重启桌面 Helper：全部桌面宠物窗口按最新配置重建
+      return;
+    }
+    if (leaf.action === 'close-all') {
+      this.closeAllPets(); // 【临时关闭】请宿主进入临时关闭态：全关窗口 + 托盘恢复
       return;
     }
     if (!leaf.anim) return;
@@ -1379,6 +1387,17 @@ class PetSprite {
   reloadDesktop() {
     fetch(BASE + '/reload', { method: 'POST' }).catch((e) => {
       console.warn('[dsh-pet] 重载配置请求失败（宿主不可达？）', e);
+    });
+  }
+
+  // 「临时关闭桌宠」菜单：请宿主进入临时关闭态（**内存态**，不写配置文件——DSH 重启即恢复）。
+  // 宿主置位后走 syncDesktop 重启本 Helper，并给新进程带 DSH_PET_PAUSED=1：新 Helper 不开宠物窗口、
+  // 只建一个托盘图标（托盘代码在 main.js），点托盘「显示桌宠」= POST /resume 恢复。
+  // 与 reloadDesktop 同一处境：本请求由**即将被重启的这个进程**发出，响应很可能永远不回
+  // （宿主杀进程时回调地址已失效），故不 await、不重试，失败只记日志。
+  closeAllPets() {
+    fetch(BASE + '/pause', { method: 'POST' }).catch((e) => {
+      console.warn('[dsh-pet] 临时关闭请求失败（宿主不可达？）', e);
     });
   }
 
