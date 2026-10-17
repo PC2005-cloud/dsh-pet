@@ -96,10 +96,11 @@ paths:
           "sections": {
             "balance":    { "counter": 1755000000000, "data": { /* BalanceState */ } },
             "workStatus": { "counter": 1755000000001, "data": { /* WorkStatusSnapshot */ } },
-            "notify":     { "counter": 1755000000002, "data": { /* NotifyFrame */ } }
+            "notify":     { "counter": 1755000000002, "data": { /* NotifyFrame */ } },
+            "power":      { "counter": 1755000000003, "data": { /* PowerState */ } }
           },
           "pets": {
-            "main": { "say": { "counter": 1755000000003, "data": { "text": "……" } } }
+            "main": { "say": { "counter": 1755000000004, "data": { "text": "……" } } }
           }
         }
         ```
@@ -107,6 +108,9 @@ paths:
         **约定与注意事项**：
 
         - `sections` 是**全局**段，所有端共享一份；`pets.<id>` 是**每只宠物**各自一份。
+        - `power` 是「临时关闭桌宠」的内存态（`POST /pause` / `POST /resume` 写入，**不落盘**）：
+          `data.closed === true` 时消费端应停止渲染这只插件的界面——桌面端此时本就没有窗口，
+          浏览器端靠它一并停渲染。`null` 等同未关闭。
         - **`configVersion` 不是叶子**（没有 `counter`/`data`，不参与 counter 比对）：它是配置文件的
           版本指纹，与上一拍不同就说明配置被改过——桌面端右键改了显示位置、另一个页面保存了配置、
           或用户手工编辑了 `main-config.jsonc` / `pet/*.json`。消费端此时应重拉 `GET /config`。
@@ -154,6 +158,8 @@ paths:
           消费端据此决定"余额不可用时要不要必弹文字说明"。
         - 常规的周期刷新由宿主**自己的定时器**完成（周期来自配置
           `eventsRefreshSec.balance`，默认 1800 秒），前端不需要轮询它。
+        - 临时关闭桌宠期间（`POST /pause` 之后）本端点**直接拒绝**：不查余额、不写 S，
+          返回 `{ ok: false, reason: "paused", message }`——"完全停掉"包括不拉外部网络。
       responses:
         "200":
           description: 刷新动作已完成（不代表余额可用）
@@ -181,6 +187,8 @@ paths:
           会随机抽一张配图，随文本一起写进叶子的 `image` 字段。
         - 模型选择：条目配置的 `whisperModel` 优先；留空则跟随当前对话的模型。
           指定模型生成失败时会**自动回落到当前对话的模型**重试一次。
+        - 临时关闭桌宠期间（`POST /pause` 之后）本端点**直接拒绝**：不生成、不写 S，
+          返回 `{ ok: false, reason: "paused", message }`——关掉之后不调模型。
       parameters:
         - $ref: "#/components/parameters/PetIdQuery"
       responses:
@@ -426,6 +434,9 @@ paths:
         - 模型选择：条目配置的 `chatModel` 优先；留空则跟随当前对话的模型。
           指定模型生成失败时会**自动回落到当前对话的模型**重试一次。
         - 记忆只存**正文**：配图属展示层，不进上下文（否则下次请求会把标记当历史读回去）。
+        - 临时关闭桌宠期间（`POST /pause` 之后）本端点**直接拒绝**：不生成、不写记忆，
+          返回 `{ ok: false, reason: "paused", message }`；`GET`（读记忆）不受影响，
+          弹窗照常能打开看历史。
       parameters:
         - $ref: "#/components/parameters/PetIdQuery"
       requestBody:
@@ -448,7 +459,7 @@ paths:
       responses:
         "200":
           description: |
-            恒为 200（除 405）。`reason` 取值：`bad-request`（空/超长消息）、
+            恒为 200（除 405）。`reason` 取值：`bad-request`（空/超长消息）、`paused`（桌宠已临时关闭）、
             `provider-missing`（没有可用的对话服务商）、`generate-error`（生成/IO 失败）。
           content:
             application/json:
@@ -794,6 +805,74 @@ paths:
         "405":
           $ref: "#/components/responses/MethodNotAllowed"
 
+  /dsh-pet-7340/pause:
+    post:
+      tags: [Action]
+      operationId: pausePets
+      summary: 临时关闭桌宠（宿主内存态）
+      description: |
+        把全部桌宠收起来：宿主置位**内存态**开关并重启桌面 Helper，新 Helper **只建一个
+        托盘图标、不开宠物窗口**；浏览器端 overlay 同步停止渲染（同一状态也写进
+        `sections.power`，见 `GET /state`）。
+
+        **"临时"是真的临时**：不写任何配置文件，DSH 重启即恢复（托盘图标也随进程消失）。
+
+        恢复入口只有一个——托盘图标的「显示桌宠」，它请求 `POST /resume`。
+        本端点幂等：已经处于关闭态时不重复重启 Helper（避免托盘连点导致连起重启）。
+
+        置位期间这是"完全停掉"：自动行为（余额轮询 / 碎碎念轮询 / 工作状态跟踪 / 系统通知）
+        全部短路，手动动作 `POST /balance`、`POST /whisper`、`POST /chat` 也一律拒绝，
+        统一回 `{ ok: false, reason: "paused", message: "桌宠已临时关闭（点托盘「显示桌宠」恢复）" }`。
+
+        **注意**：与 `POST /reload` 同一处境——发起者往往就是即将被换掉的桌面 Helper，
+        本响应不保证送达，调用方按 fire-and-forget 处理即可。
+      responses:
+        "200":
+          description: 已处于（或刚进入）临时关闭态
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, closed]
+                properties:
+                  ok:
+                    type: boolean
+                    const: true
+                  closed:
+                    type: boolean
+                    const: true
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+
+  /dsh-pet-7340/resume:
+    post:
+      tags: [Action]
+      operationId: resumePets
+      summary: 恢复桌宠显示（托盘「显示桌宠」）
+      description: |
+        解除临时关闭：宿主复位内存态开关并重启桌面 Helper，新 Helper 按最新配置建回全部
+        宠物窗口；浏览器端 overlay 随之恢复渲染。
+
+        幂等：本来就没关闭时不重复重启 Helper。同 `POST /pause`，响应不保证送达
+        （发起者托盘所在进程会被换掉），按 fire-and-forget 处理即可。
+      responses:
+        "200":
+          description: 已处于（或刚进入）正常显示态
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, closed]
+                properties:
+                  ok:
+                    type: boolean
+                    const: true
+                  closed:
+                    type: boolean
+                    const: false
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+
   "/dsh-pet-7340/thumb/{petId}/{file}":
     get:
       tags: [Assets]
@@ -1019,7 +1098,7 @@ components:
         sections:
           type: object
           description: 全局段（所有端共享一份）
-          required: [balance, workStatus, notify]
+          required: [balance, workStatus, notify, power]
           properties:
             balance:
               $ref: "#/components/schemas/BalanceLeaf"
@@ -1027,6 +1106,8 @@ components:
               $ref: "#/components/schemas/WorkStatusLeaf"
             notify:
               $ref: "#/components/schemas/NotifyLeaf"
+            power:
+              $ref: "#/components/schemas/PowerLeaf"
         pets:
           type: object
           description: 每只宠物各自一份；键是宠物 id（**可含点号，勿切分**）
@@ -1074,6 +1155,35 @@ components:
                   data:
                     text: 主人今天也要加油哦～
                     image: 可爱
+
+    PowerLeaf:
+      type: object
+      required: [counter, data]
+      description: |
+        「临时关闭桌宠」的内存态（见 `POST /pause` / `POST /resume`）。
+        `data.closed === true` 时两端都不显示宠物，且宿主停掉全部自动行为
+        （余额/碎碎念轮询、工作状态跟踪、系统通知）。
+      properties:
+        counter:
+          $ref: "#/components/schemas/Counter"
+        data:
+          description: |
+            `PowerState`；`null` = 从未写过（等同未关闭）。
+            由 `POST /pause` / `POST /resume` 写入——**内存态，不落盘**：
+            DSH 重启后自动回到 `null`（宠物照常显示）。
+          oneOf:
+            - $ref: "#/components/schemas/PowerState"
+            - type: "null"
+
+    PowerState:
+      type: object
+      required: [closed]
+      properties:
+        closed:
+          type: boolean
+          description: |
+            是否处于临时关闭态。`true` = 全部桌宠收起（桌面端只留一个托盘图标，
+            浏览器 overlay 一并停渲染）；`false` = 正常显示。
 
     BalanceLeaf:
       type: object

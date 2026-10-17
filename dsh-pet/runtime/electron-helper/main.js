@@ -45,7 +45,7 @@ try {
   );
   process.exit(3);
 }
-const { app, BrowserWindow, ipcMain, screen, shell, protocol } = electronApi;
+const { app, BrowserWindow, ipcMain, screen, shell, protocol, Tray, Menu, nativeImage } = electronApi;
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 const { readFileSync, writeFileSync } = require('node:fs');
@@ -643,6 +643,98 @@ async function handleBridgeRequest(request) {
   return new Response(resp.body ?? '', { status: resp.status || 200, headers });
 }
 
+// ---------- 【临时关闭桌宠】托盘 ----------
+//
+// 「临时关闭」是**宿主的内存态**（见 src/host/index.ts 的 petPaused / /pause / /resume）：置位后宿主走
+// syncDesktop 重启本 Helper，并给新进程带 DSH_PET_PAUSED=1。此时本进程**不开任何宠物窗口**，
+// 只建一个托盘图标——托盘必须活在一个"一直活着"的进程里，所以只能由 Helper 自己持有
+// （宿主不会因为"窗口一个都没有"就停掉它：桌面宠物仍在配置里，hasDesktopPet 照旧为真）。
+//
+// 恢复走"再重启一次"这条路，而不是在本进程里就地建窗口：宠物数量/尺寸/暂停态全部由宿主经 env 决定，
+// 就地建窗口就得在本进程里复刻一遍宿主的配置解析——与「重载配置」同一条路径最省事也最一致。
+// 于是点托盘「显示桌宠」= POST /resume，宿主复位后重启本 Helper：新进程建窗口，本进程连同托盘一起换掉。
+const PAUSED = process.env.DSH_PET_PAUSED === '1';
+/** 托盘图标：包内 assets/logo.png（256×256 → 缩到 32×32：100%/150%/200% 缩放下托盘分别是 16/24/32，
+ *  用 32 这一档向下缩放最干净，比只给 16 在高 DPI 屏上更清楚） */
+const TRAY_ICON = path.join(__dirname, '..', '..', 'assets', 'logo.png');
+/** 宿主基址与前缀：bridge 模式走管道协议（路径已是 /dsh-pet-7340/...），否则按 configUrl 推 origin 直连 HTTP */
+const HOST_ORIGIN = (() => {
+  try {
+    return new URL(process.env.DSH_PET_CONFIG_URL || 'http://127.0.0.1:3080/dsh-pet-7340/config').origin;
+  } catch {
+    return '';
+  }
+})();
+const HOST_PREFIX = '/dsh-pet-7340';
+
+/** 托盘句柄（必须留着引用：局部变量会被 GC 掉，图标随之消失） */
+let tray = null;
+/** 恢复请求进行中（托盘可能被连点；也避免失败后重复发） */
+let resuming = false;
+
+/**
+ * 点托盘「显示桌宠」：请宿主解除临时关闭。
+ * 成功时宿主会重启本进程（托盘一并消失），所以这里不需要做别的；失败（宿主不可达）复位标记供再点。
+ * 不设超时取消：bridge 请求自身 45s 兜底，HTTP 也有网络层超时。
+ */
+function resumeFromTray() {
+  if (resuming) return;
+  resuming = true;
+  if (tray) tray.setToolTip('正在显示桌宠…');
+  const request = BRIDGE
+    ? bridgeRequest('POST', HOST_PREFIX + '/resume')
+    : fetch(HOST_ORIGIN + HOST_PREFIX + '/resume', { method: 'POST' }).then((res) => {
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        return null;
+      });
+  Promise.resolve(request).then(
+    () => {
+      // 正常：宿主收到 /resume 就会重启本进程（托盘随进程消失），下面这段兜底根本跑不到。
+      // 若 5s 后本进程还活着，说明"宿主收了但没换掉我们"（异常路径）——复位标记让托盘别变成点不动的
+      // 死图标（再点一次至少会重发请求并留下日志）。**不在此处就地建窗口**：窗口该不该存在由宿主经 env
+      // 决定，本进程自己建会和宿主刚拉起的新 Helper 撞成两只宠物（issue #64 的重复窗口问题）。
+      const aliveTimer = setTimeout(() => {
+        if (!tray) return;
+        resuming = false;
+        tray.setToolTip('桌宠已临时关闭（点此再试）');
+        console.error('[dsh-pet-desktop-helper] resume accepted but helper still alive; tray kept for retry');
+      }, 5000);
+      aliveTimer.unref?.();
+    },
+    (error) => {
+      resuming = false;
+      if (tray) tray.setToolTip('桌宠已临时关闭（点此显示）');
+      console.error('[dsh-pet-desktop-helper] resume failed:', String(error && error.message ? error.message : error));
+    },
+  );
+}
+
+/**
+ * 建立托盘图标（临时关闭态下用户唯一的入口）。
+ * 图标读不出来时**不留"看不见的托盘"**：直接把宿主复位（宠物照常显示）——宁可这次关不掉，
+ * 也不能让用户按下去之后既没有宠物、也没有恢复入口（那种状态只能重启 DSH 才能出来）。
+ */
+function showTray() {
+  if (tray) return;
+  let icon = null;
+  try {
+    icon = nativeImage.createFromPath(TRAY_ICON);
+    if (!icon.isEmpty()) icon = icon.resize({ width: 32, height: 32 });
+  } catch (error) {
+    console.error('[dsh-pet-desktop-helper] tray icon load failed:', error);
+  }
+  if (!icon || icon.isEmpty()) {
+    console.error('[dsh-pet-desktop-helper] tray icon unavailable (' + TRAY_ICON + '); asking host to resume');
+    resumeFromTray();
+    return;
+  }
+  tray = new Tray(icon);
+  tray.setToolTip('桌宠已临时关闭（点此显示）');
+  tray.setContextMenu(Menu.buildFromTemplate([{ label: '显示桌宠', click: () => resumeFromTray() }]));
+  tray.on('click', () => resumeFromTray());
+  console.error('[dsh-pet-desktop-helper] temporarily closed: no pet windows, tray icon created');
+}
+
 app.whenReady().then(() => {
   // 探测子进程：此时没有 force-device-scale-factor，读到的是 Windows 的真实主屏缩放。
   // 退出推迟一拍——在 ready 回调里直接 app.exit() 会赶在 stdout 落盘前拆掉进程
@@ -676,7 +768,10 @@ app.whenReady().then(() => {
     startBridgeCallback(); // 宿主应答回调服务器（stdin 在 Electron 主进程不可用，改走本地 HTTP）
   }
 
-  createPetWindows();
+  // 【临时关闭】宿主带 DSH_PET_PAUSED=1 时：不开宠物窗口，只留托盘图标（唯一恢复入口）。
+  // 其余 ipc/renderer 相关逻辑照常注册——没有窗口时它们不会被触发，省得再分叉一套分支。
+  if (PAUSED) showTray();
+  else createPetWindows();
 
   // 宠物窗口跟随：renderer 逐帧上报窗口内容区位置/尺寸
   ipcMain.on('pet:set-bounds', (event, bounds) => {
@@ -1097,5 +1192,7 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => {
-  app.quit();
+  // 【临时关闭】态下「没有窗口」是**故意**的：托盘图标还活着，用户要靠它点回来——绝不能在这里退出。
+  // 正常态托盘为 null，行为与改造前完全一致（关掉最后一个窗口 = 退出 Helper，宿主守护循环再拉起）。
+  if (!tray) app.quit();
 });

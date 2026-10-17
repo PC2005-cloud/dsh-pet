@@ -30,8 +30,8 @@ export interface StateLeaf {
   data: unknown;
 }
 
-/** 全局段（所有端共享一份） */
-export type SectionName = 'balance' | 'workStatus' | 'notify';
+/** 全局段（所有端共享一份）；power = 临时关闭桌宠的内存态（closed: boolean） */
+export type SectionName = 'balance' | 'workStatus' | 'notify' | 'power';
 
 /** 每宠物段（say = 要说的话；anim = 要播的动画名） */
 export type PetLeafName = 'say' | 'anim';
@@ -56,7 +56,7 @@ export class PollStateStore {
 
   constructor() {
     this.last = 0;
-    this.sections = { balance: emptyLeaf(), workStatus: emptyLeaf(), notify: emptyLeaf() };
+    this.sections = { balance: emptyLeaf(), workStatus: emptyLeaf(), notify: emptyLeaf(), power: emptyLeaf() };
     this.pets = new Map();
   }
 

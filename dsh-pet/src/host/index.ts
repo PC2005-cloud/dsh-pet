@@ -684,6 +684,23 @@ export function apply(ctx: any): void {
   let startRetryTimer: NodeJS.Timeout | undefined;
   let electronEnsure: Promise<void> | undefined;
   let disposed = false;
+
+  /**
+   * 【临时关闭桌宠】宿主内存态开关（**不落盘**：DSH 重启即恢复，配置一个字节都不动）。
+   *
+   * 置位路径：桌面端右键「临时关闭桌宠」→ 渲染端 POST /dsh-pet-7340/pause（见 runtime/electron-helper
+   * 的 sprite.js closeAllPets）→ 本处翻转 + syncDesktop() 重启 Helper；新 Helper 带
+   * DSH_PET_PAUSED=1，**只建托盘图标不开宠物窗口**（托盘是恢复入口，它必须活在一个"一直活着"的
+   * 进程里，所以由 Helper 自己持有；点托盘「显示桌宠」→ POST /resume → 再走同一条重启路径建回窗口）。
+   *
+   * 同时是"完全停掉"的闸门：置位期间碎碎念/余额/工作状态/系统通知的自动行为全部短路（不调模型、
+   * 不拉网络），手动动作（/balance /whisper /chat 与其同名命令）统一拒绝——见下方各处的 petPaused 分支。
+   */
+  let petPaused = false;
+  /** 【临时关闭】手动动作（/balance /whisper /chat 与其命令）在关闭期间的统一拒绝：同一句话、同一个形状 */
+  const PAUSED_TEXT = '桌宠已临时关闭（点托盘「显示桌宠」恢复）';
+  const PAUSED_REPLY = { ok: false, reason: 'paused', message: PAUSED_TEXT };
+
   /** 「无图形环境」提示只在进程生命周期内打一次，避免守护循环刷屏 */
   let displayWarned = false;
 
@@ -726,6 +743,8 @@ export function apply(ctx: any): void {
           DSH_PET_SCALE: '1',
           // 打开 bridge 协议：main.js 注册 dsh-pet-bridge scheme，把渲染端请求经管道转给宿主
           DSH_PET_BRIDGE: '1',
+          // 【临时关闭】透传宿主内存态：'1' = 只建托盘不开窗口（点托盘「显示桌宠」→ /resume 再重启回来）
+          DSH_PET_PAUSED: petPaused ? '1' : '0',
           // 每只桌面宠物一个局部小窗口：透传宠物列表（[{id,size}]）
           DSH_PET_PETS: JSON.stringify(desktopPetList()),
         },
@@ -1012,6 +1031,24 @@ export function apply(ctx: any): void {
       return { kind: 'json', status: 200, obj: { reloading: true } };
     }
 
+    /**
+     * 【临时关闭桌宠】/pause（关闭，全部宠物一起）与 /resume（恢复，托盘点「显示桌宠」）：
+     * 内存态开关 + 同一条 syncDesktop 重启路径（新 Helper 按 DSH_PET_PAUSED 决定"只建托盘"还是"建窗口"）。
+     * 幂等：状态没变就不重启（避免托盘点两下导致连起重启）。
+     * 状态同时写进 /state 的 sections.power——浏览器 overlay 据此一并停渲染（两端语义一致）。
+     */
+    if (rest === 'pause' || rest === 'resume') {
+      if (method !== 'POST') return { kind: 'json', status: 405, obj: { error: 'method not allowed' } };
+      const next = rest === 'pause';
+      if (petPaused !== next) {
+        petPaused = next;
+        state.writeSection('power', { closed: petPaused });
+        ctx.logger?.info?.(`[dsh-pet] 桌宠已${petPaused ? '临时关闭（点托盘「显示桌宠」恢复）' : '恢复显示'}`);
+        void syncDesktop();
+      }
+      return { kind: 'json', status: 200, obj: { ok: true, closed: petPaused } };
+    }
+
     // 配置文件路径 + 存储位置清单（设置页「高级配置」与「卸载与存储」展示用）
     if (rest === 'config/meta') {
       return {
@@ -1101,6 +1138,8 @@ export function apply(ctx: any): void {
     // 前端不再各自定时查余额（host 定时器统一查，两端共享一份），也不再需要计数轮询中转。
     if (rest === 'balance') {
       if (method !== 'POST') return { kind: 'json', status: 405, obj: { error: 'method not allowed' } };
+      // 【临时关闭】期间不查余额（不拉网络）：手动动作一并拒绝，口径与自动轮询一致
+      if (petPaused) return { kind: 'json', status: 200, obj: PAUSED_REPLY };
       await refreshBalance(true); // manual：用户主动要的，余额不可用时前端必弹文字说明
       // ok 只表示"这次刷新动作完成了"；余额本身是否可用在 S 的 data 里（ok:false 会弹文字说明气泡）
       return { kind: 'json', status: 200, obj: { ok: true } };
@@ -1111,6 +1150,8 @@ export function apply(ctx: any): void {
     // 手动语义不受 whisperEnabled 门控：那个字段只关自动周期（与改造前一致）。
     if (rest === 'whisper') {
       if (method !== 'POST') return { kind: 'json', status: 405, obj: { error: 'method not allowed' } };
+      // 【临时关闭】期间不生成碎碎念（不调模型——本地 LLM 单并发时会顶掉正在跑的任务的 KV cache）
+      if (petPaused) return { kind: 'json', status: 200, obj: PAUSED_REPLY };
       const petId = String(url.searchParams.get('pet') ?? '');
       try {
         const ok = await publishWhisper(petId);
@@ -1229,6 +1270,8 @@ export function apply(ctx: any): void {
           return { kind: 'json', status: 200, obj: { ok: true, messages, rounds } };
         }
         if (method === 'POST') {
+          // 【临时关闭】期间不发对话（不调模型）：GET（读记忆）不受影响，弹窗照常能打开看历史
+          if (petPaused) return { kind: 'json', status: 200, obj: PAUSED_REPLY };
           const parsed = (JSON.parse(body ?? 'null') as Record<string, unknown> | null) ?? {};
           const text = typeof parsed.text === 'string' ? parsed.text.trim() : '';
           if (!text) {
@@ -1367,6 +1410,8 @@ export function apply(ctx: any): void {
   // 纯监听不调用模型；有宠物启用 workStatusEnabled 时才被浏览器侧消费（host 侧恒轻量监听）。
   ctx.effect(() => {
     const dispose = ctx.on('session/event', (session: unknown, event: unknown) => {
+      // 【临时关闭】期间不再跟踪工作状态（不监听、不写 S）：桌宠不在，攒状态没有意义；恢复后由后续事件重建
+      if (petPaused) return;
       const type = (event as { type?: string } | null)?.type;
       if (!type) return;
       const sessionId = String(
@@ -1464,6 +1509,8 @@ export function apply(ctx: any): void {
       'session/event',
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (session: any, event: any) => {
+        // 【临时关闭】期间不产生系统通知帧（桌宠不在，弹 toast 只会打扰；也免得排下延迟确认的定时器）
+        if (petPaused) return;
         // 会话门（issue #82）：子代理 / 委派会话不发通知——你等的是父对话，不是某一路子代理跑完。
         // 判据用 header.origin（不是 parentSession，那会把普通 fork 的主对话一起静音），
         // 判据不可用时放行，绝不把通知整体打哑。详见 notify-events.ts 的 shouldNotifySession。
@@ -1507,6 +1554,8 @@ export function apply(ctx: any): void {
         name: 'balance',
         description: '手动触发桌宠余额显示（立即弹出余额气泡）',
         handler: () => {
+          // 【临时关闭】期间拒绝（与 /balance 路由同一句话口径）
+          if (petPaused) return { kind: 'error', text: PAUSED_TEXT };
           void refreshBalance(true); // manual：命令是用户主动敲的
           return { kind: 'success', text: '已触发桌宠余额显示' };
         },
@@ -1530,7 +1579,8 @@ export function apply(ctx: any): void {
         const cfg = readAllConfig(configPaths);
         sec = balancePeriodSec(cfg);
         // 没有任何启用余额的宠物 → 不查（省外部调用）；配置改了下一拍自然跟上
-        if (flattenPetList(cfg).some((p) => p.balanceEnabled === true)) await refreshBalance();
+        // 【临时关闭】期间不拉余额（不发网络请求）：完全停掉，只留定时器骨架等恢复
+        if (!petPaused && flattenPetList(cfg).some((p) => p.balanceEnabled === true)) await refreshBalance();
       } catch {
         // 读配置抛错 = 安装损坏（readAllConfig 只在**内置默认**缺失/损坏时抛，用户层写坏只会告警回退）：
         // 不再重排——每 30 分钟重试一次没有意义，而且会白占一个常驻定时器。修好安装后重启 DSH 即可。
@@ -1562,7 +1612,8 @@ export function apply(ctx: any): void {
         const cfg = readAllConfig(configPaths);
         const now = Date.now();
         let min = Infinity;
-        for (const pet of flattenPetList(cfg)) {
+        // 【临时关闭】期间整只下线：不生成碎碎念（不调模型——本地 LLM 单并发时会顶掉正在跑的任务的 KV cache）
+        for (const pet of petPaused ? [] : flattenPetList(cfg)) {
           const petId = String(pet.id ?? '');
           if (!petId || pet.whisperEnabled !== true) continue;
           const sec = whisperPeriodSec(cfg, petId);
@@ -1651,6 +1702,8 @@ export function apply(ctx: any): void {
         description: '与桌宠对话：留空 = 碎碎念一句；输入消息 = 正常对话',
         input: { hint: '[消息]（留空 = 碎碎念）' },
         handler: ({ rawInput }: { rawInput: string }) => {
+          // 【临时关闭】期间拒绝（不调模型；与 /chat 路由同一句话口径）
+          if (petPaused) return { kind: 'error', text: PAUSED_TEXT };
           const petId = resolveActivePetId();
           if (!petId) return { kind: 'error', text: '没有可交互的桌宠' };
           const text = rawInput.trim();
