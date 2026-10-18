@@ -7,6 +7,9 @@
  */
 'use strict';
 
+/** 交叉淡出时长（ms）：必须与 index.html 里 video.pet-video 的 opacity transition 一致 */
+const FADE_MS = 300;
+
 // ---------- 单只宠物（行为与浏览器 PetCard 一致；纯逻辑来自 src/shared） ----------
 class PetSprite {
   constructor(pet) {
@@ -132,6 +135,13 @@ class PetSprite {
     this.workState = null; // 最近一次工作状态（互动/事件动画播完恢复档位循环用）
     this.prevWorkState = null; // 上一档状态（气泡只在状态变化时点亮/收起，Bug 2）
     this.prevWorkTick = 0;
+    // 工作状态演出状态机（滞回）：正在播的档位 / 起播时刻 / 候选档位与连续拍数（events.js onWorkTick 维护）
+    this.workShown = null;
+    this.workShownAt = 0;
+    this.workCand = null;
+    this.workCandTicks = 0;
+    // 交叉淡出计时：旧片在淡出期间继续播，结束后才 pause（见 pauseNonFrontSoon）
+    this.fadeTimer = null;
     // 对话弹窗（shared 组件）：当前挂载的 close() 句柄 + 开启标记
     // （chatOpen 是穿透守卫：弹窗是窗口内 DOM，期间整窗保持可交互，与 menuOpen 同语义——否则
     //   光标移到输入框（不在身体命中区）就会被 onMouseMove 翻回穿透，点击全被透传）
@@ -269,6 +279,7 @@ class PetSprite {
     if (this.bubbleTimer !== null) window.clearTimeout(this.bubbleTimer);
     if (this.whisperTimer !== null) window.clearTimeout(this.whisperTimer);
     if (this.workTimer !== null) window.clearTimeout(this.workTimer);
+    if (this.fadeTimer !== null) window.clearTimeout(this.fadeTimer);
     if (this.chatClose) {
       this.chatClose();
       this.chatClose = null;
@@ -422,6 +433,10 @@ class PetSprite {
     }
     const gen = ++this.gen;
     this.pending = { anim: next, once: nextOnce, gen };
+    // 单一事实来源：switchTo 也写 anim/once。旧实现只在 playOnce 里写，工作状态这条路径
+    // 因此长期留着脏值——档内避重、handleEnded 的 isEventAnim 判定、恢复档位都跟着错。
+    this.anim = next;
+    this.once = nextOnce;
     const target = this.front === 0 ? this.videoB : this.videoA;
     const el = target;
     if (!el) return;
@@ -450,17 +465,18 @@ class PetSprite {
       loadGuard('video error');
     };
     el.load();
-    const onReady = () => {
-      el.removeEventListener('loadeddata', onReady);
-      window.clearTimeout(loadTimer);
-      el.onerror = null;
-      if (this.pending && this.pending.gen !== gen) return;
+    // 首帧闸门 + 交叉淡出：loadeddata 只代表"有数据"，首帧常在此之后才被合成——那一下就是一帧黑/空
+    // （观感上的"闪"）。先让新片静默播起来，等 requestVideoFrameCallback 报"首帧已上屏"再翻前台；
+    // 窗口隐藏/后台时不回调 → 120ms 兜底，绝不卡住切换。
+    const flip = () => {
+      if (this.gen !== gen) return; // 已被更新的切换覆盖
       const old = this.front === 0 ? this.videoA : this.videoB;
       el.classList.add('is-front');
       if (old && old !== el) {
         old.classList.remove('is-front');
         old.onended = null;
-        old.pause();
+        // 交叉淡出：不再立刻 pause（定格帧 → 活动帧的硬切），淡出结束后才停
+        this.pauseNonFrontSoon();
         // 被换下去的那一段若属第三方点播且没播完 → 如实回 cancelled。
         // （"被新点播顶掉"由 host 在受理时直接标记，这里补的是**非点播**打断：
         //   点击 / 拖拽 / 碎碎念 / 余额 / 工作状态 / 空闲回收。）
@@ -472,6 +488,18 @@ class PetSprite {
       this.pending = null;
       this.playback = playbackId || null;
       el.style.transform = this.facing === 'right' ? 'scaleX(-1)' : '';
+      // 点击 Q 弹：等新动画就位后才压（压的是新点击动画的首帧，与浏览器一致）
+      if (this.pendingSquash) {
+        this.pendingSquash = false;
+        this.startSquash(el);
+      }
+      if (this.pendingMove) this.startMoveDrive(el);
+    };
+    const onReady = () => {
+      el.removeEventListener('loadeddata', onReady);
+      window.clearTimeout(loadTimer);
+      el.onerror = null;
+      if (this.pending && this.pending.gen !== gen) return;
       el.play()
         .then(() => {
           // 只有 play() 兑现才代表"确实开始出画"（loadeddata 只代表可解码）
@@ -483,15 +511,38 @@ class PetSprite {
           if (this.playback === playbackId) this.playback = null;
           this.reportPlayback(playbackId, 'failed', 'play-rejected');
         });
-      // 点击 Q 弹：等新动画就位后才压（压的是新点击动画的首帧，与浏览器一致）
-      if (this.pendingSquash) {
-        this.pendingSquash = false;
-        this.startSquash(el);
-      }
-      if (this.pendingMove) this.startMoveDrive(el);
+      this.whenFirstFrame(el, flip);
     };
     el.addEventListener('loadeddata', onReady);
     if (el.readyState >= 2) onReady();
+  }
+
+  /** 首帧上屏后回调（rVFC 优先；隐藏窗口不回调 → 120ms 兜底；同一元素只兑现一次） */
+  whenFirstFrame(el, cb) {
+    let done = false;
+    const fire = () => {
+      if (done) return;
+      done = true;
+      cb();
+    };
+    if (typeof el.requestVideoFrameCallback === 'function') {
+      el.requestVideoFrameCallback(fire);
+      window.setTimeout(fire, 120);
+      return;
+    }
+    // 老内核：两帧 rAF 近似"至少经过一次合成"
+    requestAnimationFrame(() => requestAnimationFrame(fire));
+  }
+
+  /** 交叉淡出收尾：FADE_MS 之后停掉所有不在前台的视频（可重入，连切也不会漏停） */
+  pauseNonFrontSoon() {
+    if (this.fadeTimer !== null) window.clearTimeout(this.fadeTimer);
+    this.fadeTimer = window.setTimeout(() => {
+      this.fadeTimer = null;
+      const frontEl = this.front === 0 ? this.videoA : this.videoB;
+      if (this.videoA && this.videoA !== frontEl) this.videoA.pause();
+      if (this.videoB && this.videoB !== frontEl) this.videoB.pause();
+    }, FADE_MS);
   }
 
   playOnce(name, playbackId) {

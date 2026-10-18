@@ -31,7 +31,12 @@ import {
   type PollState,
   type SayCue,
 } from '../shared/state';
-import { WORK_STATUS_INDEX, type WorkStatusSnapshot } from '../shared/work-status';
+import {
+  WORK_STATUS_INDEX,
+  decideWorkTier,
+  type WorkStatusSnapshot,
+  type WorkStatusState,
+} from '../shared/work-status';
 import { makeBalanceBubble, makeWhisperBubble } from './bubble';
 import { clickScore, SCORE_MIN_SPEED, mountScorePopup, spawnScoreBurst } from '../shared/score-popup';
 import { CANVAS_H, FEET_Y, HIT_BOX, DRAG_THRESHOLD, PET_REF_WIDTH, ANIMATION_EXT } from '../shared/constants';
@@ -94,6 +99,26 @@ const THUMB_EXT = ANIMATION_EXT;
 /** 余额气泡展示时长（ms）：定时自动消失，与动画生命周期解耦 */
 const BUBBLE_DURATION_MS = 10 * 1000;
 
+/** 交叉淡出时长（ms）：必须与 .dsh-pet-video 的 opacity transition 一致（旧片淡出结束才暂停） */
+const FADE_MS = 300;
+
+/** 首帧上屏后回调（rVFC 优先；后台标签页不回调 → 120ms 兜底；同一元素只兑现一次） */
+function whenFirstFrame(el: HTMLVideoElement, cb: () => void): void {
+  let done = false;
+  const fire = (): void => {
+    if (done) return;
+    done = true;
+    cb();
+  };
+  if (typeof el.requestVideoFrameCallback === 'function') {
+    el.requestVideoFrameCallback(fire);
+    window.setTimeout(fire, 120);
+    return;
+  }
+  // 老内核：两帧 rAF 近似"至少经过一次合成"
+  requestAnimationFrame(() => requestAnimationFrame(fire));
+}
+
 /** /state 长轮询的挂起时长（ms）：宿主在"版本没变"时最多挂这么久。
  *  1s 是**前端自己定的下限**——空闲时请求率因此与改造前完全一致（1 req/s），
  *  而叶子一变宿主立刻返回，前端不必再等满一拍。 */
@@ -111,7 +136,7 @@ const css = [
   '.dsh-pet-root[data-corner="top-right"]{right:var(--dsh-pet-mx,24px);top:var(--dsh-pet-my,0)}',
   '.dsh-pet-root[data-corner="top-left"]{left:var(--dsh-pet-mx,24px);top:var(--dsh-pet-my,0)}',
   '.dsh-pet-stage{position:relative;width:var(--dsh-pet-size,462px);height:calc(var(--dsh-pet-size,462px)*9/16);pointer-events:none}',
-  '.dsh-pet-video{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;pointer-events:none;opacity:0;transition:opacity .18s ease;transform-origin:center}',
+  '.dsh-pet-video{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;pointer-events:none;opacity:0;transition:opacity .3s cubic-bezier(.4,0,.2,1);transform-origin:center}',
   '.dsh-pet-video.is-front{opacity:1}',
   // 触屏拖拽必需：缺 touch-action:none 时浏览器把手势判成页面滚动并发 pointercancel，
   // 宠物就不跟手指走；两条 -webkit-* 抑制长按选中与 iOS 长按呼出系统菜单
@@ -306,6 +331,18 @@ export function makePetUI(rt: {
     // 卸载时统一 abort——否则卸载后完成的 fetch 会再创建 blob URL 且无人 revoke（泄漏到页面销毁）。
     const mountedRef = useRef(false);
     const inflightRef = useRef<AbortController[]>([]);
+    // 交叉淡出计时：旧片在淡出期间继续播，过渡结束才 pause（可重入，连续切换也不会漏停）
+    const fadeTimerRef = useRef<number | null>(null);
+    const pauseNonFrontSoon = () => {
+      if (fadeTimerRef.current !== null) window.clearTimeout(fadeTimerRef.current);
+      fadeTimerRef.current = window.setTimeout(() => {
+        fadeTimerRef.current = null;
+        const front = frontRef.current === 0 ? videoARef.current : videoBRef.current;
+        for (const ref of [videoARef, videoBRef]) {
+          if (ref.current && ref.current !== front) ref.current.pause();
+        }
+      }, FADE_MS);
+    };
 
     /**
      * 播放回执上报（issue #122 第 3 项）：把这一段点播的**真实**状态告诉 host。
@@ -430,18 +467,21 @@ export function makePetUI(rt: {
               '（已释放本次切换）',
           );
         });
-      const onReady = () => {
-        el.removeEventListener('loadeddata', onReady);
-        if (pendingRef.current?.gen !== gen) return;
+      // 首帧闸门 + 交叉淡出：loadeddata 只代表"有数据"，首帧常在此之后才被合成——那一下就是一帧黑/空
+      // （观感上的"闪"）。先让新片静默播起来，等 requestVideoFrameCallback 报"首帧已上屏"再翻前台；
+      // 后台标签页里 rVFC 不回调 → 120ms 兜底，绝不卡住切换。
+      const flip = () => {
+        if (genRef.current !== gen) return; // 已被更新的切换覆盖
         const old = frontRef.current === 0 ? videoARef : videoBRef;
         el.classList.add('is-front');
         if (old.current && old.current !== el) {
           old.current.classList.remove('is-front');
           // 拆雷：降级为背景的视频继续播完会触发它身上残留的 onended → handleEnded，
-          // 掐断当前前台动画（历史上表现为随机急速跳转/雪崩）。清 handler + 停播彻底消除。
+          // 掐断当前前台动画（历史上表现为随机急速跳转/雪崩）。清 handler 彻底消除。
           old.current.onended = null;
           old.current.onerror = null;
-          old.current.pause();
+          // 交叉淡出：不再立刻 pause（定格帧 → 活动帧的硬切），淡出结束后才停
+          pauseNonFrontSoon();
           // 被换下去的那一段若属第三方点播且没播完 → 如实回 cancelled。
           // （"被新点播顶掉"由 host 在受理时直接标记，这里补的是**非点播**打断：
           //   点击 / 拖拽 / 碎碎念 / 余额 / 工作状态 / 空闲回收。）
@@ -454,6 +494,16 @@ export function makePetUI(rt: {
         pendingRef.current = null;
         playingPlaybackRef.current = cuePlaybackId;
         el.style.transform = facingRef.current === 'right' ? 'scaleX(-1)' : '';
+        // 点击 Q 弹：等新动画就位后才压（压的是新点击动画的首帧，与桌面一致）
+        if (pendingSquashRef.current) {
+          pendingSquashRef.current = false;
+          startSquash(el);
+        }
+        if (pendingMoveRef.current) startMoveDrive(el);
+      };
+      const onReady = () => {
+        el.removeEventListener('loadeddata', onReady);
+        if (pendingRef.current?.gen !== gen) return;
         el.play()
           .then(() => {
             // 只有 play() 兑现才代表"确实开始出画"（loadeddata 只代表可解码）
@@ -465,12 +515,7 @@ export function makePetUI(rt: {
             if (playingPlaybackRef.current === cuePlaybackId) playingPlaybackRef.current = null;
             reportPlayback(cuePlaybackId, 'failed', 'play-rejected');
           });
-        // 点击 Q 弹：等新动画就位后才压（压的是新点击动画的首帧，与桌面一致）
-        if (pendingSquashRef.current) {
-          pendingSquashRef.current = false;
-          startSquash(el);
-        }
-        if (pendingMoveRef.current) startMoveDrive(el);
+        whenFirstFrame(el, flip);
       };
       el.addEventListener('loadeddata', onReady);
     };
@@ -488,6 +533,10 @@ export function makePetUI(rt: {
         mountedRef.current = false;
         for (const c of inflight) c.abort();
         inflight.length = 0;
+        if (fadeTimerRef.current !== null) {
+          window.clearTimeout(fadeTimerRef.current);
+          fadeTimerRef.current = null;
+        }
         stopMove();
         stopDragFollow();
         stopThrow();
@@ -589,9 +638,21 @@ export function makePetUI(rt: {
     //   success/error（"这事结束了"）10s 自动收起；
     //   state=null（空闲，回合 aborted 等）收起气泡回待机。
     // 动画循环语义：进行中档位循环播（once=false），终态档位播一遍（once=true）回 idle 链。
+    //
+    // **演出平滑（滞回）**：/state 给的 state 是"这一拍的瞬时真相"，而后台工具密集调用时
+    //   tool/call 与 tool/result 会交替上报 —— 照搬成换片就是每秒硬切一段 10s 的 webm，
+    //   观感即闪烁 + 抖动 + 生硬切换。所以先过一层状态机（decideWorkTier，纯函数在 shared）：
+    //   · 同档位：不换片、不 stopMove，只刷新气泡文本（旧实现每拍都把同一段从第 0 帧重播）；
+    //   · 空闲→任意 / 任意→终态 / 升档：立即接受（反馈不迟到）；
+    //   · 降档：候选连续两拍（≈2s）且当前档已驻留 ≥1.2s 才认 —— working↔result 的 1s 毛刺被吞掉。
     const prevWorkTickRef = useRef(0);
     // 调试日志：上一档位（null=空闲；undefined=启动后首次触发，显示为 null）
     const prevWorkStateRef = useRef<string | null | undefined>(undefined);
+    // 演出状态机：正在播的档位 / 起播时刻 / 候选档位与连续拍数
+    const workShownRef = useRef<WorkStatusState | null>(null);
+    const workShownAtRef = useRef(0);
+    const workCandRef = useRef<WorkStatusState | null>(null);
+    const workCandTicksRef = useRef(0);
     useEffect(() => {
       if (!cfg.workStatusEnabled) return; // 未启用工作状态联动 -> 该宠物完全免疫
       if (workStatusTick === 0 || workStatusTick === prevWorkTickRef.current) return;
@@ -608,6 +669,11 @@ export function makePetUI(rt: {
             '->null    播完即停（回待机，收起气泡）',
         );
         prevWorkStateRef.current = null;
+        // 演出状态机复位：下一段回合从"空闲→任意立即接受"重新开始
+        workShownRef.current = null;
+        workShownAtRef.current = 0;
+        workCandRef.current = null;
+        workCandTicksRef.current = 0;
         // 回空闲：把正在**循环播**的进行中档位动画改成"播完即停"。
         // 进行中档位走 setOnce(false)（el.loop=true、el.onended=null），ended 永不触发；而这里不切
         // 动画（原设计"由常规动画链回待机"），链因此拿不到推进信号 —— 宠物会一直卡在那段工作动画上，
@@ -633,12 +699,48 @@ export function makePetUI(rt: {
         console.error('[dsh-pet] 配置缺少 animations.events.workStatus，无法播放工作状态动画');
         return;
       }
-      const idx = WORK_STATUS_INDEX[workStatus.state];
+      const state = workStatus.state;
+      const idx = WORK_STATUS_INDEX[state];
       const slot = pool[idx];
       if (slot === undefined) {
-        console.error('[dsh-pet] work-status 档位索引越界：state=' + workStatus.state + ' idx=' + idx);
+        console.error('[dsh-pet] work-status 档位索引越界：state=' + state + ' idx=' + idx);
         return;
       }
+      // 气泡文本：任务详情（todo/write 提供，如"正在做 X"）优先，否则从条目级配置
+      // workStatusTexts[档位]（数组）随机抽一句；整字段/整档缺失 = 不弹文本，只播动画。
+      const textGroup = Array.isArray(cfg.workStatusTexts) ? cfg.workStatusTexts[idx] : undefined;
+      const configuredText =
+        Array.isArray(textGroup) && textGroup.length > 0
+          ? textGroup[Math.floor(Math.random() * textGroup.length)]
+          : undefined;
+      if (workShownRef.current === state) {
+        // 同档位：动画保持不动（不重播、不打断漫游），只刷新任务详情文本
+        workCandRef.current = null;
+        workCandTicksRef.current = 0;
+        setWorkText(workStatus.task ?? configuredText ?? null);
+        return;
+      }
+      if (workCandRef.current === state) workCandTicksRef.current += 1;
+      else {
+        workCandRef.current = state;
+        workCandTicksRef.current = 1;
+      }
+      const decision = decideWorkTier({
+        shown: workShownRef.current,
+        shownAt: workShownAtRef.current,
+        candidate: state,
+        candTicks: workCandTicksRef.current,
+        now: Date.now(),
+      });
+      if (decision === 'hold') {
+        // 滞回：压住这一拍不换片（working↔result 的 1s 毛刺在这里被吞掉），动画继续演
+        setWorkText(workStatus.task ?? configuredText ?? null);
+        return;
+      }
+      workShownRef.current = state;
+      workShownAtRef.current = Date.now();
+      workCandRef.current = null;
+      workCandTicksRef.current = 0;
       const name = pickSlot(slot, animRef.current); // 数组槽位档内随机抽 1，且避开当前正播动画（避免连续重复）
       console.log(
         '[dsh-pet] ' +
@@ -648,33 +750,21 @@ export function makePetUI(rt: {
           ' ' +
           (prevWorkStateRef.current ?? 'null') +
           '->' +
-          workStatus.state +
+          state +
           '    ' +
           name,
       );
-      const stateChanged = prevWorkStateRef.current !== workStatus.state;
-      prevWorkStateRef.current = workStatus.state;
+      prevWorkStateRef.current = state;
       stopMove();
-      // 气泡文本：任务详情（todo/write 提供，如"正在做 X"）优先，否则从条目级配置
-      // workStatusTexts[档位]（数组）随机抽一句；整字段/整档缺失 = 不弹文本，只播动画。
-      const textGroup = Array.isArray(cfg.workStatusTexts) ? cfg.workStatusTexts[idx] : undefined;
-      const configuredText =
-        Array.isArray(textGroup) && textGroup.length > 0
-          ? textGroup[Math.floor(Math.random() * textGroup.length)]
-          : undefined;
       // 文本总是更新（任务详情可能在同一状态下变化）
       setWorkText(workStatus.task ?? configuredText ?? null);
-      const terminal = workStatus.state === 'success' || workStatus.state === 'error';
-      // 气泡点亮/收起只在状态变化时动作：同状态后续 tick（todo 文案更新、其它会话事件搅动 ts）
-      // 不重新点亮**已自动收起的终态气泡**——否则"任务完成"的气泡会被后续 ts 变化反复弹回（Bug 2）；
-      // 非终态同状态 tick 气泡本就常驻，无需重复点亮。
-      if (stateChanged) {
-        setWorkBubbleOn(true);
-        if (workBubbleTimerRef.current !== null) window.clearTimeout(workBubbleTimerRef.current);
-        workBubbleTimerRef.current = terminal
-          ? window.setTimeout(() => setWorkBubbleOn(false), BUBBLE_DURATION_MS)
-          : null; // 非终态：常驻，不设自动收起
-      }
+      const terminal = state === 'success' || state === 'error';
+      // 气泡点亮/收起只在真正换档时动作：同档 tick 从不点亮**已自动收起的终态气泡**（Bug 2 语义不变）
+      setWorkBubbleOn(true);
+      if (workBubbleTimerRef.current !== null) window.clearTimeout(workBubbleTimerRef.current);
+      workBubbleTimerRef.current = terminal
+        ? window.setTimeout(() => setWorkBubbleOn(false), BUBBLE_DURATION_MS)
+        : null; // 非终态：常驻，不设自动收起
       // 循环语义：终态播一遍回 idle（once=true）；非终态单候选档位 once=false 无限循环；
       // 非终态多候选档位 once=true 播一遍 → ended 由 handleEnded 护栏轮换到下一候选（长时间状态不单段重复）
       const rotating = !terminal && Array.isArray(slot) && slot.length > 1;

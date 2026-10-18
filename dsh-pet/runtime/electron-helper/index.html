@@ -48,7 +48,9 @@
         object-fit: contain;
         pointer-events: none;
         opacity: 0;
-        transition: opacity 0.18s ease;
+        /* 交叉淡出 300ms（与 sprite.js 的 FADE_MS 一致）：新片首帧上屏后旧片才开始淡出；
+           18ms 级别的短过渡在密集换片时看起来就是"闪"，这里拉长并换成标准缓动 */
+        transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1);
       }
       video.pet-video.is-front {
         opacity: 1;

@@ -11,14 +11,18 @@
 //   success/error（"这事结束了"）10s 自动收起；state=null（空闲/回合被打断）收起气泡回待机。
 // 动画循环语义：进行中档位循环播（switchTo once=false），终态档位播一遍回 idle 链；
 //   回空闲时把正在循环的那段改成"播完即停"（见下面空闲分支），否则 ended 永不触发、链回不去。
+//
+// **演出平滑（滞回）**：/state 给的 state 是"这一拍的瞬时真相"，而后台工具密集调用时
+//   tool/call 与 tool/result 会交替上报 —— 照搬成换片就是每秒硬切一段 10s 的 webm，
+//   观感即闪烁 + 抖动 + 生硬切换。所以先过一层状态机（S.decideWorkTier，纯函数在 shared）：
+//   · 同档位：不换片、不 stopMove，只刷新气泡文本（旧实现每拍都把同一段从第 0 帧重播）；
+//   · 空闲→任意 / 任意→终态 / 升档：立即接受（反馈不迟到）；
+//   · 降档：候选连续两拍（≈2s）且当前档已驻留 ≥1.2s 才认 —— working↔result 的 1s 毛刺被吞掉。
 PetSprite.prototype.onWorkTick = function onWorkTick(snapshot, tick) {
   if (!this.pet.workStatusEnabled) return; // 未启用工作状态联动 -> 该宠物完全免疫（与浏览器一致）
   if (tick === 0 || tick === this.prevWorkTick) return;
   this.prevWorkTick = tick;
   const state = snapshot && snapshot.state ? snapshot.state : null;
-  this.workState = state; // 当前工作状态：互动/事件动画播完恢复档位循环用（与浏览器 workStatusRef 同用途）
-  const stateChanged = this.prevWorkState !== state;
-  this.prevWorkState = state;
   if (!state) {
     // 回空闲：把正在**循环播**的进行中档位动画改成"播完即停"（与浏览器 src/client/pet.ts 的空闲分支
     // 同一处修复）。进行中档位走 switchTo(name, false)（el.loop=true、el.onended=null），ended 永不
@@ -32,7 +36,12 @@ PetSprite.prototype.onWorkTick = function onWorkTick(snapshot, tick) {
         frontEl.onended = () => this.handleEnded();
       }
     }
-    // 空闲：收起常驻气泡
+    // 空闲：演出状态机复位 + 收起常驻气泡
+    this.workShown = null;
+    this.workShownAt = 0;
+    this.workCand = null;
+    this.workCandTicks = 0;
+    this.workState = null;
     if (this.workTimer !== null) window.clearTimeout(this.workTimer);
     this.workTimer = null;
     this.workOn = false;
@@ -51,42 +60,85 @@ PetSprite.prototype.onWorkTick = function onWorkTick(snapshot, tick) {
     console.error('[dsh-pet] work-status 档位索引越界：state=' + state + ' idx=' + idx);
     return;
   }
-  const name = S.pickSlot(slot, this.anim); // 数组槽位档内随机抽 1，且避开当前正播动画（避免连续重复，与浏览器一致）
-  console.log(
-    '[dsh-pet] ' +
-      new Date().toTimeString().slice(0, 8) +
-      ' workStatus pet=' +
-      this.pet.id +
-      ' state=' +
-      state +
-      ' -> [' +
-      idx +
-      '] ' +
-      name,
-  );
-  this.stopMove();
+
+  // —— 滞回：这一拍到底换不换片 ——
+  let switched = false;
+  if (this.workShown === state) {
+    // 同档位：保持当前片段继续演（不重播、不打断漫游），只刷新文本
+    this.workCand = null;
+    this.workCandTicks = 0;
+  } else {
+    if (this.workCand === state) this.workCandTicks += 1;
+    else {
+      this.workCand = state;
+      this.workCandTicks = 1;
+    }
+    const decision = S.decideWorkTier({
+      shown: this.workShown,
+      shownAt: this.workShownAt,
+      candidate: state,
+      candTicks: this.workCandTicks,
+      now: Date.now(),
+    });
+    if (decision === 'accept') {
+      switched = true;
+      this.workShown = state;
+      this.workShownAt = Date.now();
+      this.workCand = null;
+      this.workCandTicks = 0;
+    }
+  }
+  // 交互/事件动画播完恢复档位循环时按**正在演的那一档**恢复（hold 期间不提前跳到候选档）
+  this.workState = this.workShown;
+
   // 气泡文本：任务详情（todo/write 提供）优先，否则从条目级 workStatusTexts[档位]（数组）随机抽一句；
-  // 整字段/整档缺失 = 不弹文本，只播动画（与浏览器同一语义）。
+  // 整字段/整档缺失 = 不弹文本，只播动画（与浏览器同一语义）。hold 时也刷新文本——任务详情会推进。
   const textGroup = Array.isArray(this.pet.workStatusTexts) ? this.pet.workStatusTexts[idx] : undefined;
   const configuredText =
     Array.isArray(textGroup) && textGroup.length > 0
       ? textGroup[Math.floor(Math.random() * textGroup.length)]
       : undefined;
   this.workText = (snapshot && snapshot.task) || configuredText || null;
-  const terminal = state === 'success' || state === 'error';
-  // 气泡点亮/收起只在状态变化时动作：同状态后续 tick（todo 文案更新、其它会话事件搅动 ts）
-  // 不重新点亮**已自动收起的终态气泡**——否则"任务完成"的气泡会被后续 ts 变化反复弹回（Bug 2，
-  // 与浏览器 workBubbleOn 同一语义）。
-  if (stateChanged) {
-    this.workOn = true;
-    if (this.workTimer !== null) window.clearTimeout(this.workTimer);
-    this.workTimer = terminal
-      ? window.setTimeout(() => {
-          this.workOn = false;
-          this.renderBubble();
-        }, BUBBLE_DURATION_MS)
-      : null; // 非终态：常驻，不设自动收起
+
+  if (!switched) {
+    // 压住不换：动画继续演，只更新气泡文本。
+    // 终态已自动收起的气泡不被同档 tick 重新弹起（Bug 2 语义不变：同档后续 tick 从不点亮气泡）。
+    if (window.__dshPetDebug) window.__dshPetDebug.workHolds = (window.__dshPetDebug.workHolds || 0) + 1;
+    this.renderBubble();
+    return;
   }
+
+  const name = S.pickSlot(slot, this.anim); // 数组槽位档内随机抽 1，且避开当前正播动画（避免连续重复）
+  const prev = this.prevWorkState === undefined ? 'null' : this.prevWorkState === null ? 'null' : this.prevWorkState;
+  console.log(
+    '[dsh-pet] ' +
+      new Date().toTimeString().slice(0, 8) +
+      ' workStatus pet=' +
+      this.pet.id +
+      ' ' +
+      prev +
+      '->' +
+      state +
+      ' -> [' +
+      idx +
+      '] ' +
+      name,
+  );
+  this.prevWorkState = state;
+  if (window.__dshPetDebug) window.__dshPetDebug.workSwitches = (window.__dshPetDebug.workSwitches || 0) + 1;
+  // 只在真的换片时打断漫游：旧实现每拍都 stopMove，宠物被反复拽住 = "抖动"的一部分
+  this.stopMove();
+  const terminal = state === 'success' || state === 'error';
+  // 气泡点亮/收起只在真正换档时动作：同状态后续 tick（todo 文案更新、其它会话事件搅动 ts）
+  // 不重新点亮**已自动收起的终态气泡**——否则"任务完成"的气泡会被后续 ts 变化反复弹回（Bug 2）。
+  this.workOn = true;
+  if (this.workTimer !== null) window.clearTimeout(this.workTimer);
+  this.workTimer = terminal
+    ? window.setTimeout(() => {
+        this.workOn = false;
+        this.renderBubble();
+      }, BUBBLE_DURATION_MS)
+    : null; // 非终态：常驻，不设自动收起
   this.renderBubble();
   // 循环语义（与浏览器 setOnce 一致）：终态播一遍回 idle；非终态多候选档位播一遍 →
   // ended 由 sprite.handleEnded 轮换到下一候选（长时间状态不单段重复）；非终态单候选档位无限循环。
