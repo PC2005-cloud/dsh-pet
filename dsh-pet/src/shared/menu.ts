@@ -27,6 +27,10 @@ import type { Animations, Category, PetDisplay } from './types';
 /** 叶子：可点击的菜单项 */
 export interface MenuLeaf {
   label: string;
+  /** 只读信息项：点击不关闭菜单，也不执行动作。 */
+  disabled?: boolean;
+  /** 被省略的长标签可通过悬浮查看全文。 */
+  title?: string;
   /** 播放的动画名（点播动作）；action 优先于 anim */
   anim?: string;
   /** 自定义动作：open-site=打开网站 / show-balance=查看余额；whisper=立即碎碎念一句；
@@ -144,6 +148,8 @@ export const MENU_CSS = [
   '.dsh-pet-menu-item{position:relative;display:flex;align-items:center;justify-content:space-between;',
   'gap:14px;padding:5px 12px;border-radius:6px;white-space:nowrap;cursor:default}',
   '.dsh-pet-menu-item:hover{background:rgba(43,99,255,.14)}',
+  '.dsh-pet-menu-item[aria-disabled="true"]{color:#444;user-select:text}',
+  '.dsh-pet-menu-item[aria-disabled="true"]:hover{background:transparent}',
   '.dsh-pet-menu-item>span:first-child{min-width:0;overflow:hidden;text-overflow:ellipsis}',
   '.dsh-pet-menu-arrow{color:#9aa0a6;font-size:12px;flex:none}',
 ].join('');
@@ -234,6 +240,10 @@ export function mountContextMenu(opts: {
     const panel = document.createElement('div');
     panel.className = 'dsh-pet-menu-column';
     panel.style.display = 'none';
+    if (nodes.length && nodes.every((n) => !isBranchNode(n) && n.disabled)) {
+      panel.style.minWidth = Math.min(320, Math.max(120, c.w - 16)) + 'px';
+      panel.style.maxWidth = Math.min(420, Math.max(120, c.w - 16)) + 'px';
+    }
     // 桌面 clamp：把列高封顶到可视矩形内（否则 62vh 相对的是窗口高度，可视区更小时仍会溢出被裁）
     if (clamp) panel.style.maxHeight = Math.min(460, Math.max(120, c.h - 16)) + 'px';
     root.appendChild(panel);
@@ -262,9 +272,12 @@ export function mountContextMenu(opts: {
         const label = document.createElement('span');
         label.textContent = node.label;
         item.appendChild(label);
+        item.title = node.title ?? node.label;
+        if (node.disabled) item.setAttribute('aria-disabled', 'true');
         item.addEventListener('click', (e) => {
           e.preventDefault();
           e.stopPropagation();
+          if (node.disabled) return;
           close();
           onAction(node);
         });

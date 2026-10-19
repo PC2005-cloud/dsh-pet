@@ -15,6 +15,8 @@ import {
 } from '../shared/pickers';
 import { planMove } from '../shared/motion';
 import { flattenConfigPets, isWebVisible } from '../shared/config';
+import { clampPetSize, readPetSize, savePetSize } from '../shared/resize';
+import { createActionHistory, buildActionHistoryMenu } from '../shared/action-history';
 import { balanceEventIndex, balancePercent, decideBalanceNotice, type BalanceState } from '../shared/balance';
 // 轮询统一状态 S：前端唯一的数据来源与渲染入口（拉取 / 拍平 / 比对都在 shared，两端同一份）
 import {
@@ -118,6 +120,7 @@ const css = [
   // 宠物就不跟手指走；两条 -webkit-* 抑制长按选中与 iOS 长按呼出系统菜单
   '.dsh-pet-hit{position:absolute;pointer-events:auto;cursor:url("/dsh-pet-7340/pic/cursor-grab.png") 16 16, grab;z-index:1;touch-action:none;-webkit-user-select:none;-webkit-touch-callout:none}',
   '.dsh-pet-hit.dragging{cursor:url("/dsh-pet-7340/pic/cursor-grabbing.png") 16 16, grabbing}',
+  '.dsh-pet-resize{position:absolute;right:0;bottom:0;width:18px;height:18px;padding:0;border:1px solid #fff8;border-radius:5px;background:#426587a8;color:white;cursor:nwse-resize;touch-action:none;pointer-events:auto;z-index:2;line-height:16px;font-size:14px}',
   '@media (prefers-reduced-motion: reduce){.dsh-pet-video{transition:none}}',
   // 统一右键菜单样式（与桌面注入同一份 MENU_CSS）
   MENU_CSS,
@@ -206,7 +209,19 @@ export function makePetUI(rt: {
     arena: ReactNS.MutableRefObject<{ slots: Record<string, PetCollisionSlot> }>;
   }) {
     // ---- 尺寸（由配置传入；容器/设置页更新后即时跟随）----
-    const [size, setSize] = useState(cfg.size);
+    const [size, setSize] = useState(readPetSize(cfg.id, cfg.size));
+    const resizeRef = useRef<null | {
+      pointerId: number;
+      target: HTMLButtonElement;
+      x: number;
+      y: number;
+      size: number;
+      last: number;
+      anchorX: number;
+      anchorY: number;
+    }>(null);
+    // ended 在缩放期间仍上报回执，只延后推进动画链；退出缩放时按同一代前台恢复。
+    const resizeEndedRef = useRef<null | { gen: number; el: HTMLVideoElement | null }>(null);
     // 字号（全局配置 font）：按本宠物尺寸算好最终 px 注入 root（气泡与悬浮提示读它）。
     // 随 size / cfg.font 变化即时重算——followPet 关闭时结果与 size 无关（见 resolveFontPx）。
     const fontPx = resolveFontPx(cfg.font, size);
@@ -218,6 +233,8 @@ export function makePetUI(rt: {
     // 即内置默认池）——成品绝对正确，直接读，不做任何回落
     const petAnims = cfg.animations;
     const petWeights = cfg.animationWeights;
+    const actionHistoryRef = useRef<ReturnType<typeof createActionHistory> | null>(null);
+    if (!actionHistoryRef.current) actionHistoryRef.current = createActionHistory(cfg.id);
 
     // ---- React 状态 ----
     const [anim, setAnim] = useState(petAnims.idle[0] ?? '');
@@ -253,10 +270,10 @@ export function makePetUI(rt: {
 
     // 配置变化即时跟随（容器重新合并 / 设置页保存后通过 petBridge.reload 触发）
     useEffect(() => {
-      setSize(cfg.size);
+      setSize(readPetSize(cfg.id, cfg.size));
       setCorner(cfg.position.corner);
       setMargin({ x: cfg.position.marginX, y: cfg.position.marginY });
-    }, [cfg.size, cfg.position.corner, cfg.position.marginX, cfg.position.marginY]);
+    }, [cfg.id, cfg.size, cfg.position.corner, cfg.position.marginX, cfg.position.marginY]);
     const [seq, setSeq] = useState(0);
 
     // ---- DOM / 状态 refs ----
@@ -451,7 +468,7 @@ export function makePetUI(rt: {
         });
       const onReady = () => {
         el.removeEventListener('loadeddata', onReady);
-        if (pendingRef.current?.gen !== gen) return;
+        if (!mountedRef.current || pendingRef.current?.gen !== gen) return;
         const old = frontRef.current === 0 ? videoARef : videoBRef;
         el.classList.add('is-front');
         if (old.current && old.current !== el) {
@@ -477,6 +494,10 @@ export function makePetUI(rt: {
           .then(() => {
             // 只有 play() 兑现才代表"确实开始出画"（loadeddata 只代表可解码）
             if (cuePlaybackId !== null) reportPlayback(cuePlaybackId, 'playing');
+            const front = frontRef.current === 0 ? videoARef.current : videoBRef.current;
+            if (mountedRef.current && genRef.current === gen && front === el) {
+              actionHistoryRef.current?.record(cueUrl != null ? '外部动画' : next);
+            }
           })
           .catch(() => {
             // 自动播放被拒 / 元素不可播：既有实现静默吞掉 → 现在如实回 failed（不改播放控制）
@@ -917,6 +938,13 @@ export function makePetUI(rt: {
         reportPlayback(donePlayback, 'ended');
       }
       const animations = petAnims;
+      if (resizeRef.current) {
+        resizeEndedRef.current = {
+          gen: genRef.current,
+          el: frontRef.current === 0 ? videoARef.current : videoBRef.current,
+        };
+        return;
+      }
       if (dragRef.current.active) return;
       // 事件动画播完：回 idle（与 drag/clicks 同分支，不进入随机链）；气泡由定时器自动消失，与动画解耦
       const isEvent = isEventAnim(animations.events, animRef.current);
@@ -1026,7 +1054,7 @@ export function makePetUI(rt: {
 
     const startMoveDrive = (el: HTMLVideoElement) => {
       const pm = pendingMoveRef.current;
-      if (!pm || moveRef.current !== null) return;
+      if (!pm || moveRef.current !== null || resizeRef.current) return;
       pendingMoveRef.current = null;
       const { startRatio, startYRatio, targetRatio, dir, totalRatio, leadSec, tailSec } = pm;
       const duration = Number.isFinite(el.duration) && el.duration > 0 ? el.duration : 10.09;
@@ -1062,7 +1090,8 @@ export function makePetUI(rt: {
     /** 尝试发起一次移动：占用中返回 true（不重播），无法移动返回 false，成功返回动作名（供日志显示具体动作）。
      *  preferredName 传入时固定使用该动画（右键菜单点播移动动画），否则与随机链一致随机从 moves.actions 选。 */
     const tryMove = (preferredName?: string): boolean | string => {
-      if (moveRef.current !== null || pendingMoveRef.current || throwRef.current !== null) return true;
+      if (resizeRef.current || moveRef.current !== null || pendingMoveRef.current || throwRef.current !== null)
+        return true;
       const moves = petAnims.moves;
       const actions = moves.actions;
       if (!actions.length) return false;
@@ -1135,7 +1164,7 @@ export function makePetUI(rt: {
     };
     /** rAF 弹簧跟随：包围盒朝拖拽目标（指针-抓取偏移）过阻尼追赶，抹平高频抖动 */
     const startDragFollow = (rootEl: HTMLDivElement) => {
-      if (dragFollowRef.current !== null) return;
+      if (resizeRef.current || dragFollowRef.current !== null) return;
       const token = ++dragFollowTokenRef.current;
       let last = performance.now();
       const step = () => {
@@ -1166,6 +1195,7 @@ export function makePetUI(rt: {
     };
     /** 抛掷驱动：重力 + 边缘反弹 + 落地摩擦，落定后提交 customPos（飞行中只改 DOM，避免逐帧 React 重渲染） */
     const startThrow = (px: number, py: number, vx: number, vy: number) => {
+      if (resizeRef.current) return;
       stopDragFollow();
       stopMove();
       const bounds = throwBounds({ W: window.innerWidth, H: window.innerHeight, size, sideAllow });
@@ -1269,7 +1299,7 @@ export function makePetUI(rt: {
      * 这与动画链的守卫同一语义（见 handleEnded）。丢弃是静默的：接口早已回过 ok。
      */
     const applyPositionCue = (rx: number, ry: number, mode: PositionMode, duration: number) => {
-      if (dragRef.current.active) return; // 用户交互优先
+      if (dragRef.current.active || resizeRef.current) return; // 用户交互优先
       stopThrow(); // 先显式接管：停掉飞行与走路（stopMove 顺带停掉上一次的位置跟随）
       stopMove();
       // 中心 → 包围盒左上角 px（与下面提交 customPos 时的换算互逆）
@@ -1343,12 +1373,13 @@ export function makePetUI(rt: {
      * 本接口不引入任何新物理。不设死区：接口是明确命令，power 再小也照抛。
      */
     const applyThrowCue = (angleDeg: number, power: number) => {
-      if (dragRef.current.active) return; // 用户交互优先
+      if (dragRef.current.active || resizeRef.current) return; // 用户交互优先
       const { vx, vy } = throwVelocity(angleDeg, power);
       const box = boxPxRef.current ?? { x: currentCenterX() - halfW, y: currentCenterY() - halfH };
       startThrow(box.x, box.y, vx, vy);
     };
     const onPetHit = (vx: number, vy: number) => {
+      if (resizeRef.current) return;
       stopMove();
       stopDragFollow();
       stopThrow();
@@ -1394,7 +1425,7 @@ export function makePetUI(rt: {
      *  与桌面同构，曲线在 shared（squashScale）。depth = 下压幅度（点击固定 0.55；
      *  落地按冲击速度 landingSquash 动态取）。reduce-motion 时跳过。 */
     const startSquash = (el: HTMLVideoElement, depth: number = SQ_SQUASH) => {
-      if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+      if (resizeRef.current || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
       const token = ++squashTokenRef.current;
       if (squashRef.current !== null) cancelAnimationFrame(squashRef.current);
       const origin = el.style.transformOrigin;
@@ -1449,7 +1480,7 @@ export function makePetUI(rt: {
     // ---- 点击 vs 拖拽 ----
     const handlePointerDown = (e: ReactNS.PointerEvent<HTMLDivElement>) => {
       // 只认左键：右键进入拖拽判定会与右键菜单打架（右键不拖拽，两端一致）
-      if (e.button !== 0) return;
+      if (e.button !== 0 || resizeRef.current) return;
       // 抓取速度日志：stopThrow 之前读，否则飞行速度就没了；静止时记录 0
       const grabState = throwStateRef.current;
       console.log(
@@ -1539,6 +1570,7 @@ export function makePetUI(rt: {
       }
     };
     const handlePointerMove = (e: ReactNS.PointerEvent<HTMLDivElement>) => {
+      if (resizeRef.current) return;
       // 提示跟随光标：必须在拖拽早退之前——拖拽期间提示本来就收起了，但非拖拽的每次移动都要跟上
       if (tipOn) placeTip(e.clientX, e.clientY);
       const d = dragRef.current;
@@ -1640,7 +1672,7 @@ export function makePetUI(rt: {
     };
     const handleClick = () => {
       const d = dragRef.current;
-      if (d.active || d.dragging || justDraggedRef.current) return;
+      if (resizeRef.current || d.active || d.dragging || justDraggedRef.current) return;
       // 积分判定已在 pointerdown（按下即触发）完成：
       // 本次按下已触发过积分 → 只收手停住、**不**再播普通点击动画（粒子+弹窗即反馈）
       if (pressScoreFiredRef.current) {
@@ -1736,6 +1768,7 @@ export function makePetUI(rt: {
         return;
       }
       if (leaf.action === 'home') {
+        if (resizeRef.current) return;
         // 回到初始位置：停漫游/移动/抛掷，清掉拖拽/漫游留下的会话位置，回配置角落
         stopThrow();
         stopMove();
@@ -1782,13 +1815,14 @@ export function makePetUI(rt: {
         // 显示位置（仅网页/仅桌面/两者/都不）：与桌面端注入**同一份**子菜单。
         // 改成不含 web 的值（仅桌面/都不）后，本宠物会随即从 visiblePets 里消失——字面意义上的"自己走掉"。
         displayMenuBranch(),
+        ...buildActionHistoryMenu(actionHistoryRef.current?.entries() ?? []),
         ...buildMenuTree(petAnims),
       ];
       if (!tree.length) return;
       e.preventDefault();
       e.stopPropagation(); // 不触碰 DSH 页面任何菜单/右键处理
       const d = dragRef.current;
-      if (d.active || d.dragging || justDraggedRef.current) return;
+      if (resizeRef.current || d.active || d.dragging || justDraggedRef.current) return;
       stopThrow(); // 菜单弹出前停住飞行中的宠物
       stopMove(); // 菜单悬停期间宠物不漫游
       if (menuRef.current) menuRef.current.close();
@@ -1852,6 +1886,108 @@ export function makePetUI(rt: {
       }
       return null;
     })();
+    const finishResize = () => {
+      const r = resizeRef.current;
+      if (!r) return;
+      resizeRef.current = null;
+      savePetSize(cfg.id, cfg.size, r.last);
+      const ended = resizeEndedRef.current;
+      resizeEndedRef.current = null;
+      const front = frontRef.current === 0 ? videoARef.current : videoBRef.current;
+      // 不重播仍在播放的第三方点播（否则会错误发 cancelled）；只补推进被缩放挡下的 ended。
+      if (mountedRef.current && ((ended && ended.gen === genRef.current && ended.el === front) || front?.ended)) {
+        handleEnded();
+      }
+      try {
+        if (r.target.hasPointerCapture(r.pointerId)) r.target.releasePointerCapture(r.pointerId);
+      } catch {
+        // 元素被移除/捕获已丢失时无需再次释放。
+      }
+    };
+    useEffect(() => {
+      window.addEventListener('blur', finishResize);
+      return () => {
+        window.removeEventListener('blur', finishResize);
+        finishResize();
+      };
+      // finishResize 只读取交互 refs；配置变化时先保存旧基准再清理。
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [cfg.id, cfg.size]);
+    const resizeHandle = h('button', {
+      type: 'button',
+      className: 'dsh-pet-resize',
+      title: '拖动调整大小',
+      'aria-label': '拖动调整宠物大小',
+      children: '↘',
+      onClick: (e: ReactNS.MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+      },
+      onContextMenu: (e: ReactNS.MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+      },
+      onPointerDown: (e: ReactNS.PointerEvent<HTMLButtonElement>) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.button !== 0 || resizeRef.current || dragRef.current.active) return;
+        const rect = rootRef.current?.getBoundingClientRect();
+        if (!rect) return;
+        stopMove();
+        stopThrow();
+        stopDragFollow();
+        stopSquash();
+        pendingSquashRef.current = false;
+        // 停止 Q 弹也要还原其 transform，缩放不应冻结在挤压形变上。
+        for (const el of [videoARef.current, videoBRef.current]) {
+          if (!el) continue;
+          el.style.transformOrigin = 'center';
+          el.style.transform = facingRef.current === 'right' ? 'scaleX(-1)' : '';
+        }
+        setTipOn(false);
+        resizeRef.current = {
+          pointerId: e.pointerId,
+          target: e.currentTarget,
+          x: e.clientX,
+          y: e.clientY,
+          size,
+          last: size,
+          anchorX: rect.left + (size * HIT_BOX.x0) / 640,
+          anchorY: rect.top + bottomPad + (size * HIT_BOX.y0) / 640,
+        };
+        try {
+          e.currentTarget.setPointerCapture(e.pointerId);
+        } catch {
+          finishResize();
+        }
+      },
+      onPointerMove: (e: ReactNS.PointerEvent<HTMLButtonElement>) => {
+        e.stopPropagation();
+        const r = resizeRef.current;
+        if (!r || r.pointerId !== e.pointerId) return;
+        const w = (HIT_BOX.x1 - HIT_BOX.x0) / 640;
+        const ht = (HIT_BOX.y1 - HIT_BOX.y0) / 640;
+        const next = clampPetSize(r.size + ((e.clientX - r.x) * w + (e.clientY - r.y) * ht) / (w * w + ht * ht));
+        r.last = next;
+        const left = r.anchorX - (next * HIT_BOX.x0) / 640;
+        const top = r.anchorY - (next * (CANVAS_H - FEET_Y + HIT_BOX.y0)) / 640;
+        boxPxRef.current = { x: left, y: top };
+        setSize(next);
+        setCustomPos({ rx: (left + next / 2) / window.innerWidth, ry: (top + (next * 9) / 32) / window.innerHeight });
+      },
+      onPointerUp: (e: ReactNS.PointerEvent) => {
+        e.stopPropagation();
+        if (resizeRef.current?.pointerId === e.pointerId) finishResize();
+      },
+      onPointerCancel: (e: ReactNS.PointerEvent) => {
+        e.stopPropagation();
+        if (resizeRef.current?.pointerId === e.pointerId) finishResize();
+      },
+      onLostPointerCapture: (e: ReactNS.PointerEvent) => {
+        e.stopPropagation();
+        if (resizeRef.current?.pointerId === e.pointerId) finishResize();
+      },
+    });
     const commonVideoProps = { muted: true, playsInline: true, autoPlay: true };
     const hitProps = {
       className: 'dsh-pet-hit',
@@ -1867,6 +2003,7 @@ export function makePetUI(rt: {
       onPointerUp: handlePointerUp,
       onPointerCancel: handlePointerUp,
       onPointerEnter: (e: ReactNS.PointerEvent<HTMLDivElement>) => {
+        if (resizeRef.current) return;
         placeTip(e.clientX, e.clientY); // 先摆位再显示：否则会先在兜底坐标闪一帧
         setTipOn(true);
       },
@@ -1874,6 +2011,7 @@ export function makePetUI(rt: {
       onContextMenu: handleContextMenu,
       // 原先这里挂 title（原生系统提示）：已换成自绘浮层，但无障碍名称不能跟着丢
       'aria-label': cfg.name,
+      children: resizeHandle,
     };
     return h('div', {
       ref: rootRef,

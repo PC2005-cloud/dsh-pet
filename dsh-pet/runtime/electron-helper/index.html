@@ -62,6 +62,34 @@
       .pet-hit.dragging {
         cursor: grabbing;
       }
+      /* 独立角柄，身体其余区域仍用于点击/拖拽。 */
+      .pet-resize-handle {
+        position: absolute;
+        width: 18px;
+        height: 18px;
+        z-index: 2;
+        pointer-events: auto;
+        touch-action: none;
+        cursor: nwse-resize;
+        border: 1px solid rgba(255, 255, 255, 0.9);
+        border-radius: 4px;
+        background: rgba(36, 48, 65, 0.68);
+        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.28);
+      }
+      .pet-resize-handle::after {
+        content: '';
+        position: absolute;
+        right: 3px;
+        bottom: 3px;
+        width: 8px;
+        height: 8px;
+        border-right: 2px solid white;
+        border-bottom: 2px solid white;
+      }
+      .pet-resize-handle:hover,
+      .pet-resize-handle.is-resizing {
+        background: rgba(34, 105, 180, 0.92);
+      }
       /* 余额气泡：与浏览器 overlay 同一套视觉（白色圆润泡 + 峰/谷/错误着色）。
          尺寸分两类锚点：盒子（宽度/内边距/圆角/尾巴/阴影/行间距）锚在字号 --f 上——字号调大盒子同步变大，
          文字不会顶出白底；位置（bottom 偏移）仍锚在宠物宽度 var(--pet-size)，气泡始终贴着宠物头顶。

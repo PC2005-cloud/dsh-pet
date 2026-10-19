@@ -137,7 +137,7 @@ if (window.petBridge && window.petBridge.onDisplays) {
 // 那正好落在拖拽/飞行过程中，不设防就会看到宠物瞬间跳回上一个落点。
 window.addEventListener('resize', () => {
   for (const s of sprites) {
-    if (s.dragState.active || s.throwRef !== null || s.moveRef !== null) continue;
+    if (s.resizing || s.dragState.active || s.throwRef !== null || s.moveRef !== null || s.posFollow !== null) continue;
     s.position();
   }
 });
