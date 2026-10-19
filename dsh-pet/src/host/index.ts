@@ -82,6 +82,7 @@ import { resolveDshHome } from '@deepseek-ai/dsh-home-paths';
 import { credentialRef } from '@deepseek-ai/dsh-credentials';
 import { queryBalance } from './balance/index';
 import { generateWhisper } from './whisper';
+import { automaticWhisperSchedule } from './whisper-policy';
 import { generateChat, type ChatMemoryMessage } from './chat';
 import { configuredModel } from './model-selection';
 import { limitPool, pickMeme, readMemePool } from './memes';
@@ -1870,8 +1871,14 @@ export function apply(ctx: any): void {
         let min = Infinity;
         for (const pet of flattenPetList(cfg)) {
           const petId = String(pet.id ?? '');
-          if (!petId || pet.whisperEnabled !== true) continue;
-          const sec = whisperPeriodSec(cfg, petId);
+          if (!petId) continue;
+          const schedule = automaticWhisperSchedule(
+            ctx.standaloneAi,
+            pet.whisperEnabled === true,
+            whisperPeriodSec(cfg, petId),
+          );
+          if (!schedule.enabled) continue;
+          const sec = schedule.periodSec;
           min = Math.min(min, sec);
           if (now - (lastWhisperAt.get(petId) ?? 0) < sec * 1000) continue;
           lastWhisperAt.set(petId, now);

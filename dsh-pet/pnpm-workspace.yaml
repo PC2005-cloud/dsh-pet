@@ -27,5 +27,6 @@ minimumReleaseAgeExclude:
   - '@deepseek-ai/dsh-typert-protocol@0.2.0-rc.1'
   - '@deepseek-ai/dsh-util-crypto@0.2.0-rc.1'
   - '@deepseek-ai/dsh-util-values@0.2.0-rc.1'
+  - openai@7.39.0
 overrides:
   rolldown: 1.0.0-beta.7

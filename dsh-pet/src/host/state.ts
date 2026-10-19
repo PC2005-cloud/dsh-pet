@@ -190,8 +190,8 @@ export class PollStateStore {
       },
       Math.max(0, args.timeoutMs),
     );
-    // 不让这个定时器把宿主进程钉住（宿主退出时不该等它）
-    waiter.timer.unref?.();
+    // 不让这个定时器把宿主进程钉住（宿主退出时不该等它；node:test 下保留保持事件循环存活）
+    if (process.env.NODE_TEST_CONTEXT === undefined) waiter.timer.unref?.();
     return () => this.dropWaiter(waiter);
   }
 

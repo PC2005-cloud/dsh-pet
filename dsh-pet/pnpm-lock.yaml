@@ -11,6 +11,9 @@ importers:
 
   .:
     dependencies:
+      '@anthropic-ai/sdk':
+        specifier: 0.135.0
+        version: 0.135.0(zod@4.6.7)
       '@deepseek-ai/cordis':
         specifier: ^4.0.4
         version: 4.0.4(@deepseek-ai/cordis-plugin-include@1.0.9)(@deepseek-ai/cordis-plugin-loader@1.0.5)
@@ -47,6 +50,12 @@ importers:
       '@electron/get':
         specifier: ^5.1.0
         version: 5.1.0
+      openai:
+        specifier: 7.39.0
+        version: 7.39.0(undici@7.30.0)(zod@4.6.7)
+      zod:
+        specifier: 4.6.7
+        version: 4.6.7
     devDependencies:
       '@eslint/js':
         specifier: ^10.0.1
@@ -95,6 +104,15 @@ importers:
         version: 8.67.0(eslint@10.9.0(jiti@2.7.0))(typescript@5.5.2)
 
 packages:
+
+  '@anthropic-ai/sdk@0.135.0':
+    resolution: {integrity: sha512-WWrdL57JhU5KoynpTjt9GXK6k7ud9nPw2uw/Trn+oBXh6s0KpjhAccWZm2Qxw08ARYG1UDQj5iC+JO42j1rt/g==}
+    hasBin: true
+    peerDependencies:
+      zod: ^3.25.0 || ^4.0.0
+    peerDependenciesMeta:
+      zod:
+        optional: true
 
   '@babel/code-frame@7.29.7':
     resolution: {integrity: sha512-Aup7aUOfpbAUg2ROOJN6Iw5f9DMBlzu0mIkm/malLQFN/YQgO48wCj0Kxa3sEHJvPVFg7siR+qRInwXd2qhQKw==}
@@ -150,6 +168,10 @@ packages:
     resolution: {integrity: sha512-E8lTAYNB1KW+FH+VGJuZM1ioAx2E6oVlvQFRrf5P8ZZmsiJXYAD9vTFV7yyEURNzgh1dFqMZuO6tUwcARbqFCA==}
     engines: {node: '>=6.0.0'}
     hasBin: true
+
+  '@babel/runtime@7.29.10':
+    resolution: {integrity: sha512-NpugTzbKgGrNe45Ui32cN8vCFFMxVtP/9rtfwv0nP5FRDAjvYBxJcLVpYA9mr1jxP6cnIT7x9LUzuDTbWYYNRA==}
+    engines: {node: '>=6.9.0'}
 
   '@babel/template@7.29.7':
     resolution: {integrity: sha512-puq+Gf35oI24FeN11LkoUQFqv9uwNeWpxXZi/Ji3rRIoKAzKnxRaZ+Gkj0vKS9ZCiTESfng1N9LyOyXvo+m+Gg==}
@@ -519,6 +541,10 @@ packages:
   '@napi-rs/wasm-runtime@0.2.12':
     resolution: {integrity: sha512-ZVWUcfwY4E/yPitQJl481FjFo3K22D6qF0DuFH6Y/nbnE11GY5uguDxZMGXPQ8WQ0128MXQD7TnfHyK4oWoIJQ==}
 
+  '@opentelemetry/api@1.9.1':
+    resolution: {integrity: sha512-gLyJlPHPZYdAk1JENA9LeHejZe1Ti77/pTeFm/nMXmQH/HFZlcS/O2XJB+L8fkbrNSqhdtlvjBVjxwUYanNH5Q==}
+    engines: {node: '>=8.0.0'}
+
   '@oxc-parser/binding-darwin-arm64@0.62.0':
     resolution: {integrity: sha512-p9haXzG2mE0PvfITKY3bTQpwDc+T4H9bG5SC4vp8PbwikmIWGrahASpuO5c2keiahspGTCzqUnl+8PXU/saT/A==}
     engines: {node: '>=14.0.0'}
@@ -792,6 +818,9 @@ packages:
     resolution: {integrity: sha512-Z3P1JHx+U7Sr73v5wJtEygxboF2VR9ds4eSAgFfslhIxFI48FFm+WEMeuLLeqnx0tiq1UL6cIIg5+h3mlaG6UA==}
     cpu: [x64]
     os: [win32]
+
+  '@stablelib/base64@1.0.1':
+    resolution: {integrity: sha512-1bnPQqSxSuc3Ii6MhBysoWCg58j97aUjuCSZrGSmDxNqtytIi0k8utUenAwTZN4V5mXXYGsVUI9zeBqy+jBOSQ==}
 
   '@standard-schema/spec@1.1.0':
     resolution: {integrity: sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w==}
@@ -1111,6 +1140,9 @@ packages:
   fast-levenshtein@2.0.6:
     resolution: {integrity: sha512-DCXu6Ifhqcks7TZKY3Hxp3y6qphY5SJZmrWMDrKcERSOXWQdMhU9Ig/PYrzyw/ul9jOIyh0N4M0tbC5hodg8dw==}
 
+  fast-sha256@1.3.0:
+    resolution: {integrity: sha512-n11RGP/lrWEFI/bWdygLxhI+pVeo1ZYIVwvvPkW7azl/rOy+F3HYRZ2K5zeE9mmkhQppyv9sQFx0JM9UabnpPQ==}
+
   fast-uri@3.1.8:
     resolution: {integrity: sha512-GZMtZUTNRpOVIECoXwLNZS5xUGE+mVNbTB8h/7Rwh2TFWcBQiPzTgyZi05BF9UMZKkLJv8XBRJTlU7zg8+ZfMg==}
 
@@ -1224,6 +1256,10 @@ packages:
 
   json-buffer@3.0.1:
     resolution: {integrity: sha512-4bV5BfR2mqfQTJm+V5tPPdf+ZpuhiIvTuAB5g8kcrXOZpTT/QwwVRWBywX1ozr6lEuPdbHxwaJlm9G6mI2sfSQ==}
+
+  json-schema-to-ts@3.1.1:
+    resolution: {integrity: sha512-+DWg8jCJG2TEnpy7kOm/7/AxaYoaRbjVB4LFZLySZlWn8exGs3A4OLJR966cVvU26N7X9TWxl+Jsw7dzAqKT6g==}
+    engines: {node: '>=16'}
 
   json-schema-traverse@0.4.1:
     resolution: {integrity: sha512-xbbCH5dCYU5T8LcEhhuh7HJ88HXuW3qsI3Y0zOZFKfZEHcpWiHU/Jxzk629Brsab/mMiHQti9wMP+845RPe3Vg==}
@@ -1360,6 +1396,30 @@ packages:
   on-headers@1.1.0:
     resolution: {integrity: sha512-737ZY3yNnXy37FHkQxPzt4UZ2UWPWiCZWLvFZ4fu5cueciegX0zGPnrlY6bwRg4FdQOe9YU8MkmJwGhoMybl8A==}
     engines: {node: '>= 0.8'}
+
+  openai@7.39.0:
+    resolution: {integrity: sha512-iEA9ndbrj32vhYZwJg2v9BQVuztGUOb2SBQU16ZcWNkQHWEBjtarxjqR9c6d5PbWMG0Eyfhk66OZ0iJ8XpFjyw==}
+    engines: {node: '>=22.0.0'}
+    peerDependencies:
+      '@aws-sdk/credential-provider-node': '>=3.972.0 <4'
+      '@smithy/hash-node': '>=4.3.0 <5'
+      '@smithy/signature-v4': '>=5.4.0 <6'
+      undici: '>=5 <9'
+      ws: ^8.21.0
+      zod: ^3.25 || ^4.0
+    peerDependenciesMeta:
+      '@aws-sdk/credential-provider-node':
+        optional: true
+      '@smithy/hash-node':
+        optional: true
+      '@smithy/signature-v4':
+        optional: true
+      undici:
+        optional: true
+      ws:
+        optional: true
+      zod:
+        optional: true
 
   optionator@0.9.4:
     resolution: {integrity: sha512-6IpQ7mKUxRcZNLIObR0hz7lxsapSSIYNZJwXPGeF0mTVqGKFIXj1DQcMoT22S3ROcLyY/rz0PWaWZ9ayWmad9g==}
@@ -1518,6 +1578,9 @@ packages:
     resolution: {integrity: sha512-bzyZ1e88w9O1iNJbKnOlvYTrWPDl46O1bG0D3XInv+9tkPrxrN8jUUTiFlDkkmKWgn1M6CfIA13SuGqOa9Korw==}
     engines: {node: '>=14'}
 
+  standardwebhooks@1.1.1:
+    resolution: {integrity: sha512-bCbX9ZEyFkWPsRz7Bl3NuQUJohmwGSev/yhr7vhaGPlc4AfIrspIRa6cPTBuI1ItmrTDJ4d/S2hCsfe4+vQGnQ==}
+
   string-width@4.2.0:
     resolution: {integrity: sha512-zUz5JD+tgqtuDjMhwIg5uFVV3dtqZ9yQJlZVfq4I01/K5Paj5UHj7VyrQOJvzawSVlKpObApbfD0Ed6yJc+1eg==}
     engines: {node: '>=8'}
@@ -1545,6 +1608,9 @@ packages:
   tinyglobby@0.2.17:
     resolution: {integrity: sha512-wXR/dYpcqKmfWpEdZjiKJOwCNFndD0DMnrW/cYjVGttEkBfVgcLFHoNrlj47mjOVic9yyNu65alsgF4NQyTa2g==}
     engines: {node: '>=12.0.0'}
+
+  ts-algebra@2.0.0:
+    resolution: {integrity: sha512-FPAhNPFMrkwz76P7cdjdmiShwMynZYN6SgOujD1urY4oNm80Ou9oMdmbR45LotcKOXoy7wSmHkRFE6Mxbrhefw==}
 
   ts-api-utils@2.5.0:
     resolution: {integrity: sha512-OJ/ibxhPlqrMM0UiNHJ/0CKQkoKF243/AEmplt3qpRgkW8VG7IfOS41h7V8TjITqdByHzrjcS/2si+y4lIh8NA==}
@@ -1652,7 +1718,18 @@ packages:
   zod@4.4.3:
     resolution: {integrity: sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ==}
 
+  zod@4.6.7:
+    resolution: {integrity: sha512-g8W2D2kU6a8untc053fX1uVBKzM7yqAxW/3zwk83+6RyF2+SKOuV+c0wBDhUwzV1PaGapmZH+rmcUzPf+3CGwg==}
+
 snapshots:
+
+  '@anthropic-ai/sdk@0.135.0(zod@4.6.7)':
+    dependencies:
+      '@opentelemetry/api': 1.9.1
+      json-schema-to-ts: 3.1.1
+      standardwebhooks: 1.1.1
+    optionalDependencies:
+      zod: 4.6.7
 
   '@babel/code-frame@7.29.7':
     dependencies:
@@ -1730,6 +1807,8 @@ snapshots:
   '@babel/parser@7.29.8':
     dependencies:
       '@babel/types': 7.29.8
+
+  '@babel/runtime@7.29.10': {}
 
   '@babel/template@7.29.7':
     dependencies:
@@ -1850,7 +1929,7 @@ snapshots:
       '@deepseek-ai/dsh-credentials': 0.2.0-rc.1(@deepseek-ai/cordis@4.0.4)(@deepseek-ai/dsh-invariants@0.2.0-rc.1(@deepseek-ai/cordis@4.0.4))
       '@deepseek-ai/dsh-scope': 0.2.0-rc.1(@deepseek-ai/cordis@4.0.4)(@deepseek-ai/dsh-invariants@0.2.0-rc.1(@deepseek-ai/cordis@4.0.4))
       '@deepseek-ai/schemastery': 3.18.4
-      zod: 4.4.3
+      zod: 4.6.7
     transitivePeerDependencies:
       - '@deepseek-ai/dsh-invariants'
 
@@ -1874,7 +1953,7 @@ snapshots:
       '@deepseek-ai/dsh-session': 0.2.0-rc.1(@deepseek-ai/cordis@4.0.4)(@deepseek-ai/dsh-scope@0.2.0-rc.1(@deepseek-ai/cordis@4.0.4)(@deepseek-ai/dsh-invariants@0.2.0-rc.1(@deepseek-ai/cordis@4.0.4)))
       '@deepseek-ai/dsh-typert-protocol': 0.2.0-rc.1(@deepseek-ai/cordis@4.0.4)
       '@deepseek-ai/dsh-util-crypto': 0.2.0-rc.1(@deepseek-ai/cordis@4.0.4)
-      zod: 4.4.3
+      zod: 4.6.7
 
   '@deepseek-ai/dsh-config-editor@0.2.0-rc.1(@deepseek-ai/cordis-plugin-include@1.0.9)(@deepseek-ai/cordis-plugin-loader@1.0.5)(@deepseek-ai/cordis@4.0.4)(@deepseek-ai/dsh-app-boot@0.2.0-rc.1(@deepseek-ai/cordis-plugin-group@1.0.4(@deepseek-ai/cordis-plugin-loader@1.0.5)(@deepseek-ai/cordis@4.0.4))(@deepseek-ai/cordis-plugin-include@1.0.9)(@deepseek-ai/cordis-plugin-loader@1.0.5)(@deepseek-ai/cordis@4.0.4)(@deepseek-ai/dsh-home-paths@0.2.0-rc.1(@deepseek-ai/cordis@4.0.4))(@deepseek-ai/dsh-launch-environment@0.2.0-rc.1(@deepseek-ai/cordis@4.0.4))(@deepseek-ai/dsh-system-prompt@0.2.0-rc.1(@deepseek-ai/cordis@4.0.4)(@deepseek-ai/dsh-invariants@0.2.0-rc.1(@deepseek-ai/cordis@4.0.4))(@deepseek-ai/dsh-llm@0.2.0-rc.2(@deepseek-ai/cordis@4.0.4))(@deepseek-ai/dsh-scope@0.2.0-rc.1(@deepseek-ai/cordis@4.0.4)(@deepseek-ai/dsh-invariants@0.2.0-rc.1(@deepseek-ai/cordis@4.0.4)))))':
     dependencies:
@@ -1934,7 +2013,7 @@ snapshots:
       '@deepseek-ai/dsh-util-crypto': 0.2.0-rc.2(@deepseek-ai/cordis@4.0.4)
       '@deepseek-ai/dsh-util-values': 0.2.0-rc.2(@deepseek-ai/cordis@4.0.4)
       '@deepseek-ai/schemastery': 3.18.4
-      zod: 4.4.3
+      zod: 4.6.7
 
   '@deepseek-ai/dsh-package-manifest@0.2.0-rc.1(@deepseek-ai/cordis@4.0.4)':
     dependencies:
@@ -2134,6 +2213,8 @@ snapshots:
       '@tybys/wasm-util': 0.10.3
     optional: true
 
+  '@opentelemetry/api@1.9.1': {}
+
   '@oxc-parser/binding-darwin-arm64@0.62.0':
     optional: true
 
@@ -2287,6 +2368,8 @@ snapshots:
 
   '@rolldown/binding-win32-x64-msvc@1.0.0-beta.7':
     optional: true
+
+  '@stablelib/base64@1.0.1': {}
 
   '@standard-schema/spec@1.1.0': {}
 
@@ -2555,8 +2638,8 @@ snapshots:
       '@babel/parser': 7.29.8
       eslint: 10.9.0(jiti@2.7.0)
       hermes-parser: 0.25.1
-      zod: 4.4.3
-      zod-validation-error: 4.0.2(zod@4.4.3)
+      zod: 4.6.7
+      zod-validation-error: 4.0.2(zod@4.6.7)
     transitivePeerDependencies:
       - supports-color
 
@@ -2631,6 +2714,8 @@ snapshots:
   fast-json-stable-stringify@2.1.0: {}
 
   fast-levenshtein@2.0.6: {}
+
+  fast-sha256@1.3.0: {}
 
   fast-uri@3.1.8: {}
 
@@ -2726,6 +2811,11 @@ snapshots:
   jsesc@3.1.0: {}
 
   json-buffer@3.0.1: {}
+
+  json-schema-to-ts@3.1.1:
+    dependencies:
+      '@babel/runtime': 7.29.10
+      ts-algebra: 2.0.0
 
   json-schema-traverse@0.4.1: {}
 
@@ -2842,6 +2932,11 @@ snapshots:
   node-releases@2.0.53: {}
 
   on-headers@1.1.0: {}
+
+  openai@7.39.0(undici@7.30.0)(zod@4.6.7):
+    optionalDependencies:
+      undici: 7.30.0
+      zod: 4.6.7
 
   optionator@0.9.4:
     dependencies:
@@ -3014,6 +3109,11 @@ snapshots:
 
   signal-exit@4.1.0: {}
 
+  standardwebhooks@1.1.1:
+    dependencies:
+      '@stablelib/base64': 1.0.1
+      fast-sha256: 1.3.0
+
   string-width@4.2.0:
     dependencies:
       emoji-regex: 8.0.0
@@ -3046,6 +3146,8 @@ snapshots:
     dependencies:
       fdir: 6.5.0(picomatch@4.0.5)
       picomatch: 4.0.5
+
+  ts-algebra@2.0.0: {}
 
   ts-api-utils@2.5.0(typescript@5.5.2):
     dependencies:
@@ -3146,8 +3248,10 @@ snapshots:
 
   yaml@2.9.1: {}
 
-  zod-validation-error@4.0.2(zod@4.4.3):
+  zod-validation-error@4.0.2(zod@4.6.7):
     dependencies:
-      zod: 4.4.3
+      zod: 4.6.7
 
   zod@4.4.3: {}
+
+  zod@4.6.7: {}
