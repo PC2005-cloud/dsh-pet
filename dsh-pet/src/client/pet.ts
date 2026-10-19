@@ -188,8 +188,11 @@ export function makePetUI(rt: {
     say?: SayCue & { seq: number };
     sayTick: number;
     /** 本宠物的「点播动画」指令（其他插件经 POST /anim 写进 S；容器从 S 分发下来）。
-     *  注意与组件内既有的 `anim`（**当前正在播的**动画名）区分：这个只是"要播什么"的指令。 */
-    animCue?: { name: string; seq: number; playbackId?: string };
+     *  注意与组件内既有的 `anim`（**当前正在播的**动画名）区分：这个只是"要播什么"的指令。
+     *  `name` 与 `url` **恰好一个**（host 判定层保证）：`name` = 池内名字，交给菜单动作处理函数
+     *  （镜像修正 / 移动类走真实位移）；`url` = 第三方自带的完整地址，直接换源播一次、
+     *  **不走菜单语义**（裸地址没有"是不是文字类 / 是不是移动类"这些属性）。 */
+    animCue?: { name?: string; url?: string; seq: number; playbackId?: string };
     animCueTick: number;
     /** 本宠物的「位置」指令（其他插件经 POST /position 写进 S；容器从 S 分发下来）。
      *  `x`/`y` 是宠物**中心**的归一化坐标（0~1，host 写入前已夹取）；
@@ -237,6 +240,8 @@ export function makePetUI(rt: {
     // 碎碎念当前文本（本宠物独立生成的句子）+ 配图名称（开启配图时由 host 随机抽定，随文本一起来）
     const [whisperText, setWhisperText] = useState<string | null>(null);
     const [whisperImage, setWhisperImage] = useState<string | undefined>(undefined);
+    /** 配图的 url 形态（第三方自带地址；与 whisperImage 二选一，见 triggerWhisper） */
+    const [whisperUrl, setWhisperUrl] = useState<string | undefined>(undefined);
     // 工作状态气泡：DSH 会话状态联动（workStatusEnabled 开启时）——终态 10s 自动收起、非终态常驻
     const [workBubbleOn, setWorkBubbleOn] = useState(false);
     const workBubbleTimerRef = useRef<number | null>(null);
@@ -261,6 +266,10 @@ export function makePetUI(rt: {
     const videoBRef = useRef<HTMLVideoElement | null>(null);
     const frontRef = useRef(0);
     const pendingRef = useRef<null | { anim: string; once: boolean; gen: number }>(null);
+    /** 「这一段直接播这个地址」的一次性交接位（POST /anim 的 url 形态，issue #122 第 1 条）。
+     *  为什么用 ref 而不是 state：它只在**设置它的那一拍**有效——switchTo 一进来就取走并清空，
+     *  之后任何一次普通换源都不会误用上一个地址（换成 state 的话，"清空"本身会再触发一次 effect）。 */
+    const cueUrlRef = useRef<string | null>(null);
     // 播放回执（issue #122 第 3 项）：待归属的第三方点播编号**随 anim 一起经 state 下发**。
     // 为什么用 state 而不是 ref：目标动画与当前动画相同时客户端有防重语义（不换源），
     // ref 会把这个编号留下、串到后续某次自播动画的换源上；state 变化本身会驱动 effect 再跑一趟，
@@ -331,6 +340,10 @@ export function makePetUI(rt: {
       // 一次性消费：立刻清掉待归属编号（清空会再跑一趟本 effect，那一趟 cuePlaybackId 为 null，
       // 落进下面的防重分支，无副作用）
       if (cuePlaybackId !== null) setCuePlayback(null);
+      // 「这一段直接播这个地址」同样一次性取走并清空。**必须早于任何 return**——否则防重分支
+      // 提前返回时它会留到下一次普通换源上，把那个动画误播成这个地址。
+      const cueUrl = cueUrlRef.current;
+      cueUrlRef.current = null;
       if (!next) return;
       const pending = pendingRef.current;
       if (pending && pending.anim === next && pending.once === nextOnce) {
@@ -368,12 +381,16 @@ export function makePetUI(rt: {
             nextOnce,
         );
       }
+      // 素材地址两条路（issue #122 第 1 条）：url 形态直接用第三方给的**完整地址**（宿主已卡在
+      // http/https）；name 形态照旧按「素材根 + 名字」拼（名字即文件名）。下面的 fetch + blob
+      // 一段两条路共用，不做区分——正常请求 URL 就是。
       const assetUrl =
+        cueUrl ??
         '/dsh-pet-7340/thumb/' +
-        encodeURIComponent(cfg.assetRoot ?? cfg.id) +
-        '/' +
-        encodeURIComponent(next) +
-        THUMB_EXT;
+          encodeURIComponent(cfg.assetRoot ?? cfg.id) +
+          '/' +
+          encodeURIComponent(next) +
+          THUMB_EXT;
       el.loop = !nextOnce;
       el.muted = true;
       el.autoplay = true;
@@ -698,7 +715,7 @@ export function makePetUI(rt: {
         clearWhisperBubble();
         return;
       }
-      triggerWhisper(say.text, say.image, say.duration, say.anim);
+      triggerWhisper(say.text, say.image, say.url, say.duration, say.anim);
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [sayTick]);
 
@@ -709,6 +726,20 @@ export function makePetUI(rt: {
     useEffect(() => {
       if (!animCue || animCue.seq === prevAnimSeqRef.current) return;
       prevAnimSeqRef.current = animCue.seq;
+      // url 形态（issue #122 第 1 条）：第三方自带的素材地址。**不走 handleMenuAction**——
+      // 那套是菜单语义（文字类先强制朝左的镜像修正、移动类走真实位移），裸地址没有这些属性。
+      // 这里只做"插播一段"：停掉漫游/移动，换源播一次，播完由 handleEnded 回到正常动画链
+      // （与菜单点一下的 once 语义相同）。
+      if (animCue.url !== undefined) {
+        stopMove();
+        cueUrlRef.current = animCue.url;
+        setOnce(true);
+        setSeq((s) => s + 1); // 同一个地址连播两次时 React 状态不变，递增 seq 强制 switchTo 走一遍
+        setAnim(animCue.url);
+        setCuePlayback(animCue.playbackId ?? null);
+        return;
+      }
+      if (animCue.name === undefined) return;
       handleMenuAction({ label: animCue.name, anim: animCue.name }, animCue.playbackId);
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [animCueTick]);
@@ -751,7 +782,9 @@ export function makePetUI(rt: {
     //     于是配置里缺 events.whisper 时，只弹气泡这条路照样走得通。
     //   - `duration === 0` 表示"这一条不显示"：**不动当前已在显示的气泡**
     //     （要收起它请用 POST /bubble/clear，两件事不重叠）。
-    const triggerWhisper = (text: string, image?: string, duration?: number, anim?: boolean) => {
+    // image / url：配图的两种形态，二选一（host 判定层保证）。image = 该条目表情包池内的名称
+    // （按素材根拼路径取），url = 第三方自带的完整地址（直接用）。判别位在字段名上，不靠嗅探。
+    const triggerWhisper = (text: string, image?: string, url?: string, duration?: number, anim?: boolean) => {
       let name: string | null = null;
       if (anim !== false) {
         const pool = petAnims.events?.whisper;
@@ -781,6 +814,7 @@ export function makePetUI(rt: {
       if (duration === 0) return;
       setWhisperText(text);
       setWhisperImage(image);
+      setWhisperUrl(url);
       setWhisperBubbleOn(true);
       // 气泡定时消失（与动画解耦；重复触发先清旧定时器）
       if (whisperBubbleTimerRef.current !== null) window.clearTimeout(whisperBubbleTimerRef.current);
@@ -1800,10 +1834,12 @@ export function makePetUI(rt: {
         return h(WhisperBubble, { text: workText, on: workBubbleOn });
       }
       if (whisperBubbleOn && whisperText) {
-        // assetRoot：配图去哪个表情包目录链取（种类独占 → 用户目录 → 包内），与动画素材同一套归属
+        // assetRoot：配图**按名称**取时去哪个表情包目录链取（种类独占 → 用户目录 → 包内），
+        // 与动画素材同一套归属；配图走 url 形态时不用它（直接用那个地址）
         return h(WhisperBubble, {
           text: whisperText,
           image: whisperImage,
+          url: whisperUrl,
           assetRoot: cfg.assetRoot,
           on: whisperBubbleOn,
         });
@@ -2004,7 +2040,7 @@ export function makePetUI(rt: {
     const [sayTick, setSayTick] = useState(0);
     const sayRef = useRef<Record<string, SayCue & { seq: number }>>({});
     const [animCueTick, setAnimCueTick] = useState(0);
-    const animCueRef = useRef<Record<string, { name: string; seq: number; playbackId?: string }>>({});
+    const animCueRef = useRef<Record<string, { name?: string; url?: string; seq: number; playbackId?: string }>>({});
     const [posCueTick, setPosCueTick] = useState(0);
     const posCueRef = useRef<
       Record<string, { x: number; y: number; mode: PositionMode; duration: number; seq: number }>
@@ -2063,6 +2099,7 @@ export function makePetUI(rt: {
             if (hit) {
               animCueRef.current[petId] = {
                 name: hit.name,
+                url: hit.url,
                 playbackId: hit.playbackId,
                 seq: (animCueRef.current[petId]?.seq ?? 0) + 1,
               };

@@ -226,8 +226,8 @@ export function createStandaloneAi(
       if (disposed) return { ok: false, message: '服务已关闭' };
       const current = store.current();
       const protocol = input.protocol === 'anthropic' ? 'anthropic' : (input.protocol ?? current.protocol);
-      const baseUrl = (input.baseUrl !== undefined && input.baseUrl !== '' ? input.baseUrl : current.baseUrl).trim();
-      const model = (input.model !== undefined && input.model !== '' ? input.model : current.model).trim();
+      const baseUrl = (input.baseUrl !== undefined ? input.baseUrl : current.baseUrl).trim();
+      const model = (input.model !== undefined ? input.model : current.model).trim();
       const apiKey = (input.apiKey !== undefined && input.apiKey !== '' ? input.apiKey : current.apiKey).trim();
 
       if (!baseUrl) {

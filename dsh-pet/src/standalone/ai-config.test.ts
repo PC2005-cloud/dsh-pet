@@ -28,7 +28,7 @@ test('validates safe endpoints and explicit configuration with fixed redacted er
     );
   }
   for (const baseUrl of [
-    'http://43.167.242.91:8317/v1',
+    'http://192.168.1.100:8000/v1',
     'http://localhost:1234/v1',
     'http://127.0.0.1:8080',
     'http://[::1]:8080',

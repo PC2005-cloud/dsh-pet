@@ -317,3 +317,54 @@ test('redirects are disabled and unexpected SDK endpoints are rejected; custom A
     'anthropic',
   );
 });
+
+test('testConnection checks parameters and reports success or friendly error', async () => {
+  await fixture(
+    async (ai) => {
+      assert.deepEqual(await ai.testConnection({ baseUrl: '', model: 'm', apiKey: 'k' }), {
+        ok: false,
+        message: '请先填写接口地址（Base URL）',
+      });
+      assert.deepEqual(await ai.testConnection({ baseUrl: 'https://example.test/v1', model: '', apiKey: 'k' }), {
+        ok: false,
+        message: '请先填写模型名称',
+      });
+      await ai.saveSettings({ clearApiKey: true, enabled: false });
+      assert.deepEqual(await ai.testConnection({ baseUrl: 'https://example.test/v1', model: 'm', apiKey: '' }), {
+        ok: false,
+        message: '请先填写 API 密钥',
+      });
+      const success = await ai.testConnection({
+        protocol: 'openai-compatible',
+        baseUrl: 'https://example.test/v1',
+        model: 'test-model',
+        apiKey: 'test-key',
+      });
+      assert.equal(success.ok, true);
+      assert.match(success.message, /连接成功/);
+      assert.equal(success.reply, 'ok');
+    },
+    async () => {
+      const chunk = { choices: [{ delta: { content: 'ok' }, index: 0 }] };
+      return new Response(`data: ${JSON.stringify(chunk)}\n\ndata: [DONE]\n\n`, {
+        headers: { 'content-type': 'text/event-stream' },
+      });
+    },
+  );
+
+  await fixture(
+    async (ai) => {
+      const failure = await ai.testConnection({
+        protocol: 'openai-compatible',
+        baseUrl: 'https://example.test/v1',
+        model: 'test-model',
+        apiKey: 'bad-key',
+      });
+      assert.equal(failure.ok, false);
+      assert.match(failure.message, /401/);
+    },
+    async () => {
+      return new Response('Unauthorized', { status: 401 });
+    },
+  );
+});

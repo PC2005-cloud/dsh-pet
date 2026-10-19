@@ -97,3 +97,25 @@ export function createMemeImage(name?: string, base = '/dsh-pet-7340', assetRoot
   img.alt = key;
   return img;
 }
+
+/**
+ * 生成「外部地址配图」节点 —— 配图的另一种形态（issue #122 第 1 条的 url 参数：素材由第三方
+ * 自己托管，只给地址）。
+ *
+ * 与 createMemeImage 共用同一份 class 与样式（MEME_BUBBLE_CSS），区别只在 `src`：这里**直接用
+ * 给定的完整地址**，不拼 `<base>/pic/memes/<素材根>/<名>.png`（地址与本页 origin 无关，所以
+ * 连 `base` 都不需要——桌面端页面是 file://，正因如此名称形态才必须传 BASE）。
+ *
+ * 两种形态**二选一**，由宿主判定层保证；消费端按字段名区分，不做 `startsWith('http')` 嗅探。
+ * 地址为空 → null（调用方走纯文本路径，与名称形态同一契约）。
+ */
+export function createMemeImageFromUrl(url?: string): HTMLImageElement | null {
+  const href = String(url ?? '').trim();
+  if (!href) return null;
+  injectMemeBubbleCss();
+  const img = document.createElement('img');
+  img.className = MEME_IMG_CLASS;
+  img.src = href;
+  img.alt = '';
+  return img;
+}

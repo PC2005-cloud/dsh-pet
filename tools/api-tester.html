@@ -482,6 +482,65 @@
 
     .field label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 3px; }
 
+    /* ── 动作页的紧凑组件 ──────────────────────────────────────────────
+       全部 scope 在 .view-action 下：**不动全局 .field**（设置页 / 总览 / 对话还在用它）。
+       起因：.field label{display:block} 会让每个字段独占一行标签，卡片被拉得很长。 */
+
+    /* 字段：标签在左、控件在右（一个字段一行） */
+    .view-action .row {
+      display: grid; grid-template-columns: 76px minmax(0, 1fr); gap: 10px; align-items: center;
+    }
+    .view-action .row + .row { margin-top: 7px; }
+    .view-action .row > label {
+      font-size: 12px; color: var(--muted); text-align: right; line-height: 1.35;
+    }
+    .view-action .row > .ctl {
+      display: flex; flex-wrap: wrap; gap: 8px; align-items: center; min-width: 0;
+    }
+    .view-action .row > .ctl > .grow { flex: 1 1 220px; min-width: 0; }
+    /* 全局 select 是 100% 宽：在 .ctl 里会把同一行的第二个控件挤到下一行（标签于是被垂直居中到两行之间）。
+       这里让它按内容宽排，要撑满的用 .grow 显式声明。 */
+    .view-action .row > .ctl > select { flex: 0 1 auto; width: auto; min-width: 132px; }
+    /* 挂在 .row 外面的次级提示：缩进到与控件列对齐 */
+    .view-action .hint-indent { margin: 5px 0 0 86px; font-size: 12px; color: var(--faint); }
+
+    /* 卡片内的分节标题（位置 / 抛掷 这类） */
+    .view-action .sub {
+      margin: 15px 0 9px; padding-top: 12px; border-top: 1px solid var(--border);
+      display: flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 650;
+    }
+    .view-action .sub .hint { font-weight: 400; margin-left: auto; }
+
+    /* 说明：**一行摘要 + 点开看**。原来卡片顶部是 4~5 行常驻灰字。 */
+    .view-action details.desc { margin: 0 0 11px; }
+    .view-action details.desc > summary {
+      cursor: pointer; list-style: none; display: flex; align-items: center; gap: 6px;
+      font-size: 12.5px; color: var(--muted);
+    }
+    .view-action details.desc > summary::-webkit-details-marker { display: none; }
+    .view-action details.desc > summary::before { content: 'ⓘ'; color: var(--faint); flex: 0 0 auto; }
+    .view-action details.desc > summary::after {
+      content: '展开'; flex: 0 0 auto; margin-left: auto; padding: 0 6px;
+      font-size: 11px; color: var(--faint); border: 1px solid var(--border); border-radius: 99px;
+    }
+    .view-action details.desc[open] > summary::after { content: '收起'; }
+    .view-action details.desc > .desc-body {
+      margin-top: 8px; padding: 9px 11px; font-size: 12.5px; line-height: 1.7; color: var(--muted);
+      background: rgba(128, 128, 128, 0.06);
+      border-left: 2px solid var(--border-strong); border-radius: 0 6px 6px 0;
+    }
+
+    /* 可勾选的胶囊（「等待状态」那一排，替掉原来竖排的 5 行复选框） */
+    .view-action .chip-check {
+      display: inline-flex; align-items: center; gap: 5px; cursor: pointer; user-select: none;
+      font-size: 12px; padding: 3px 9px; border-radius: 99px;
+      border: 1px solid var(--border); background: #f7f8fa; color: var(--muted);
+    }
+    .view-action .chip-check input { margin: 0; }
+    .view-action .chip-check:has(input:checked) {
+      background: var(--accent-soft); border-color: #c7cbfa; color: var(--accent); font-weight: 600;
+    }
+
     .toggles { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 11px; }
 
     .switches {
@@ -815,55 +874,99 @@
       </section>
 
       <!-- ── 动作：以"外部插件"身份让桌宠做事 ── -->
-      <section class="view" id="view-action">
+      <section class="view view-action" id="view-action">
         <!-- 第三方投喂：这就是 issue #76 的场景——控制台扮演"别的插件"，把外部文本送进气泡 -->
         <div class="card">
           <div class="card-head">
             <h2>第三方投喂</h2>
-            <span class="hint">以"外部插件"身份写一句话进气泡</span>
+            <span class="hint">POST /broadcast</span>
           </div>
           <div class="card-body">
-            <div class="card-desc">
-              模拟宿主侧其他插件（如巡检类插件）调用 <span class="mono">POST /broadcast</span>：
-              <b>不生成内容</b>，只把给定的文本搬运到桌宠气泡。配图只接受<b>该桌宠条目表情包池内</b>的名字
-              （图片归属按条目分：<span class="mono">pet/&lt;素材根&gt;-memes/</span> 独占 → 用户
-              <span class="mono">memes/</span> → 包内 <span class="mono">assets/memes/</span>）。
-              下拉框已经把池算好了——只列<b>磁盘上真实存在</b>的图（配置里写了但文件不在的会被宿主剔除，这里提前隐藏）。
-              <b>时长可调、可关掉动画联动、可提前撤回</b>——这三件事就是 issue #122 第 5 条要的。
-            </div>
-            <div class="field" style="margin-top:10px">
+            <details class="desc">
+              <summary>不生成内容，只把给定文本搬进气泡；配图给池内名或自带地址</summary>
+              <div class="desc-body">
+                模拟宿主侧其他插件（如巡检类插件）调用 <span class="mono">POST /broadcast</span>：
+                <b>不生成内容</b>，只搬运。
+                配图<b>两种形态二选一</b>（issue #122 第 1 条）：给<b>名称</b>时只接受该桌宠条目表情包池内的名字
+                （<span class="mono">pet/&lt;素材根&gt;-memes/</span> 独占 → 用户
+                <span class="mono">memes/</span> → 包内 <span class="mono">assets/memes/</span>），
+                下拉框只列<b>磁盘上真实存在</b>的图；给<b>地址</b>时是完整 URL、<b>不查池</b>。
+                两个都给会被判 <span class="mono">bad-request</span>。
+                <br>
+                时长可调、可关掉动画联动、可提前撤回——这三件事是 issue #122 第 5 条要的。
+                内容与频率由调用方自己负责：<b>不设长度限制，也不限频</b>；「清空气泡」只收起说话气泡，
+                正在播的动画、余额气泡、工作状态气泡都不动，没有气泡时也回 <span class="mono">ok</span>。
+              </div>
+            </details>
+
+            <div class="row">
               <label for="bc-text">要说的话</label>
-              <input id="bc-text" type="text" value="巡检完毕，一切正常" style="flex:1;min-width:220px">
+              <div class="ctl">
+                <input id="bc-text" class="grow" type="text" value="巡检完毕，一切正常">
+              </div>
             </div>
-            <div class="field">
-              <label for="bc-image">配图</label>
-              <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-                <select id="bc-image" style="flex:1;min-width:200px;width:auto">
+
+            <div class="row">
+              <label for="bc-pet">目标宠物</label>
+              <div class="ctl">
+                <select id="bc-pet"></select>
+              </div>
+            </div>
+
+            <div class="row">
+              <label for="bc-pic-mode">配图来源</label>
+              <div class="ctl">
+                <select id="bc-pic-mode">
+                  <option value="image">表情包池内名称</option>
+                  <option value="url">自己托管的地址</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="row" id="bc-image-row">
+              <label for="bc-image">配图名称</label>
+              <div class="ctl">
+                <select id="bc-image" class="grow">
                   <option value="">（加载中…）</option>
                 </select>
-                <select id="bc-pet" style="width:auto"></select>
-                <button type="button" class="btn sm" id="bc-image-reload">刷新图片清单</button>
+                <button type="button" class="btn sm" id="bc-image-reload">刷新清单</button>
               </div>
-              <div id="bc-image-hint" style="margin-top:6px;font-size:12px;color:var(--faint)"></div>
             </div>
-            <div class="field">
-              <label>显示时长与动画</label>
-              <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+            <div class="hint-indent" id="bc-image-hint"></div>
+
+            <div class="row" id="bc-url-row" style="display:none">
+              <label for="bc-url">配图地址</label>
+              <div class="ctl">
+                <input id="bc-url" class="grow" type="text" placeholder="https://…/拒绝换壁纸.png（或点下面的「选择图片」）">
+              </div>
+            </div>
+
+            <div class="row" id="bc-upload-row" style="display:none">
+              <label>上传图片</label>
+              <div class="ctl">
+                <button type="button" class="btn" id="bc-file-btn">选择图片</button>
+                <input id="bc-file" type="file" accept="image/png,image/jpeg,image/webp,image/gif,.png,.jpg,.jpeg,.webp,.gif" style="display:none">
+                <button type="button" class="btn primary" id="bc-upload">上传并填入地址</button>
+                <span class="hint" id="bc-upload-result"></span>
+              </div>
+            </div>
+
+            <div class="row">
+              <label for="bc-duration">气泡时长</label>
+              <div class="ctl">
                 <input id="bc-duration" type="number" min="0" step="500" value="10000" style="width:110px">
-                <span class="hint">毫秒 · 缺省 10000 · <b>0 = 字面意思「不显示」</b></span>
+                <span class="hint">ms · 缺省 10000 · <b>0 = 不显示</b></span>
                 <label class="chk"><input type="checkbox" id="bc-anim" checked> 联动说话动画</label>
-                <span class="hint">关掉 = 只弹气泡（不查 <span class="mono">events.whisper</span> 池、不换源）</span>
               </div>
             </div>
-            <div class="field">
-              <button type="button" class="btn primary" id="bc-send">投喂</button>
-              <button type="button" class="btn" id="bc-clear">清空气泡</button>
-              <span class="hint" id="bc-result"></span>
-            </div>
-            <div class="note" style="margin-top:8px">
-              内容与频率由调用方自己负责：<b>不设长度限制，也不限频</b>。
-              「清空气泡」（<span class="mono">POST /bubble/clear</span>）只收起气泡——
-              正在播的动画、余额气泡、工作状态气泡都不动，没有气泡时也回 <span class="mono">ok</span>。
+
+            <div class="row">
+              <label></label>
+              <div class="ctl">
+                <button type="button" class="btn primary" id="bc-send">投喂</button>
+                <button type="button" class="btn" id="bc-clear">清空气泡</button>
+                <span class="hint" id="bc-result"></span>
+              </div>
             </div>
           </div>
         </div>
@@ -872,51 +975,126 @@
         <div class="card">
           <div class="card-head">
             <h2>点播动画</h2>
-            <span class="hint">以"外部插件"身份让桌宠播一段</span>
+            <span class="hint">POST /anim</span>
           </div>
           <div class="card-body">
-            <div class="card-desc">
-              模拟其他插件调用 <span class="mono">POST /anim</span>：把动画名写进状态，
-              桌宠在 1 秒内发现后换源播放，<b>效果与右键菜单点「动作」完全一致</b>。
-              名字必须是该宠物动画池里真实存在的（下拉框列的就是池子）。
-            </div>
-            <div class="field" style="margin-top:10px">
-              <label for="anim-name">动画</label>
-              <select id="anim-name" style="flex:1;min-width:220px"></select>
-              <select id="anim-pet" style="width:auto"></select>
-            </div>
-            <div class="field">
-              <button type="button" class="btn primary" id="anim-play">播放</button>
-              <span class="hint" id="anim-result"></span>
+            <details class="desc">
+              <summary>播池内名字（同右键「动作」菜单）或第三方自带的地址</summary>
+              <div class="desc-body">
+                两种形态<b>二选一</b>（issue #122 第 1 条）：给<b>名字</b>时必须是该宠物动画池里真实存在的
+                （下拉框列的就是池子），效果与右键菜单点「动作」完全一致——文字类先强制朝左的镜像修正、
+                移动类走真实位移；给<b>地址</b>时是第三方自带的素材，完整 URL、<b>不查池</b>，
+                消费端直接换源播一次、<b>不走菜单语义</b>（裸地址没有"是不是文字类 / 是不是移动类"这些属性）。
+                两个都给或都不给都会被判 <span class="mono">bad-request</span>。
+                <br>
+                点播是"插播一段"：播完回到正常动画链；<span class="mono">display: both</span> 时两端都会播。
+                要看回执请用下面那张「播放回执」卡片。
+              </div>
+            </details>
+
+            <div class="row">
+              <label for="anim-mode">来源</label>
+              <div class="ctl">
+                <select id="anim-mode">
+                  <option value="name">动画池内名字</option>
+                  <option value="url">自己托管的地址</option>
+                </select>
+                <select id="anim-pet"></select>
+              </div>
             </div>
 
-            <!-- 播放回执（issue #122 第 3 项）：POST /anim 会带回 playbackId，
-                 拿它轮询 GET /playback/<id> 才能知道这一段**到底**播完了没有 -->
-            <div class="card-desc" style="margin-top:12px;border-top:1px solid rgba(128,128,128,.25);padding-top:10px">
-              <b>播放回执</b>：<span class="mono">POST /anim</span> 只代表"受理了"，
-              <span class="mono">accepted</span> ≠ 播完。响应里的
-              <span class="mono">playbackId</span> 可以查
-              <span class="mono">GET /playback/&lt;id&gt;</span>：勾选要等的状态，命中即停；
-              没命中就按「轮询时间」反复挂起等待（长轮询）。
+            <div class="row" id="anim-name-row">
+              <label for="anim-name">动画</label>
+              <div class="ctl">
+                <select id="anim-name" class="grow"></select>
+              </div>
             </div>
-            <div class="field" style="margin-top:8px">
+
+            <div class="row" id="anim-url-row" style="display:none">
+              <label for="anim-url">动画地址</label>
+              <div class="ctl">
+                <input id="anim-url" class="grow" type="text" placeholder="https://…/拉侧栏.webm（或点下面的「选择视频」）">
+              </div>
+            </div>
+
+            <div class="row" id="anim-upload-row" style="display:none">
+              <label>上传视频</label>
+              <div class="ctl">
+                <button type="button" class="btn" id="anim-file-btn">选择视频</button>
+                <input id="anim-file" type="file" accept="video/webm,video/mp4,.webm,.mp4" style="display:none">
+                <button type="button" class="btn primary" id="anim-upload">上传并填入地址</button>
+                <span class="hint" id="anim-upload-result"></span>
+              </div>
+            </div>
+
+            <div class="row" id="anim-upload-preview-row" style="display:none">
+              <label>回读</label>
+              <div class="ctl">
+                <video id="anim-preview" muted loop playsinline style="max-width:220px;border-radius:8px;background:#000"></video>
+                <span class="hint">
+                  画面是浏览器<b>从上传后的那个地址</b>取回来的——能出画就说明服务真能访问它。
+                  地址跨源（测试代理 8741 vs DSH 页面），代理给 <span class="mono">/__uploads</span> 补了
+                  <span class="mono">Access-Control-Allow-Origin</span> 才能过。
+                </span>
+              </div>
+            </div>
+
+            <div class="row">
+              <label></label>
+              <div class="ctl">
+                <button type="button" class="btn primary" id="anim-play">播放</button>
+                <span class="hint" id="anim-result"></span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 播放回执（issue #122 第 3 项）：POST /anim 会带回 playbackId，
+             拿它轮询 GET /playback/<id> 才能知道这一段**到底**播完了没有 -->
+        <div class="card">
+          <div class="card-head">
+            <h2>播放回执</h2>
+            <span class="hint">GET /playback/&lt;id&gt;</span>
+          </div>
+          <div class="card-body">
+            <details class="desc">
+              <summary>受理 ≠ 播完：勾选要等的状态，命中即停，没命中就继续挂起</summary>
+              <div class="desc-body">
+                <span class="mono">POST /anim</span> 只代表"受理了"，<span class="mono">accepted</span> ≠ 播完。
+                响应里的 <span class="mono">playbackId</span> 可以查
+                <span class="mono">GET /playback/&lt;id&gt;</span>：勾选要等的状态，命中即停；
+                没命中就按「轮询时间」反复挂起等待（长轮询）。
+              </div>
+            </details>
+
+            <div class="row">
               <label>等待状态</label>
-              <label class="chk"><input type="checkbox" class="pb-wait" value="accepted"> accepted</label>
-              <label class="chk"><input type="checkbox" class="pb-wait" value="playing"> playing</label>
-              <label class="chk"><input type="checkbox" class="pb-wait" value="ended" checked> ended</label>
-              <label class="chk"><input type="checkbox" class="pb-wait" value="failed" checked> failed</label>
-              <label class="chk"><input type="checkbox" class="pb-wait" value="cancelled" checked> cancelled</label>
+              <div class="ctl">
+                <label class="chip-check"><input type="checkbox" class="pb-wait" value="accepted"><span>accepted</span></label>
+                <label class="chip-check"><input type="checkbox" class="pb-wait" value="playing"><span>playing</span></label>
+                <label class="chip-check"><input type="checkbox" class="pb-wait" value="ended" checked><span>ended</span></label>
+                <label class="chip-check"><input type="checkbox" class="pb-wait" value="failed" checked><span>failed</span></label>
+                <label class="chip-check"><input type="checkbox" class="pb-wait" value="cancelled" checked><span>cancelled</span></label>
+              </div>
             </div>
-            <div class="field">
+
+            <div class="row">
               <label for="pb-timeout">轮询时间</label>
-              <input type="number" id="pb-timeout" value="10000" min="100" max="10000" step="500" style="width:110px">
-              <span class="hint">ms（每次最多挂这么久，回来立刻再发一次；限 100–10000）</span>
+              <div class="ctl">
+                <input type="number" id="pb-timeout" value="10000" min="100" max="10000" step="500" style="width:110px">
+                <span class="hint">ms · 每次最多挂这么久，回来立刻再发一次（限 100–10000）</span>
+              </div>
             </div>
-            <div class="field">
-              <button type="button" class="btn" id="pb-start" disabled>开始轮询</button>
-              <button type="button" class="btn" id="pb-stop" disabled>停止</button>
-              <span class="hint" id="pb-state">先点上面的「播放」拿到 playbackId</span>
+
+            <div class="row">
+              <label></label>
+              <div class="ctl">
+                <button type="button" class="btn" id="pb-start" disabled>开始轮询</button>
+                <button type="button" class="btn" id="pb-stop" disabled>停止</button>
+                <span class="hint" id="pb-state">先在上面「点播动画」里点一次「播放」拿到 playbackId</span>
+              </div>
             </div>
+
             <!-- 直观显示：当前状态高亮成阶梯 + 每轮一行表格（原始 JSON 收在下面的折叠里） -->
             <div id="pb-stages" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px"></div>
             <div style="margin-top:8px;overflow:auto;max-height:200px">
@@ -937,10 +1115,6 @@
               <summary class="hint" style="cursor:pointer">原始响应文本（逐轮，要查再展开）</summary>
               <div id="pb-log" class="mono" style="margin-top:6px;max-height:240px;overflow:auto;font-size:12px;line-height:1.5;white-space:pre-wrap;word-break:break-all;background:rgba(128,128,128,.08);border:1px solid rgba(128,128,128,.2);border-radius:6px;padding:8px"></div>
             </details>
-            <div class="note" style="margin-top:8px">
-              点播是"插播一段"：播完会回到正常动画链；<span class="mono">display: both</span>
-              时浏览器与桌面都会播。
-            </div>
           </div>
         </div>
 
@@ -948,64 +1122,69 @@
         <div class="card">
           <div class="card-head">
             <h2>位置与抛掷</h2>
-            <span class="hint">以"外部插件"身份控制宠物去哪、往哪飞</span>
+            <span class="hint">POST /position · POST /throw</span>
           </div>
           <div class="card-body">
-            <div class="card-desc">
-              模拟第三方调用 <span class="mono">POST /position</span> 与 <span class="mono">POST /throw</span>。
-              两条都是<b>运动指令</b>：写进状态后由渲染端执行，<b>不引入任何新物理</b>——位置按
-              <span class="mono">mode</span> 走三条既有路径（直接 / 弹簧 / 直线），抛掷复用已有的
-              重力 / 反弹 / 地面摩擦 / 落地 Q 弹。
-              <b>手指正按在宠物身上时会被静默丢弃</b>：接口仍回 <span class="mono">ok</span>，
-              但宠物不动，而且轮询也看不出来（这是设计上的已知缺口）。
-            </div>
+            <details class="desc">
+              <summary>两条运动指令：位置走三条既有路径，抛掷复用已有物理</summary>
+              <div class="desc-body">
+                模拟第三方调用 <span class="mono">POST /position</span> 与 <span class="mono">POST /throw</span>。
+                两条都是<b>运动指令</b>：写进状态后由渲染端执行，<b>不引入任何新物理</b>——位置按
+                <span class="mono">mode</span> 走三条既有路径（直接 / 弹簧 / 直线），抛掷复用已有的
+                重力 / 反弹 / 地面摩擦 / 落地 Q 弹。
+                <br>
+                <b>手指正按在宠物身上时会被静默丢弃</b>：接口仍回 <span class="mono">ok</span>，
+                但宠物不动，而且轮询也看不出来（这是设计上的已知缺口）。
+              </div>
+            </details>
 
-            <div class="field" style="margin-top:10px">
+            <div class="row">
               <label for="mv-pet">目标宠物</label>
-              <select id="mv-pet" style="width:auto"></select>
-              <span class="hint" id="mv-hint"></span>
+              <div class="ctl">
+                <select id="mv-pet"></select>
+                <span class="hint" id="mv-hint"></span>
+              </div>
             </div>
 
             <!-- ── 位置 ── -->
-            <div class="card-desc" style="margin-top:12px;border-top:1px solid rgba(128,128,128,.25);padding-top:10px">
-              <b>位置</b>：<span class="mono">x</span> / <span class="mono">y</span> 是宠物<b>中心</b>的归一化坐标
-              （合法 <span class="mono">0~1</span>，越界会被夹取）。在下面的框里<b>点一下或拖一下</b>就能设位置——
-              不必手算归一化坐标。<span class="mono">mode</span> 三选一：<b>直接</b>一帧到位、<b>弹簧</b>走拖拽
-              那套过阻尼弹簧、<b>直线</b>在指定毫秒里直线走完（只有它用 <span class="mono">ms</span> 那个框）。
+            <div class="sub">
+              位置
+              <span class="hint">x / y = 宠物中心的归一化坐标（0~1，越界会被夹取）</span>
             </div>
             <div class="stage" id="mv-stage">
               <div class="stage-dot" id="mv-dot"></div>
               <div class="stage-tip">点或拖这里设定宠物中心</div>
             </div>
-            <div class="field" style="margin-top:8px">
-              <label>目标位置（宠物中心）</label>
-              <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+            <div class="row" style="margin-top:9px">
+              <label>目标位置</label>
+              <div class="ctl">
                 <span class="hint">x</span>
-                <input type="number" id="mv-x" step="0.01" value="0.5" style="width:96px">
+                <input type="number" id="mv-x" step="0.01" value="0.5" style="width:92px">
                 <span class="hint">y</span>
-                <input type="number" id="mv-y" step="0.01" value="0.5" style="width:96px">
-                <select id="mv-mode" style="width:auto">
+                <input type="number" id="mv-y" step="0.01" value="0.5" style="width:92px">
+                <select id="mv-mode">
                   <option value="spring" selected>弹簧</option>
                   <option value="line">直线</option>
                   <option value="instant">直接</option>
                 </select>
                 <span class="hint">ms</span>
-                <input type="number" id="mv-duration" step="100" min="0" value="1200" style="width:96px">
-                <span class="hint" id="mv-note"></span>
+                <input type="number" id="mv-duration" step="100" min="0" value="1200" style="width:92px">
               </div>
             </div>
-            <div class="field">
-              <button type="button" class="btn primary" id="mv-go">挪过去</button>
-              <button type="button" class="btn" id="mv-snap">立即到位</button>
-              <span class="hint" id="mv-result"></span>
+            <div class="hint-indent" id="mv-note"></div>
+            <div class="row">
+              <label></label>
+              <div class="ctl">
+                <button type="button" class="btn primary" id="mv-go">挪过去</button>
+                <button type="button" class="btn" id="mv-snap">立即到位</button>
+                <span class="hint" id="mv-result"></span>
+              </div>
             </div>
 
             <!-- ── 抛掷 ── -->
-            <div class="card-desc" style="margin-top:12px;border-top:1px solid rgba(128,128,128,.25);padding-top:10px">
-              <b>抛掷</b>：<span class="mono">angle</span> 单位度，<span class="mono">0</span> = 正右、
-              <b>逆时针为正</b>（<span class="mono">90</span> = 正上）。<span class="mono">power</span> 是力度倍率，
-              <span class="mono">1.0</span> 对应软上限<b>前</b>的 1200 px/s——实际初速会被压到约 1021 px/s，
-              下面的读数实时算给你看。拖左边的拨盘就能定方向。
+            <div class="sub">
+              抛掷
+              <span class="hint">angle 单位度（0 = 正右，逆时针为正）· power 是力度倍率</span>
             </div>
             <div class="throw-row">
               <div class="dial" id="th-dial">
@@ -1014,26 +1193,31 @@
                 <div class="dial-hub"></div>
               </div>
               <div class="throw-side">
-                <div class="field">
+                <div class="row">
                   <label for="th-angle">角度</label>
-                  <input type="number" id="th-angle" step="1" value="45" style="width:92px">
-                  <span class="hint">度 · 0 = 正右，逆时针为正</span>
+                  <div class="ctl">
+                    <input type="number" id="th-angle" step="1" value="45" style="width:92px">
+                    <span class="hint">0 = 正右，逆时针为正</span>
+                  </div>
                 </div>
-                <div class="field">
+                <div class="row">
                   <label for="th-power">力度</label>
-                  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                  <div class="ctl">
                     <input type="range" id="th-power" min="0.1" max="6" step="0.05" value="1" style="flex:1;min-width:150px">
                     <input type="number" id="th-power-num" min="0.01" step="0.1" value="1" style="width:84px">
                   </div>
                 </div>
                 <div class="throw-readout" id="th-readout"></div>
-                <div class="field">
-                  <button type="button" class="btn primary" id="th-go">抛出去</button>
-                  <span class="hint" id="th-result"></span>
+                <div class="row">
+                  <label></label>
+                  <div class="ctl">
+                    <button type="button" class="btn primary" id="th-go">抛出去</button>
+                    <span class="hint" id="th-result"></span>
+                  </div>
                 </div>
               </div>
             </div>
-            <div class="note" style="margin-top:8px">
+            <div class="hint-indent" style="margin-left:0">
               抛掷<b>不设死区</b>：力度再小也照抛（死区是拖拽语义，表示"手停住了 = 温柔放下"）。
               角度是<b>数学惯例</b>而非屏幕惯例，所以"往上抛"写 <span class="mono">90</span> 而不是
               <span class="mono">270</span>。宠物<b>从当前位置起飞</b>，不需要先被"抓住"。
@@ -1045,34 +1229,43 @@
         <div class="card">
           <div class="card-head">
             <h2>显示在哪端</h2>
-            <span class="hint">以"外部插件"身份改某只宠物出现在哪个端</span>
+            <span class="hint">POST /pet-display</span>
           </div>
           <div class="card-body">
-            <div class="card-desc">
-              模拟第三方调用 <span class="mono">POST /pet-display</span>：只传宠物 id 与目标
-              <span class="mono">display</span>，<b>不用回传整段 pets</b>——层归属（写
-              <span class="mono">main-config.jsonc</span> 还是
-              <span class="mono">pet/&lt;前缀&gt;-config.json</span>）由宿主按 id 反查。
-              桌面端与浏览器端的右键菜单「显示位置」走的就是它。
-              <b>这管的是"哪个端"，不是屏幕坐标</b>——屏幕坐标见同页的「位置与抛掷」。
-            </div>
-            <div class="field" style="margin-top:10px">
+            <details class="desc">
+              <summary>只传宠物 id 与目标 display，层归属由宿主按 id 反查</summary>
+              <div class="desc-body">
+                模拟第三方调用 <span class="mono">POST /pet-display</span>：只传宠物 id 与目标
+                <span class="mono">display</span>，<b>不用回传整段 pets</b>——层归属（写
+                <span class="mono">main-config.jsonc</span> 还是
+                <span class="mono">pet/&lt;前缀&gt;-config.json</span>）由宿主按 id 反查。
+                桌面端与浏览器端的右键菜单「显示位置」走的就是它。
+                <br>
+                <b>这管的是"哪个端"，不是屏幕坐标</b>——屏幕坐标见同页的「位置与抛掷」。
+                这是<b>持久配置写入</b>，不是临时隐藏：选「都不」后这只宠物两端都不可见，
+                恢复入口是设置页的「显示在哪端」下拉框。返回体是改动后的成品聚合，本页据此刷新宠物清单。
+              </div>
+            </details>
+
+            <div class="row">
               <label for="disp-value">显示在哪端</label>
-              <select id="disp-value" style="flex:1;min-width:180px">
-                <option value="web">仅网页</option>
-                <option value="desktop">仅桌面</option>
-                <option value="both">两者</option>
-                <option value="none">都不</option>
-              </select>
-              <select id="disp-pet" style="width:auto"></select>
+              <div class="ctl">
+                <select id="disp-value" class="grow">
+                  <option value="web">仅网页</option>
+                  <option value="desktop">仅桌面</option>
+                  <option value="both">两者</option>
+                  <option value="none">都不</option>
+                </select>
+                <select id="disp-pet"></select>
+              </div>
             </div>
-            <div class="field">
-              <button type="button" class="btn primary" id="disp-send">应用</button>
-              <span class="hint" id="disp-result"></span>
-            </div>
-            <div class="note" style="margin-top:8px">
-              这是<b>持久配置写入</b>，不是临时隐藏：选「都不」后这只宠物两端都不可见，
-              恢复入口是设置页的「显示在哪端」下拉框。返回体是改动后的成品聚合，本页据此刷新宠物清单。
+
+            <div class="row">
+              <label></label>
+              <div class="ctl">
+                <button type="button" class="btn primary" id="disp-send">应用</button>
+                <span class="hint" id="disp-result"></span>
+              </div>
             </div>
           </div>
         </div>
@@ -1279,7 +1472,7 @@
       baseline: {},        // 叶子路径 → 上次见到的 counter（首拉只记基线，不渲染）
       firstPoll: true,
       polls: 0,            // 轮询次数（活动日志有上限，计数另记）
-      say: null,           // { text, image }
+      say: null,           // { text, image } 或 { text, url }（配图两种形态二选一）
       sayAt: 0,
       sayCounter: 0,
       notes: [],           // 客户端自己攒的通知历史（host 侧只有一个槽位）
@@ -1299,8 +1492,9 @@
     const enc = (p) => String(p).split("/").map(encodeURIComponent).join("/");
     /**
      * 表情包名 → 图片地址。
-     * 注意：宿主在 say 叶子里存的 image 是**表情包名**（如「可爱」），不是 URL；
-     * 直接把 name 当 src 用会被解析成相对路径 → 裂图。
+     * 注意：这个函数只服务**名称形态**——宿主在 say 叶子里存的 `image` 是**表情包名**
+     *（如「可爱」），不是 URL；直接把 name 当 src 用会被解析成相对路径 → 裂图。
+     *（配图的另一种形态 `url` 是完整地址，**直接当 src 用**、不走这个函数，见 renderSay。）
      *
      * 拼法与两端共用逻辑一致：`<前缀>/pic/memes/<素材根>/<名称>.png`（素材根与名称都要编码）。
      * 素材根 = 该宠物所属条目（= `/config` 的顶层键）——图片归属与动画同一套：
@@ -1534,9 +1728,17 @@
       S.sayAt = Date.now();
       b.className = "bubble";
       b.appendChild(document.createTextNode(data.text));
-      if (typeof data.image === "string" && data.image) {
+      // 配图两种形态二选一（issue #122 第 1 条），**由字段名区分**、不靠嗅探：
+      //   url   → 第三方自带的地址，直接当 src 用（与本页 origin 无关）；
+      //   image → 池内名称，须经 memeUrl 拼地址；素材根取该宠物所属条目（配图归属按条目分）。
+      if (typeof data.url === "string" && data.url) {
         const img = el("img", "meme");
-        // image 是名称，须经 memeUrl 拼地址；素材根取该宠物所属条目（配图归属按条目分）
+        img.src = data.url;
+        img.alt = "自带配图";
+        img.onerror = () => img.remove();
+        b.appendChild(img);
+      } else if (typeof data.image === "string" && data.image) {
+        const img = el("img", "meme");
         img.src = memeUrl(data.image, assetRootOf(petId));
         img.alt = data.image;
         img.onerror = () => img.remove();
@@ -2581,6 +2783,24 @@
     // 刚往 memes/ 里丢了新图 → 忽略存在性缓存重探一次（否则要刷新整个页面才看得到）
     $("bc-image-reload").addEventListener("click", () => void fillBcImageSelect({ force: true }));
 
+    // 配图 / 动画的"来源"下拉：两种形态二选一，切换时只显示对应的那一行输入
+    //（与宿主同一套 XOR —— 两个都给会被判 bad-request，所以界面上根本不给同时填的机会）
+    $("bc-pic-mode").addEventListener("change", () => {
+      const url = $("bc-pic-mode").value === "url";
+      $("bc-image-row").style.display = url ? "none" : "";
+      $("bc-url-row").style.display = url ? "" : "none";
+      $("bc-upload-row").style.display = url ? "" : "none";
+    });
+    $("anim-mode").addEventListener("change", () => {
+      const url = $("anim-mode").value === "url";
+      $("anim-name-row").style.display = url ? "none" : "";
+      $("anim-url-row").style.display = url ? "" : "none";
+      $("anim-upload-row").style.display = url ? "" : "none";
+      // 预览只在真的传过东西之后才占位置
+      const hasPreview = !!$("anim-preview").getAttribute("src");
+      $("anim-upload-preview-row").style.display = url && hasPreview ? "" : "none";
+    });
+
     $("chat-pet-select").addEventListener("change", (e) => {
       S.chatPetId = e.target.value;
       void loadChat();
@@ -2701,18 +2921,22 @@
       if (prev && names.includes(prev)) sel.value = prev;
     }
 
-    // 点播动画：以"外部插件"的身份让桌宠播一段（效果与右键「动作」菜单一致）
+    // 点播动画：以"外部插件"的身份让桌宠播一段。两种形态二选一（与宿主同一套 XOR）：
+    //   名字 → 走菜单语义（镜像修正 / 真实位移），效果与右键「动作」一致；
+    //   地址 → 第三方自带的素材，直接换源播一次，不走菜单语义（issue #122 第 1 条）。
     $("anim-play").addEventListener("click", async () => {
       const petId = $("anim-pet").value || S.petId;
-      const name = $("anim-name").value;
+      const mode = $("anim-mode").value;
       const res = $("anim-result");
-      if (!name) {
-        res.textContent = "该宠物没有可点播的动画";
+      // 按来源下拉决定发 name 还是 url——**绝不两个都发**（宿主会判 bad-request）
+      const body = mode === "url" ? { url: $("anim-url").value.trim() } : { name: $("anim-name").value };
+      if (!body.url && !body.name) {
+        res.textContent = mode === "url" ? "请填一个动画地址" : "该宠物没有可点播的动画";
         return;
       }
       stopPlaybackWatch("重新点播"); // 新的一次点播：先停掉上一次的回执轮询
       res.textContent = "点播中…";
-      const r = await POST("/anim?pet=" + encodeURIComponent(petId), { body: { name } });
+      const r = await POST("/anim?pet=" + encodeURIComponent(petId), { body });
       if (r.status === 200 && r.body && r.body.ok) {
         // 回执编号：宿主受理时生成。老版本 host 不回这个字段 → 回执不可用，明确提示（不静默）
         const pid = typeof r.body.playbackId === "string" ? r.body.playbackId : "";
@@ -2729,6 +2953,96 @@
         const why = (r.body && r.body.message) || (r.body && r.body.reason) || r.error || "HTTP " + r.status;
         res.textContent = "被拒：" + why;
       }
+    });
+
+    /**
+     * 原生 <input type="file"> 长什么样由浏览器定，跟本页风格完全不搭 —— 藏起来，
+     * 用一个页面自己的 .btn 触发它，并把选中的文件名回填到按钮上（太长就截断）。
+     */
+    function bindFilePicker(inputId, btnId, emptyLabel, prefix) {
+      const input = $(inputId);
+      const btn = $(btnId);
+      btn.addEventListener("click", () => input.click());
+      input.addEventListener("change", () => {
+        const f = input.files && input.files[0];
+        if (!f) {
+          btn.textContent = emptyLabel;
+          btn.title = "";
+          return;
+        }
+        btn.textContent = prefix + (f.name.length > 16 ? f.name.slice(0, 15) + "…" : f.name);
+        btn.title = f.name;
+      });
+    }
+
+    /**
+     * 把一个文件交给**测试代理自己的** /__upload 收下，拿回一个可访问的地址。
+     * 动画与配图两个卡片共用这一条 —— 服务端本来就是通用的（按扩展名定 MIME）。
+     * 上传落在系统临时目录、回读走 /__uploads/，两者都在 dsh-pet 接口前缀之外，宿主全程不参与。
+     */
+    async function uploadToTester(file) {
+      const upPath = "/__upload?name=" + encodeURIComponent(file.name);
+      const t0 = performance.now();
+      try {
+        // 直接发 File 本体（不套 multipart）：代理那边就是"请求体 = 原始字节"
+        const r = await fetch(upPath, {
+          method: "POST",
+          headers: { "content-type": file.type || "application/octet-stream" },
+          body: file,
+        });
+        const ms = Math.round(performance.now() - t0);
+        const j = await r.json().catch(() => null);
+        logActivity("POST", upPath, { status: r.status, ms, error: r.ok ? "" : (j && j.error) || "" });
+        if (!r.ok || !j || !j.ok) return { error: (j && j.error) || "HTTP " + r.status };
+        return { url: j.url, bytes: j.bytes };
+      } catch (e) {
+        return { error: e && e.message ? e.message : String(e) };
+      }
+    }
+
+    bindFilePicker("anim-file", "anim-file-btn", "选择视频", "视频：");
+    bindFilePicker("bc-file", "bc-file-btn", "选择图片", "图片：");
+
+    // 上传视频 → 拿回地址 → 填进 url 字段 → 回读预览。
+    // 这就是"第三方自己托管素材、只给一个 url"的完整演示（issue #122 第 1 条那条路）。
+    $("anim-upload").addEventListener("click", async () => {
+      const file = $("anim-file").files && $("anim-file").files[0];
+      const res = $("anim-upload-result");
+      if (!file) {
+        res.textContent = "先选一个视频文件";
+        return;
+      }
+      res.textContent = "上传中…";
+      const up = await uploadToTester(file);
+      if (up.error) {
+        res.textContent = "上传失败：" + up.error;
+        return;
+      }
+      $("anim-url").value = up.url;
+      res.textContent = "已上传 " + Math.max(1, Math.round(up.bytes / 1024)) + " KB → " + up.url;
+      // 回读预览：让浏览器从**那个地址**再取一次，确认服务真的能访问到这个视频
+      const pv = $("anim-preview");
+      pv.src = up.url;
+      pv.load();
+      $("anim-upload-preview-row").style.display = "";
+    });
+
+    // 上传图片 → 同一条路（配图也能"自己托管"）。填进 #bc-url，投喂时走 /broadcast 的 url 参数。
+    $("bc-upload").addEventListener("click", async () => {
+      const file = $("bc-file").files && $("bc-file").files[0];
+      const res = $("bc-upload-result");
+      if (!file) {
+        res.textContent = "先选一个图片文件";
+        return;
+      }
+      res.textContent = "上传中…";
+      const up = await uploadToTester(file);
+      if (up.error) {
+        res.textContent = "上传失败：" + up.error;
+        return;
+      }
+      $("bc-url").value = up.url;
+      res.textContent = "已上传 " + Math.max(1, Math.round(up.bytes / 1024)) + " KB → " + up.url;
     });
 
     // ── 播放回执轮询（issue #122 第 3 项）────────────────────────────────
@@ -3052,16 +3366,23 @@
 
     // 第三方投喂：以"外部插件"的身份把文本写进气泡（issue #76 的场景）
     // 新参数（issue #122 第 5 条）：duration 毫秒（0 = 字面意思「不显示」）、anim 是否联动说话动画
+    // 配图（issue #122 第 1 条）：名称 / 地址**二选一**——按来源下拉决定发哪个，绝不两个都发
     $("bc-send").addEventListener("click", async () => {
       const petId = $("bc-pet").value || S.petId;
       const text = $("bc-text").value;
-      const image = $("bc-image").value.trim();
+      const picMode = $("bc-pic-mode").value;
       const duration = Number($("bc-duration").value);
       const anim = $("bc-anim").checked;
       const res = $("bc-result");
       res.textContent = "投喂中…";
       const body = { text };
-      if (image) body.image = image;
+      if (picMode === "url") {
+        const url = $("bc-url").value.trim();
+        if (url) body.url = url;
+      } else {
+        const image = $("bc-image").value.trim();
+        if (image) body.image = image;
+      }
       if (Number.isFinite(duration)) body.duration = duration;
       body.anim = anim;
       const r = await POST("/broadcast?pet=" + encodeURIComponent(petId), { body });

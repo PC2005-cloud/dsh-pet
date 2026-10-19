@@ -280,10 +280,13 @@ paths:
         - **不设长度限制，也不限频**：投喂是显式的调用方行为，内容与频率都由调用方自己负责，
           宿主不做静默丢弃、截断或排队；
         - `pet` 必须是一只真实存在的桌宠；缺省时落到当前桌宠，仍为空则兜底 `main`；
-        - `image` 只接受**该桌宠条目表情包池内**的名称（即该条目 `memes` 里、且在其表情包目录链
-          —— `pet/<素材根>-memes/`（独占）或 `memes/` → 包内 `assets/memes/` ——里真实存在的键）。
-          传入外部 URL 或池外名称一律拒绝——前端因此永远不会去加载任意外部地址
-          （与对话选图共用同一份校验）；
+        - **配图两种形态，二选一**（issue #122 第 1 条的"资源注册"）：
+          - `image`：只接受**该桌宠条目表情包池内**的名称（即该条目 `memes` 里、且在其表情包目录链
+            —— `pet/<素材根>-memes/`（独占）或 `memes/` → 包内 `assets/memes/` ——里真实存在的键）。
+            池外名称 → `ok: false` + `reason: unknown-image`（与对话选图共用同一份校验）；
+          - `url`：**第三方自带的配图地址**，完整 URL，不查池——素材在调用方手里，池里当然没有。
+            scheme 只放行 `http` / `https`（`file:` 会让桌面端渲染进程能读本地任意文件）。
+          - **两个都给 → `bad-request`**：两种形态互斥，意图不明时不替调用方猜。
         - `duration` 可选，气泡显示时长（毫秒）。缺省 `10000`；**`0` 是合法值**，字面意思
           「不显示」（请求照常受理，只是不渲染）；负数 / `NaN` / `Infinity` / 非数字 → `bad-request`。
           **不设上限**——和内容、频率一样，由调用方自己负责；
@@ -326,8 +329,20 @@ paths:
                   description: |
                     可选配图**名称**（配置 `memes` 的键 = 图文件名去扩展名，不含路径）。
                     必须在该桌宠条目的 `memes` 里、且在其表情包目录链里真实存在，否则 `ok: false` +
-                    `reason: unknown-image`。不接受 URL。
+                    `reason: unknown-image`。与 `url` **二选一**（两个都给 → `bad-request`）。
                   example: 可爱
+                url:
+                  type: string
+                  format: uri
+                  description: |
+                    可选配图**地址**——第三方自带的图，完整 URL（issue #122 第 1 条）。
+                    不查表情包池；scheme 只放行 `http` / `https`，其余 → `ok: false` + `reason: bad-request`。
+                    与 `image` **二选一**。
+
+                    **跨域不由本插件解决**：浏览器端配图是 `<img src>`（不受 CORS 管），
+                    但动画那边走 `fetch`，跨域地址要求对方自己带 `Access-Control-Allow-Origin`。
+                    插件与第三方插件在同一个 DSH、同一个端口上时，同源地址天然没有这个问题。
+                  example: https://cdn.example.com/拒绝换壁纸.png
                 duration:
                   type: number
                   minimum: 0
@@ -353,6 +368,11 @@ paths:
                 value:
                   text: 巡检完毕，一切正常
                   image: 厉害了我的鲸
+              withUrl:
+                summary: 带一张**自己托管**的配图（给完整地址，不查池）
+                value:
+                  text: 巡检完毕，一切正常
+                  url: https://cdn.example.com/拒绝换壁纸.png
               noAnimShort:
                 summary: 只弹 3 秒气泡，不播说话动画
                 value:
@@ -428,19 +448,30 @@ paths:
       operationId: playAnimation
       summary: 点播动画——让桌宠播一段指定动画
       description: |
-        效果与**右键菜单里点「动作」树完全一致**：两端都复用同一个菜单动作处理函数
-        （浏览器 `handleMenuAction` / 桌面 `sprite.onMenuAction`），所以镜像修正（文字类朝右时
-        先强制朝左）、移动类走真实位移、其余播一遍这些语义天然一致。
+        两种形态**二选一**（issue #122 第 1 条的"资源注册"）：
 
-        名字写进 `pets.<id>.anim`，消费端在 1 秒内轮询发现 `counter` 变化后换源播放。
-        **动画名即素材文件名**（`/dsh-pet-7340/thumb/<素材根>/<名字>.webm`），所以名字必须是
-        该宠物 `animations` 配置里菜单能点到的名字之一——播放端对不存在的名字没有兜底
-        （404 → 加载失败 → 表现为"点了没反应"），因此由宿主在写入前拦下。
+        - **`name`（池内动画名）**：效果与**右键菜单里点「动作」树完全一致**——两端都复用同一个
+          菜单动作处理函数（浏览器 `handleMenuAction` / 桌面 `sprite.onMenuAction`），所以镜像修正
+          （文字类朝右时先强制朝左）、移动类走真实位移、其余播一遍这些语义天然一致。
+          名字写进 `pets.<id>.anim`，消费端在 1 秒内轮询发现 `counter` 变化后换源播放。
+          **动画名即素材文件名**（`/dsh-pet-7340/thumb/<素材根>/<名字>.webm`），所以名字必须是
+          该宠物 `animations` 配置里菜单能点到的名字之一——播放端对不存在的名字没有兜底
+          （404 → 加载失败 → 表现为"点了没反应"），因此由宿主在写入前拦下。
+        - **`url`（第三方自带的素材地址）**：完整 URL，**不查动画池**——素材在调用方手里，
+          池里当然没有这个名字。scheme 只放行 `http` / `https`（`file:` 会让桌面端渲染进程能读
+          本地任意文件）。消费端拿到后**直接换源播一次，不走菜单语义**——裸地址没有"是不是文字类 /
+          是不是移动类"这些属性。两端都是"插播一段"：播完回到正常动画链。
 
         **校验**（任何一条不通过都返回 HTTP 200 + `ok: false`）：
 
-        - `name` 必填，`trim()` 后不得为空，且必须在该宠物的动画池内；
+        - `name` 与 `url` 必须**恰好给一个**：两个都给或都不给 → `bad-request`（意图不明，不替
+          调用方猜）；
+        - `name` 给了就必须在该宠物的动画池内；`url` 给了就必须是 http/https 的完整地址；
         - `pet` 必须是一只真实存在的桌宠；缺省时落到当前桌宠，仍为空则兜底 `main`。
+
+        **跨域不由本插件解决**：两端消费端都是 `fetch` + blob（为了绕开流式加载的 stall），
+        所以**跨域地址要求对方自己带 `Access-Control-Allow-Origin`**。插件与第三方插件在同一个
+        DSH、同一个端口上时，同源地址天然没有这个问题——宿主**不做代理**，因此也没有 SSRF 面。
 
         **多宠物：动画池是按「条目」分的，不是全局一份**
 
@@ -477,7 +508,8 @@ paths:
           application/json:
             schema:
               type: object
-              required: [name]
+              description: |
+                `name` 与 `url` **恰好给一个**。两个都给或都不给 → `ok: false` + `reason: bad-request`。
               properties:
                 name:
                   type: string
@@ -485,16 +517,33 @@ paths:
                     要播放的动画名。必须是该宠物 `animations` 配置里菜单可点到的名字
                     （`idle` / `turn` / `drag` / `clicks` / `moves.actions` / `categories` /
                     `events` 这七类池子的并集），否则 `ok: false` + `reason: unknown-animation`。
+                    与 `url` 二选一。
                   example: 东张西望
+                url:
+                  type: string
+                  format: uri
+                  description: |
+                    要播放的素材**地址**——第三方自带的动画，完整 URL（issue #122 第 1 条）。
+                    **不查动画池**；scheme 只放行 `http` / `https`，其余 → `ok: false` +
+                    `reason: bad-request`。与 `name` 二选一。
+
+                    消费端不走菜单语义（没有镜像修正 / 真实位移），只是换源播一次。
+                    跨域由浏览器强制、插件绕不过去：外站地址要求对方带 `Access-Control-Allow-Origin`，
+                    同源（第三方插件在同一个 DSH 端口上注册自己的路由）则没有这个问题。
+                  example: https://cdn.example.com/拉侧栏.webm
             examples:
               turn:
-                summary: 播一段转向动画
+                summary: 播一段转向动画（池内名字）
                 value:
                   name: 东张西望
               move:
                 summary: 播一段移动动画（会真的走过去，与菜单一致）
                 value:
                   name: 螃蟹走路
+              byUrl:
+                summary: 播一段**自己托管**的动画（给完整地址，不查池）
+                value:
+                  url: https://cdn.example.com/拉侧栏.webm
       responses:
         "200":
           description: |
@@ -1958,20 +2007,34 @@ components:
           description: |
             该宠物要播的动画；`null` = 从未写过。
             每次写入 counter 都递增，所以**同一个动画连续点播两次也会被消费端当成两次指令**
-            （重播）。名字即素材文件名（`/thumb/<素材根>/<名字>.webm`），因此名字必须存在于
-            该宠物的动画池内——由 `POST /anim` 在写入前校验。
+            （重播）。两种形态：`name`（名字即素材文件名 `/thumb/<素材根>/<名字>.webm`，因此名字
+            必须存在于该宠物的动画池内）或 `url`（第三方自带的完整地址，不查池）——两者**恰好一个**，
+            都由 `POST /anim` 在写入前保证。
           oneOf:
             - $ref: "#/components/schemas/Anim"
             - type: "null"
 
     Anim:
       type: object
-      required: [name]
+      description: |
+        要播的一段动画。`name` 与 `url` **恰好一个**（由 `POST /anim` 在写入前保证）。
       properties:
         name:
           type: string
-          description: 要播放的动画名（等于 `animations` 配置里菜单可点到的某个名字）
+          description: |
+            要播放的动画名（等于 `animations` 配置里菜单可点到的某个名字）。
+            消费端按「素材根 + 名字」拼 `/thumb/<素材根>/<名>.webm` 换源，并走**菜单语义**
+            （文字类先强制朝左的镜像修正、移动类走真实位移、其余播一遍）。
           example: 东张西望
+        url:
+          type: string
+          description: |
+            要播放的素材**地址**（第三方自带，完整 URL，issue #122 第 1 条）。
+            消费端**直接拿它当 src，不走菜单语义**——裸地址没有"是不是文字类 / 是不是移动类"
+            这些属性，只做"插播一段"（播完回正常动画链）。
+            与 `name` 并列、**由字段名区分**（不靠 `startsWith('http')` 嗅探：名字恰好长得像
+            地址时会判错）。
+          example: https://cdn.example.com/拉侧栏.webm
 
     PositionLeaf:
       type: object
@@ -2070,6 +2133,13 @@ components:
             仅在配置开启了 `whisperImageEnabled` / `chatImageEnabled` 且命中池内图片时出现。
             消费端（浏览器 / 桌面）按素材根拼成 `/dsh-pet-7340/pic/memes/<素材根>/<名>.png`
             取图，素材根 = 该宠物的条目 key（`assetRoot`）。
+            与 `url` 并列、**由字段名区分**；**只有 `POST /broadcast` 会写 url 形态**。
+        url:
+          type: string
+          description: |
+            可选配图**地址**（第三方自带的图，完整 URL，issue #122 第 1 条）。
+            消费端直接拿它当 `src`，**不拼表情包路径**。
+            只有 `POST /broadcast` 会写这个字段（`image` / `url` 由宿主保证二选一）。
         duration:
           type: number
           minimum: 0

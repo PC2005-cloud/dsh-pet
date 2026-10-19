@@ -123,6 +123,9 @@ class PetSprite {
     this.whisperText = '';
     // 配图名称（配置 memes 的键；whisperImageEnabled 开启时由 host 随机抽定，随文本一起来）
     this.whisperImage = '';
+    // 配图**地址**（POST /broadcast 的 url 参数；与 whisperImage 二选一，见 showWhisper）。
+    // 两种形态由字段名区分，不靠嗅探——地址形态直接用、名称形态才按素材根拼路径。
+    this.whisperUrl = '';
     // 工作状态联动（DSH 会话状态）：容器 1s 轮询 /state 递增 workTick → 本宠物按档位播动画+气泡。
     // 气泡单槽优先级 终态任务 > whisper > balance > 非终态任务（见 renderBubble）；
     // workStatusEnabled 未启用时完全免疫（与浏览器一致）
@@ -402,7 +405,7 @@ class PetSprite {
   }
 
   // 双缓冲切换（与浏览器同一套：前台 opacity 切换 + 降级视频清 handler 并停播，防残留 ended 雪崩）
-  switchTo(next, nextOnce, playbackId) {
+  switchTo(next, nextOnce, playbackId, url) {
     if (!next) return;
     const pending = this.pending;
     if (pending && pending.anim === next && pending.once === nextOnce) {
@@ -425,7 +428,10 @@ class PetSprite {
     const target = this.front === 0 ? this.videoB : this.videoA;
     const el = target;
     if (!el) return;
-    el.src = this.assetBase + encodeURIComponent(next) + (S.ANIMATION_EXT || '.webm');
+    // 素材地址两条路（POST /anim 的 url 参数）：url 形态直接用第三方给的**完整地址**——宿主已把
+    // scheme 卡在 http/https，这里**不经 bridge、也不拼 BASE**（地址本身就与本页 origin 无关）；
+    // name 形态照旧按「素材根 + 名字」拼（名字即文件名）。
+    el.src = url || this.assetBase + encodeURIComponent(next) + (S.ANIMATION_EXT || '.webm');
     el.loop = !nextOnce;
     el.muted = true;
     el.autoplay = true;
@@ -494,10 +500,20 @@ class PetSprite {
     if (el.readyState >= 2) onReady();
   }
 
-  playOnce(name, playbackId) {
+  playOnce(name, playbackId, url) {
     this.anim = name;
     this.once = true;
-    this.switchTo(name, true, playbackId);
+    this.switchTo(name, true, playbackId, url);
+  }
+
+  // 直接播一个**外部地址**（POST /anim 的 url 参数，issue #122 第 1 条）。
+  // 为什么单独一个方法、不复用 onMenuAction：那套是菜单语义（文字类先强制朝左的镜像修正、
+  // 移动类走真实位移），裸地址没有"是不是文字类 / 是不是移动类"这些属性。这里只做"插播一段"
+  // ——停掉漫游/移动，换源播一次，播完由 handleEnded 回到正常动画链（与菜单点一下的 once 同义）。
+  // `name` 位置传地址本身：它同时是 pending 的防重键与日志里的标识，地址天然唯一。
+  playUrlOnce(url, playbackId) {
+    this.stopMove();
+    this.playOnce(url, playbackId, url);
   }
 
   // 动画链（与浏览器 pickNext 语义一致，纯逻辑在 shared）
@@ -1577,7 +1593,14 @@ class PetSprite {
     const workTerminal = this.workState === 'success' || this.workState === 'error';
     const slot =
       workTerminal && workOn ? 'work' : whisperOn ? 'whisper' : balanceOn ? 'balance' : workOn ? 'work' : 'none';
-    const whisperImg = slot === 'whisper' ? S.createMemeImage(this.whisperImage, BASE, this.assetRoot) : null;
+    // 配图两种形态二选一（host 判定层保证）：url 直接用那个完整地址，image 按素材根拼表情包路径。
+    // 样式/class 两份共用（都在 shared 的 MEME_BUBBLE_CSS），只是 src 的来源不同。
+    const whisperImg =
+      slot === 'whisper'
+        ? this.whisperUrl
+          ? S.createMemeImageFromUrl(this.whisperUrl)
+          : S.createMemeImage(this.whisperImage, BASE, this.assetRoot)
+        : null;
     this.bubble.classList.toggle(
       'is-whisper',
       // 余额「文字说明」（不可用状态）同样套用紧凑变体：字号更小、宽度下限更窄，多行说明更紧凑

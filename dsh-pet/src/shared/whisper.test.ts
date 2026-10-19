@@ -9,7 +9,14 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { MEME_BUBBLE_CLASS, MEME_BUBBLE_CSS, MEME_IMG_CLASS, createMemeImage, memeImageUrl } from './whisper.ts';
+import {
+  MEME_BUBBLE_CLASS,
+  MEME_BUBBLE_CSS,
+  MEME_IMG_CLASS,
+  createMemeImage,
+  createMemeImageFromUrl,
+  memeImageUrl,
+} from './whisper.ts';
 
 describe('memeImageUrl —— 表情包图片地址', () => {
   test('中文名被 URL 编码（路由段只认编码后的形态）', () => {
@@ -159,6 +166,37 @@ describe('createMemeImage —— 两端共用的配图节点', () => {
       createMemeImage('可爱', 'http://127.0.0.1:8080/dsh-pet-7340', 'pack1');
       const img = doc.created.find((c) => c.tag === 'img');
       assert.equal(img?.props.src, memeImageUrl('可爱', 'http://127.0.0.1:8080/dsh-pet-7340', 'pack1'));
+    } finally {
+      doc.restore();
+    }
+  });
+
+  test('createMemeImageFromUrl —— url 形态直接用那个完整地址（不拼表情包路径，也不需要 BASE）', () => {
+    const doc = stubDocument();
+    try {
+      createMemeImageFromUrl('https://cdn.example.com/拒绝换壁纸.png');
+      assert.equal(doc.created.filter((c) => c.tag === 'img').length, 1);
+      const img = doc.created.find((c) => c.tag === 'img');
+      // 与名称形态共用同一份样式 class（气泡靠它取消 min-width）
+      assert.equal(img?.props.className, MEME_IMG_CLASS);
+      assert.equal(img?.props.src, 'https://cdn.example.com/拒绝换壁纸.png');
+    } finally {
+      doc.restore();
+    }
+  });
+
+  test('createMemeImageFromUrl —— 地址缺失/空白 → null（调用方据此走纯文本路径）', () => {
+    for (const v of [undefined, '', '   ']) {
+      assert.equal(createMemeImageFromUrl(v), null);
+    }
+  });
+
+  test('两种形态互不干扰：url 形态绝不拼 /pic/memes（哪怕地址里带着同名文件名）', () => {
+    const doc = stubDocument();
+    try {
+      createMemeImageFromUrl('https://cdn.example.com/可爱.png');
+      const img = doc.created.find((c) => c.tag === 'img');
+      assert.ok(!String(img?.props.src).includes('/pic/memes/'));
     } finally {
       doc.restore();
     }

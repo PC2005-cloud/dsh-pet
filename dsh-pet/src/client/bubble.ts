@@ -135,12 +135,14 @@ export function makeBalanceBubble(rt: { h: typeof jsx }): (props: { state: Balan
  * 内容来自 src/shared 的 whisperBubbleView（与桌面模式完全一致）。
  * image：配图名称（配置 memes 的键），有值则在文字上方渲染该表情包；
  *        图片样式取自 shared 的 MEME_BUBBLE_CSS（两端同一份，这里只声明式建节点）。
- * assetRoot：素材根（= 该宠物的条目 key），决定图片去哪个表情包目录链取
- *        （种类独占 pet/<名>-memes/ → 用户目录 → 包内），与动画素材同一套归属语义。
+ * url：配图的另一种形态（第三方自带的完整地址），**与 image 二选一**（host 判定层保证），
+ *        有值就直接当 img.src 用、不再拼表情包路径（issue #122 第 1 条）。
+ * assetRoot：**只在 image 形态下有意义**——素材根（= 该宠物的条目 key），决定图片去哪个表情包
+ *        目录链取（种类独占 pet/<名>-memes/ → 用户目录 → 包内），与动画素材同一套归属语义。
  */
 export function makeWhisperBubble(rt: {
   h: typeof jsx;
-}): (props: { text: string; image?: string; assetRoot?: string; on: boolean }) => ReactNode {
+}): (props: { text: string; image?: string; url?: string; assetRoot?: string; on: boolean }) => ReactNode {
   const { h } = rt;
   injectBubbleCss();
   injectMemeBubbleCss();
@@ -148,26 +150,34 @@ export function makeWhisperBubble(rt: {
   return function WhisperBubble({
     text,
     image,
+    url,
     assetRoot,
     on,
   }: {
     text: string;
     image?: string;
+    url?: string;
     assetRoot?: string;
     on: boolean;
   }) {
     const rows = whisperBubbleView({ ok: true, text, ts: 0 });
     const key = String(image ?? '').trim();
+    const href = String(url ?? '').trim();
+    // 配图两种形态二选一（host 判定层保证）：url = 第三方自带的完整地址，直接用；image = 该条目
+    // 表情包池内的名称，按素材根拼路径。判别位在字段名上，不靠 startsWith('http') 嗅探
+    // （名字恰好长得像地址时会判错）。
+    const src = href || (key ? memeImageUrl(key, '/dsh-pet-7340', assetRoot) : '');
     return h('div', {
-      className: 'dsh-pet-bubble dsh-pet-whisper' + (key ? ' ' + MEME_BUBBLE_CLASS : '') + (on ? ' is-on' : ''),
-      children: key
+      className: 'dsh-pet-bubble dsh-pet-whisper' + (src ? ' ' + MEME_BUBBLE_CLASS : '') + (on ? ' is-on' : ''),
+      children: src
         ? [
             h('img', {
               key: 'img',
               className: MEME_IMG_CLASS,
-              // 浏览器端基址就是本页 origin 下的路由前缀（与上面 @font-face 同一个字面量）
-              src: memeImageUrl(key, '/dsh-pet-7340', assetRoot),
-              alt: key,
+              // 名称形态：基址是本页 origin 下的路由前缀（与上面 @font-face 同一个字面量）；
+              // url 形态：src 就是那个完整地址，与本页 origin 无关
+              src,
+              alt: key || href,
             }),
             rowsToNodes(h, rows),
           ]

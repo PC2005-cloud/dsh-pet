@@ -1,9 +1,11 @@
 /**
  * 点播动画（`POST /dsh-pet-7340/anim`）的决策层单测。
  *
- * 契约核心是"名字必须在菜单能点到的集合里"——播放端"名字即文件名"，播不存在的动画只会
- * 静默失败（404 → 加载失败 → 表现为"点了没反应"），所以这条校验必须钉死。
- * 本模块只依赖配置，可完全离线测。
+ * 契约核心有两条（issue #122 第 1 条后是**两种形态**）：
+ *   name = 名字必须在菜单能点到的集合里——播放端"名字即文件名"，播不存在的动画只会静默失败
+ *     （404 → 加载失败 → 表现为"点了没反应"），所以这条校验必须钉死；
+ *   url  = 第三方自带的素材地址，**不查池**，但必须是 http/https 的完整 URL。
+ * 两者二选一，由本模块判定。本模块只依赖配置，可完全离线测。
  *
  * 用 Node 内置 test runner（node:test），不引入任何 npm 依赖。
  */
@@ -48,7 +50,7 @@ const cfg = {
 
 /** 决策的便捷调用：只覆盖本次关心的参数 */
 const decide = (over: Partial<Parameters<typeof decideAnim>[0]> = {}) =>
-  decideAnim({ cfg, requested: 'main', active: '', name: '东张西望', ...over });
+  decideAnim({ cfg, requested: 'main', active: '', name: '东张西望', url: undefined, ...over });
 
 describe('animationNames —— 与右键菜单同一份动画集合', () => {
   test('七个池全部收到（菜单树取的就是这些）', () => {
@@ -170,5 +172,64 @@ describe('decideAnim —— 宠物选择', () => {
     assert.equal(decide({ cfg: two, requested: 'pack1', name: '主池动画' }).ok, false);
     assert.equal(decide({ cfg: two, requested: 'main', name: '主池动画' }).ok, true);
     assert.equal(decide({ cfg: two, requested: 'pack1', name: '包池动画' }).ok, true);
+  });
+});
+
+describe('decideAnim —— url 形态（第三方自带素材，issue #122 第 1 条）', () => {
+  const URL_OK = 'https://cdn.example.com/拉侧栏.webm';
+
+  test('给 url → 通过，且**不查动画池**：池里当然没有别人手里的素材名', () => {
+    const d = decide({ name: undefined, url: URL_OK });
+    assert.equal(d.ok, true);
+    assert.equal(d.ok === true && d.url, URL_OK);
+    assert.equal(d.ok === true && d.name, undefined, 'url 形态不应同时给出 name');
+  });
+
+  test('同源相对地址不行——必须是完整 URL（`new URL` 对相对路径会抛）', () => {
+    const d = decide({ name: undefined, url: '/dsh-pet-wallpaper/asset/x.webm' });
+    assert.equal(d.ok, false);
+    assert.equal(d.ok === false && d.reason, 'bad-request');
+  });
+
+  test('url 前后空白 → trim 后判定', () => {
+    const d = decide({ name: undefined, url: '  ' + URL_OK + '  ' });
+    assert.equal(d.ok === true && d.url, URL_OK);
+  });
+
+  test('只放行 http / https：其余 scheme 一律 bad-request', () => {
+    for (const url of [
+      'file:///C:/secret.webm', // 桌面端 el.src 是直连，file: 会让渲染端读本地任意文件
+      'ftp://example.com/x.webm',
+      'javascript:alert(1)',
+      'data:video/webm;base64,AAAA',
+    ]) {
+      const d = decide({ name: undefined, url });
+      assert.equal(d.ok, false, `${url} 不应通过`);
+      assert.equal(d.ok === false && d.reason, 'bad-request');
+    }
+  });
+
+  test('name 与 url 同时给 / 都不给 → bad-request（意图不明，不替调用方猜）', () => {
+    for (const over of [
+      { name: '东张西望', url: URL_OK },
+      { name: undefined, url: undefined },
+      { name: '', url: '' },
+      { name: '   ', url: '   ' },
+    ]) {
+      const d = decide(over);
+      assert.equal(d.ok, false, JSON.stringify(over) + ' 不应通过');
+      assert.equal(d.ok === false && d.reason, 'bad-request');
+    }
+  });
+
+  test('url 形态下宠物校验照旧：指定不存在的宠物 → unknown-pet', () => {
+    const d = decide({ name: undefined, url: URL_OK, requested: 'ghost' });
+    assert.equal(d.ok, false);
+    assert.equal(d.ok === false && d.reason, 'unknown-pet');
+  });
+
+  test('url 形态不看名字：地址里带什么名字都照样放行（不查池、也不查文件名）', () => {
+    const d = decide({ name: undefined, url: 'http://127.0.0.1:8080/dsh-pet-wallpaper/a/根本不在池里.webm' });
+    assert.equal(d.ok, true);
   });
 });

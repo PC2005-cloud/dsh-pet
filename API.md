@@ -24,9 +24,9 @@ dsh-pet 的宿主半侧向 DSH 自己的 Web 服务注册了**一条前缀路由
 | 接口 | 功能 |
 | --- | --- |
 | `POST /dsh-pet-7340/whisper?pet=` | 让桌宠**生成**一句碎碎念（走当前模型） |
-| `POST /dsh-pet-7340/broadcast?pet=` | **第三方投喂**：把外部给定的文本写进气泡（不生成，只搬运）；时长与动画联动可选 |
+| `POST /dsh-pet-7340/broadcast?pet=` | **第三方投喂**：把外部给定的文本写进气泡（不生成，只搬运）；配图（`image` 池内名 / `url` 自带地址）、时长、动画联动可选 |
 | `POST /dsh-pet-7340/bubble/clear?pet=` | **清空气泡**：提前收起说话气泡（只动气泡，不动动画） |
-| `POST /dsh-pet-7340/anim?pet=` | **点播动画**：播一段指定动画，效果与右键「动作」菜单一致；回 `playbackId` |
+| `POST /dsh-pet-7340/anim?pet=` | **点播动画**：播池内名字（同右键「动作」菜单）或第三方自带的 `url`；回 `playbackId` |
 | `GET /dsh-pet-7340/playback/{id}` | **播放回执**：查那次点播的真实状态；带 `?wait=&timeout=` 可挂起等待 |
 | `POST /dsh-pet-7340/playback/{id}/report` | 渲染端上报播放状态（**内部通道**，第三方不用调） |
 | `POST /dsh-pet-7340/chat?pet=` | 对桌宠说一句话并生成回复，同时写入对话记忆 |
@@ -89,6 +89,11 @@ curl -s -X POST "$BASE/broadcast?pet=main" \
      -H 'content-type: application/json' \
      -d '{"text":"该喝水了","duration":3000,"anim":false}'
 
+# 配图两种形态二选一：image 给池内名，url 给自己托管的完整地址（不给两个都给）
+curl -s -X POST "$BASE/broadcast?pet=main" \
+     -H 'content-type: application/json' \
+     -d '{"text":"巡检完毕","url":"https://cdn.example.com/拒绝换壁纸.png"}'
+
 # 提前收起气泡（正在播的动画不受影响）
 curl -s -X POST "$BASE/bubble/clear?pet=main"
 
@@ -97,6 +102,11 @@ curl -s -X POST "$BASE/bubble/clear?pet=main"
 curl -s -X POST "$BASE/anim?pet=main" \
      -H 'content-type: application/json' \
      -d '{"name":"东张西望"}'
+
+# 或者播自己托管的素材：给 url 就不查动画池（name 与 url 二选一）
+curl -s -X POST "$BASE/anim?pet=main" \
+     -H 'content-type: application/json' \
+     -d '{"url":"https://cdn.example.com/拉侧栏.webm"}'
 ```
 
 ## 独立模式（不打开 DSH）

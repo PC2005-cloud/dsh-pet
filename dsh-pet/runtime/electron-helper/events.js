@@ -136,18 +136,21 @@ PetSprite.prototype.clearWhisper = function clearWhisper() {
   this.whisperOn = false;
   this.whisperView = null;
   this.whisperImage = '';
+  this.whisperUrl = '';
   this.renderBubble();
 };
 
 // 碎碎念展示（本宠物）：随机抽 events.whisper 动画 + 弹文本气泡（与余额同一套定时语义）
 // image：host 随机抽定的配图名称（未开配图/池为空则空串，与浏览器端同一契约）
+// url：配图的另一种形态——第三方自带的完整地址（POST /broadcast 的 url 参数，issue #122 第 1 条）。
+//   与 image **二选一**（host 判定层保证），由字段名区分，不靠嗅探。
 // duration / anim：POST /broadcast 的两个新参数（issue #122 第 5 条）。两者**互相独立**：
 //   - anim === false 时整段跳过动画联动——不查池、不换源，也不 stopMove()
 //     （stopMove 属于"开始播这段动画"的一部分，不是弹气泡的副作用）。
 //     于是配置里缺 events.whisper 时，只弹气泡这条路照样走得通。
 //   - duration === 0 表示"这一条不显示"：**不动当前已在显示的气泡**
 //     （要收起它请用 POST /bubble/clear，两件事不重叠）。
-PetSprite.prototype.showWhisper = function showWhisper(text, image, duration, anim) {
+PetSprite.prototype.showWhisper = function showWhisper(text, image, url, duration, anim) {
   let name = null;
   if (anim !== false) {
     const pool = this.animations.events?.whisper;
@@ -178,6 +181,7 @@ PetSprite.prototype.showWhisper = function showWhisper(text, image, duration, an
   this.whisperOn = true;
   this.whisperView = S.whisperBubbleView({ ok: true, text, ts: 0 });
   this.whisperImage = typeof image === 'string' ? image : '';
+  this.whisperUrl = typeof url === 'string' ? url : '';
   this.renderBubble();
   // 气泡定时消失（与动画解耦，与余额同一语义；重复触发先清旧定时器）
   if (this.whisperTimer !== null) window.clearTimeout(this.whisperTimer);
@@ -273,7 +277,7 @@ function applySayLeaf(petId, leaf) {
   for (const s of sprites) {
     if (s.pet.id !== petId) continue;
     if (said.kind === 'clear') s.clearWhisper();
-    else s.showWhisper(said.text, said.image, said.duration, said.anim);
+    else s.showWhisper(said.text, said.image, said.url, said.duration, said.anim);
   }
 }
 
@@ -286,17 +290,18 @@ function applyWorkStatusLeaf(leaf) {
 }
 
 /** 点播动画叶子 → 对应宠物播该动画（其他插件经 POST /anim 写进 S）。
- *  复用**右键菜单同一个处理函数** onMenuAction，所以镜像修正 / 移动类走真实位移 /
- *  其余播一遍的语义与菜单点一下完全一致，这里不重写一遍。
+ *  两种形态（issue #122 第 1 条）：
+ *    name = 池内名字，复用**右键菜单同一个处理函数** onMenuAction，所以镜像修正 / 移动类走真实
+ *      位移 / 其余播一遍的语义与菜单点一下完全一致，这里不重写一遍；
+ *    url  = 第三方自带的完整地址，**不走 onMenuAction**（裸地址没有菜单语义），只换源播一次。
  *  petId 由路径解析出来（pets.<id>.anim）；本窗口只装一只宠物，按 id 命中即可。 */
 function applyAnimLeaf(petId, leaf) {
   const hit = S.readAnim(leaf);
   if (!hit) return;
-  // 回执编号**直接从叶子取**：shared-core 是构建产物（它的 readAnim 只回 name），
-  // 绕开它就不必重建桌面共享核心也能拿到 playbackId（events.js 是入库源文件）。
-  const playbackId = leaf.data && typeof leaf.data.playbackId === 'string' ? leaf.data.playbackId : undefined;
   for (const s of sprites) {
-    if (s.pet.id === petId) s.onMenuAction({ label: hit.name, anim: hit.name, playbackId });
+    if (s.pet.id !== petId) continue;
+    if (hit.url !== undefined) s.playUrlOnce(hit.url, hit.playbackId);
+    else if (hit.name !== undefined) s.onMenuAction({ label: hit.name, anim: hit.name, playbackId: hit.playbackId });
   }
 }
 

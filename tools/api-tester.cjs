@@ -13,12 +13,23 @@
  *
  * 也可以用 --dir 指向别的静态目录（默认 tools/ 自身），方便调试别的页面。
  * 只监听 127.0.0.1；这条命令不碰任何生产代码。
+ *
+ * 另外它还扮演**第三方素材托管方**，让测试页能把"自己托管的 url"这条路走通：
+ *   POST /__upload?name=<原文件名>   请求体 = 文件原始字节 → { ok, url, bytes }
+ *   GET  /__uploads/<文件名>         把刚上传的文件原样送回去（带 CORS）
+ * 上传落在系统临时目录（`<tmp>/dsh-pet-tester-uploads`），**不污染仓库**。
+ *
+ * 注意 /__uploads 的响应**必须带 CORS**：测试页在 8741、DSH 页面在另一个端口，浏览器端素材
+ * 走的是 `fetch`，跨源就会被拦。这正是"外站 url 要对方自己配 CORS"那条规则的真实演示——
+ * 换成桌面端（`el.src` 直连、媒体加载不走 CORS）则不需要。
  */
 'use strict';
 
 const http = require('node:http');
 const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
+const crypto = require('node:crypto');
 const { spawn } = require('node:child_process');
 
 const argv = process.argv.slice(2);
@@ -47,6 +58,24 @@ const CORS = {
 
 /** 需要转发的路径：接口前缀本身 + 代理自身的探测端点 */
 const isApi = (url) => url === PREFIX || url.startsWith(PREFIX + '/') || url.startsWith(PREFIX + '?');
+
+/** 上传落盘目录：系统临时目录，**不污染仓库**（测试页在这里扮演"第三方托管素材"） */
+const UPLOAD_DIR = path.join(os.tmpdir(), 'dsh-pet-tester-uploads');
+/** 单个上传上限：防手滑传个几 GB 把临时盘塞满 */
+const UPLOAD_MAX = 512 * 1024 * 1024;
+/** 上传/回读用的 MIME（`<video>` / `<img>` 靠它解码；认不出的按二进制流送） */
+const UPLOAD_MIME = {
+  '.webm': 'video/webm',
+  '.mp4': 'video/mp4',
+  '.mov': 'video/quicktime',
+  '.m4v': 'video/x-m4v',
+  '.mkv': 'video/x-matroska',
+  '.gif': 'image/gif',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.webp': 'image/webp',
+};
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -96,6 +125,86 @@ function handleTarget(req, res, url) {
   res.end(JSON.stringify({ port: hostPort }));
 }
 
+/**
+ * 收一个上传：请求体就是文件的**原始字节**（不走 multipart——省掉一个解析器，而
+ * `fetch(url, { body: file })` 本来就能直接发 File/Blob）。流式落盘，不把整个文件读进内存。
+ *
+ * 返回的 url 指向本代理自己的端口 —— 对 DSH 页面来说是**跨源**地址，正是要测的那条路。
+ */
+function handleUpload(req, res, url) {
+  const json = (status, obj) => {
+    res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', ...CORS });
+    res.end(JSON.stringify(obj));
+  };
+  if (req.method !== 'POST') return json(405, { ok: false, error: 'use POST' });
+
+  // 只取原文件的**基名**（剥掉任何路径成分，防穿越）；扩展名保留——回读时靠它定 MIME
+  const raw = path.basename(String(url.searchParams.get('name') || 'upload'));
+  const ext = (path.extname(raw) || '.bin').toLowerCase();
+  const name = Date.now().toString(36) + '-' + crypto.randomBytes(4).toString('hex') + ext;
+  const file = path.join(UPLOAD_DIR, name);
+
+  try {
+    fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+  } catch (e) {
+    return json(500, { ok: false, error: '建上传目录失败：' + e.message });
+  }
+
+  const out = fs.createWriteStream(file);
+  let bytes = 0;
+  let done = false;
+
+  const fail = (status, msg) => {
+    if (done) return;
+    done = true;
+    req.unpipe(out);
+    out.destroy();
+    fs.rm(file, { force: true }, () => {});
+    // 不 destroy(req)：把剩下的请求体排掉，让客户端看到明确的状态码，而不是连接被掐
+    req.resume();
+    json(status, { ok: false, error: msg });
+  };
+
+  req.on('data', (chunk) => {
+    bytes += chunk.length;
+    if (bytes > UPLOAD_MAX) fail(413, `文件太大（上限 ${Math.round(UPLOAD_MAX / 1024 / 1024)}MB）`);
+  });
+  req.on('error', (e) => fail(400, '接收失败：' + e.message));
+  out.on('error', (e) => fail(500, '写盘失败：' + e.message));
+  out.on('finish', () => {
+    if (done) return;
+    if (!bytes) return fail(400, '空文件');
+    done = true;
+    json(200, { ok: true, url: `http://127.0.0.1:${PROXY_PORT}/__uploads/${name}`, bytes, name });
+  });
+  req.pipe(out);
+}
+
+/** 把刚上传的文件原样送回。**CORS 必须给**：浏览器端素材走 fetch，跨源就靠它。 */
+function serveUpload(req, res, name) {
+  if (req.method !== 'GET' && req.method !== 'HEAD') {
+    res.writeHead(405, { 'content-type': 'text/plain; charset=utf-8', ...CORS });
+    return res.end('use GET');
+  }
+  // path.basename 再兜一道：`/__uploads/..%2f..%2fsecret` 这类穿越在拼路径前就被削平
+  const file = path.join(UPLOAD_DIR, path.basename(decodeURIComponent(name)));
+  fs.stat(file, (err, st) => {
+    if (err || !st.isFile()) {
+      res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8', ...CORS });
+      return res.end('no such upload');
+    }
+    res.writeHead(200, {
+      'content-type': UPLOAD_MIME[path.extname(file).toLowerCase()] || 'application/octet-stream',
+      'content-length': st.size,
+      // 文件名每次上传都不同，但测试页会反复重传 —— no-store 保证永远拿到刚传的那一份
+      'cache-control': 'no-store',
+      ...CORS,
+    });
+    if (req.method === 'HEAD') return res.end();
+    fs.createReadStream(file).pipe(res);
+  });
+}
+
 /** 静态文件（测试页本身）；做了防穿越校验 */
 function serveStatic(req, res) {
   let rel = decodeURIComponent(req.url.split('?')[0]);
@@ -122,6 +231,11 @@ const server = http.createServer((req, res) => {
     return res.end();
   }
   if (url.pathname === '/__target') return handleTarget(req, res, url);
+  // 代理自己扮演"第三方素材托管方"：上传 + 回读（都在前缀之外，不会被当成 dsh-pet 接口转发）
+  if (url.pathname === '/__upload') return handleUpload(req, res, url);
+  if (url.pathname.startsWith('/__uploads/')) {
+    return serveUpload(req, res, url.pathname.slice('/__uploads/'.length));
+  }
   if (isApi(req.url || '')) return forward(req, res);
   serveStatic(req, res);
 });
@@ -142,6 +256,9 @@ server.listen(PROXY_PORT, '127.0.0.1', () => {
   console.log('  ─────────────────────────────────────────────');
   console.log(`  测试页   ${url}`);
   console.log(`  转发到   http://127.0.0.1:${hostPort}${PREFIX}`);
+  console.log(`  上传素材 ${UPLOAD_DIR}`);
+  console.log('           （测试页「上传视频」把文件放这儿，再由 /__uploads/ 提供出去，');
+  console.log('             模拟"第三方自己托管素材、只给一个 url"）');
   console.log('');
   console.log('  Ctrl+C 退出');
   console.log('');

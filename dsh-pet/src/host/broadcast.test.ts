@@ -2,7 +2,8 @@
  * 第三方投喂（`POST /dsh-pet-7340/broadcast`，issue #76）的决策层单测。
  *
  * 为什么测这一层而不是只测 HTTP：本功能的契约就是这几条校验规则（文本非空、宠物存在、
- * 配图必须在包内表情包池内）。路由层在源码形态下读不到包内 assets（PACKAGE_ROOT 解析成
+ * 配图给名称时必须在包内表情包池内、给 url 时必须是 http/https 完整地址、两种形态不得同时给）。
+ * 路由层在源码形态下读不到包内 assets（PACKAGE_ROOT 解析成
  * <pkg>/src），覆盖不到这些分支——所以规则抽到 ./broadcast 里单测，路由只剩搬运。
  *
  * 用 Node 内置 test runner（node:test），不引入任何 npm 依赖。
@@ -40,6 +41,7 @@ const decide = (over: Partial<Parameters<typeof decideBroadcast>[0]> = {}) =>
     active: '',
     text: '主人，该喝水了',
     image: undefined,
+    url: undefined,
     duration: 10000,
     anim: true,
     memeDirs: () => [memesDir],
@@ -298,5 +300,60 @@ describe('decideBubbleClear —— 清空气泡（只有"清哪只宠物"会失�
   test('没有"气泡不存在"这种失败：空状态下也是 ok（幂等）', () => {
     // 决策层看不到气泡当前显隐，本来就不该为它造一个失败分支
     assert.equal(decideBubbleClear({ cfg, requested: 'main', active: '' }).ok, true);
+  });
+});
+
+describe('decideBroadcast —— 配图的 url 形态（第三方自带素材，issue #122 第 1 条）', () => {
+  const URL_OK = 'https://cdn.example.com/拒绝换壁纸.png';
+
+  test('给 url → 通过，且**不查表情包池**：图在第三方手里，池里当然没有', () => {
+    const d = decide({ url: URL_OK });
+    assert.equal(d.ok, true);
+    assert.equal(d.ok === true && d.url, URL_OK);
+    assert.equal(d.ok === true && d.image, undefined, 'url 形态不应同时给出 image');
+  });
+
+  test('url 前后空白 → trim 后判定', () => {
+    const d = decide({ url: '  ' + URL_OK + '  ' });
+    assert.equal(d.ok === true && d.url, URL_OK);
+  });
+
+  test('同源相对地址不行——必须是完整 URL', () => {
+    const d = decide({ url: '/dsh-pet-wallpaper/asset/x.png' });
+    assert.equal(d.ok, false);
+    assert.equal(d.ok === false && d.reason, 'bad-request');
+  });
+
+  test('只放行 http / https：其余 scheme 一律 bad-request', () => {
+    for (const url of ['file:///C:/secret.png', 'ftp://example.com/x.png', 'javascript:alert(1)']) {
+      const d = decide({ url });
+      assert.equal(d.ok, false, `${url} 不应通过`);
+      assert.equal(d.ok === false && d.reason, 'bad-request');
+    }
+  });
+
+  test('image 与 url 同时给 → bad-request（两种形态二选一，不替调用方猜）', () => {
+    const d = decide({ image: IN_POOL, url: URL_OK });
+    assert.equal(d.ok, false);
+    assert.equal(d.ok === false && d.reason, 'bad-request');
+  });
+
+  test('url 形态下不产生 unknown-image（那道校验只属于名称形态）', () => {
+    // 地址里带的文件名根本不在池里：名称形态必然 unknown-image，url 形态照旧通过
+    const d = decide({ url: 'https://cdn.example.com/池里没有这张.png' });
+    assert.equal(d.ok, true);
+  });
+
+  test('纯文本路径不受影响：image / url 都不给 → 照旧通过且不带配图字段', () => {
+    const d = decide({ image: undefined, url: undefined });
+    assert.equal(d.ok, true);
+    assert.equal(d.ok === true && 'image' in d, false);
+    assert.equal(d.ok === true && 'url' in d, false);
+  });
+
+  test('url 形态下文本与宠物校验照旧', () => {
+    assert.equal(decide({ text: '', url: URL_OK }).ok, false);
+    const d = decide({ url: URL_OK, requested: 'ghost' });
+    assert.equal(d.ok === false && d.reason, 'unknown-pet');
   });
 });

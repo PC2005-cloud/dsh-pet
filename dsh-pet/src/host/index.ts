@@ -39,9 +39,12 @@
  *   /dsh-pet-7340/balance              → 余额刷新（POST 动作端点，写 S；数据从 /state 读）
  *   /dsh-pet-7340/whisper              → 让某只宠物立即说一句（POST 动作端点，写 S 的 pets.<id>.say）
  *   /dsh-pet-7340/broadcast            → 第三方投喂：把外部给定的文本写进气泡（POST 动作端点，写 S 的
- *                                       pets.<id>.say；不生成、只搬运，供宿主侧其他插件集成）
- *   /dsh-pet-7340/anim                 → 点播动画：让桌宠播一段指定动画（POST 动作端点，写 S 的
- *                                       pets.<id>.anim；效果与右键「动作」菜单一致，供其他插件调用）。
+ *                                       pets.<id>.say；不生成、只搬运，供宿主侧其他插件集成）。
+ *                                       配图给 `image`（池内名）或 `url`（第三方自带的完整地址）二选一
+ *   /dsh-pet-7340/anim                 → 点播动画：让桌宠播一段动画（POST 动作端点，写 S 的
+ *                                       pets.<id>.anim；供其他插件调用）。`name`（池内名，效果与右键
+ *                                       「动作」菜单一致）或 `url`（第三方自带的完整地址，不查池、
+ *                                       不走菜单语义）二选一。
  *                                       响应带 playbackId，供 /playback 查**真实回执**
  *   /dsh-pet-7340/playback/<id>        → **播放回执**（GET）：返回那一次点播的真实状态
  *                                       （accepted/playing/ended/failed/cancelled）。带
@@ -1215,7 +1218,10 @@ export function apply(ctx: any): void {
     // 校验（不通过一律 HTTP 200 + ok:false，与 /chat 的失败口径一致）：
     //   text 必填、trim 后非空（**不设长度限制，也不限频**：内容与频率由调用方自己负责）；
     //   pet 缺省 = 当前桌宠（resolveActivePetId），须真实存在；
-    //   image 只认**包内表情包名**（池内命中即用其规范名），杜绝第三方注入外部地址；
+    //   image / url **配图的两种形态，二选一**（两个都给 = bad-request）：
+    //     image 只认**该条目表情包池内的名称**（池内命中即用其规范名）；
+    //     url 是第三方自带的完整地址，不查池（issue #122 第 1 条：素材由第三方自己托管），
+    //     scheme 由宿主卡在 http/https。**宿主不做代理**：跨域由浏览器强制，插件绕不过去。
     //   duration 可选，气泡显示时长（ms）；缺省 10s，`0` = 字面意思「不显示」，负数/非有限数拒绝；
     //   anim 可选，是否联动 events.whisper 动画；只有严格 false 才关闭（宽松口径）。
     if (rest === 'broadcast') {
@@ -1249,6 +1255,7 @@ export function apply(ctx: any): void {
           active: resolveActivePetId(),
           text: o.text,
           image: o.image,
+          url: o.url,
           duration,
           anim,
           memeDirs: memeDirsFor,
@@ -1256,13 +1263,9 @@ export function apply(ctx: any): void {
         if (!d.ok) return { kind: 'json', status: 200, obj: { ok: false, reason: d.reason, message: d.message } };
         // duration / anim 写**解析后的生效值**（缺省也已填成显式值）：/state 里因此能看到
         // 实际生效的时长与联动开关，调用方不用自己猜缺省是多少。
-        state.writePet(
-          d.petId,
-          'say',
-          d.image
-            ? { text: d.text, image: d.image, duration: d.duration, anim: d.anim }
-            : { text: d.text, duration: d.duration, anim: d.anim },
-        );
+        // 配图两种形态二选一（判定层保证）：url 形态写 url，名称形态写池内规范名，都没有则纯文本。
+        const pic = d.url !== undefined ? { url: d.url } : d.image !== undefined ? { image: d.image } : {};
+        state.writePet(d.petId, 'say', { text: d.text, ...pic, duration: d.duration, anim: d.anim });
         return { kind: 'json', status: 200, obj: { ok: true } };
       } catch (e) {
         // 配置读取失败等（安装损坏）→ 显式失败，不静默
@@ -1303,15 +1306,21 @@ export function apply(ctx: any): void {
       }
     }
 
-    // 点播动画：/dsh-pet-7340/anim?pet=<id>（POST = 让桌宠播一段指定动画）
-    // 效果与右键菜单点「动作」树**完全一致**——两端都复用同一个菜单动作处理函数
-    // （浏览器 handleMenuAction / 桌面 sprite.onMenuAction），宿主只负责把名字送到。
-    // 写入 S 的 pets.<id>.anim —— 前端 1s 内发现 counter 变化后换源播放（**名字即文件名**）。
-    // 动作端点，只回 {ok}。
+    // 点播动画：/dsh-pet-7340/anim?pet=<id>（POST = 让桌宠播一段动画）
+    // 两种形态**二选一**（issue #122 第 1 条）：
+    //   name = 池内的动画名。效果与右键菜单点「动作」树**完全一致**——两端都复用同一个菜单动作
+    //     处理函数（浏览器 handleMenuAction / 桌面 sprite.onMenuAction），宿主只负责把名字送到。
+    //     写入 S 的 pets.<id>.anim，前端发现 counter 变化后换源播放（**名字即文件名**）。
+    //   url = 第三方自带的素材完整地址。**不查动画池**（素材在别人手里，池里当然没有这个名字），
+    //     前端拿到后**直接换源播一次，不走菜单语义**——裸地址没有"文字类要镜像修正 /
+    //     移动类走真实位移"这些属性。scheme 由宿主卡在 http/https。
+    // 动作端点，只回 {ok}（成功时另带回执编号 playbackId）。
     // 校验（不通过一律 HTTP 200 + ok:false，与其他动作端点口径一致）：
-    //   name 必填、trim 后非空，且必须在该宠物 animations 配置能点到的集合内
+    //   name / url 必须**恰好给一个**：两个都给或都不给 = 意图不明 → bad-request；
+    //   name 必须在该宠物 animations 配置能点到的集合内
     //   （播放端对不存在的动画没有兜底：名字即文件名 → 404 → 加载失败 → 表现为"点了没反应"，
     //    所以必须在这里拦住，而不是写进 S 让前端白跑一趟）；
+    //   url 必须是 http/https 的完整地址（`file:` 会让桌面端渲染进程能读本地任意文件）；
     //   pet 缺省 = 当前桌宠（resolveActivePetId），须真实存在。
     if (rest === 'anim') {
       if (method !== 'POST') return { kind: 'json', status: 405, obj: { error: 'method not allowed' } };
@@ -1329,12 +1338,21 @@ export function apply(ctx: any): void {
           requested: String(url.searchParams.get('pet') ?? ''),
           active: resolveActivePetId(),
           name: o.name,
+          url: o.url,
         });
         if (!d.ok) return { kind: 'json', status: 200, obj: { ok: false, reason: d.reason, message: d.message } };
-        // 播放回执：受理时建记录（accepted），并把编号随叶子一起下发——渲染端据此上报
-        // （叶子多一个字段对老客户端无害：readAnim 只读 name）。见 ./playback 与下方 /playback 路由。
-        const record = playback.create(d.petId, d.name);
-        state.writePet(d.petId, 'anim', { name: d.name, playbackId: record.playbackId });
+        // 播放回执：受理时建记录（accepted），并把编号随叶子一起下发——渲染端据此上报。
+        // 记录里的标识：name 形态是动画名，url 形态就是那个地址（纯记录，不参与任何判定）。
+        // 叶子形状：name 与 url **恰好一个**（判定层保证），消费端按字段名决定走不走菜单语义
+        // ——url 是裸地址，没有"文字类要镜像修正 / 移动类走真实位移"这些属性。
+        const record = playback.create(d.petId, d.url ?? d.name ?? '');
+        state.writePet(
+          d.petId,
+          'anim',
+          d.url !== undefined
+            ? { url: d.url, playbackId: record.playbackId }
+            : { name: d.name, playbackId: record.playbackId },
+        );
         return { kind: 'json', status: 200, obj: { ok: true, playbackId: record.playbackId } };
       } catch (e) {
         // 配置读取失败等（安装损坏）→ 显式失败，不静默

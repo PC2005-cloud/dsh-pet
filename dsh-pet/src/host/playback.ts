@@ -121,7 +121,8 @@ export interface PlaybackRecord {
   playbackId: string;
   /** 目标宠物实例 id */
   petId: string;
-  /** 动画名（名字即文件名，与 /anim 的白名单同源） */
+  /** 这一次点播的标识：`name` 形态是动画名（名字即文件名，与 /anim 的白名单同源），
+   *  `url` 形态就是那个地址。**纯记录**，不参与任何判定。 */
   name: string;
   status: PlaybackStatus;
   createdAt: number;

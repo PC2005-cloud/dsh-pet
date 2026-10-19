@@ -139,9 +139,14 @@ export function readBalance(leaf: StateLeaf): { state: BalanceState; manual: boo
  *   `anim` **只在显式 `false` 时出现**，表示这次不联动 `events.whisper` 动画、只弹气泡。
  * - `clear`：收起当前气泡（`POST /bubble/clear` 的落点）。**必须单独一个形态**——
  *   空文本会被本函数判成非法、整拍跳过，表达不了"清空"这个动作。
+ *
+ * 配图两种形态**并列、由字段名区分**（issue #122 第 1 条的"资源注册"）：`image` = 该条目
+ * 表情包池内的名称（消费端拼 `<base>/pic/memes/<素材根>/<名>.png`），`url` = 第三方给的完整地址
+ * （消费端直接用它）。**不做「一个中性字段装两种值」**——消费端必须知道该不该拼路径，字段名
+ * 本身就是那个判别位，靠 `startsWith('http')` 嗅探会在名字恰好长得像 URL 时出错。
  */
 export type SayCue =
-  { kind: 'say'; text: string; image?: string; duration?: number; anim?: boolean } | { kind: 'clear' };
+  { kind: 'say'; text: string; image?: string; url?: string; duration?: number; anim?: boolean } | { kind: 'clear' };
 
 /**
  * 类型收窄：宠物说话叶子 → SayCue（形状非法 / 空文本 → null，消费端跳过这一拍）。
@@ -151,7 +156,14 @@ export type SayCue =
  */
 export function readSay(leaf: StateLeaf): SayCue | null {
   if (!leaf.data || typeof leaf.data !== 'object') return null;
-  const d = leaf.data as { text?: unknown; image?: unknown; duration?: unknown; anim?: unknown; clear?: unknown };
+  const d = leaf.data as {
+    text?: unknown;
+    image?: unknown;
+    url?: unknown;
+    duration?: unknown;
+    anim?: unknown;
+    clear?: unknown;
+  };
   // 清空指令优先：它不带 text，所以必须排在文本校验**前面**
   if (d.clear === true) return { kind: 'clear' };
   if (typeof d.text !== 'string' || !d.text) return null;
@@ -159,6 +171,9 @@ export function readSay(leaf: StateLeaf): SayCue | null {
     kind: 'say',
     text: d.text,
     image: typeof d.image === 'string' ? d.image : undefined,
+    // 第三方给的配图地址（完整 URL，scheme 已由宿主卡在 http/https）。与 image 并列、互斥，
+    // 消费端"有 url 就用 url，否则拼表情包路径"——判别位在字段名上，见 SayCue 的说明。
+    url: typeof d.url === 'string' ? d.url : undefined,
     // 只认 ≥0 的有限数：非法值当"没给"（写端已校验，这里只是防御，不让脏数据毁掉整拍）
     duration: typeof d.duration === 'number' && Number.isFinite(d.duration) && d.duration >= 0 ? d.duration : undefined,
     anim: typeof d.anim === 'boolean' ? d.anim : undefined,
@@ -174,17 +189,24 @@ export function readWorkStatus(leaf: StateLeaf): WorkStatusSnapshot | null {
 }
 
 /**
- * 类型收窄：点播动画叶子 → 动画名 + 回执编号（形状非法 / 空名 → null，消费端跳过这一拍）。
- * **名字即文件名**：消费端拿到后交给菜单动作处理函数换源播放，所以这里只做形状校验；
+ * 类型收窄：点播动画叶子 → 动画名**或**地址 + 回执编号（两者都空 → null，消费端跳过这一拍）。
+ * **两种形态并列、由字段名区分**（issue #122 第 1 条）：
+ *   - `name`：该宠物动画池内的名字，**名字即文件名**，消费端拼 `/thumb/<素材根>/<名>.webm` 换源，
+ *     并走菜单动作处理函数（镜像修正 / 移动类走真实位移等菜单语义）；
+ *   - `url`：第三方给的**完整地址**（scheme 已由宿主卡在 http/https），消费端直接换源播一次，
+ *     **不走菜单语义**——裸地址没有"是不是文字类 / 是不是移动类"这些属性。
  * "这个动画是否存在于该宠物"由宿主在写入前保证（播放端对不存在的名字没有兜底）。
  * `playbackId`：宿主受理时生成的回执编号（issue #122），渲染端拿它在播放的四个时机
  * 上报真实状态（见 /playback 路由）。老 host 不写这个字段 → undefined，消费端按"无回执"处理。
  */
-export function readAnim(leaf: StateLeaf): { name: string; playbackId?: string } | null {
+export function readAnim(leaf: StateLeaf): { name?: string; url?: string; playbackId?: string } | null {
   if (!leaf.data || typeof leaf.data !== 'object') return null;
-  const d = leaf.data as { name?: unknown; playbackId?: unknown };
-  if (typeof d.name !== 'string' || !d.name) return null;
-  return { name: d.name, playbackId: typeof d.playbackId === 'string' && d.playbackId ? d.playbackId : undefined };
+  const d = leaf.data as { name?: unknown; url?: unknown; playbackId?: unknown };
+  const name = typeof d.name === 'string' && d.name ? d.name : undefined;
+  const url = typeof d.url === 'string' && d.url ? d.url : undefined;
+  // 两个都缺席 = 形状非法（宿主写端保证恰好一个，这里不替它猜）
+  if (name === undefined && url === undefined) return null;
+  return { name, url, playbackId: typeof d.playbackId === 'string' && d.playbackId ? d.playbackId : undefined };
 }
 
 /**
