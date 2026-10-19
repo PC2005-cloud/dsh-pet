@@ -95,8 +95,11 @@
     "node": ">=22.12.0"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "0.135.0",
     "@electron-internal/extract-zip": "^1.0.5",
-    "@electron/get": "^5.1.0"
+    "@electron/get": "^5.1.0",
+    "openai": "7.39.0",
+    "zod": "4.6.7"
   },
   "dsh": {
     "bundle": {
