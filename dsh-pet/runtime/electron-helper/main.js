@@ -17,6 +17,10 @@
  * 进/出宠物身体命中区时经 pet:set-interactive 翻转可交互——透明像素不挡下层应用，
  * 与浏览器 overlay（仅 .dsh-pet-hit 可交互）严格对齐。
  *
+ * 焦点：窗口默认**不可激活**（`focusable:false`，Windows 即 `WS_EX_NOACTIVATE`）——点击/拖拽/右键
+ * 照常生效，但不激活、不抢前台，所以全屏游戏里误触宠物**不会**把游戏打回桌面（issue #139）；
+ * 「对话」要打字，键盘按**租约**临时解锁（焦点进文本控件才给，离开/失焦/关闭就收回，见 focus-lease.js）。
+ *
  * 数据通道（bridge 模式，DSH_PET_BRIDGE=1 由宿主注入）：
  * 渲染端不再直连宿主 WebServer（DSH Desktop 2.0.3+ 的浏览器访问闸门会拦无令牌裸 HTTP）——
  * 本进程注册自定义 scheme `dsh-pet-bridge://`，protocol.handle 收到渲染端请求后
@@ -52,6 +56,8 @@ const { readFileSync, writeFileSync } = require('node:fs');
 const fsPromises = require('node:fs/promises');
 // 点击穿透兜底通道的纯判定（不依赖 Electron 的 forward 鼠标钩子；见文件头注释）
 const { decideWindowIgnore, pointerZone } = require('./pointer-target.js');
+// 焦点策略：「点击不抢前台」+「键盘按租约」的纯判定（不 require('electron')，可单测）
+const { activationPlan } = require('./focus-lease.js');
 // 置顶看门狗：WS_EX_TOPMOST 只是样式位，不等于窗口真的在置顶带（见 topmost-watchdog.js 头部）
 const { TOPMOST_WATCHDOG_TICK_MS, shouldReassertTopmost } = require('./topmost-watchdog.js');
 // 宿主存活判定（issue #56：宿主退出 → 管道断开 → 自己退，绝不弹框、绝不留僵尸）
@@ -334,6 +340,26 @@ function setWindowIgnore(win, ignore) {
   windowIgnore.set(win.id, ignore);
 }
 
+/**
+ * 键盘租约的落地（判决全在 focus-lease.js，纯函数、单测覆盖；这里只把判决翻成 Electron 调用）。
+ *
+ * 窗口默认 `focusable:false`（点击不抢前台，见 createPetWindows 的注释）——这样全屏游戏里
+ * 误触宠物不会把游戏打回桌面；但「对话」要打字，非激活窗口收不到键盘，所以按租约临时解锁：
+ * 渲染端把焦点/手指落到文本控件时 want=true → 解锁并要前台；离开/失焦/关闭时 want=false → 锁回去。
+ *
+ * 收回只动可激活态，**不动焦点、不动显隐**：那两件事会打断用户正在做的事，且不属于本函数。
+ */
+function applyKeyboardLease(win, want) {
+  if (!win || win.isDestroyed()) return;
+  const plan = activationPlan({ want, focusable: win.isFocusable(), focused: win.isFocused() });
+  if (plan.setFocusable !== undefined) win.setFocusable(plan.setFocusable);
+  if (!plan.focus) return;
+  win.focus();
+  // 回执：非激活窗口里 DOM 的 focusin 不发声（真窗实测），窗口要到这里才真正激活——让 preload 把
+  // 光标还给用户点的那一格。少了这一步会出现"窗口激活了、输入框却没焦点"，照样打不了字。
+  win.webContents.send('pet:keyboard-granted');
+}
+
 /** 兜底通道的光标轮询间隔（ms，与 issue #55 报告者实测值一致） */
 const POINTER_POLL_MS = 60;
 /** 冒烟期间暂停兜底轮询：它按**真实光标**翻转 windowIgnore，会干扰冒烟对渲染端通道的断言 */
@@ -427,9 +453,12 @@ function createPetWindows() {
       skipTaskbar: true,
       resizable: false,
       hasShadow: false,
-      // 可聚焦：对话输入框/菜单需要窗口焦点才能打字（focusable:false 会让输入框永远无法聚焦）。
-      // 显示时使用 showInactive()，不打断其它应用；用户主动点对话输入框时仍然允许获得焦点。
-      focusable: true,
+      // 【不抢焦点（全屏游戏误触的唯一根因，issue #139）】窗口默认**不可激活**（Windows:
+      // WS_EX_NOACTIVATE）：点击、拖拽、右键菜单照常生效，但**不激活窗口、不抢前台**。原先这里是
+      // focusable:true —— 光标划过宠物身体时窗口已被 pointer-target 的两条通道翻成可交互，于是全屏
+      // 游戏里开枪/点菜单那一下落在宠物上就把前台从游戏手里抢走，游戏随即最小化回桌面。
+      // 键盘（对话输入框）改走**租约**：见 focus-lease.js、applyKeyboardLease 与 pet:keyboard-focus。
+      focusable: false,
       webPreferences: {
         preload: path.join(__dirname, 'preload.js'),
         contextIsolation: true,
@@ -508,6 +537,9 @@ function createPetWindows() {
       lastTopmostAssertMs = nowMs;
       win.setAlwaysOnTop(true, 'screen-saver');
     }, TOPMOST_WATCHDOG_TICK_MS);
+    // 键盘租约自愈：窗口一旦失活就收回可激活态（此刻用户无论如何打不了字），这样「游戏重新拿到
+    // 前台之后再乱点一下」不可能再把焦点拽走。租约因此不依赖任何定时器，也不会卡在解锁态。
+    win.on('blur', () => applyKeyboardLease(win, false));
     win.on('closed', () => {
       clearInterval(pointerTimer);
       clearInterval(topmostTimer);
@@ -902,6 +934,14 @@ app.whenReady().then(() => {
     inputRegions.set(win.id, { dragging: input.dragging === true, rects });
   });
 
+  // 键盘租约：渲染端**只在手指/焦点落到文本控件时**（对话输入框）要「可激活 + 前台」，控件失焦 /
+  // 弹窗关闭 / 窗口失活就收回。默认态永远是「点击不抢前台」——全屏游戏里误触宠物不会打回桌面。
+  ipcMain.on('pet:keyboard-focus', (event, want) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (!win || win.isDestroyed()) return;
+    applyKeyboardLease(win, !!want);
+  });
+
   // 右键菜单「打开网站」：交给**系统默认浏览器**打开（等效于网页里 Ctrl+点击链接新标签页），
   // 不建专属窗口——宠物窗口机制是透明小窗，不该承载常规网页浏览。URL 由渲染端从
   // configUrl 推导 = DSH webServer 端口，端口变化自动跟随
@@ -1192,6 +1232,24 @@ app.whenReady().then(() => {
           console.log(
             '[dsh-pet-desktop-helper] smoke interactive round-trip:',
             JSON.stringify({ interactiveIgnoring, passthroughIgnoring }),
+          );
+          // 键盘租约 round-trip（全屏游戏不被打回桌面的核心不变量）：
+          //   ① 静息态必须**不可激活**（= 点击不抢前台）；② 租约要求后解锁；③ 收回后必须回到不可激活。
+          const focusAtRest = first.isFocusable();
+          await first.webContents.executeJavaScript('window.petBridge.setKeyboardFocus(true); true;');
+          await new Promise((r) => setTimeout(r, 150));
+          const focusOnLease = first.isFocusable();
+          await first.webContents.executeJavaScript('window.petBridge.setKeyboardFocus(false); true;');
+          await new Promise((r) => setTimeout(r, 150));
+          const focusAfterRelease = first.isFocusable();
+          console.log(
+            '[dsh-pet-desktop-helper] smoke focus lease:',
+            JSON.stringify({
+              focusAtRest,
+              focusOnLease,
+              focusAfterRelease,
+              ok: focusAtRest === false && focusOnLease === true && focusAfterRelease === false,
+            }),
           );
           const image = await first.webContents.capturePage();
           writeFileSync(smokeOut, image.toPNG());

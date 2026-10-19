@@ -20,6 +20,8 @@
 //       reportCollide：本窗飞行方检测到撞到 targetId → 主进程把动量结果转发给目标窗；
 //       onPetHit：订阅「你被撞了」→ 用新初速 startThrow 抛出去（与浏览器 onHit 同语义）。
 const { contextBridge, ipcRenderer } = require('electron');
+// 焦点策略：「这个元素要不要键盘」的纯判定（与 main 侧同一份模块，可单测）
+const { needsKeyboardFocus } = require('./focus-lease.js');
 
 contextBridge.exposeInMainWorld('petBridge', {
   setBounds(x, y, width, height, boxX, boxY, size, bottomPad, vx, vy, marginL, marginT) {
@@ -70,4 +72,83 @@ contextBridge.exposeInMainWorld('petBridge', {
   onDisplays(cb) {
     ipcRenderer.on('pet:displays', (e, geo) => cb(geo));
   },
+  // 键盘租约：窗口默认**不可激活**（点击不抢前台，全屏游戏里误触宠物不会把游戏打回桌面），
+  // 只有手指真的落到文本控件时主进程才临时解锁并要前台（下方 pointerdown/focusin 自动收发；
+  // 这里额外暴露手动入口，供渲染端在特殊流程里显式声明）。
+  setKeyboardFocus(want) {
+    ipcRenderer.send('pet:keyboard-focus', !!want);
+  },
+});
+
+// ---- 键盘租约自动收发（唯一入口是 pointerdown / focusin / focusout / blur）----
+// 为什么放在 preload 而不是渲染端：这是「窗口该不该被激活」的宿主级事实，preload 天然能看到
+// 页面里任何一处文本控件，不必让每个弹窗各自记得上报（漏一处 = 那个弹窗打不了字）。
+//
+// **触发必须挂在 pointerdown 上，不能只靠 focusin**（真实 Electron 窗口实测）：窗口处于
+// 非激活态（WS_EX_NOACTIVATE）时，`input.focus()` 只改 `document.activeElement`，**focusin 不发声**
+// ——只在 focusin 上要租约，等于"越打不了字越要不来键盘"。鼠标事件反过来照常到达，
+// 所以「点进输入框」这一刻就是唯一可靠的信号；focusin 留着接窗口本来就激活时的键盘 Tab 切换。
+let keyboardWanted = false;
+let releaseTimer = null;
+/** 用户最后点/聚焦的那一格文本控件：拿到租约、窗口真激活之后把光标还给它 */
+let lastText = null;
+
+const askKeyboard = (want) => {
+  if (want === keyboardWanted) return;
+  keyboardWanted = want;
+  ipcRenderer.send('pet:keyboard-focus', want);
+};
+const cancelRelease = () => {
+  if (releaseTimer === null) return;
+  clearTimeout(releaseTimer);
+  releaseTimer = null;
+};
+
+document.addEventListener(
+  'pointerdown',
+  (e) => {
+    if (!needsKeyboardFocus(e.target)) return;
+    lastText = e.target;
+    cancelRelease();
+    askKeyboard(true);
+  },
+  true,
+);
+document.addEventListener(
+  'focusin',
+  (e) => {
+    if (!needsKeyboardFocus(e.target)) return;
+    lastText = e.target;
+    cancelRelease();
+    askKeyboard(true);
+  },
+  true,
+);
+document.addEventListener(
+  'focusout',
+  () => {
+    // 焦点在控件之间移动时 focusout 早于 focusin，所以延到下一个宏任务再判：
+    // 只有「窗口还活着 + 新焦点仍是文本控件」才继续持有；否则收回。
+    cancelRelease();
+    releaseTimer = setTimeout(() => {
+      releaseTimer = null;
+      if (document.hasFocus() && needsKeyboardFocus(document.activeElement)) return;
+      askKeyboard(false);
+    }, 0);
+  },
+  true,
+);
+// 页面失活（用户点了别处 / 切走了）必然打不了字：立刻收回，绝不留着可激活态给下一次误触用
+window.addEventListener('blur', () => {
+  cancelRelease();
+  askKeyboard(false);
+});
+// 主进程解锁并拿到前台之后回执：此刻窗口已激活，DOM 焦点事件恢复正常，把光标还给用户点的那一格
+ipcRenderer.on('pet:keyboard-granted', () => {
+  if (!lastText || document.activeElement === lastText) return;
+  try {
+    lastText.focus();
+  } catch {
+    /* 元素已被移除（弹窗关了）：忽略，下一条 pointerdown 会重新要 */
+  }
 });
