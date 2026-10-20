@@ -89,7 +89,8 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "test:ui": "node --test scripts/tests/*.test.mjs"
+    "test:ui": "node --test scripts/tests/*.test.mjs",
+    "test:packaged": "node --test scripts/tests/desktop-windows-packaged.test.mjs"
   },
   "license": "MIT",
   "engines": {
