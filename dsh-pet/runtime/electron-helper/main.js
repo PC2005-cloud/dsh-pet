@@ -45,8 +45,9 @@ try {
   );
   process.exit(3);
 }
-const { app, BrowserWindow, ipcMain, screen, shell, protocol, Tray, Menu, nativeImage } = electronApi;
+const { app, BrowserWindow, dialog, ipcMain, screen, shell, protocol, Tray, Menu, nativeImage } = electronApi;
 const path = require('node:path');
+const { pathToFileURL } = require('node:url');
 const { execFileSync } = require('node:child_process');
 const { readFileSync, writeFileSync } = require('node:fs');
 const fsPromises = require('node:fs/promises');
@@ -67,6 +68,72 @@ const { buildDeskGeometry } = require('./desktop-geometry.js');
 const { probeSpawnCommand } = require('./probe-command.js');
 // 单实例唤回：宿主经 bridge 回调通道反向 POST /control，这里解析动作并唤回全部宠物窗口
 const { parseControlRequest, focusAllWindows } = require('./control-request.js');
+
+// ---------- AI 设置入口（ticket 07）----------
+//
+// 设置页 URL（含一次性 token）由宿主写进 `~/.dsh/dsh-pet/standalone-runtime.json`。只有安装版
+// 有本机设置页：插件形态（跑在 DSH 宿主里）不写这个文件，右键菜单也不出现该项。
+// 读取/校验必须与托盘共用 lib/runtime-settings.js（ESM 产物，壳是 CJS → 动态 import）；
+// 只有打包形态才加载，开发/插件形态没有这个入口。
+const AI_SETTINGS_ENABLED = process.env.DSH_PET_PACKAGED === '1';
+const runtimeSettingsReady = AI_SETTINGS_ENABLED
+  ? import(pathToFileURL(path.join(__dirname, '..', '..', 'lib', 'runtime-settings.js')).href).catch((error) => {
+      console.error(
+        '[dsh-pet-desktop-helper] AI 设置模块加载失败：',
+        String(error && error.message ? error.message : error),
+      );
+      return null;
+    })
+  : Promise.resolve(null);
+
+/** 读取/校验运行时状态文件；任何分支都不把 settingsUrl / token 写进日志 */
+async function readAiSettings() {
+  if (!AI_SETTINGS_ENABLED) return { available: false, reason: 'disabled', message: '' };
+  const runtimeSettings = await runtimeSettingsReady;
+  if (!runtimeSettings) {
+    return {
+      available: false,
+      reason: 'module-missing',
+      message: 'AI 设置模块不可用（安装可能不完整）。请重新安装 DSH Pet 后重试。',
+    };
+  }
+  return runtimeSettings.readRuntimeSettings(runtimeSettings.resolveDshHome());
+}
+
+/** 不可用时给用户可操作的提示（message 来自 runtime-settings，不含 URL/token） */
+async function showSettingsUnavailable(message) {
+  try {
+    await dialog.showMessageBox({
+      type: 'warning',
+      title: 'AI 设置',
+      message: '暂时无法打开 AI 设置',
+      detail: message,
+      buttons: ['知道了'],
+      noLink: true,
+    });
+  } catch (error) {
+    console.error(
+      '[dsh-pet-desktop-helper] 显示 AI 设置提示失败：',
+      String(error && error.message ? error.message : error),
+    );
+  }
+}
+
+async function openAiSettings() {
+  const settings = await readAiSettings();
+  if (!settings.available) {
+    // 文件缺失 / 已退出 / 端口不可连 / 内容损坏：明确告诉用户先启动安装版或稍后重试
+    await showSettingsUnavailable(settings.message);
+    return;
+  }
+  try {
+    await shell.openExternal(settings.settingsUrl);
+  } catch {
+    // openExternal 的异常信息可能回显 URL：只打固定文案，绝不把能力 URL 写进日志
+    console.warn('[dsh-pet-desktop-helper] 打开 AI 设置失败');
+    await showSettingsUnavailable('系统浏览器没有打开设置页。请稍后重试，或重启 DSH Pet。');
+  }
+}
 
 // 允许无用户手势直接播放（余额动画等）
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
@@ -985,6 +1052,20 @@ app.whenReady().then(() => {
       return;
     }
     openSite(url);
+  });
+
+  // 右键菜单「AI 设置…」的可用性（渲染端在弹菜单前查询）：
+  // 只有安装版且运行时文件通过校验（pid 存活、端口可连、URL 与 port 一致）才返回 true。
+  // 插件形态没有本机设置页 → 恒 false → 菜单里不出现这一项。
+  ipcMain.handle('pet:ai-settings-available', async () => {
+    const settings = await readAiSettings();
+    return settings.available === true;
+  });
+
+  // 点击「AI 设置…」：重新读取/校验运行时文件后交给系统默认浏览器。
+  // 缺失/过期/损坏时弹可读提示，绝不打开空白页；绝不把 URL/token 写进日志。
+  ipcMain.on('pet:open-settings', () => {
+    void openAiSettings();
   });
 
   // 显示器热更新：分辨率/缩放变化、插拔屏、旋转都会让桌面几何失效。原先几何只在

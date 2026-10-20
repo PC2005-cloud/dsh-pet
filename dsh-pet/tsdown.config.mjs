@@ -63,6 +63,9 @@ export default defineConfig([
       // 应用托盘的动作分发/配置拍平（ticket 06）：desktop/tray.mjs 直接引它，
       // 不经过 lib/index.js（那里只有 Cordis 插件入口）。
       'tray-actions': 'src/host/tray-actions.ts',
+      // 运行时状态文件的读取/过期判定（ticket 07）：托盘（ESM）与桌面壳（CJS 动态 import）
+      // 共用同一份实现，不允许各自再解析。
+      'runtime-settings': 'src/host/runtime-settings.ts',
     },
     external: [/^@deepseek-ai\//, /^@electron\//, /^node:/],
   },

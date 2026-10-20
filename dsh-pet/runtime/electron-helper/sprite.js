@@ -1531,16 +1531,41 @@ class PetSprite {
     e.preventDefault();
     this.stopThrow(); // 菜单弹出前停住飞行中的宠物
     this.stopMove(); // 菜单悬停期间宠物不漫游
-    // 桌面专属工具根项（打开网站 / 查看余额 / 碎碎念 / 对话 / 回到初始位置 / 重载配置）+ 共享菜单树（动作→分类→具体动画）
+    this.menuOpen = true;
+    this.setInteractive(true); // 菜单是窗口内 DOM：悬停期间整窗保持可交互，关闭后恢复命中区穿透
+    this.syncInputBusy();
+    window.__dshPetDebug.menuOpen = true;
+    void this.showContextMenu(e.clientX, e.clientY);
+  }
+
+  /**
+   * 挂载右键菜单。先向主进程确认「AI 设置…」是否可用——插件形态没有本机设置页，
+   * 安装版的运行时状态文件也可能缺失/过期；不可用时这一项**不出现**（绝不打开空白页）。
+   * 查询失败按不可用处理，菜单其余项照常可用。
+   */
+  async showContextMenu(x, y) {
+    let settingsAvailable = false;
+    if (window.petBridge && typeof window.petBridge.aiSettingsAvailable === 'function') {
+      try {
+        settingsAvailable = await window.petBridge.aiSettingsAvailable();
+      } catch {
+        settingsAvailable = false;
+      }
+    }
+    // 查询期间菜单可能已被关闭（窗口失焦等）：不再挂一棵无主的菜单
+    if (!this.menuOpen) return;
+    // 桌面专属工具根项（打开网站 / 查看余额 / 碎碎念 / 对话 / AI 设置 / 回到初始位置 / 重载配置）
+    // + 共享菜单树（动作→分类→具体动画）
     // 碎碎念/对话项无条件显示：手动触发不受 whisperEnabled 限制（该字段只影响自动周期轮询）
     // 首项文案随宿主形态变（OPEN_TARGET）：宿主是 DSH 桌面应用时点是"唤起桌面应用窗口"，仍叫「打开网站」会误导
     const tools = [{ label: OPEN_TARGET === 'desktop' ? '打开 DeepSeek Harness' : '打开网站', action: 'open-site' }];
     // 「查看余额」无条件显示（与浏览器端一致）：关了 balanceEnabled 的宠物也能点——手动请求不受开关限制
     //（该开关只关自动轮询与档位动画），点了一定给答复。
     tools.push({ label: '查看余额', action: 'show-balance' });
+    tools.push({ label: '碎碎念', action: 'whisper' }, { label: '对话', action: 'chat' });
+    // 安装版专属：设置页 URL 由宿主写进运行时文件，主进程负责读/校验/打开系统浏览器。
+    if (settingsAvailable) tools.push({ label: 'AI 设置…', action: 'open-settings' });
     tools.push(
-      { label: '碎碎念', action: 'whisper' },
-      { label: '对话', action: 'chat' },
       { label: '回到初始位置', action: 'home' },
       // 显示位置（仅网页/仅桌面/两者/都不）：改这只宠物的 display 配置 + 宿主重载生效。
       // 与浏览器端注入的是**同一份**子菜单（shared 的 displayMenuBranch），两端文案/取值不会漂移。
@@ -1553,14 +1578,10 @@ class PetSprite {
     );
     const tree = tools.concat(S.buildMenuTree(this.animations));
     if (!tree.length) return;
-    this.menuOpen = true;
-    this.setInteractive(true); // 菜单是窗口内 DOM：悬停期间整窗保持可交互，关闭后恢复命中区穿透
-    this.syncInputBusy();
-    window.__dshPetDebug.menuOpen = true;
     const m = S.mountContextMenu({
       tree,
-      x: e.clientX,
-      y: e.clientY,
+      x,
+      y,
       // 只允许在「窗口 ∩ 工作区」内显示：宠物贴边时外扩余量伸出屏幕，菜单走进那里会被 OS 裁掉（#41）
       clamp: this.visibleClampRect(),
       onAction: (leaf) => this.onMenuAction(leaf),
@@ -1595,6 +1616,11 @@ class PetSprite {
     }
     if (leaf.action === 'chat') {
       this.showChatFromMenu(); // 打开对话弹窗（记忆经 host /chat 读写，浏览器/桌面同一实例共享）
+      return;
+    }
+    if (leaf.action === 'open-settings') {
+      // 主进程会重新读取并校验运行时状态文件，再交给系统浏览器；不可用时弹可读提示。
+      if (window.petBridge) window.petBridge.openAiSettings();
       return;
     }
     if (leaf.action === 'home') {
