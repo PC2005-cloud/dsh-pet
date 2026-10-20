@@ -63,6 +63,9 @@ export default defineConfig([
       // 应用托盘的动作分发/配置拍平（ticket 06）：desktop/tray.mjs 直接引它，
       // 不经过 lib/index.js（那里只有 Cordis 插件入口）。
       'tray-actions': 'src/host/tray-actions.ts',
+      // 开机自启（ticket 09）：默认开启/自启延迟（desktop/main.mjs）与托盘勾选
+      // （desktop/tray.mjs）共用同一份登录项适配层。
+      autostart: 'src/host/autostart.ts',
     },
     external: [/^@deepseek-ai\//, /^@electron\//, /^node:/],
   },

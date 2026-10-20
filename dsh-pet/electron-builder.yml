@@ -61,6 +61,8 @@ win:
 nsis:
   oneClick: false
   perMachine: false
+  # 卸载时清理「开机自启」写入的 HKCU Run 项（见 build/installer.nsh 的 customUnInstall）
+  include: build/installer.nsh
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: true
   createStartMenuShortcut: true

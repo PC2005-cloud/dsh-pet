@@ -18,6 +18,8 @@
 import { readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 
+// 登录项适配层（ticket 09）：读写参数恒含 --autostart，状态以系统真实状态为准
+import { createLoginItemAdapter } from '../lib/autostart.js';
 import {
   dispatchTrayAction,
   helpText,
@@ -38,7 +40,6 @@ const CONFIG_PATH = '/dsh-pet-7340/config';
 const PET_DISPLAY_PATH = '/dsh-pet-7340/pet-display';
 /** 配置变化（settings 页/右键菜单/其它实例）的收敛周期；点勾选后会立即强制刷新一次 */
 const DEFAULT_POLL_MS = 1000;
-const AUTOSTART_ARGS = ['--autostart'];
 
 const describeError = (error) => (error instanceof Error ? error.message : String(error));
 
@@ -78,17 +79,17 @@ function createTrayIcon(appPath) {
 }
 
 /** 自启状态以系统登录项为准（不另存一份配置，避免两份状态漂移） */
-function readAutostart() {
+function readAutostart(loginItem) {
   try {
-    return Boolean(app.getLoginItemSettings({ args: AUTOSTART_ARGS }).openAtLogin);
+    return loginItem.isEnabled();
   } catch (error) {
     console.warn(`[dsh-pet] 读取开机自启状态失败：${describeError(error)}`);
     return false;
   }
 }
 
-function writeAutostart(enabled) {
-  app.setLoginItemSettings({ openAtLogin: enabled, args: AUTOSTART_ARGS });
+function writeAutostart(loginItem, enabled) {
+  loginItem.setEnabled(enabled);
 }
 
 /**
@@ -111,8 +112,13 @@ export async function startAppTray(options = {}) {
   await app.whenReady();
   const home = options.dshHome ?? resolveDshHome();
   const pollMs = options.pollMs ?? DEFAULT_POLL_MS;
+  const loginItem = createLoginItemAdapter(app);
 
-  const state = { config: undefined, settingsUrl: await readSettingsUrl(home), autostart: readAutostart() };
+  const state = {
+    config: undefined,
+    settingsUrl: await readSettingsUrl(home),
+    autostart: readAutostart(loginItem),
+  };
   let template = [];
   let menu = null;
   let lastSignature = '';
@@ -201,7 +207,7 @@ export async function startAppTray(options = {}) {
         return;
       }
       state.config = config;
-      state.autostart = readAutostart();
+      state.autostart = readAutostart(loginItem);
       const signature = JSON.stringify(trayMenuScenario(state));
       if (!refreshOptions.force && signature === lastSignature) return;
       lastSignature = signature;
@@ -245,8 +251,8 @@ export async function startAppTray(options = {}) {
         }
         break;
       case 'set-autostart':
-        writeAutostart(effect.enabled);
-        state.autostart = readAutostart();
+        writeAutostart(loginItem, effect.enabled);
+        state.autostart = readAutostart(loginItem);
         rebuild();
         break;
       case 'open-data-dir': {

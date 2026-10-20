@@ -48,10 +48,11 @@ describe('desktop/tray.mjs —— 宿主托盘接线', () => {
     assert.match(source, /handle\.token/);
   });
 
-  test('自启走 Electron 登录项 API，并使用 --autostart 参数', () => {
-    assert.match(source, /getLoginItemSettings/);
-    assert.match(source, /setLoginItemSettings/);
-    assert.match(source, /--autostart/);
+  test('自启读写走 autostart 适配层（参数恒含 --autostart，状态以系统为准）', () => {
+    assert.match(source, /\.\.\/lib\/autostart\.js/);
+    assert.match(source, /createLoginItemAdapter\(app\)/);
+    assert.match(source, /loginItem\.isEnabled\(\)/);
+    assert.match(source, /loginItem\.setEnabled\(/);
   });
 
   test('退出：先销毁托盘，再走 handle.shutdown，完成后 app.exit(0)', () => {

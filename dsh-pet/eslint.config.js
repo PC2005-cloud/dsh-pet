@@ -37,7 +37,7 @@ export default tseslint.config(
   },
   {
     // 打包后的 Electron 主进程：Node 环境（process/console 由 Electron 提供），没有浏览器全局。
-    // fetch / 定时器是 Node 22+ 的运行时全局（托盘轮询配置、调用本机 HTTP 服务）。
+    // fetch / 定时器是 Node 22+ 的运行时全局（托盘轮询配置、调用本机 HTTP 服务、自启延迟）。
     files: ['desktop/**/*.mjs'],
     languageOptions: {
       globals: {
@@ -46,6 +46,7 @@ export default tseslint.config(
         fetch: 'readonly',
         setInterval: 'readonly',
         clearInterval: 'readonly',
+        setTimeout: 'readonly',
       },
     },
   },

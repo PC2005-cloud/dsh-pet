@@ -26,6 +26,16 @@ process.env.DSH_PET_PACKAGED = '1';
 const { parseAppRole } = await import('../lib/launch-plan.js');
 // second-instance 的启动时序闸门（纯逻辑，见 src/host/single-instance.ts）
 const { createFocusGate } = await import('../lib/single-instance.js');
+// 开机自启：默认开启只写一次 + 登录项适配层 + 自启延迟参数（纯逻辑，见 src/host/autostart.ts）
+const {
+  createFileMarker,
+  createLoginItemAdapter,
+  defaultAutostartMarkerPath,
+  initializeAutostartOnce,
+  resolveAutostartDelayMs,
+} = await import('../lib/autostart.js');
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 // 打包形态下 process.argv = [exe 路径, ...应用参数]，与 launch-plan 的约定一致
 const invocation = parseAppRole(process.argv.slice(1));
 for (const warning of invocation.warnings) console.warn(`[dsh-pet] ${warning}`);
@@ -60,7 +70,16 @@ if (invocation.role === 'helper' || invocation.role === 'dpi-probe') {
     console.error('[dsh-pet] 已有实例在运行，本次启动退出');
     app.exit(0);
   } else {
-    await startHost(app);
+    // 刻意**不 await**：Electron 的 ready 要等 ESM 入口求值结束才触发，主进程也才会处理
+    // second-instance。自启延迟若卡在入口的顶层 await 里，用户在延迟期间双击产生的第二个
+    // 进程会一直挂到延迟结束才退出（实测 3s 延迟 → 第二个进程存活 2.9s）。这里让入口立即
+    // 求值完成；延迟仍由 startHost 内部的时序保证（结束前不 startStandalone，也绝不启动第二套）。
+    void startHost(app).catch((error) => {
+      console.error(
+        `[dsh-pet] 宿主启动失败：${error instanceof Error ? (error.stack ?? error.message) : String(error)}`,
+      );
+      app.exit(1);
+    });
   }
 }
 
@@ -88,6 +107,10 @@ async function startHost(app) {
     gate.request();
   });
 
+  // 默认开启（ticket 09）：安装完成后第一次启动写一次系统登录项。标记文件保证
+  // 用户在托盘里关掉后不会被后续启动写回；初始化失败只告警，不拖垮宿主。
+  applyDefaultAutostart(app);
+
   const { startStandalone } = await import('../lib/standalone-app.js');
 
   const exitAfter = (shutdown) => {
@@ -100,6 +123,15 @@ async function startHost(app) {
   };
 
   try {
+    // 系统登录项拉起时延迟约 4 秒（ticket 09）：避开登录瞬间的程序启动高峰，且此刻宿主
+    // 还没有创建任何窗口或托盘，不存在弹窗、抢焦点或任务栏闪烁。延迟期间用户手动双击
+    // 只会经 second-instance 闸门记为 pending（见上），启动完成后才补一次唤回 ——
+    // 绝不能在这里提前 startStandalone。
+    const delayMs = resolveAutostartDelayMs(process.env);
+    if (invocation.autostart && delayMs > 0) {
+      console.log(`[dsh-pet] 开机自启：延迟 ${delayMs}ms 后启动`);
+      await sleep(delayMs);
+    }
     handle = await startStandalone({
       autostart: invocation.autostart,
       onShutdownRequested: (_reason, shutdown) => exitAfter(shutdown),
@@ -128,5 +160,28 @@ async function startHost(app) {
   } catch (error) {
     console.error(`[dsh-pet] 宿主启动失败：${error instanceof Error ? (error.stack ?? error.message) : String(error)}`);
     app.exit(1);
+  }
+}
+
+/**
+ * 默认开启开机自启（ticket 09）：只在从未初始化过时写一次系统登录项。
+ *
+ * 标记（`<DSH_HOME>/dsh-pet/autostart-initialized`）写系统成功之后才落盘：写失败时
+ * 下次启动还能重试，而不是永久失去默认开启。已有标记时完全不读也不写系统——
+ * 用户主动关掉的自启不会被后续启动写回。
+ */
+function applyDefaultAutostart(app) {
+  try {
+    const outcome = initializeAutostartOnce({
+      loginItem: createLoginItemAdapter(app),
+      marker: createFileMarker(defaultAutostartMarkerPath()),
+    });
+    if (outcome === 'enabled') console.log('[dsh-pet] 首次启动：已默认开启开机自启');
+  } catch (error) {
+    console.warn(
+      `[dsh-pet] 初始化开机自启失败（本次照常启动，下次启动重试）：${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
   }
 }
