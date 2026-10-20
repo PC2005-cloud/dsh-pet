@@ -15,6 +15,12 @@ PetSprite.prototype.onWorkTick = function onWorkTick(snapshot, tick) {
   if (!this.pet.workStatusEnabled) return; // 未启用工作状态联动 -> 该宠物完全免疫（与浏览器一致）
   if (tick === 0 || tick === this.prevWorkTick) return;
   this.prevWorkTick = tick;
+  // 占用锁（issue #122 第 4 项）：锁生效时不响应工作状态——它是**自动**来源（任务事件驱动），
+  // 没有"用户手动要"这条路。判在 tick 消费**之后**：占用期间的变化当过去了，解冻时由
+  // applyFreeze 的 resumeWorkStatusAnim() 重新对齐**当前**状态，所以不会停在旧档位上。
+  // 宿主侧不挡这个全局段：sections.workStatus 是所有宠物共用一份，宿主"跳过写入"会连带静音
+  // 别的宠物（issue #122 要的是"只控制指定 main"），所以按宠物在渲染端忽略。
+  if (this.frozen) return;
   const state = snapshot && snapshot.state ? snapshot.state : null;
   this.workState = state; // 当前工作状态：互动/事件动画播完恢复档位循环用（与浏览器 workStatusRef 同用途）
   const stateChanged = this.prevWorkState !== state;
@@ -101,6 +107,10 @@ PetSprite.prototype.onBalanceTick = function onBalanceTick(state, tick, manual) 
   if (!this.pet.balanceEnabled && !manual) return; // 自动轮询受开关门控；手动无条件通过（与浏览器一致）
   if (tick === 0 || tick === this.prevTick) return;
   this.prevTick = tick;
+  // 占用锁（issue #122 第 4 项）：锁生效时**不看自动余额**（那是宠物自己的行为）；**手动**请求照常
+  // （用户右键「查看余额」/ `/balance` 命令——用户交互优先）。判在 tick 消费之后：占用期间这一拍
+  // 就当过去了，解冻后不补播（事件是瞬时的）。
+  if (this.frozen && !manual) return;
   this.showBalanceNow(state, manual);
 };
 
@@ -110,6 +120,7 @@ PetSprite.prototype.onBalanceTick = function onBalanceTick(state, tick, manual) 
 // 门控：自动轮询要求 balanceEnabled；**手动请求无条件弹**（用户问了就该有答复，包括"服务商不支持"这件事）。
 PetSprite.prototype.showBalanceNotice = function showBalanceNotice(state, manual) {
   if (!this.pet.balanceEnabled && !manual) return; // 自动轮询受开关门控；手动无条件通过
+  if (this.frozen && !manual) return; // 占用锁：自动来源不看；手动照常（用户问了就得有答复）
   if (!state || state.ok) return;
   this.bubbleOn = true;
   this.balanceWrap = true; // 文字说明可能多行：renderBubble 据此套用紧凑变体（字号缩到 0.75、宽度下限更窄）
@@ -294,14 +305,20 @@ function applyWorkStatusLeaf(leaf) {
  *    name = 池内名字，复用**右键菜单同一个处理函数** onMenuAction，所以镜像修正 / 移动类走真实
  *      位移 / 其余播一遍的语义与菜单点一下完全一致，这里不重写一遍；
  *    url  = 第三方自带的完整地址，**不走 onMenuAction**（裸地址没有菜单语义），只换源播一次。
+ *  `facing`（可选）= 调用方显式指定的朝向：**换源之前**赋给 sprite——switchTo 是在 onReady 里按
+ *  this.facing 贴 scaleX(-1) 的，晚一步就赶不上这一趟。没给就一个字都不动（保持宠物当前朝向，
+ *  而不是回落 left）；给了就跳过"文字类动画点播前强制朝左"那条修正（显式值优先）。
  *  petId 由路径解析出来（pets.<id>.anim）；本窗口只装一只宠物，按 id 命中即可。 */
 function applyAnimLeaf(petId, leaf) {
   const hit = S.readAnim(leaf);
   if (!hit) return;
   for (const s of sprites) {
     if (s.pet.id !== petId) continue;
+    const explicitFacing = hit.facing !== undefined;
+    if (explicitFacing) s.facing = hit.facing; // 必须在换源前：switchTo 里按它贴 scaleX(-1)
     if (hit.url !== undefined) s.playUrlOnce(hit.url, hit.playbackId);
-    else if (hit.name !== undefined) s.onMenuAction({ label: hit.name, anim: hit.name, playbackId: hit.playbackId });
+    else if (hit.name !== undefined)
+      s.onMenuAction({ label: hit.name, anim: hit.name, playbackId: hit.playbackId }, explicitFacing);
   }
 }
 
@@ -323,6 +340,18 @@ function applyThrowLeaf(petId, leaf) {
   if (!hit) return;
   for (const s of sprites) {
     if (s.pet.id === petId) s.throwWith(hit.angle, hit.power);
+  }
+}
+
+/** 占用锁叶子 → 对应宠物冻结 / 解冻（其他插件经 POST /lock 写进 S，issue #122 第 4 项）。
+ *  与上面四个**指令**不同，这是**状态**：sprite 读它决定要不要冻结自己（随机链停、暂停自播、
+ *  忽略自动来源），并按叶子里的 expiresAt **自己**定时解除——宿主侧过期是懒判的，不会推"锁没了"。
+ *  petId 由路径解析（pets.<id>.lock）；本窗口只装一只宠物，按 id 命中即可。 */
+function applyLockLeaf(petId, leaf) {
+  const hit = S.readLock(leaf);
+  if (!hit) return;
+  for (const s of sprites) {
+    if (s.pet.id === petId) s.setLock(hit);
   }
 }
 
@@ -358,6 +387,9 @@ async function pollStateOnce() {
       } else if (change.path.startsWith('pets.') && change.path.endsWith('.throw')) {
         // 抛掷指令：同上
         applyThrowLeaf(change.path.slice('pets.'.length, -'.throw'.length), change.leaf);
+      } else if (change.path.startsWith('pets.') && change.path.endsWith('.lock')) {
+        // 占用锁：同上切片，绝不 split('.')。它是**状态**不是指令（见 applyLockLeaf）
+        applyLockLeaf(change.path.slice('pets.'.length, -'.lock'.length), change.leaf);
       }
     }
     return true;

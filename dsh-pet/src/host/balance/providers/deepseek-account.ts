@@ -29,10 +29,23 @@ export function parseAccountBalance(
   const wallets = Array.isArray(snapshot.value) ? snapshot.value : [];
   // 充值钱包为空 = 这个账号没有可展示的余额（常见于只送不充的新号）→ 报错而非显示 ¥0.00
   if (wallets.length === 0) throw new Error('dsh-pet: 账号没有充值钱包余额');
-  const first = obj(wallets[0] as unknown);
-  if (!first) throw new Error('dsh-pet: 账号钱包结构非法');
-  const currency = typeof first.currency === 'string' && first.currency.length > 0 ? first.currency : 'CNY';
-  const toppedUp = money(first.balance, 'balance');
+  // 账号可能同时持有多个币种钱包（例如「USD 0.00 + CNY 有余额」）。旧实现只取 wallets[0]，
+  // 会把排在前面的空 USD 钱包当成账户余额，显示成 $0.00。这里改为：先挑余额最大的那个
+  // （有余额的才是用户真正关心的），金额相同或全为 0 时 CNY 优先。
+  const candidates = wallets.map((w) => obj(w as unknown)).filter((w): w is Record<string, unknown> => w !== undefined);
+  if (candidates.length === 0) throw new Error('dsh-pet: 账号钱包结构非法');
+  const walletAmount = (w: Record<string, unknown>): number => {
+    const n = Number(w.balance);
+    return Number.isFinite(n) ? n : 0;
+  };
+  const chosen = [...candidates].sort((a, b) => {
+    const byAmount = walletAmount(b) - walletAmount(a);
+    if (byAmount !== 0) return byAmount;
+    const rank = (w: Record<string, unknown>) => (w.currency === 'CNY' ? 0 : 1);
+    return rank(a) - rank(b);
+  })[0] as Record<string, unknown>;
+  const currency = typeof chosen.currency === 'string' && chosen.currency.length > 0 ? chosen.currency : 'CNY';
+  const toppedUp = money(chosen.balance, 'balance');
   // 赠送钱包：与充值同币种的那个（币种不同不硬配，见下）
   const bonus = (Array.isArray(snapshot.bonusWallets) ? snapshot.bonusWallets : [])
     .map((w) => obj(w as unknown))

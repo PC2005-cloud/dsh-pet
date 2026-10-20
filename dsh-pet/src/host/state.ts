@@ -10,7 +10,7 @@
  *   {
  *     counter: 1755000000007,   // 全局写入版本 = 最后一次写入的编号（顶层，不是叶子）
  *     sections: { balance: {counter,data}, workStatus: {…}, notify: {…}, config: {…} },  // 全局，所有端共享
- *     pets: { <宠物id>: { say: {…}, anim: {…}, position: {…}, throw: {…} } } // 每只宠物各自一份
+ *     pets: { <宠物id>: { say: {…}, anim: {…}, position: {…}, throw: {…}, lock: {…} } } // 每只宠物各自一份
  *   }
  *
  * 长轮询（`GET /state?since=&timeout=`）：
@@ -47,9 +47,12 @@ export interface StateLeaf {
  *  保存 / 同步配置（PUT / POST /config）**不写**——它们的调用方自己就拿到了成品聚合。 */
 export type SectionName = 'balance' | 'workStatus' | 'notify' | 'config';
 
-/** 每宠物段（say = 要说的话；anim = 要播的动画名；position = 要挪到的位置；throw = 要给的初速度）。
- *  后两个是**指令**（host → 前端），与 say/anim 同族：前端读到即执行，不往它们写任何东西。 */
-export type PetLeafName = 'say' | 'anim' | 'position' | 'throw';
+/** 每宠物段（say = 要说的话；anim = 要播的动画名；position = 要挪到的位置；throw = 要给的初速度；
+ *  lock = 占用锁状态）。
+ *  中间两个是**指令**（host → 前端），与 say/anim 同族：前端读到即执行，不往它们写任何东西。
+ *  `lock` 不一样，它是**状态**不是指令：前端读它来决定"要不要冻结自己"（随机链不掷骰、暂停自播），
+ *  并**按叶子里的 expiresAt 自己解除**——宿主侧没有定时器（见 ./lock 的第 4 条边界）。 */
+export type PetLeafName = 'say' | 'anim' | 'position' | 'throw' | 'lock';
 
 /** S 的完整形态（GET /state 的响应体）。
  *  `counter` = 整份 S 的版本号，就是"最后一次写入的编号"（见类里的 `last`）。
@@ -152,7 +155,7 @@ export class PollStateStore {
   writePet(petId: string, leaf: PetLeafName, data: unknown): void {
     let entry = this.pets.get(petId);
     if (!entry) {
-      entry = { say: emptyLeaf(), anim: emptyLeaf(), position: emptyLeaf(), throw: emptyLeaf() };
+      entry = { say: emptyLeaf(), anim: emptyLeaf(), position: emptyLeaf(), throw: emptyLeaf(), lock: emptyLeaf() };
       this.pets.set(petId, entry);
     }
     entry[leaf] = { counter: this.next(), data };

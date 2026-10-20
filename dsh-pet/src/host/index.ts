@@ -37,7 +37,8 @@
  *                                       每个叶子 = { counter, data }；counter 变了前端才渲染。
  *                                       只读、纯内存、零副作用（绝不在这里触发外部调用/模型生成）。
  *   /dsh-pet-7340/balance              → 余额刷新（POST 动作端点，写 S；数据从 /state 读）
- *   /dsh-pet-7340/whisper              → 让某只宠物立即说一句（POST 动作端点，写 S 的 pets.<id>.say）
+ *   /dsh-pet-7340/whisper              → 让某只宠物立即说一句（POST 动作端点，写 S 的 pets.<id>.say；
+ *                                       响应带生成的 text，配图时带 image）
  *   /dsh-pet-7340/broadcast            → 第三方投喂：把外部给定的文本写进气泡（POST 动作端点，写 S 的
  *                                       pets.<id>.say；不生成、只搬运，供宿主侧其他插件集成）。
  *                                       配图给 `image`（池内名）或 `url`（第三方自带的完整地址）二选一
@@ -46,6 +47,24 @@
  *                                       「动作」菜单一致）或 `url`（第三方自带的完整地址，不查池、
  *                                       不走菜单语义）二选一。
  *                                       响应带 playbackId，供 /playback 查**真实回执**
+ *   /dsh-pet-7340/lock                 → **占用锁**（issue #122 第 4 项，POST 动作端点）：联动演出
+ *                                       期间独占这只宠物，除持锁者外全静音。`lockId` 给了 = 续期、
+ *                                       没给 = 新建；回 { lockId, expiresAt }。内存态 + TTL。
+ *                                       没带 lock 时行为与改造前逐字一致；带了但查不到锁 → lock-lost
+ *   /dsh-pet-7340/lock/release         → 释放占用（POST 动作端点）：`lockId` = 持锁者收工 /
+ *                                       `force` = **渲染端**报告用户接管（拖拽、点击、隐藏、关闭）。
+ *                                       占用期间 5 个动作端点必须带 `?lock=<lockId>`，否则
+ *                                       lock-required（没带）/ lock-lost（带了不匹配，附 cause）
+ *   `?surface=`（**必填**，issue #122 第 1 条）→ 声明"我要**哪一端**的宠物"：web / desktop /
+ *                                       both / any。`pet` 只说明"哪一只"，不说明"哪一端"——一只
+ *                                       `display: desktop` 的宠物被当成网页目标时宿主照旧受理，
+ *                                       但**没有任何渲染端会消费它**（拿到 ok:true 却什么都不会
+ *                                       发生，直到回执超时）。这里把那种"必然不可能"提前变成显式
+ *                                       失败：pet-not-displayed + **该宠物实际的 display**。
+ *                                       **只开在会产生渲染端可见效果的端点上**：/anim、/broadcast、
+ *                                       /bubble/clear、/position、/throw、/lock、/whisper 与
+ *                                       /chat 的 POST；/lock/release（释放必须永远能成功）与
+ *                                       /chat 的 GET（读记忆与显示在哪一端无关）**不开**。见 ./surface
  *   /dsh-pet-7340/playback/<id>        → **播放回执**（GET）：返回那一次点播的真实状态
  *                                       （accepted/playing/ended/failed/cancelled）。带
  *                                       `?wait=<状态[,状态]>` + `?timeout=<ms>`（**成对必填**）时挂起等待：
@@ -55,7 +74,7 @@
  *                                       渲染进程 → host）。这是回执的**地基**——没有它，记录永远停在
  *                                       accepted（host 只知道"受理了"，不知道播没播完）。见 ./playback
  *   /dsh-pet-7340/chat                 → 对话与记忆（GET 最近窗口 / POST 对话并写 memory.json；
- *                                       POST 只回 {ok}，回复同样写 S 的 pets.<id>.say）
+ *                                       POST 回 {ok,text,image?}，回复同样写 S 的 pets.<id>.say）
  *   /dsh-pet-7340/font|pic             → 字体 / 通知图标素材
  *
  * 系统通知不属于宠物行为、不在这里的旧实现是：浏览器半侧 notify.ts 经 connection 事件流
@@ -94,8 +113,11 @@ import {
   normalizeBroadcastText,
 } from './broadcast';
 import { decideAnim } from './anim';
+import { LockStore } from './lock';
 import { decidePosition, decideThrow, positionLeafData } from './motion-cue';
 import { parsePlaybackPath, parseWaitQuery, PlaybackStore } from './playback';
+import { PoseStore, normalizePoseInput } from './pose';
+import { SURFACE_TEXT, displayCovers, normalizeSurface, type Surface } from './surface';
 import {
   findPetInstance,
   flattenPetList,
@@ -347,6 +369,149 @@ export function apply(ctx: any): void {
     publishedWork = key;
     state.writeSection('workStatus', { state: snap.state, task: snap.task });
   };
+  // 占用锁（issue #122 第 4 项「独立动作/气泡占用」）：**内存态**一把锁 + TTL，第三方联动期间
+  // 独占这只宠物——除持锁者外谁都动不了它（随机链、碎碎念、余额、工作状态一概让路）。
+  //
+  // 它自己**不带定时器**：过期是懒判的，叶子里的 `expiresAt` 是唯一真相，渲染端据此**自己**
+  // 解除静止；这里只负责把状态变化同步进 S 的 `pets.<id>.lock`。见 ./lock 的四条边界
+  // （无锁 = 现状零变化 / 有界 / 续期即心跳 / 无定时器）。
+  const lock = new LockStore({
+    onChange: (petId, data) => state.writePet(petId, 'lock', data),
+  });
+
+  // 实况快照（issue #122 第 1 条）：桌面渲染端变化时上报，第三方用 GET /pose 读。
+  // 网页端不走这里——它的位置**天生每个页面一份**，走页面内的 Cordis 服务 `petApi7340`。
+  const pose = new PoseStore();
+
+  /**
+   * `?surface=` 的**参数级**校验（缺省 / 非法 → `bad-request`）。放在读盘之前：必然失败的请求
+   * 不碰磁盘（与 pet 空串同一处境）。通过则给出收窄后的取值。
+   */
+  const surfaceParam = (params: URLSearchParams): { ok: true; want: Surface } | { ok: false; res: RouteResult } => {
+    const want = normalizeSurface(params.get('surface'));
+    if (want !== null) return { ok: true, want };
+    return {
+      ok: false,
+      res: { kind: 'json', status: 200, obj: { ok: false, reason: 'bad-request', message: SURFACE_TEXT } },
+    };
+  };
+
+  /**
+   * `?surface=` 与该宠物 `display` 的对齐校验（issue #122 第 1 条）：不满足 → `pet-not-displayed`
+   * + **实际 display 原样回给调用方**（调用方据此一眼知道该怎么办），放行回 null。
+   *
+   * 这是**前置校验**，不是按面分发——指令照旧写进同一个叶子、两端内容照旧完全一致
+   * （要"网页播 A、桌面播 B"用两只宠物表达，见 ./surface 的第 1 条边界）。
+   */
+  const surfaceMismatch = (pet: Record<string, unknown>, petId: string, want: Surface): RouteResult | null => {
+    const display = String(pet.display ?? '');
+    if (displayCovers(want, display)) return null;
+    return {
+      kind: 'json',
+      status: 200,
+      obj: {
+        ok: false,
+        reason: 'pet-not-displayed',
+        message: petId + ' 的显示模式是 ' + display + '，不满足 surface=' + want,
+        display,
+      },
+    };
+  };
+
+  /**
+   * 决策函数**之后**的 surface 校验（`/anim`、`/broadcast`、`/bubble/clear`、`/position`、
+   * `/throw` 共用）：这五条的 pet 解析住在各自的决策模块里，所以这里按 `petId` 再查一次实例取
+   * `display`（配置已在手，成本可忽略）。放行回 null。
+   *
+   * 位置与 `lockBlocked` 一致——都在决策函数之后、任何副作用之前，所以校验顺序是
+   * 「body → pet → surface → 锁」。
+   */
+  const surfaceBlocked = (
+    cfg: Record<string, Record<string, unknown>>,
+    petId: string,
+    params: URLSearchParams,
+  ): RouteResult | null => {
+    const p = surfaceParam(params);
+    if (!p.ok) return p.res;
+    return surfaceMismatch(findPetInstance(cfg, petId)?.pet ?? {}, petId, p.want);
+  };
+
+  /**
+   * 路由层的 pet 参数解析（`/lock`、`/lock/release`、`/whisper`、`/chat` 用——这四条没有独立决策层；
+   * `/anim`、`/broadcast`、`/bubble/clear`、`/position`、`/throw` 的同一套校验住在各自的决策模块里，
+   * 口径与这里逐字一致）：**必填**且必须真实存在。
+   *
+   * 两种失败分开报（issue #122 第 1 条「绝不默认退到列表第一只」）：
+   * 没给 / 空串 → `pet-required`；给了但配置里没有 → `unknown-pet`。
+   *
+   * 收紧前这四条是 `get('pet') || resolveActivePetId() || 'main'`：缺省会落到"当前桌宠"
+   * = **有效宠物列表第一只**（`/whisper`、`/chat` 更彻底——`?? ''` 直接空串：人设按 main 条目取、
+   * 生成结果写进没人消费的 `pets[""].say`，还回 ok:true——钱花了、话丢了、调用方以为成功）。
+   * 落点随用户 /pet 操作而变、失败也不报，第三方无从预期，故整条缺省链已删除：
+   * pet 与 `/pet-display` 的 `id` 一样是必填项。
+   *
+   * `cfg` 传**惰性读取**：pet 空串时不必碰磁盘（与 /broadcast 的 text/duration 同一处境，
+   * routes.test.ts 里"配置不可达"那一组断言正是靠这个顺序钉住的）。
+   *
+   * `opts.surface` = 是否同时校验 `?surface=`。**只对会产生渲染端可见效果的端点开**：
+   * `/lock`、`/whisper`、`/chat` 的 POST。`/lock/release` 与 `/chat` 的 GET 不开——
+   * 释放必须永远能成功（否则宠物中途被隐藏就撤不掉锁），读记忆与显示在哪一端无关。
+   */
+  const requirePet = (
+    params: URLSearchParams,
+    cfg: () => Record<string, Record<string, unknown>>,
+    opts?: { surface?: boolean },
+  ):
+    | { ok: true; petId: string; entry: string; conf: Record<string, unknown>; pet: Record<string, unknown> }
+    | { ok: false; res: RouteResult } => {
+    const fail = (reason: 'pet-required' | 'unknown-pet', message: string): { ok: false; res: RouteResult } => ({
+      ok: false,
+      res: { kind: 'json', status: 200, obj: { ok: false, reason, message } },
+    });
+    const petId = String(params.get('pet') ?? '').trim();
+    if (!petId) return fail('pet-required', 'pet 必填：要指定操作哪只桌宠');
+    // surface 分两步：参数级校验在读盘之前（必然失败的请求不碰磁盘），显示模式校验在找到宠物之后。
+    let want: Surface | null = null;
+    if (opts?.surface === true) {
+      const p = surfaceParam(params);
+      if (!p.ok) return { ok: false, res: p.res };
+      want = p.want;
+    }
+    // 一次查找同时给出"存在性"与"所属条目"（entry 即素材根，/chat 读记忆分桶要用）+ 条目配置
+    // （/chat 取 chatMemoryRounds 要用）——调用方拿到的就是校验时那份快照里的值，不必再查一次。
+    const found = findPetInstance(cfg(), petId);
+    if (!found) return fail('unknown-pet', '没有这只桌宠：' + petId);
+    if (want !== null) {
+      const mismatch = surfaceMismatch(found.pet, petId, want);
+      if (mismatch) return { ok: false, res: mismatch };
+    }
+    return { ok: true, petId, entry: found.entry, conf: found.conf, pet: found.pet };
+  };
+
+  /**
+   * 动作端点的占用门禁（`/anim`、`/broadcast`、`/position`、`/throw`、`/bubble/clear` 共用）：
+   * 放行回 null，否则直接给出路由应答。抽成一个函数，是为了让"哪些接口受占用约束"只有一处可查。
+   *
+   * **无锁时按「有没有带 `lock`」分流**：没带 → 返回 null（既有调用方一个字都不用改）；
+   * 带了但查不到锁 → `lock-lost`，旧租约不能继续执行迟到请求。
+   * 没带这一支就是「不传 lock = 现状零变化」（issue #122 最重要的边界）的落点。
+   *
+   * 位置放在决策函数**之后**：`petId` 要先解析出来才知道问哪只宠物的锁，而这时还没有任何副作用
+   * （没写叶子、没建播放记录、没调模型）。所以"先判锁再干活"这个意图是满足的，只是与
+   * body 校验的先后为「body → pet → 锁」——两者都不合法时报的是 body 的错。
+   */
+  const lockBlocked = (petId: string, params: URLSearchParams): RouteResult | null => {
+    const g = lock.gate(petId, String(params.get('lock') ?? ''));
+    if (g.ok) return null;
+    return {
+      kind: 'json',
+      status: 200,
+      obj:
+        g.reason === 'lock-lost'
+          ? { ok: false, reason: g.reason, cause: g.cause, message: g.message }
+          : { ok: false, reason: g.reason, message: g.message },
+    };
+  };
   // 系统通知帧：host 监听 DSH 宿主事件生成通知帧（帧契约与 shared/notify.ts 一致），写进 S 的
   // sections.notify，浏览器 1s 轮询 /state 后弹 toast。
   // 背景：DSH 0.1.5 删除浏览器侧 api.events.mux/host 事件流，改为 host 转发通道——
@@ -482,26 +647,27 @@ export function apply(ctx: any): void {
 
   // ---- 配置消费：唯一入口 readAllConfig（./config）——返回值绝对正确，这里只读字段，零校验 ----
 
-  /** 某宠物的最终人设 system：所属条目（非文件宠物 → main 条目）的 whisperPrompt（合并器已填默认）
-   *  + 无条件追加一句名字声明（name，缺失已按 id）——碎碎念与对话共用同一拼装。
+  /** 某宠物的最终人设 system：所属条目（写在该条目 `pets` 里的实例 → 那个条目；主配置的实例 → `main`）
+   *  的 whisperPrompt（合并器已填默认）+ 无条件追加一句名字声明（name，缺失已按 id）——碎碎念与对话共用同一拼装。
    *  + 末尾追加一行**时间背景**（time-context.ts：日期/星期/时刻/时段/工作日或周末）：
    *    碎碎念与对话各自每次生成都会重新走这里，所以拿到的永远是**当前**时刻，不需要额外的刷新机制；
-   *    非法 Date 时它为空串，此时整行不加（宁可没有时间信息，也不把 NaN 拼进提示词）。 */
-  const petSystemPrompt = (petId: string, cfg: Record<string, Record<string, unknown>>): string => {
-    const found = findPetInstance(cfg, petId);
-    const conf = found ? found.conf : (cfg.main ?? {});
-    const prompt = typeof conf.whisperPrompt === 'string' ? conf.whisperPrompt : '';
-    const name = found ? String(found.pet.name || found.pet.id || petId) : petId;
+   *    非法 Date 时它为空串，此时整行不加（宁可没有时间信息，也不把 NaN 拼进提示词）。
+   *
+   *  收 `findPetInstance` 的**命中结果**而不是 `(petId, cfg)`：两个调用方都已经解析过了，这里再查一次
+   *  只会多出一处"查不到就兜底 main"的不可达分支。 */
+  const petSystemPrompt = (found: { conf: Record<string, unknown>; pet: Record<string, unknown> }): string => {
+    const prompt = typeof found.conf.whisperPrompt === 'string' ? found.conf.whisperPrompt : '';
+    const name = String(found.pet.name || found.pet.id);
     const nameLine = '你的名字是“' + name + '”。';
     const base = prompt ? prompt + '\n' + nameLine : nameLine;
     const time = timeContextOf(new Date());
     return time ? base + '\n' + time : base;
   };
 
-  /** 对话记忆轮数（1 轮 = 1 问 1 答）：所属条目/主条目的 chatMemoryRounds（合并器已填默认非负数字） */
-  const memoryRounds = (petId: string, cfg: Record<string, Record<string, unknown>>): number => {
-    const found = findPetInstance(cfg, petId);
-    const v = Number(found?.conf.chatMemoryRounds ?? cfg.main?.chatMemoryRounds);
+  /** 对话记忆轮数（1 轮 = 1 问 1 答）：该宠物**所属条目**的 chatMemoryRounds（合并器已填默认非负数字）。
+   *  同样收**已解析的条目配置**：两个调用方都已经拿到 `findPetInstance` 的结果。 */
+  const memoryRounds = (conf: Record<string, unknown>): number => {
+    const v = Number(conf.chatMemoryRounds);
     return Number.isFinite(v) && v >= 0 ? Math.floor(v) : 5;
   };
 
@@ -510,17 +676,30 @@ export function apply(ctx: any): void {
    *  碎碎念 / 命令气泡 / 对话回复在前端本来就是**同一条展示链路**（同一个 triggerWhisper、
    *  同一个气泡槽、同一批 events.whisper 动画），所以合并成同一个叶子；"周期内不重复"由
    *  调度侧的 lastWhisperAt 保证，不再需要一份 whisperCache（多端共享也由 S 天然保证）。
-   *  配图（whisperImageEnabled 开启时）：从表情包池**随机抽 1 张**，把描述注入指令并随文本一起写。 */
-  const publishWhisper = async (petId: string): Promise<boolean> => {
+   *  配图（whisperImageEnabled 开启时）：从表情包池**随机抽 1 张**，把描述注入指令并随文本一起写。
+   *
+   *  失败**带回真实 reason**（含 `unknown-pet`：目标宠物在"校验那次读"与这里之间被删掉了）。
+   *  成功**带回生成的文本**（与同时写进叶子的那份完全相同）——调用方拿到就不必再拉一拍 /state。 */
+  const publishWhisper = async (
+    petId: string,
+  ): Promise<
+    | { ok: true; text: string; image?: string }
+    | { ok: false; reason: 'provider-missing' | 'generate-error' | 'unknown-pet'; message?: string }
+  > => {
     const cfg = readAllConfig(configPaths);
     const found = findPetInstance(cfg, petId);
-    const conf = found ? found.conf : (cfg.main ?? {});
-    const entry = found ? found.entry : 'main';
-    const system = petSystemPrompt(petId, cfg);
+    // 宠物在"校验那次读"（requirePet / resolveActivePetId / 周期调度各自读的那一份）与这里之间被删了
+    // ——配置随时可能被设置页 / 右键菜单 / 手改文件改动，两次读之间就是窗口。
+    // **明确失败：不生成、不写 S**。写下去就是一只已不存在宠物的幽灵叶子（/state 里常驻到进程重启）。
+    if (!found) return { ok: false, reason: 'unknown-pet', message: '没有这只桌宠：' + petId };
+    const system = petSystemPrompt(found);
     // 配图：全局开关关闭 / 池为空 / 池内图片全缺失 → 纯文本（不报错，退化为原行为）
-    const meme = conf.whisperImageEnabled === true ? pickMeme(readMemePool(conf.memes, memeDirsFor(entry))) : undefined;
+    const meme =
+      found.conf.whisperImageEnabled === true
+        ? pickMeme(readMemePool(found.conf.memes, memeDirsFor(found.entry)))
+        : undefined;
     // 模型：条目配置的 whisperModel 优先（留空 = 不指定）；生成侧失败会回落到当前对话的模型重试一次
-    const result = await generateWhisper(ctx, system, meme, configuredModel(conf, 'whisperModel'));
+    const result = await generateWhisper(ctx, system, meme, configuredModel(found.conf, 'whisperModel'));
     if (!result.ok) {
       // 失败**不写 S**（与改造前一致：静默跳过 + console.warn，不伪造文案、不弹错误气泡）
       console.warn(
@@ -530,41 +709,52 @@ export function apply(ctx: any): void {
           result.reason +
           (result.message ? ' ' + result.message : ''),
       );
-      return false;
+      // 真实 reason **原样带回**给调用方。改造前这里只回布尔值，路由只能把失败硬编码成
+      // `generate-error`——独立模式下 `generateWhisper` 明明算出了 `provider-missing`，
+      // 却在边界被吞掉（API.md 描述的降级 reason 正是它）。
+      return result;
     }
     state.writePet(petId, 'say', result.image ? { text: result.text, image: result.image } : { text: result.text });
-    return true;
+    // 文本随返回值带出，且与刚写进叶子的**是同一个变量**：两条出口给同一份文本，不是一个真相两个版本
+    return { ok: true, text: result.text, ...(result.image ? { image: result.image } : {}) };
   };
 
   /** 与某只宠物对话：截取最近记忆 → 生成回复 → 写入记忆 → 把回复写进 S 的 pets.<id>.say。
    *  供 POST /chat（动作端点）与 /chat 命令共用同一条路径（锁内读写，防两端交错写盘）。
-   *  配图（chatImageEnabled 开启时）：把表情包清单交给模型按语境选一张，命中池内才随回复写回。 */
+   *  配图（chatImageEnabled 开启时）：把表情包清单交给模型按语境选一张，命中池内才随回复写回。
+   *  成功**带回回复文本**（与同时写进叶子的那份完全相同）——调用方拿到就不必再拉一拍 /state。 */
   const chatWithPet = async (
     petId: string,
     text: string,
-  ): Promise<{ ok: true } | { ok: false; reason: 'provider-missing' | 'generate-error'; message?: string }> =>
+  ): Promise<
+    | { ok: true; text: string; image?: string }
+    | { ok: false; reason: 'provider-missing' | 'generate-error' | 'unknown-pet'; message?: string }
+  > =>
     withMemoryLock(async () => {
       const cfg = readAllConfig(configPaths);
-      const rounds = memoryRounds(petId, cfg);
       const found = findPetInstance(cfg, petId);
-      const conf = (found ?? { conf: cfg.main ?? {} }).conf;
+      // 宠物在"校验那次读"与这里之间被删了——本函数还要先排 withMemoryLock 的串行队列（等前一次生成
+      // 跑完，窗口可能是**秒级**），所以这一支是真会命中的。
+      // **明确失败：不生成、不写记忆也不写叶子**。否则会在 memory.json 里**永久**留下一个已删宠物的
+      // 分桶，外加一只幽灵叶子（/state 里常驻到进程重启）。
+      if (!found) return { ok: false, reason: 'unknown-pet', message: '没有这只桌宠：' + petId };
+      const rounds = memoryRounds(found.conf);
       // 人设：所属条目的 whisperPrompt（合并器已填默认）+ 名字声明（与碎碎念同一拼装）
-      const system = petSystemPrompt(petId, cfg);
+      const system = petSystemPrompt(found);
       // 配图：开关关闭 → 空池（指令与解析都不介入，与旧行为逐字一致）；目录链按所属条目取。
       // 张数上限（chatImageLimit，0 = 不限制）：整张清单每条消息都要附，截断后费用上限可控。
       const pool =
-        conf.chatImageEnabled === true
-          ? limitPool(readMemePool(conf.memes, memeDirsFor(found?.entry ?? 'main')), Number(conf.chatImageLimit))
+        found.conf.chatImageEnabled === true
+          ? limitPool(readMemePool(found.conf.memes, memeDirsFor(found.entry)), Number(found.conf.chatImageLimit))
           : [];
       const mem = await readMemory();
-      const bucketKey = found?.entry ?? petId;
-      const bucket = (mem[bucketKey] ??= {});
+      const bucket = (mem[found.entry] ??= {});
       const entry = (bucket[petId] ??= { messages: [] });
       // rounds = 0（用户关掉历史）→ 空历史；否则截尾部 rounds 轮（1 轮 = 1 问 1 答）。
       // 不能写 slice(-rounds * 2)：-0 在 JS 里 === 0，slice(-0) 返回整个数组而不是空。
       const list = sliceMemoryRounds(entry.messages, rounds);
       // 模型：条目配置的 chatModel 优先（留空 = 不指定）；生成侧失败会回落到当前对话的模型重试一次
-      const generated = await generateChat(ctx, system, list, text, pool, configuredModel(conf, 'chatModel'));
+      const generated = await generateChat(ctx, system, list, text, pool, configuredModel(found.conf, 'chatModel'));
       if (!generated.ok) return generated;
       const now = Date.now();
       entry.messages.push({ role: 'user', content: text, ts: now });
@@ -577,7 +767,8 @@ export function apply(ctx: any): void {
         'say',
         generated.image ? { text: generated.text, image: generated.image } : { text: generated.text },
       );
-      return { ok: true as const };
+      // 同一份文本随返回值带出（叶子照写，不是二选一）
+      return { ok: true as const, text: generated.text, ...(generated.image ? { image: generated.image } : {}) };
     });
 
   /**
@@ -593,9 +784,10 @@ export function apply(ctx: any): void {
     return Number.isFinite(n) && n > 0 ? n : 1800;
   };
 
-  /** 碎碎念周期（秒）：该宠物**所属条目**的 eventsRefreshSec.whisper（合并器已填默认；非法兜底 300） */
-  const whisperPeriodSec = (cfg: Record<string, Record<string, unknown>>, petId: string): number => {
-    const conf = (findPetInstance(cfg, petId) ?? { conf: cfg.main ?? {} }).conf;
+  /** 碎碎念周期（秒）：该宠物**所属条目**的 eventsRefreshSec.whisper（合并器已填默认；非法兜底 300）。
+   *  收**已解析的条目配置**：唯一调用方是周期调度，而它的 `petId` 就是从**同一份 cfg** 拍平出来的，
+   *  所以这里再查一次只会多出一处"查不到就兜底 main"的不可达分支。 */
+  const whisperPeriodSec = (conf: Record<string, unknown>): number => {
     const ers = conf.eventsRefreshSec as Record<string, unknown> | undefined;
     const n = Number(ers?.whisper);
     return Number.isFinite(n) && n > 0 ? n : 300;
@@ -987,6 +1179,15 @@ export function apply(ctx: any): void {
     // whisperPrompt / memes 等非白名单字段不许被抹掉（见 ./config 里那段老 bug 的注释）。
     if (rest === 'pet-display') {
       if (method !== 'POST') return { kind: 'json', status: 405, obj: { error: 'method not allowed' } };
+      // 失败一律 **HTTP 200 + `{ok:false, reason, message}`**（与其他动作端点同一口径）：
+      // 缺 id / display 非法 / 宠物不存在 / 写盘失败全是**业务错误**，不是"资源未找到"或"请求非法"，
+      // 用 400/404 会让调用方把业务结论当成传输层故障。200 不代表改动生效——必须看 body 的 ok。
+      // 只有 405（方法错）与 400（JSON 坏了）仍是协议层错误码，全插件只有这两处不是 200。
+      const fail = (reason: string, message: string): RouteResult => ({
+        kind: 'json',
+        status: 200,
+        obj: { ok: false, reason, message },
+      });
       let payload: { id?: unknown; display?: unknown };
       try {
         payload = JSON.parse(body ?? '') as { id?: unknown; display?: unknown };
@@ -995,20 +1196,21 @@ export function apply(ctx: any): void {
       }
       const petId = typeof payload.id === 'string' ? payload.id.trim() : '';
       const nextDisplay = String(payload.display ?? '');
-      if (!petId) return { kind: 'json', status: 400, obj: { error: 'missing pet id' } };
+      // id **必填**（与 9 条 `?pet=` 路由同一对词汇：没给 → pet-required；不存在 → unknown-pet）
+      if (!petId) return fail('pet-required', 'pet 必填：要指定操作哪只桌宠');
       if (!PET_DISPLAY_SET.has(nextDisplay)) {
-        return { kind: 'json', status: 400, obj: { error: `invalid display: ${nextDisplay}` } };
+        return fail('bad-request', `display 必须是 web / desktop / both / none：${nextDisplay}`);
       }
       let merged: Record<string, Record<string, unknown>>;
       try {
         merged = readAllConfig(configPaths);
       } catch (e) {
-        return { kind: 'json', status: 500, obj: { error: e instanceof Error ? e.message : String(e) } };
+        return fail('generate-error', e instanceof Error ? e.message : String(e));
       }
       // 命中不到有两种可能：id 根本不存在，或该实例在合并时**因 id 与其它条目重复被跳过**（于是不在
-      // 聚合里）。两种都只能回 404——绝不能凭 id 去猜它"应该"属于哪个文件。
+      // 聚合里）。两种都只能按"没有这只桌宠"报——绝不能凭 id 去猜它"应该"属于哪个文件。
       const hit = findPetInstance(merged, petId);
-      if (!hit) return { kind: 'json', status: 404, obj: { error: `pet not found: ${petId}` } };
+      if (!hit) return fail('unknown-pet', `没有这只桌宠：${petId}`);
       // 目标层：main → 用户主配置；其余 → 文件宠物自己的配置（.json 或 .jsonc，定位统一走 ./config）
       let layerPath: string;
       let layerDir: string;
@@ -1020,7 +1222,7 @@ export function apply(ctx: any): void {
       } else {
         const file = readPetConfigEntry(configPaths, hit.entry);
         if (!file) {
-          return { kind: 'json', status: 404, obj: { error: `pet config file not found: ${hit.entry}` } };
+          return fail('generate-error', `宠物条目配置文件找不到：${hit.entry}`);
         }
         layerPath = file.path;
         layerDir = petConfigDir;
@@ -1031,18 +1233,23 @@ export function apply(ctx: any): void {
       const layerPets = Array.isArray(hit.conf.pets) ? (hit.conf.pets as Record<string, unknown>[]) : [];
       const pets = layerPets.map((p) => (String(p.id) === petId ? { ...p, display: nextDisplay } : p));
       const clean = saveUserConfig({ pets }, existing);
-      if (!clean) return { kind: 'json', status: 400, obj: { error: 'invalid pet config' } };
+      if (!clean) return fail('bad-request', '宠物配置非法');
       try {
         await mkdir(layerDir, { recursive: true });
         await writeFile(layerPath, JSON.stringify(clean, null, 2), 'utf8');
       } catch (e) {
-        return { kind: 'json', status: 500, obj: { error: e instanceof Error ? e.message : String(e) } };
+        return fail('generate-error', e instanceof Error ? e.message : String(e));
       }
       // 配置变更信号（**只在写盘成功之后**：失败时不该动版本号，否则浏览器白重拉一次 /config）。
       // 这是全插件**唯一**写 sections.config 的地方：保存 / 同步配置的调用方自己就拿到了成品聚合
       // （响应体），桌面端由下面的 syncDesktop() 重启，都不需要这个信号；
       // 而桌面端右键改 display 时浏览器页面**不是发起方**，只能靠它发现「配置被别处改过」。
       state.writeSection('config', {});
+      // 占用锁：改成 `none`（桌面端右键「关闭桌面显示」）＝ 用户主动隐藏/关闭，属于**抢占**——
+      // 撤销本轮占用（cause: preempted）。不做的话宠物会被锁到 TTL 到点，而用户明明已经把它藏了
+      // （issue #122：「用户主动停止、隐藏或关闭时，也应能取消联动，避免宠物被永久锁住」）。
+      // 只认 `none`：web/desktop/both 是换显示位置，不是"用户接管"。
+      if (nextDisplay === 'none') lock.release({ petId, force: true });
       // 不 await：发起者很可能就是**即将被这次重载换掉的**桌面 Helper（与 /reload 同一处境）。
       // 写盘已经落定，重启结果不需要回给调用方。
       void syncDesktop();
@@ -1192,15 +1399,93 @@ export function apply(ctx: any): void {
       return { kind: 'json', status: 200, obj: { ok: true } };
     }
 
-    // 碎碎念：/dsh-pet-7340/whisper?pet=<id>（POST = 立即让桌宠新说一句，返回 {ok}）
-    // 动作端点，**不返回文本**——文本走 S 的 pets.<id>.say（碎碎念/命令气泡/对话回复同一个叶子）。
+    // 占用锁：/dsh-pet-7340/lock?pet=<id>          （POST = 取锁 / 续期，二合一）
+    //         /dsh-pet-7340/lock/release?pet=<id>  （POST = 释放）
+    //
+    // issue #122 第 4 项「独立动作/气泡占用」。一把锁、**全有全无**：拿锁 → 回 lockId；占用期间
+    // 除持锁者外全静音（5 个动作端点要带 `?lock=`，内部自动来源各自让路）；释放 → 一切复原。
+    //
+    // 与 /playback 的分工：那个是"这一次点播播完没有"的**回执**，这个是"这段时间归谁控制"的**租约**。
+    // 锁自己占一个叶子（`pets.<id>.lock`）：渲染端必须能读到它才能冻结自己——宿主停不掉一段
+    // 正在播的视频，"完全静止"最终是渲染端执行的。
+    //
+    // 取锁 / 续期**二合一**（`lockId` 给了 = 续期）：续期是持锁者每隔几秒就要做一次的**心跳**，
+    // 而这一次调用同时就是"我的锁还在吗"的探测器——丢了会回 lock-lost + cause，所以不需要
+    // 单独的"查锁"端点。真值表与墓碑语义见 ./lock 的 acquire。
+    //
+    // 失败一律 HTTP 200 + ok:false（与其他动作端点口径一致）；只有 405 / 400 不是 200。
+    if (rest === 'lock' || rest === 'lock/release') {
+      const isRelease = rest === 'lock/release';
+      if (method !== 'POST') return { kind: 'json', status: 405, obj: { error: 'method not allowed' } };
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(body ?? 'null');
+      } catch {
+        return { kind: 'json', status: 400, obj: { error: 'invalid JSON body' } };
+      }
+      const o = parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : {};
+      try {
+        // pet **必填**且必须真实存在（与 /anim、/broadcast 同一口径，见 requirePet）
+        // surface 只对**取锁**这一支校验：`/lock/release` 必须永远能成功（否则宠物中途被隐藏就撤不掉锁）
+        const who = requirePet(url.searchParams, () => readAllConfig(configPaths), { surface: !isRelease });
+        if (!who.ok) return who.res;
+        const petId = who.petId;
+        if (isRelease) {
+          const d = lock.release({ petId, lockId: o.lockId, force: o.force });
+          if (!d.ok) {
+            const obj: Record<string, unknown> = { ok: false, reason: d.reason, message: d.message };
+            if (d.reason === 'lock-lost') obj.cause = d.cause;
+            return { kind: 'json', status: 200, obj };
+          }
+          // 幂等：当前没有锁同样回 ok（"让锁消失"这个意图在空状态下已经成立）
+          return { kind: 'json', status: 200, obj: { ok: true } };
+        }
+        const d = lock.acquire({ petId, lockId: o.lockId, ttl: o.ttl });
+        if (!d.ok) {
+          const obj: Record<string, unknown> = { ok: false, reason: d.reason, message: d.message };
+          if (d.reason === 'locked') obj.expiresAt = d.expiresAt; // 让对方知道何时能重试
+          if (d.reason === 'lock-lost') obj.cause = d.cause;
+          return { kind: 'json', status: 200, obj };
+        }
+        return {
+          kind: 'json',
+          status: 200,
+          obj: { ok: true, lockId: d.lockId, petId: d.petId, expiresAt: d.expiresAt },
+        };
+      } catch (e) {
+        // 配置读取失败等（安装损坏）→ 显式失败，不静默（与其他动作端点同一口径）
+        return {
+          kind: 'json',
+          status: 200,
+          obj: { ok: false, reason: 'generate-error', message: e instanceof Error ? e.message : String(e) },
+        };
+      }
+    }
+
+    // 碎碎念：/dsh-pet-7340/whisper?pet=<id>（POST = 立即让桌宠新说一句，返回 {ok,text,image?}）
+    // 文本**照旧**写进 S 的 pets.<id>.say（碎碎念/命令气泡/对话回复同一个叶子），同时随响应带回——
+    // 两条出口给的是同一份文本；其它消费端（网页/桌面/第三方监听）仍从 /state 读。
     // 手动语义不受 whisperEnabled 门控：那个字段只关自动周期（与改造前一致）。
     if (rest === 'whisper') {
       if (method !== 'POST') return { kind: 'json', status: 405, obj: { error: 'method not allowed' } };
-      const petId = String(url.searchParams.get('pet') ?? '');
       try {
-        const ok = await publishWhisper(petId);
-        return { kind: 'json', status: 200, obj: ok ? { ok: true } : { ok: false, reason: 'generate-error' } };
+        // pet **必填**且必须真实存在：收紧前这里是 `?? ''`——空串会让人设/配图按 main 条目取、
+        // 生成结果写进没人消费的 `pets[""].say`，还回 ok:true（钱花了、话丢了、调用方以为成功）。
+        const who = requirePet(url.searchParams, () => readAllConfig(configPaths), { surface: true });
+        if (!who.ok) return who.res;
+        const r = await publishWhisper(who.petId);
+        if (r.ok) {
+          return {
+            kind: 'json',
+            status: 200,
+            obj: { ok: true, text: r.text, ...(r.image ? { image: r.image } : {}) },
+          };
+        }
+        // 真实 reason 原样透出（独立模式是 `provider-missing`，见 ./whisper 的联合体）——
+        // 不再把一切失败糊成 generate-error，调用方据此能分清"没配模型"与"生成炸了"。
+        const obj: Record<string, unknown> = { ok: false, reason: r.reason };
+        if (r.message) obj.message = r.message;
+        return { kind: 'json', status: 200, obj };
       } catch (e) {
         return {
           kind: 'json',
@@ -1217,7 +1502,7 @@ export function apply(ctx: any): void {
     // 动作端点，只回 {ok}；文本本身从 /state 读。
     // 校验（不通过一律 HTTP 200 + ok:false，与 /chat 的失败口径一致）：
     //   text 必填、trim 后非空（**不设长度限制，也不限频**：内容与频率由调用方自己负责）；
-    //   pet 缺省 = 当前桌宠（resolveActivePetId），须真实存在；
+    //   pet **必填**（空串 → pet-required），且须真实存在（否则 unknown-pet）；
     //   image / url **配图的两种形态，二选一**（两个都给 = bad-request）：
     //     image 只认**该条目表情包池内的名称**（池内命中即用其规范名）；
     //     url 是第三方自带的完整地址，不查池（issue #122 第 1 条：素材由第三方自己托管），
@@ -1252,7 +1537,6 @@ export function apply(ctx: any): void {
         const d = decideBroadcast({
           cfg,
           requested: String(url.searchParams.get('pet') ?? ''),
-          active: resolveActivePetId(),
           text: o.text,
           image: o.image,
           url: o.url,
@@ -1261,6 +1545,12 @@ export function apply(ctx: any): void {
           memeDirs: memeDirsFor,
         });
         if (!d.ok) return { kind: 'json', status: 200, obj: { ok: false, reason: d.reason, message: d.message } };
+        // 显示端对齐：不满足 → pet-not-displayed（+ 实际 display），早于锁门禁
+        const noSurface = surfaceBlocked(cfg, d.petId, url.searchParams);
+        if (noSurface) return noSurface;
+        // 占用门禁：有锁时只有持锁者能投喂（无锁恒放行，见 lockBlocked）
+        const blocked = lockBlocked(d.petId, url.searchParams);
+        if (blocked) return blocked;
         // duration / anim 写**解析后的生效值**（缺省也已填成显式值）：/state 里因此能看到
         // 实际生效的时长与联动开关，调用方不用自己猜缺省是多少。
         // 配图两种形态二选一（判定层保证）：url 形态写 url，名称形态写池内规范名，都没有则纯文本。
@@ -1292,9 +1582,12 @@ export function apply(ctx: any): void {
         const d = decideBubbleClear({
           cfg,
           requested: String(url.searchParams.get('pet') ?? ''),
-          active: resolveActivePetId(),
         });
         if (!d.ok) return { kind: 'json', status: 200, obj: { ok: false, reason: d.reason, message: d.message } };
+        const noSurface = surfaceBlocked(cfg, d.petId, url.searchParams);
+        if (noSurface) return noSurface;
+        const blocked = lockBlocked(d.petId, url.searchParams);
+        if (blocked) return blocked;
         state.writePet(d.petId, 'say', { clear: true });
         return { kind: 'json', status: 200, obj: { ok: true } };
       } catch (e) {
@@ -1321,7 +1614,10 @@ export function apply(ctx: any): void {
     //   （播放端对不存在的动画没有兜底：名字即文件名 → 404 → 加载失败 → 表现为"点了没反应"，
     //    所以必须在这里拦住，而不是写进 S 让前端白跑一趟）；
     //   url 必须是 http/https 的完整地址（`file:` 会让桌面端渲染进程能读本地任意文件）；
-    //   pet 缺省 = 当前桌宠（resolveActivePetId），须真实存在。
+    //   pet **必填**（空串 → pet-required），且须真实存在（否则 unknown-pet）；
+    //   facing **可选**（left / right）：给了就必须合法（非法 → bad-request），**没给就不动朝向**
+    //     ——叶子里连字段都不写，渲染端保持宠物当前朝向（不是"回落 left"）。显式值优先于渲染端
+    //     "文字类动画点播前强制朝左"那条镜像修正（调用方明确要哪个朝向就给哪个）。
     if (rest === 'anim') {
       if (method !== 'POST') return { kind: 'json', status: 405, obj: { error: 'method not allowed' } };
       let parsed: unknown;
@@ -1336,23 +1632,29 @@ export function apply(ctx: any): void {
         const d = decideAnim({
           cfg,
           requested: String(url.searchParams.get('pet') ?? ''),
-          active: resolveActivePetId(),
           name: o.name,
           url: o.url,
+          facing: o.facing,
         });
         if (!d.ok) return { kind: 'json', status: 200, obj: { ok: false, reason: d.reason, message: d.message } };
+        // 显示端对齐：不满足 → pet-not-displayed（+ 实际 display），早于锁门禁
+        const noSurface = surfaceBlocked(cfg, d.petId, url.searchParams);
+        if (noSurface) return noSurface;
+        // 占用门禁：持锁者自己的点播照放行（那是它的演出），别人一律拒
+        const blocked = lockBlocked(d.petId, url.searchParams);
+        if (blocked) return blocked;
         // 播放回执：受理时建记录（accepted），并把编号随叶子一起下发——渲染端据此上报。
         // 记录里的标识：name 形态是动画名，url 形态就是那个地址（纯记录，不参与任何判定）。
         // 叶子形状：name 与 url **恰好一个**（判定层保证），消费端按字段名决定走不走菜单语义
         // ——url 是裸地址，没有"文字类要镜像修正 / 移动类走真实位移"这些属性。
+        // `facing` 只在调用方**显式给了**时才进叶子：没给 = 不动朝向，叶子里连字段都没有
+        //（消费端据此区分"没要求"和"要求 left"，不会把缺省当成 left）。
         const record = playback.create(d.petId, d.url ?? d.name ?? '');
-        state.writePet(
-          d.petId,
-          'anim',
-          d.url !== undefined
-            ? { url: d.url, playbackId: record.playbackId }
-            : { name: d.name, playbackId: record.playbackId },
-        );
+        state.writePet(d.petId, 'anim', {
+          ...(d.url !== undefined ? { url: d.url } : { name: d.name }),
+          playbackId: record.playbackId,
+          ...(d.facing === undefined ? {} : { facing: d.facing }),
+        });
         return { kind: 'json', status: 200, obj: { ok: true, playbackId: record.playbackId } };
       } catch (e) {
         // 配置读取失败等（安装损坏）→ 显式失败，不静默
@@ -1391,29 +1693,107 @@ export function apply(ctx: any): void {
       try {
         const cfg = readAllConfig(configPaths);
         const requested = String(url.searchParams.get('pet') ?? '');
-        const active = resolveActivePetId();
         if (isPosition) {
           const d = decidePosition({
             cfg,
             requested,
-            active,
             x: o.x,
             y: o.y,
             mode: o.mode,
             duration: o.duration,
           });
           if (!d.ok) return { kind: 'json', status: 200, obj: { ok: false, reason: d.reason, message: d.message } };
+          const noSurface = surfaceBlocked(cfg, d.petId, url.searchParams);
+          if (noSurface) return noSurface;
+          const blocked = lockBlocked(d.petId, url.searchParams);
+          if (blocked) return blocked;
           // 叶子按模式收敛成最小形状：非 line 模式不带 duration（见 positionLeafData）
           state.writePet(d.petId, 'position', positionLeafData(d));
           // 回**夹取后**的实际生效值：调用方不必自己算边界，也不会误以为越界值被照单全收
           return { kind: 'json', status: 200, obj: { ok: true, x: d.x, y: d.y } };
         }
-        const d = decideThrow({ cfg, requested, active, angle: o.angle, power: o.power });
+        const d = decideThrow({ cfg, requested, angle: o.angle, power: o.power });
         if (!d.ok) return { kind: 'json', status: 200, obj: { ok: false, reason: d.reason, message: d.message } };
+        const noSurface = surfaceBlocked(cfg, d.petId, url.searchParams);
+        if (noSurface) return noSurface;
+        const blocked = lockBlocked(d.petId, url.searchParams);
+        if (blocked) return blocked;
         state.writePet(d.petId, 'throw', { angle: d.angle, power: d.power });
         return { kind: 'json', status: 200, obj: { ok: true } };
       } catch (e) {
         // 配置读取失败等（安装损坏）→ 显式失败，不静默（与 /anim 同一口径）
+        return {
+          kind: 'json',
+          status: 200,
+          obj: { ok: false, reason: 'generate-error', message: e instanceof Error ? e.message : String(e) },
+        };
+      }
+    }
+
+    // 实况：/dsh-pet-7340/pose?pet=<id>        （GET  = 第三方读**桌面端**的实况快照）
+    //       /dsh-pet-7340/pose/report?pet=<id> （POST = **桌面渲染端**上报，内部通道）
+    //
+    // 为什么只有桌面端走这条路：桌面宠物**一窗一只**，位置全局唯一一份 → 宿主快照语义干净；
+    // 而网页端的位置**天生每个页面一份**（开两个标签页时两边本来就不同），塞进宿主快照必然是
+    // 错的（后写者覆盖先写者）。所以网页端走**页面内**的 Cordis 只读服务 `petApi7340`
+    // （src/client/pose.ts）——两边**字段名与坐标口径完全一致**（中心点归一化 0~1，与 /position
+    // 同源），只是"取"的方式不同。
+    //
+    // 上报是**变化时推 + 节流**（拖拽 / 走位 / 抛掷 / position 指令 / turn 转身），不是轮询。
+    //
+    // 本端点**不要求 `surface`**：它是**读**端点（`GET /chat`、`GET /playback` 同样不带），而且它
+    // 的定义域本身只有一个面。宠物配置上就不在桌面显示时用 `pet-not-displayed` 明说。
+    if (rest === 'pose' || rest === 'pose/report') {
+      const isReport = rest === 'pose/report';
+      if (isReport && method !== 'POST') return { kind: 'json', status: 405, obj: { error: 'method not allowed' } };
+      if (!isReport && method !== 'GET') return { kind: 'json', status: 405, obj: { error: 'method not allowed' } };
+      // 协议层错误（非法 JSON）先报：与 /anim 同一顺序
+      let parsedPose: unknown;
+      if (isReport) {
+        try {
+          parsedPose = JSON.parse(body ?? 'null');
+        } catch {
+          return { kind: 'json', status: 400, obj: { error: 'invalid JSON body' } };
+        }
+      }
+      try {
+        const who = requirePet(url.searchParams, () => readAllConfig(configPaths));
+        if (!who.ok) return who.res;
+        if (isReport) {
+          const p = normalizePoseInput(parsedPose);
+          if (!p.ok) return { kind: 'json', status: 200, obj: { ok: false, reason: p.reason, message: p.message } };
+          pose.set(who.petId, p.pose);
+          return { kind: 'json', status: 200, obj: { ok: true } };
+        }
+        // 桌面端实况只对"显示在桌面"的宠物有意义：配置上就不在桌面 → 明确不可用（附实际 display）
+        const display = String(who.pet.display ?? '');
+        if (!displayCovers('desktop', display)) {
+          return {
+            kind: 'json',
+            status: 200,
+            obj: {
+              ok: false,
+              reason: 'pet-not-displayed',
+              message: who.petId + ' 的显示模式是 ' + display + '；桌面端实况只对 display 含 desktop 的宠物有',
+              display,
+            },
+          };
+        }
+        const snap = pose.get(who.petId);
+        if (snap === undefined) {
+          return {
+            kind: 'json',
+            status: 200,
+            obj: {
+              ok: false,
+              reason: 'pose-unavailable',
+              message: '还没收到过这只宠物的桌面端实况（桌面端没起来，或刚重启还没来得及上报）',
+            },
+          };
+        }
+        return { kind: 'json', status: 200, obj: { ok: true, petId: who.petId, ...snap } };
+      } catch (e) {
+        // 配置读取失败等（安装损坏）→ 显式失败，不静默（与其他端点同一口径）
         return {
           kind: 'json',
           status: 200,
@@ -1506,19 +1886,45 @@ export function apply(ctx: any): void {
 
     // 对话：/dsh-pet-7340/chat?pet=<id>
     //   GET  —— 最近记忆窗口（截尾 chatMemoryRounds 轮），弹窗打开时展示（一次性读，不是轮询）
-    //   POST —— 携带历史生成回复并写入记忆；**只回 {ok}**，回复走 S 的 pets.<id>.say
+    //   POST —— 携带历史生成回复并写入记忆；回 {ok,text,image?}，回复同样写 S 的 pets.<id>.say
     // 记忆唯一读写方 = host（memory.json；浏览器/桌面两端都只是客户端）→
     // 同一实例的浏览器与桌面天然共享同一份记忆；文件全存不删，
     // 请求只截尾部 chatMemoryRounds 轮（1 轮 = 1 问 1 答；合并器已按条目填默认）。
     if (rest === 'chat') {
-      const petId = String(url.searchParams.get('pet') ?? '');
+      if (method !== 'GET' && method !== 'POST') {
+        return { kind: 'json', status: 405, obj: { error: 'method not allowed' } };
+      }
       try {
+        // `?rounds=`：GET 专属的查看参数——只决定这次读多少轮（不写记忆，也不改变后续对话
+        // 往上下文里带多少，所以 POST 不认它）。与 surface 同一处境：参数级校验放在读盘之前。
+        const roundsRaw = method === 'GET' ? url.searchParams.get('rounds') : null;
+        let roundsOverride: number | null = null;
+        if (roundsRaw !== null && roundsRaw.trim() !== '') {
+          const n = Number(roundsRaw);
+          if (!Number.isInteger(n) || n < 0 || n > 200) {
+            return {
+              kind: 'json',
+              status: 200,
+              obj: { ok: false, reason: 'bad-request', message: 'rounds 必须是 0–200 的整数（不传则用配置）' },
+            };
+          }
+          roundsOverride = n;
+        }
+        // pet **必填**且必须真实存在：收紧前这里是 `?? ''`——人设/配图按 main 条目取，记忆会以那个
+        // （不存在的）id 新建一个分桶，回复写进没人消费的 `pets[""].say`，还回 ok:true。
+        // 惰性 + 记忆化：pet 空串时完全不读配置；GET 分支复用同一次读取。
+        let cfgCache: Record<string, Record<string, unknown>> | undefined;
+        const cfg = (): Record<string, Record<string, unknown>> => (cfgCache ??= readAllConfig(configPaths));
+        // surface 只对 POST 校验：GET 是读记忆，跟宠物显示在哪一端无关
+        const who = requirePet(url.searchParams, cfg, { surface: method === 'POST' });
+        if (!who.ok) return who.res;
+        const petId = who.petId;
         if (method === 'GET') {
-          const cfg = readAllConfig(configPaths);
           const mem = await readMemory();
-          const bucket = mem[findPetInstance(cfg, petId)?.entry ?? petId] ?? {};
+          const bucket = mem[who.entry] ?? {};
           const list = (bucket[petId]?.messages ?? []).slice();
-          const rounds = memoryRounds(petId, cfg);
+          // 传了 ?rounds= 就用传的（含 0 = 空历史），没传才回落到配置
+          const rounds = roundsOverride ?? memoryRounds(who.conf);
           // 与 chatWithPet 同一语义：rounds = 0 → 空历史（slice(-0) 会返回整个数组，见上）
           const messages = sliceMemoryRounds(list, rounds);
           return { kind: 'json', status: 200, obj: { ok: true, messages, rounds } };
@@ -1539,7 +1945,6 @@ export function apply(ctx: any): void {
           const result = await chatWithPet(petId, text);
           return { kind: 'json', status: 200, obj: result };
         }
-        return { kind: 'json', status: 405, obj: { error: 'method not allowed' } };
       } catch (e) {
         // 配置已由 readAllConfig 保证正确（不再有 config-error 分支）；其余（IO/LLM）→ generate-error
         return {
@@ -1872,15 +2277,25 @@ export function apply(ctx: any): void {
         for (const pet of flattenPetList(cfg)) {
           const petId = String(pet.id ?? '');
           if (!petId) continue;
+          // petId 就是从**同一份 cfg** 拍平出来的，所以必然命中（findPetInstance 与 flattenPetList
+          // 搜索同一集合）；查不到只可能是两者口径漂移——跳过这一拍，**不猜也不兜底 main**。
+          const found = findPetInstance(cfg, petId);
+          if (!found) continue;
           const schedule = automaticWhisperSchedule(
             ctx.standaloneAi,
             pet.whisperEnabled === true,
-            whisperPeriodSec(cfg, petId),
+            whisperPeriodSec(found.conf),
           );
           if (!schedule.enabled) continue;
           const sec = schedule.periodSec;
           min = Math.min(min, sec);
           if (now - (lastWhisperAt.get(petId) ?? 0) < sec * 1000) continue;
+          // 占用锁：这只宠物被占用时**跳过这一拍**——不生成也不补（碎碎念是瞬时事件，过期即弃）。
+          // 而且**不推进 lastWhisperAt**：锁一放开，下一拍就该照常说。
+          // 宿主侧只挡这一处 **per-pet** 来源；两个**全局段**（balance / workStatus）不在这里挡——
+          // 它们所有宠物共用一份，宿主"跳过写入"会连带静音别的宠物；那两处由渲染端按宠物忽略
+          // （见 src/client/pet.ts 的冻结判定），代价是叶子照常推进、渲染端自己不看。
+          if (lock.locked(petId)) continue;
           lastWhisperAt.set(petId, now);
           // 不 await：生成要几秒，别把调度拍拖住（每只宠物独立生成，互不阻塞）
           void publishWhisper(petId).catch(() => {});
@@ -1993,6 +2408,9 @@ export function apply(ctx: any): void {
   // （回执的与 /state 长轮询的都不结束的话，插件重载会留下一批悬挂的响应，各自要等到超时才收尾）
   ctx.effect(() => () => {
     disposed = true;
+    // 占用锁：卸载时把锁全撤掉并写一次叶子——不写的话渲染端要等 TTL 到点才解除静止
+    // （写叶子必须在 state.cancelAll() **之前**：那之后挂起的等待者已经收尾了）。
+    lock.releaseAll();
     playback.cancelAll();
     state.cancelAll();
     stopHelper('dsh-host-stop');

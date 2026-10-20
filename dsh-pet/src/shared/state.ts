@@ -189,6 +189,13 @@ export function readWorkStatus(leaf: StateLeaf): WorkStatusSnapshot | null {
 }
 
 /**
+ * 朝向：`left` = 素材原样，`right` = 镜像（渲染端贴 `scaleX(-1)`）。
+ * **与 host/anim.ts 的同名联合体是两份**——宿主不 import src/shared（同 `Corner`、`PositionMode`
+ * 的处理方式），改动时两边要一起改。
+ */
+export type PetFacing = 'left' | 'right';
+
+/**
  * 类型收窄：点播动画叶子 → 动画名**或**地址 + 回执编号（两者都空 → null，消费端跳过这一拍）。
  * **两种形态并列、由字段名区分**（issue #122 第 1 条）：
  *   - `name`：该宠物动画池内的名字，**名字即文件名**，消费端拼 `/thumb/<素材根>/<名>.webm` 换源，
@@ -198,15 +205,55 @@ export function readWorkStatus(leaf: StateLeaf): WorkStatusSnapshot | null {
  * "这个动画是否存在于该宠物"由宿主在写入前保证（播放端对不存在的名字没有兜底）。
  * `playbackId`：宿主受理时生成的回执编号（issue #122），渲染端拿它在播放的四个时机
  * 上报真实状态（见 /playback 路由）。老 host 不写这个字段 → undefined，消费端按"无回执"处理。
+ * `facing`：调用方**显式指定**的朝向（可选）。`undefined` = 没指定 → 消费端**不动朝向**，
+ * 保持宠物当前朝向——**不是**"回落 left"（叶子写端只在显式给了时才写这个字段，所以"没要求"
+ * 与"要求 left"在形状上就是可区分的）。两种形态都适用。
  */
-export function readAnim(leaf: StateLeaf): { name?: string; url?: string; playbackId?: string } | null {
+export function readAnim(
+  leaf: StateLeaf,
+): { name?: string; url?: string; playbackId?: string; facing?: PetFacing } | null {
   if (!leaf.data || typeof leaf.data !== 'object') return null;
-  const d = leaf.data as { name?: unknown; url?: unknown; playbackId?: unknown };
+  const d = leaf.data as { name?: unknown; url?: unknown; playbackId?: unknown; facing?: unknown };
   const name = typeof d.name === 'string' && d.name ? d.name : undefined;
   const url = typeof d.url === 'string' && d.url ? d.url : undefined;
   // 两个都缺席 = 形状非法（宿主写端保证恰好一个，这里不替它猜）
   if (name === undefined && url === undefined) return null;
-  return { name, url, playbackId: typeof d.playbackId === 'string' && d.playbackId ? d.playbackId : undefined };
+  return {
+    name,
+    url,
+    playbackId: typeof d.playbackId === 'string' && d.playbackId ? d.playbackId : undefined,
+    // 朝向：只认两个字面量，其余（含缺省、老 host、脏值）一律 undefined = 不动朝向
+    facing: d.facing === 'left' || d.facing === 'right' ? d.facing : undefined,
+  };
+}
+
+/**
+ * 占用锁叶子（`pets.<id>.lock`）的形态（issue #122 第 4 项）：
+ * `{ locked: true, expiresAt }` = 这只宠物正被第三方占用；`{ locked: false }` = 没有占用。
+ */
+export type LockState = { locked: true; expiresAt: number } | { locked: false };
+
+/**
+ * 类型收窄：占用锁叶子 → `LockState`（形状非法 → null，消费端跳过这一拍）。
+ *
+ * **这是状态，不是指令**（与 anim / position / throw 那三个不同）：宿主写、渲染端读来决定
+ * "要不要冻结自己"——随机链不掷骰、暂停自播动画、忽略**自动**来源的余额与工作状态表现。
+ * 宿主停不掉一段正在播的视频，所以"完全静止"最终是渲染端执行的。
+ *
+ * **宿主不会到点推一次"锁没了"**：`expiresAt` 是唯一真相，渲染端据此**自己**定时解除
+ * （宿主侧的过期是懒判的，见 src/host/lock.ts）。因此读到 `expiresAt` **已经过去**就等于没有锁
+ * ——页面刷新后才读到一份陈旧叶子时，必须按这个判，不能只看 `locked`。
+ *
+ * **不含 `lockId`**：那是持锁者的凭证，不能放进人人可读的 /state。
+ */
+export function readLock(leaf: StateLeaf): LockState | null {
+  if (!leaf.data || typeof leaf.data !== 'object') return null;
+  const d = leaf.data as { locked?: unknown; expiresAt?: unknown };
+  if (d.locked === false) return { locked: false };
+  if (d.locked !== true) return null;
+  // locked:true 却缺 expiresAt（或非法）= 形状非法：宁可不冻结，也不猜一个到期时刻
+  if (typeof d.expiresAt !== 'number' || !Number.isFinite(d.expiresAt)) return null;
+  return { locked: true, expiresAt: d.expiresAt };
 }
 
 /**

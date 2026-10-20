@@ -43,6 +43,14 @@ function scheduleReboot() {
   }, 5000);
 }
 
+/**
+ * 连续启动失败次数（成功一次即清零）。
+ * 首次失败多半是启动竞态：主进程 `void startTray()` / `createPetWindows()` 不等 bridge
+ * 回调服务就绪（main.js 的 startBridgeCallback 未 await），渲染端首帧 fetch 会打空。
+ * 这种失败 5s 重试就自愈，不该闪一条红条；持续失败才是真配置错误，照旧大声报。
+ */
+let bootFailures = 0;
+
 async function loadConfig() {
   // 唯一配置入口：宿主 /config 的成品聚合（host readAllConfig 已合并并保证绝对正确），
   // 一步拉取 → 拍平成渲染列表，零校验零兜底
@@ -66,6 +74,7 @@ async function boot() {
   try {
     const cfg = await loadConfig();
     config = cfg;
+    bootFailures = 0;
     hideError();
     // 字体族（全局配置 font.family）→ documentElement：对话窗/得分弹窗挂在 body 下、继承不到
     // 宠物根容器，只能走全局变量；气泡与提示也一并从这里继承（与浏览器端同一套变量名）。
@@ -73,8 +82,16 @@ async function boot() {
     document.documentElement.style.setProperty('--dsh-pet-font-family', S.fontStackOf(cfg.font.family));
     const pets = cfg.pets.filter((p) => S.isDesktopVisible(p.display));
     if (pets.length === 0) {
-      showError('配置中没有 display 为 desktop/both 的宠物，桌面模式不显示宠物');
-      scheduleReboot();
+      // **全部宠物只在网页显示是合法状态，不是配置错误**（issue #130）。
+      // 本窗口是主进程按 DSH_PET_PETS 建的：宿主流下窗口数与该列表必然一致
+      // （全 web 时宿主传 []，main.js 建 0 个窗口，本函数根本不会跑）；
+      // 只有手动 start-desktop（没有 DSH_PET_PETS）会回落出一只默认窗口而与配置脱钩。
+      // 脱钩不该报错——没有桌面宠物就表示这个窗口没活儿干：安静关掉，不弹条、不重试。
+      // 托盘会留着（startTray 只看配置里有没有宠物，与 display 无关）；宿主流由
+      // syncDesktop() 在配置变化时重建 helper，手动流则需自行重启。
+      hideError();
+      console.info('[dsh-pet] no desktop pets; closing this helper window (tray stays)');
+      window.close();
       return;
     }
     // 本窗口只承载一只宠物：petIndex 由主进程按 DSH_PET_PETS 顺序注入
@@ -91,7 +108,11 @@ async function boot() {
     for (const s of sprites) s.playIdle();
     startLoops();
   } catch (e) {
-    showError('配置加载失败：' + (e && e.message ? String(e.message) : String(e)));
+    const msg = '配置加载失败：' + (e && e.message ? String(e.message) : String(e));
+    // 首次失败先静默（多半是启动竞态，见 bootFailures 的说明），下一次 5s 重试仍失败才报。
+    bootFailures += 1;
+    if (bootFailures > 1) showError(msg);
+    else console.error('[dsh-pet] ' + msg + ' (first boot, retrying)');
     scheduleReboot();
   }
 }

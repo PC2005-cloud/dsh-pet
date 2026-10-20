@@ -1,0 +1,35 @@
+{
+  "name": "dsh-cordis-probe",
+  "version": "0.0.0",
+  "private": true,
+  "description": "模拟第三方客户端插件：在 DSH web 页面内枚举并调用 Cordis 服务，用于验证 petApi7340 一类页面内只读服务。",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "_comment": [
+    "=============== dsh-cordis-probe 包清单说明 ===============",
+    "【它是什么】仓库级测试工具，和 tools/api-tester.html 同级：那个测 HTTP 接口，这个测 Cordis 服务。",
+    "【为什么在 tools/ 而不是 dsh-pet/】它是「第三方消费者」的模拟，不属于 dsh-pet 包的发布内容，",
+    "  所以不写进 dsh-pet 的 files 白名单，也不进 dsh-pet 的 lint / format:check 作用域。",
+    "【没有构建】lib/client.js 是手写的经典脚本，直接进 DSH 的模块系统，不跑 tsdown。",
+    "  对应的就是 dsh-pet 里 src/client/index.ts + tsdown 打包后的那两行契约，只是省掉了构建。",
+    "【dsh.client.platform】web —— 本插件只出现在浏览器半侧，宿主半侧 lib/index.js 是空壳。",
+    "【dsh.client.inject】构建期外部依赖（模块名），本插件不 import 任何平台模块，故为空；",
+    "  运行时要用的服务一律靠 ctx.get() 现场探测，拿不到就降级，不写进 inject。",
+    "【private】只在仓库里自用，不发布。",
+    "=========================================================="
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": []
+    }
+  }
+}
