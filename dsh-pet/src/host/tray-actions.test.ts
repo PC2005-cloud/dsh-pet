@@ -15,10 +15,6 @@ import {
   flattenConfigPets,
   helpText,
   nextPetDisplay,
-  parseRuntimeSettingsUrl,
-  petDataDir,
-  resolveDshHome,
-  runtimeStatePath,
   trayIconPath,
   trayMenuScenario,
 } from './tray-actions.ts';
@@ -215,47 +211,8 @@ describe('trayMenuScenario → buildTrayMenuTemplate —— 宿主托盘的完�
   });
 });
 
-describe('parseRuntimeSettingsUrl —— 只信本机设置页的能力 URL', () => {
-  const token = 'A'.repeat(43);
-  const valid = `http://127.0.0.1:3080/standalone-ai/#token=${token}`;
-
-  test('运行时文件里的合法 settingsUrl 原样返回', () => {
-    const raw = JSON.stringify({ name: 'dsh-pet-standalone', pid: 1, port: 3080, settingsUrl: valid });
-    assert.equal(parseRuntimeSettingsUrl(raw), valid);
-    assert.equal(
-      parseRuntimeSettingsUrl(JSON.stringify({ settingsUrl: valid.replace('127.0.0.1', 'localhost') })),
-      valid.replace('127.0.0.1', 'localhost'),
-    );
-  });
-
-  test('读不懂 / 缺字段 / 非本机 / 缺 token 时返回 undefined（菜单不显示该项）', () => {
-    for (const raw of [
-      '',
-      'not json',
-      '{}',
-      JSON.stringify({ settingsUrl: 42 }),
-      JSON.stringify({ settingsUrl: 'https://127.0.0.1:3080/standalone-ai/#token=' + token }),
-      JSON.stringify({ settingsUrl: 'http://example.com/standalone-ai/#token=' + token }),
-      JSON.stringify({ settingsUrl: 'http://127.0.0.1:3080/standalone-ai/' }),
-      JSON.stringify({ settingsUrl: 'http://127.0.0.1:3080/standalone-ai/#token=short' }),
-      JSON.stringify({ settingsUrl: 'http://127.0.0.1:3080/other/#token=' + token }),
-    ]) {
-      assert.equal(parseRuntimeSettingsUrl(raw), undefined, raw);
-    }
-  });
-});
-
-describe('路径 —— 数据目录与图标（不用 %APPDATA%）', () => {
-  test('DSH_HOME 优先，其次 USERPROFILE / HOME，最后拼 .dsh', () => {
-    assert.equal(resolveDshHome({ DSH_HOME: '/custom/home', USERPROFILE: '/users/x' }), '/custom/home');
-    assert.equal(resolveDshHome({ USERPROFILE: '/users/x', HOME: '/home/x' }), join('/users/x', '.dsh'));
-    assert.equal(resolveDshHome({ HOME: '/home/x' }), join('/home/x', '.dsh'));
-  });
-
-  test('数据目录固定为 <DSH_HOME>/dsh-pet，运行时文件与图标路径可预测', () => {
-    const home = '/users/x/.dsh';
-    assert.equal(petDataDir(home), join(home, 'dsh-pet'));
-    assert.equal(runtimeStatePath(home), join(home, 'dsh-pet', 'standalone-runtime.json'));
+describe('路径 —— 托盘图标来自应用根', () => {
+  test('图标路径可预测（打包后 appPath 是 asar 根）', () => {
     assert.equal(trayIconPath('/opt/dsh-pet'), join('/opt/dsh-pet', 'assets', 'logo.png'));
   });
 });

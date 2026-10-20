@@ -85,58 +85,14 @@ export type TrayEffect =
   | { type: 'quit' }
   | { type: 'noop'; action: string };
 
-/**
- * DSH 主目录：优先 `DSH_HOME`，其次 Windows 的 `USERPROFILE`、类 Unix 的 `HOME`。
- * 与 src/host/helper-process.ts 的 `dshHomeDir()` 同一口径（这里单独实现是为了让托盘入口
- * 不必把整个 helper-process 模块图拖进构建产物）。
- */
-export function resolveDshHome(env: Record<string, string | undefined> = process.env): string {
-  const userProfile = env.USERPROFILE || env.HOME || '';
-  return env.DSH_HOME || join(userProfile, '.dsh');
-}
-
-/** 数据目录固定为 `<DSH_HOME>/dsh-pet`（与独立模式、插件形态共用；不是 %APPDATA%） */
-export function petDataDir(home: string): string {
-  return join(home, 'dsh-pet');
-}
-
-/** 独立模式启动时写出的运行时能力文件（settingsUrl / token / port） */
-export function runtimeStatePath(home: string): string {
-  return join(petDataDir(home), 'standalone-runtime.json');
-}
-
 /** 托盘图标来自应用根（打包后是 asar 根），不是宿主 bundle 所在目录 */
 export function trayIconPath(appPath: string): string {
   return join(appPath, 'assets', 'logo.png');
 }
 
-/**
- * 从运行时文件读设置页 URL。
- *
- * settingsUrl 是带一次性 token 的能力 URL，只接受本机 http 的 `/standalone-ai/` 页面且
- * hash 必须是 43 字符 token：文件被改坏/被替换时不把任意 URL 交给 shell.openExternal。
- */
-export function parseRuntimeSettingsUrl(raw: string): string | undefined {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    return undefined;
-  }
-  if (!parsed || typeof parsed !== 'object') return undefined;
-  const value = (parsed as { settingsUrl?: unknown }).settingsUrl;
-  if (typeof value !== 'string') return undefined;
-  let url: URL;
-  try {
-    url = new URL(value);
-  } catch {
-    return undefined;
-  }
-  if (url.protocol !== 'http:' || !['127.0.0.1', 'localhost'].includes(url.hostname)) return undefined;
-  if (url.pathname !== '/standalone-ai/' && url.pathname !== '/standalone-ai') return undefined;
-  if (!/^#token=[A-Za-z0-9_-]{43}$/.test(url.hash)) return undefined;
-  return value;
-}
+// 运行时状态文件（settingsUrl / pid / port）的读取与过期判定住在 runtime-settings.ts：
+// 托盘与宠物右键菜单（桌面壳）必须走同一份校验，不允许各自再实现一遍。本模块只保留
+// 「托盘菜单/动作」相关的纯逻辑。
 
 /** 「使用说明」的正文：不依赖日志也能知道入口与安装版的限制 */
 export function helpText(): string {

@@ -52,6 +52,14 @@ contextBridge.exposeInMainWorld('petBridge', {
   openDshSite(url) {
     ipcRenderer.send('pet:open-site', { url });
   },
+  // 右键菜单「AI 设置…」：主进程按运行时状态文件判定当前是否可用（插件形态恒 false，
+  // 菜单里不出现这一项）；点击时主进程会重新校验，不可用则弹可读提示而不是打开空白页。
+  aiSettingsAvailable() {
+    return ipcRenderer.invoke('pet:ai-settings-available');
+  },
+  openAiSettings() {
+    ipcRenderer.send('pet:open-settings');
+  },
   // ---- 宠物间碰撞（跨窗 broker）----
   reportFlight(state) {
     ipcRenderer.send('pet:report-flight', state);

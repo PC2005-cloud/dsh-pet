@@ -15,21 +15,13 @@
  *   POST /dsh-pet-7340/pet-display 写回某只宠物的 display（宿主的 HTTP 服务落盘并重启壳）
  * 请求带 x-dsh-pet-token —— token 是能力令牌，不得写日志。
  */
-import { readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 
 // 登录项适配层（ticket 09）：读写参数恒含 --autostart，状态以系统真实状态为准
 import { createLoginItemAdapter } from '../lib/autostart.js';
-import {
-  dispatchTrayAction,
-  helpText,
-  parseRuntimeSettingsUrl,
-  petDataDir,
-  resolveDshHome,
-  runtimeStatePath,
-  trayIconPath,
-  trayMenuScenario,
-} from '../lib/tray-actions.js';
+import { dispatchTrayAction, helpText, trayIconPath, trayMenuScenario } from '../lib/tray-actions.js';
+// 运行时状态文件的读取/校验与宠物右键菜单（桌面壳）共用同一份实现（ticket 07）
+import { petDataDir, readRuntimeSettings, resolveDshHome } from '../lib/runtime-settings.js';
 
 const require = createRequire(import.meta.url);
 const { app, dialog, Menu, nativeImage, shell, Tray } = require('electron');
@@ -56,13 +48,25 @@ async function hostRequest(handle, method, path, body) {
   return response;
 }
 
-/** 运行时文件由 startStandalone 刚写出；读不到只是不显示「打开 AI 设置…」 */
-async function readSettingsUrl(home) {
-  try {
-    return parseRuntimeSettingsUrl(await readFile(runtimeStatePath(home), 'utf8'));
-  } catch {
-    return undefined;
-  }
+/**
+ * 运行时文件由 startStandalone 刚写出；缺失/过期/改坏时只是不显示「打开 AI 设置…」。
+ * 过期判定（pid 存活 + 端口可连）与右键菜单共用 readRuntimeSettings，避免点开空白页。
+ */
+async function currentSettingsUrl(home) {
+  const settings = await readRuntimeSettings(home);
+  return settings.available ? settings.settingsUrl : undefined;
+}
+
+/** 运行时文件不可用时的可读提示（不含 URL/token） */
+async function showSettingsUnavailable(message) {
+  await dialog.showMessageBox({
+    type: 'warning',
+    title: 'AI 设置',
+    message: '暂时无法打开 AI 设置',
+    detail: message,
+    buttons: ['知道了'],
+    noLink: true,
+  });
 }
 
 function createTrayIcon(appPath) {
@@ -116,7 +120,7 @@ export async function startAppTray(options = {}) {
 
   const state = {
     config: undefined,
-    settingsUrl: await readSettingsUrl(home),
+    settingsUrl: await currentSettingsUrl(home),
     autostart: readAutostart(loginItem),
   };
   let template = [];
@@ -208,6 +212,8 @@ export async function startAppTray(options = {}) {
       }
       state.config = config;
       state.autostart = readAutostart(loginItem);
+      // 运行时文件可能被宿主收尾删除/重写：设置项跟着出现/消失，避免留着一个点了报错的入口
+      state.settingsUrl = await currentSettingsUrl(home);
       const signature = JSON.stringify(trayMenuScenario(state));
       if (!refreshOptions.force && signature === lastSignature) return;
       lastSignature = signature;
@@ -241,15 +247,26 @@ export async function startAppTray(options = {}) {
         // 宿主在响应前已把配置落盘（随后异步重启壳）；此刻刷新勾选态
         await refresh({ force: true });
         break;
-      case 'open-url':
+      case 'open-url': {
+        // 点击时重新读一次：菜单可能是轮询前建的，运行时文件也可能刚被收尾删除/改写。
+        // 过期时给可读提示并收掉菜单项，绝不打开空白页。
+        const settings = await readRuntimeSettings(home);
+        if (!settings.available) {
+          state.settingsUrl = undefined;
+          rebuild();
+          await showSettingsUnavailable(settings.message);
+          break;
+        }
         // URL 是带一次性 token 的能力令牌：直接交给系统浏览器。失败也只打固定文案——
         // openExternal 的异常信息可能回显 URL，不能让它进日志。
         try {
-          await shell.openExternal(effect.url);
+          await shell.openExternal(settings.settingsUrl);
         } catch {
           console.warn('[dsh-pet] 打开 AI 设置失败（可在托盘菜单重试）');
+          await showSettingsUnavailable('系统浏览器没有打开设置页。请稍后重试，或重启 DSH Pet。');
         }
         break;
+      }
       case 'set-autostart':
         writeAutostart(loginItem, effect.enabled);
         state.autostart = readAutostart(loginItem);

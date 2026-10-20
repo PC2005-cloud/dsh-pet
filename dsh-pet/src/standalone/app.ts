@@ -192,7 +192,7 @@ export async function startStandalone(options: StartStandaloneOptions = {}): Pro
     ...(options.autostart ? ['  自启        是（由系统登录项拉起）'] : []),
     ai.isReady()
       ? '  AI          本机 API 已启用；自动碎碎念遵循设置页开关'
-      : '  AI          未配置或未启用，不发送模型请求；右键“打开 AI 设置”后在本机填写',
+      : '  AI          未配置或未启用，不发送模型请求；启动安装版后可从托盘或右键菜单打开 AI 设置',
     '  不可用      余额 / 会话工作状态 / DSH 系统通知',
     '  退出        Ctrl+C，或 POST /shutdown',
     '',

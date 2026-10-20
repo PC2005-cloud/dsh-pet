@@ -66,6 +66,9 @@ export default defineConfig([
       // 开机自启（ticket 09）：默认开启/自启延迟（desktop/main.mjs）与托盘勾选
       // （desktop/tray.mjs）共用同一份登录项适配层。
       autostart: 'src/host/autostart.ts',
+      // 运行时状态文件的读取/过期判定（ticket 07）：托盘（ESM）与桌面壳（CJS 动态 import）
+      // 共用同一份实现，不允许各自再解析。
+      'runtime-settings': 'src/host/runtime-settings.ts',
     },
     external: [/^@deepseek-ai\//, /^@electron\//, /^node:/],
   },

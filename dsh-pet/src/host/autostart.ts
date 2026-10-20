@@ -14,7 +14,7 @@
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
-import { petDataDir, resolveDshHome } from './tray-actions';
+import { petDataDir, resolveDshHome } from './runtime-settings';
 
 /** 自启启动时携带的唯一参数：宿主据此延迟启动、不抢焦点 */
 export const AUTOSTART_ARGS: readonly string[] = ['--autostart'];
