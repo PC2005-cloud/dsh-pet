@@ -65,6 +65,8 @@ const { buildTrayMenuTemplate } = require('./tray-menu.js');
 const { buildDeskGeometry } = require('./desktop-geometry.js');
 // DPI 探测子进程的启动命令（开发形态 = Electron + 脚本；打包形态 = 同一个 exe + 角色参数）
 const { probeSpawnCommand } = require('./probe-command.js');
+// 单实例唤回：宿主经 bridge 回调通道反向 POST /control，这里解析动作并唤回全部宠物窗口
+const { parseControlRequest, focusAllWindows } = require('./control-request.js');
 
 // 允许无用户手势直接播放（余额动画等）
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
@@ -606,6 +608,29 @@ function bridgeResolve(resp) {
 function startBridgeCallback() {
   const http = require('node:http');
   const server = http.createServer((req, res) => {
+    // 宿主控制（单实例唤回）：复用同一条回调通道，反向 POST /control。
+    // 与 /respond（宿主应答）严格分开，路径/方法/载荷由 control-request.js 判定。
+    if (req.url === '/control') {
+      let raw = '';
+      req.on('data', (c) => (raw += c));
+      req.on('end', () => {
+        const parsed = parseControlRequest({ method: req.method, url: req.url, body: raw });
+        if (!parsed.ok) {
+          res.writeHead(parsed.status, { 'content-type': 'text/plain' });
+          res.end(parsed.error);
+          return;
+        }
+        const focused = focusAllWindows(windows.values());
+        console.error('[dsh-pet-desktop-helper] control focus: ' + focused + ' window(s)');
+        res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({ ok: true, focused }));
+      });
+      req.on('error', () => {
+        res.writeHead(400, { 'content-type': 'text/plain' });
+        res.end('dsh-pet: bad payload');
+      });
+      return;
+    }
     if (req.method !== 'POST' || req.url !== '/respond') {
       res.writeHead(404, { 'content-type': 'text/plain' });
       res.end('dsh-pet: not found');

@@ -24,6 +24,8 @@ const require = createRequire(import.meta.url);
 process.env.DSH_PET_PACKAGED = '1';
 
 const { parseAppRole } = await import('../lib/launch-plan.js');
+// second-instance 的启动时序闸门（纯逻辑，见 src/host/single-instance.ts）
+const { createFocusGate } = await import('../lib/single-instance.js');
 // 打包形态下 process.argv = [exe 路径, ...应用参数]，与 launch-plan 的约定一致
 const invocation = parseAppRole(process.argv.slice(1));
 for (const warning of invocation.warnings) console.warn(`[dsh-pet] ${warning}`);
@@ -38,11 +40,49 @@ if (invocation.role === 'dpi-probe') {
 if (invocation.role === 'helper' || invocation.role === 'dpi-probe') {
   // 现有桌面壳是 CJS（runtime/electron-helper/package.json 没有 type 字段，见 packaging.test.ts）。
   // 相对路径刻意保留包内布局：desktop/ 与 runtime/、lib/ 同级。
+  // 注意：这一支**不取单实例锁** —— 壳是宿主 spawn 出来的第二个进程，DPI 探测还会再 spawn 一个；
+  // 让它们参与锁会把合法的子进程判成重复实例（ticket 05）。
   require('../runtime/electron-helper/main.js');
 } else {
   // 宿主角色：走独立模式的可编程入口（不要 import lib/standalone.js —— 那是 CLI，
   // 被 import 就会解析 argv 并 process.exit）。
   const { app } = require('electron');
+  // 单实例锁只在宿主角色、且在启动服务/窗口之前取（ticket 05）：
+  // 第二次双击时拿不到锁 → 立即退出，不启动 standalone 服务、不拉起第二套 helper；
+  // 第一个实例会收到 app 的 second-instance 事件，由 startHost 里的闸门唤回已有宠物窗口。
+  // Electron 的锁随进程退出释放，宿主正常退出/被结束后下一次启动能重新拿到。
+  if (!app.requestSingleInstanceLock()) {
+    console.error('[dsh-pet] 已有实例在运行，本次启动退出');
+    app.exit(0);
+  } else {
+    await startHost(app);
+  }
+}
+
+/**
+ * 宿主角色启动（已持有单实例锁）。
+ *
+ * second-instance 可能早于启动完成到达（例如自启实例还在延迟启动，用户已手动双击）：
+ * 请求记为 pending，等 startStandalone 返回、服务与 helper 就绪后再执行一次唤回——
+ * 既不提前打断延迟，也绝不会再拉起第二套。
+ */
+async function startHost(app) {
+  let handle;
+  const gate = createFocusGate({
+    focus: async () => {
+      if (!handle) throw new Error('宿主尚未完成启动');
+      if (!(await handle.focusWindows())) throw new Error('桌面 Helper 未响应唤回请求（详见上方日志）');
+    },
+    onError: (error) => {
+      console.warn(`[dsh-pet] 唤回宠物窗口失败：${error instanceof Error ? error.message : String(error)}`);
+    },
+  });
+  // 监听尽早注册（此处尚未 await）：锁已到手，second-instance 随时可能到。
+  app.on('second-instance', () => {
+    console.log('[dsh-pet] 检测到二次启动，唤回已有宠物窗口');
+    gate.request();
+  });
+
   const { startStandalone } = await import('../lib/standalone-app.js');
 
   const exitAfter = (shutdown) => {
@@ -55,10 +95,12 @@ if (invocation.role === 'helper' || invocation.role === 'dpi-probe') {
   };
 
   try {
-    const handle = await startStandalone({
+    handle = await startStandalone({
       autostart: invocation.autostart,
       onShutdownRequested: (_reason, shutdown) => exitAfter(shutdown),
     });
+    // 启动完成：此刻才放行 pending 的唤回（ticket 09 的延迟启动接在这之前）。
+    gate.markReady();
     // 宿主生命周期与 HTTP 服务一致：收到信号先释放插件 effect、关服务、清运行时文件，再退出。
     // （Windows 上 GUI 进程通常收不到 SIGTERM；验证/托盘退出走带 token 的 POST /shutdown。）
     process.once('SIGINT', () => exitAfter(() => handle.shutdown('SIGINT')));

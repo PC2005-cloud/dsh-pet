@@ -13,7 +13,12 @@
 import { existsSync } from 'node:fs';
 
 import { flattenPetList, readAllConfig } from '../host/config';
-import { dshHomeDir, packageRoot as defaultPackageRoot } from '../host/helper-process';
+import {
+  dshHomeDir,
+  focusDesktopWindows,
+  packageRoot as defaultPackageRoot,
+  type FocusWaitOptions,
+} from '../host/helper-process';
 import { apply } from '../host/index';
 import { createStandaloneAi } from './ai-provider';
 import { packageVersion } from './check';
@@ -57,6 +62,11 @@ export interface StandaloneHandle {
   port: number;
   /** 带一次性 token 的设置页 URL（能力令牌，不得写日志） */
   settingsUrl: string;
+  /**
+   * 唤回已有的宠物窗口（单实例 second-instance 的宿主级入口）：复用 helper 的 bridge
+   * 回调通道反向 POST /control，作用于该 helper 的全部窗口。返回是否送达。
+   */
+  focusWindows(options?: FocusWaitOptions): Promise<boolean>;
   /** 释放插件 effect、关服务、清理运行时状态文件；幂等 */
   shutdown(reason?: string): Promise<void>;
 }
@@ -191,6 +201,7 @@ export async function startStandalone(options: StartStandaloneOptions = {}): Pro
   return {
     port: server.port,
     settingsUrl,
+    focusWindows: (options?: FocusWaitOptions) => focusDesktopWindows(options),
     shutdown: (reason = 'shutdown') => shutdown(reason),
   };
 }

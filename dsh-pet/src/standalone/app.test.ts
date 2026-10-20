@@ -80,6 +80,7 @@ test('startStandalone 返回端口/设置页 URL，shutdown 幂等且清理运�
   });
 
   assert.ok(handle.port > 0, '必须拿到真实监听端口（端口 0 = 由系统分配）');
+  assert.equal(typeof handle.focusWindows, 'function', '句柄必须暴露二次启动唤回入口（ticket 05）');
   assert.match(
     handle.settingsUrl,
     new RegExp(`^http://127\\.0\\.0\\.1:${handle.port}/standalone-ai/#token=[A-Za-z0-9_-]{43}$`),

@@ -19,6 +19,10 @@ import { dirname, join, resolve } from 'node:path';
 import { downloadArtifact } from '@electron/get';
 
 import { LAUNCH_ENV_DELETE_KEYS, buildLaunchPlan, type LaunchPlan } from './launch-plan';
+import { callbackControlUrl, waitForControlUrl, type FocusWaitOptions } from './single-instance';
+
+/** 宿主句柄（startStandalone）也用这个类型暴露唤回入口 */
+export type { FocusWaitOptions };
 
 const require = createRequire(import.meta.url);
 const here = dirname(fileURLToPath(import.meta.url));
@@ -331,6 +335,13 @@ export function helperSpawnEnv(
   return env;
 }
 
+/**
+ * 当前进程内已拉起的桌面 Helper：单实例唤回是**宿主级**动作（second-instance 在宿主侧），
+ * 而 HelperProcess 实例由 `apply()` 内部创建，桌面主进程拿不到引用，故用模块级登记表。
+ * helper 正常停止时移出；崩溃自动重启的实例保留（重启后仍是同一个对象、同一套窗口）。
+ */
+const activeHelpers = new Set<HelperProcess>();
+
 export class HelperProcess {
   declare readonly options: HelperOptions;
   declare readonly logger: Logger;
@@ -343,6 +354,8 @@ export class HelperProcess {
   declare private lastStartAt: number;
   /** stdout 按行缓冲（协议行按 \n 切分）。用 declare + 构造器赋值，避免类字段降级出外部 helper */
   declare private stdoutBuffer: string;
+  /** helper 回调服务器的控制端点（从最近一条协议行的 cb 推导）；未收到 cb 前为 undefined */
+  declare private controlEndpoint?: string;
 
   constructor(options: HelperOptions = {}, logger: Logger = console) {
     this.options = options;
@@ -353,6 +366,7 @@ export class HelperProcess {
     this.restartFailures = 0;
     this.lastStartAt = 0;
     this.stdoutBuffer = '';
+    this.controlEndpoint = undefined;
   }
 
   start(): import('node:child_process').ChildProcess | undefined {
@@ -384,6 +398,9 @@ export class HelperProcess {
       windowsHide: true,
     });
     this.child = child;
+    // 新一轮启动：旧回调端口已随旧进程失效，等新进程的首条协议行再记录。
+    this.controlEndpoint = undefined;
+    activeHelpers.add(this);
     child.once('error', (error) => {
       this.logger.error?.(`dsh-pet desktop helper failed to start: ${error.message}`);
       // Failed spawn (ENOENT/EACCES) emits error, but no exit. Do not leave
@@ -437,8 +454,6 @@ export class HelperProcess {
   /** 处理一条协议请求：交给宿主 bridgeHandler，结果按 id POST 回 main.js 的回调服务器
    *  （cb 由请求行携带；不走 stdin —— Electron 主进程收不到 piped stdin） */
   private async handleBridgeLine(line: string): Promise<void> {
-    const child = this.child;
-    if (!child?.stdin || !this.options.bridgeHandler) return;
     let req: BridgeRequest;
     try {
       req = JSON.parse(line.slice(BRIDGE_PREFIX.length)) as BridgeRequest;
@@ -447,6 +462,12 @@ export class HelperProcess {
       return;
     }
     if (typeof req.id !== 'number') return;
+    // 每条协议行都带 cb（壳的本地回调服务器地址）：记下 origin，供 second-instance 唤回
+    // 反向 POST /control。即便本实例没配 bridgeHandler，cb 本身也是有效的控制通道信息。
+    const controlEndpoint = callbackControlUrl(req.cb);
+    if (controlEndpoint) this.controlEndpoint = controlEndpoint;
+    const child = this.child;
+    if (!child?.stdin || !this.options.bridgeHandler) return;
     try {
       // bridgeHandler 返回完整 BridgeResponse（含 id）；异常时兜底 500
       const resp = await this.options.bridgeHandler(req);
@@ -488,6 +509,7 @@ export class HelperProcess {
    *  **停止后要立刻重启的场景必须用 stopAndWait()**，否则新旧进程会短暂重叠（issue #64）。 */
   stop(reason = 'plugin-disposed'): void {
     this.stopping = true;
+    activeHelpers.delete(this);
     if (this.restartTimer) clearTimeout(this.restartTimer);
     this.restartTimer = undefined;
     this.logger.debug?.(`dsh-pet desktop helper stopping (${reason})`);
@@ -517,6 +539,36 @@ export class HelperProcess {
         /* 已经退出了 */
       }
     });
+  }
+
+  /**
+   * 唤回已有宠物窗口（单实例唤回）：向 helper 回调服务器 POST `/control`。
+   *
+   * cb 只在 helper 发出首条 bridge 请求后才有值（自启延迟启动期间、或二次启动早于 helper
+   * 就绪时），因此在 waitMs 内轮询等待；等不到返回 false，调用方打一条告警即可。
+   * 唤回本身作用于 helper 的**全部**窗口（多宠物配置），见 control-request.js。
+   */
+  async focusWindows(options: FocusWaitOptions = {}): Promise<boolean> {
+    const url = await waitForControlUrl(() => this.controlEndpoint, options);
+    if (!url) {
+      this.logger.warn?.('[dsh-pet] 唤回桌面宠物失败：桌面 Helper 尚未建立回调通道');
+      return false;
+    }
+    try {
+      const resp = await fetch(url, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'focus' }),
+      });
+      if (!resp.ok) {
+        this.logger.warn?.(`[dsh-pet] 唤回桌面宠物失败：Helper 控制端点返回 ${resp.status}`);
+        return false;
+      }
+      return true;
+    } catch (error) {
+      this.logger.warn?.(`[dsh-pet] 唤回桌面宠物失败：${error instanceof Error ? error.message : String(error)}`);
+      return false;
+    }
   }
 
   private scheduleRestart(): void {
@@ -560,6 +612,20 @@ export class HelperProcess {
   private resolveMaxFailures(): number {
     return envPositiveInt(process.env.DSH_PET_RESTART_MAX_FAILURES, RESTART_MAX_FAILURES_DEFAULT);
   }
+}
+
+/**
+ * 唤回当前宿主进程内全部桌面 Helper 的宠物窗口（单实例 second-instance 的宿主级入口）。
+ *
+ * 桌面主进程（desktop/main.mjs）只拿到 `startStandalone` 的句柄，拿不到 `apply()` 内部
+ * 创建的 HelperProcess 实例，所以这里经模块级登记表找到它们。
+ * 返回是否有任一 Helper 成功收到控制请求；没有 Helper（纯浏览器/无桌面宠物）时返回 false。
+ */
+export async function focusDesktopWindows(options: FocusWaitOptions = {}): Promise<boolean> {
+  const helpers = [...activeHelpers];
+  if (helpers.length === 0) return false;
+  const results = await Promise.all(helpers.map((helper) => helper.focusWindows(options)));
+  return results.some(Boolean);
 }
 
 /**

@@ -57,6 +57,9 @@ export default defineConfig([
       // 打包后的主进程（desktop/main.mjs）是独立 ESM，不能 import 插件入口 lib/index.js
       // （那里只有 name/inject/apply），角色分流要单独有一份产物。
       'launch-plan': 'src/host/launch-plan.ts',
+      // 单实例唤回的启动时序闸门（second-instance ↔ 启动完成）：desktop/main.mjs 直接引它。
+      // 单独成入口是为了让打包入口不必加载整个宿主 bundle（helper 角色也会执行 main.mjs）。
+      'single-instance': 'src/host/single-instance.ts',
     },
     external: [/^@deepseek-ai\//, /^@electron\//, /^node:/],
   },
