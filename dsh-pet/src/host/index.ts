@@ -64,7 +64,7 @@ import { createReadStream, existsSync, fstatSync, readFileSync } from 'node:fs';
 import { readFile, mkdir, writeFile } from 'node:fs/promises';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { homedir } from 'node:os';
-import { join, normalize, resolve, sep } from 'node:path';
+import { dirname, join, normalize, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths';
 import { credentialRef } from '@deepseek-ai/dsh-credentials';
@@ -117,8 +117,19 @@ export const name = 'pet';
 /** 需要注入的服务：webServer（路由）+ agentDefaultModel（当前服务商）+ credentials（凭证）+ llm（对话模型调用）+ commands（/balance 斜杠命令）+ connection（桌面 Helper「打开网站」用的已鉴权站点 URL） */
 export const inject = ['webServer', 'agentDefaultModel', 'credentials', 'llm', 'commands', 'connection'];
 
-/** 本包目录：宿主构建产物位于 lib/，其上一级即包根。 */
-const PACKAGE_ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)));
+/** 本包目录：tsdown 构建产物在 lib/，源码在 src/，层数不一致，走 package.json 定位。 */
+function resolvePackageRoot(fromUrl: string): string {
+  const fromDir = dirname(fileURLToPath(fromUrl));
+  let dir = fromDir;
+  for (let i = 0; i < 5; i++) {
+    if (existsSync(join(dir, 'package.json'))) return dir;
+    const parent = resolve(dir, '..');
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return fromDir;
+}
+const PACKAGE_ROOT = resolvePackageRoot(import.meta.url);
 
 /** 包内 assets 根 */
 const PACKAGE_ROOT_ASSETS = join(PACKAGE_ROOT, 'assets');
@@ -1284,7 +1295,14 @@ export function apply(ctx: any): void {
       extraAnimDir !== undefined && existsSync(extraAnimDir)
         ? resolveExisting(extraAnimDir, fileName)
         : (resolveExisting(userRootFor(ext), fileName) ?? resolveExisting(assetRootFor(ext), fileName));
-    if (file === undefined) return { kind: 'text', status: 404, body: 'dsh-pet: asset not found' };
+    if (file === undefined) {
+      const uroot = userRootFor(ext);
+      const aroot = assetRootFor(ext);
+      ctx.logger?.warn?.(
+        `[dsh-pet] thumb 404: pet=${petId} file=${fileName} extraAnimDir=${extraAnimDir ?? '(none)'} userRoot=${uroot} assetRoot=${aroot} PACKAGE_ROOT=${PACKAGE_ROOT}`,
+      );
+      return { kind: 'text', status: 404, body: 'dsh-pet: asset not found' };
+    }
     return { kind: 'file', file, contentType: MIME[ext] ?? 'application/octet-stream' };
   };
 

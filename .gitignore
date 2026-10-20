@@ -39,6 +39,13 @@ temp/
 dsh-pet/lib/
 dsh-pet/runtime/electron-helper/shared-core.js
 
+# ── 桌面应用打包产物（npm run desktop 生成，可随时重建，不入仓库） ──
+#   desktop/app/    组装的应用目录（package.json + bootstrap.js + lib + runtime + assets）
+#   desktop/dist/   electron-builder 产物（NSIS 安装包 + 便携版 exe）
+#   desktop/build/  打包图标等构建资源
+dsh-pet/desktop/
+video/
+dsh-pet/assets/
 # ── IDE / 编辑器 ──
 .idea/
 .vscode/

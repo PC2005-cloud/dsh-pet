@@ -18,7 +18,7 @@
  *     都跨屏（#43，宠物可被甩/拖到其它显示器）；单显示器时即主屏工作区，行为不变。
  *     外扩区透明且点击穿透（只有身体命中区可交互），不挡下层应用。
  *   - 右键级联菜单（与浏览器共用同一份组件：树+渲染+样式来自 shared-core 的 menu 模块）：
- *     右键宠物弹出，桌面端工具根项「打开网站 / 打开 DeepSeek Harness（宿主是 DSH 桌面应用时的同一项）/ 查看余额 / 回到初始位置 / 重载配置」+ 动作点播；
+ *     右键宠物弹出，桌面端工具根项「打开网站 / 打开 DeepSeek Harness（宿主是 DSH 桌面应用时的同一项）/ 回到初始位置 / 重载配置」+ 动作点播；
  *     菜单开启期间整窗保持可交互（悬停菜单不触发穿透翻转），关闭/离开窗口即恢复穿透。
  *   - 系统通知不是宠物行为（浏览器半侧 notify.ts 负责），桌面端不重复实现。
  */
@@ -61,10 +61,13 @@ async function loadConfig() {
 // ---------- 启动（配置校验通过才建 sprite；失败大声报错 + 5s 自动重试） ----------
 async function boot() {
   try {
+    console.log('[pet-renderer] boot: 开始加载配置, BASE=' + BASE + ' configUrl=' + CONFIG.configUrl);
     const cfg = await loadConfig();
+    console.log('[pet-renderer] boot: 配置加载成功, pets=' + (cfg.pets ? cfg.pets.length : '0'));
     config = cfg;
     hideError();
     const pets = cfg.pets.filter((p) => S.isDesktopVisible(p.display));
+    console.log('[pet-renderer] boot: 桌面可见宠物数=' + pets.length);
     if (pets.length === 0) {
       showError('配置中没有 display 为 desktop/both 的宠物，桌面模式不显示宠物');
       scheduleReboot();
@@ -72,6 +75,7 @@ async function boot() {
     }
     // 本窗口只承载一只宠物：petIndex 由主进程按 DSH_PET_PETS 顺序注入
     const pet = pets[CONFIG.petIndex];
+    console.log('[pet-renderer] boot: petIndex=' + CONFIG.petIndex + ' pet=' + (pet ? JSON.stringify(pet).slice(0,200) : 'null'));
     if (!pet) {
       showError('petIndex=' + CONFIG.petIndex + ' 超出桌面宠物列表（共 ' + pets.length + ' 只），本窗口不创建宠物');
       scheduleReboot();
@@ -79,11 +83,15 @@ async function boot() {
     }
     for (const s of sprites) s.dispose();
     sprites = [new PetSprite(pet)];
+    console.log('[pet-renderer] boot: PetSprite 创建完成, assetRoot=' + pet.id + ' assetBase=' + sprites[0].assetBase);
     window.__dshPetDebug.configOk = true;
     window.__dshPetDebug.spriteCount = sprites.length;
     for (const s of sprites) s.playIdle();
+    console.log('[pet-renderer] boot: playIdle 调用完成');
     startLoops();
+    console.log('[pet-renderer] boot: 启动完成');
   } catch (e) {
+    console.error('[pet-renderer] boot: 抛出异常', e);
     showError('配置加载失败：' + (e && e.message ? String(e.message) : String(e)));
     scheduleReboot();
   }

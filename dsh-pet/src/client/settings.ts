@@ -1485,9 +1485,8 @@ export function makePetConfigSection(rt: {
                 }),
 
                 h('div', {
-                  className: 'dsh-pet-cfg__grid4',
+                  className: 'dsh-pet-cfg__grid3',
                   children: [
-                    toggleCell('balanceEnabled', !!cur.balanceEnabled, busy, (v) => updateSel({ balanceEnabled: v })),
                     toggleCell('whisperEnabled', !!cur.whisperEnabled, busy, (v) => updateSel({ whisperEnabled: v })),
                     toggleCell('workStatusEnabled', !!cur.workStatusEnabled, busy, (v) =>
                       updateSel({ workStatusEnabled: v }),

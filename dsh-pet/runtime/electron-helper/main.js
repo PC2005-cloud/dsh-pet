@@ -442,17 +442,30 @@ function createPetWindows() {
     win.webContents.on('did-finish-load', () => {
       win.webContents.setZoomFactor(scale);
     });
+    // ---- 渲染端诊断：转发 console 到主进程日志 ----
+    win.webContents.on('console-message', (_event, level, message) => {
+      const tag = ['verbose', 'info', 'warning', 'error'][level] || 'log';
+      console.error(`[dsh-pet-desktop-helper] [renderer:${tag}] ${message}`);
+    });
     // 默认整窗点击穿透（renderer 在光标进/出身体命中区时经 IPC 翻转可交互）；
     // forward:true 保证穿透期间 mousemove 仍转发进渲染端做命中判定。
     setWindowIgnore(win, true);
-    win.once('ready-to-show', () => win.showInactive());
+    win.once('ready-to-show', () => {
+      console.error('[dsh-pet-desktop-helper] ready-to-show fired, calling showInactive');
+      win.showInactive();
+    });
     // [#55 兜底显示] paintWhenInitiallyHidden:false 时渲染器可能不产出首帧，ready-to-show 便永不触发
     // （Electron 文档原文：ready-to-show "will never fire if you use paintWhenInitiallyHidden: false"），
     // 而 show() 只挂在它上面 → 窗口永远隐藏（进程活着、宠物逻辑照跑，桌面上什么都没有）。
     // 页面加载完成后强制兜底一次；zoomFactor 的设置在更早注册的 did-finish-load 里，顺序不受影响。
     win.webContents.once('did-finish-load', () => {
       setTimeout(() => {
-        if (!win.isDestroyed() && !win.isVisible()) win.showInactive();
+        if (!win.isDestroyed() && !win.isVisible()) {
+          console.error('[dsh-pet-desktop-helper] fallback showInactive (ready-to-show did not fire)');
+          win.showInactive();
+        } else if (!win.isDestroyed()) {
+          console.error('[dsh-pet-desktop-helper] window already visible, skip fallback show');
+        }
       }, 400);
     });
     // [#55 兜底交互] 上面的翻转链路只有「Electron forward 鼠标钩子 → 渲染端命中判定」一个入口，
@@ -506,7 +519,7 @@ function createPetWindows() {
       offBodyMs.delete(win.id);
     });
     win
-      .loadFile('index.html', {
+      .loadFile(path.join(__dirname, 'index.html'), {
         query: {
           configUrl,
           bridge: BRIDGE ? '1' : '0',
@@ -618,13 +631,24 @@ async function handleBridgeRequest(request) {
   if (method === 'POST' || method === 'PUT') {
     body = await request.text();
   }
+  // 视频请求诊断
+  const isThumb = url.pathname.includes('/thumb/');
+  if (isThumb) {
+    console.error('[dsh-pet-desktop-helper] bridge thumb: method=' + method + ' path=' + url.pathname);
+  }
   const resp = await bridgeRequest(method, url.pathname + url.search, body);
+  if (isThumb) {
+    console.error('[dsh-pet-desktop-helper] bridge thumb host resp: status=' + resp.status + ' hasFile=' + !!resp.file + ' contentType=' + (resp.contentType || 'none') + ' file=' + (resp.file || 'none'));
+  }
   const headers = { 'access-control-allow-origin': '*' }; // 渲染端页面是 file:// 源，scheme 跨源需 CORS
   if (resp.contentType) headers['content-type'] = resp.contentType;
   if (resp.file) {
     // 素材：直接读盘返回（宿主已解析好绝对路径；带 range 让视频能拖动进度条）
     try {
       const data = await fsPromises.readFile(resp.file);
+      if (isThumb) {
+        console.error('[dsh-pet-desktop-helper] bridge thumb file read: size=' + data.length + ' file=' + resp.file);
+      }
       return new Response(new Uint8Array(data), { status: resp.status || 200, headers });
     } catch (e) {
       console.error('[dsh-pet-desktop-helper] bridge file read failed:', resp.file, e);

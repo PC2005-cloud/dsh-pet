@@ -7,7 +7,7 @@
 // 菜单数据单一事实来源 = 合并后的 animations 配置（用户覆盖层自动生效）。
 //
 // 菜单层级（与产品定义一致）：
-//   一级 = 工具项 + 动作：打开网站（宿主是 DSH 桌面应用时，同一项的文案与去向变成「打开 DeepSeek Harness」——见 runtime/electron-helper/main.js 的 OPEN_TARGET）/ 查看余额 / 重载配置（桌面端专属）与 回到初始位置（两端共用），由各壳注入；
+//   一级 = 工具项 + 动作：打开网站（宿主是 DSH 桌面应用时，同一项的文案与去向变成「打开 DeepSeek Harness」——见 runtime/electron-helper/main.js 的 OPEN_TARGET）/ 重载配置（桌面端专属）与 回到初始位置（两端共用），由各壳注入；
 //   二级（动作的子级）= 分类：待机 / 转向 / 拖拽 / 点击回应 / 移动 / config 随机动作分类 / 事件档位
 //   三级 = 具体动画名
 //
