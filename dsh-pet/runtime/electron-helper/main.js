@@ -63,6 +63,8 @@ const { trayPlatform } = require('./tray-platform.js');
 // 托盘菜单模板（纯逻辑）：宠物勾选 + 后续要接的应用项；main.js 只把描述变成 Electron 菜单
 const { buildTrayMenuTemplate } = require('./tray-menu.js');
 const { buildDeskGeometry } = require('./desktop-geometry.js');
+// DPI 探测子进程的启动命令（开发形态 = Electron + 脚本；打包形态 = 同一个 exe + 角色参数）
+const { probeSpawnCommand } = require('./probe-command.js');
 
 // 允许无用户手势直接播放（余额动画等）
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
@@ -194,7 +196,11 @@ function parseProbeOutput(text) {
   return Number.isFinite(v) && v > 0 ? v : 0;
 }
 
-/** 拉起探测子进程读主屏 scaleFactor（同一个 electron + 同一个 main.js，走 DPI_PROBE 分支） */
+/**
+ * 拉起探测子进程读主屏 scaleFactor（走 DPI_PROBE 分支）。
+ * 开发形态 = 同一个 Electron + helper 脚本；打包形态 = 同一个应用 exe + 角色参数
+ * （命令构造见 probe-command.js —— 打包后 `__filename` 在 asar 内，不能当脚本参数传）。
+ */
 function probePrimaryScale() {
   const opts = {
     env: { ...process.env, DSH_PET_DPI_PROBE: '1', DSH_PET_BRIDGE: '0', DSH_PET_SMOKE: '0' },
@@ -203,9 +209,14 @@ function probePrimaryScale() {
     windowsHide: true,
     stdio: ['ignore', 'pipe', 'pipe'],
   };
+  const probe = probeSpawnCommand({
+    packaged: process.env.DSH_PET_PACKAGED === '1',
+    execPath: process.execPath,
+    helperEntry: __filename,
+  });
   let out = '';
   try {
-    out = execFileSync(process.execPath, [__filename, '--dsh-pet-dpi-probe'], opts);
+    out = execFileSync(probe.command, probe.args, opts);
   } catch (e) {
     // 只认 stdout，不认退出码：一个不开窗口的 Electron 进程调 app.exit() 在 Windows 上
     // 偶发 0xC0000005（退出期访问违例），但那时值早就写出来了，丢掉它纯属浪费一次冷启动。
@@ -522,7 +533,9 @@ function createPetWindows() {
       offBodyMs.delete(win.id);
     });
     win
-      .loadFile('index.html', {
+      // 必须用 __dirname 拼绝对路径：loadFile 的相对路径是相对 app.getAppPath() 解析的，
+      // 打包后那是 asar 根，而页面实际在 runtime/electron-helper/ 下（ticket 03）。
+      .loadFile(path.join(__dirname, 'index.html'), {
         query: {
           configUrl,
           bridge: BRIDGE ? '1' : '0',
