@@ -12,6 +12,7 @@
  */
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 
 import { openTargetForHostKind, resolveHostKind } from './host-kind.ts';
 
@@ -57,5 +58,25 @@ describe('openTargetForHostKind —— 注入给桌面壳的「打开网站」�
     assert.equal(openTargetForHostKind('desktop'), 'desktop');
     assert.equal(openTargetForHostKind('site'), 'site');
     assert.equal(openTargetForHostKind('packaged'), 'site');
+  });
+});
+
+describe('独立模式 CLI —— 启动方显式传入 site（ticket 08 的契约）', () => {
+  const cliSource = readFileSync(new URL('../standalone/cli.ts', import.meta.url), 'utf8');
+
+  test('CLI 入口在启动服务前设置 DSH_PET_HOST_KIND=site', () => {
+    assert.match(cliSource, /import \{ HOST_KIND_ENV \} from '\.\.\/host\/host-kind'/, '必须复用常量，不能散落字符串');
+    const setAt = cliSource.search(/if \(!process\.env\[HOST_KIND_ENV\]\) process\.env\[HOST_KIND_ENV\] = 'site';/);
+    assert.ok(setAt > 0, 'CLI 必须显式声明独立模式为 site');
+    const startAt = cliSource.indexOf('await startStandalone(');
+    assert.ok(startAt > setAt, '声明必须发生在启动服务之前');
+  });
+
+  test('已显式传入时不覆盖（环境变量优先），且未设置时 resolveHostKind 得到 site', () => {
+    assert.match(cliSource, /if \(!process\.env\[HOST_KIND_ENV\]\)/, '只在缺省时写入，避免覆盖启动方的显式选择');
+    // 与 CLI 的写入语义一致：缺省时置为 site，之后解析结果就是 site（纯 Node 进程的嗅探回退也是 site）
+    const env: Record<string, string | undefined> = {};
+    if (!env.DSH_PET_HOST_KIND) env.DSH_PET_HOST_KIND = 'site';
+    assert.equal(resolveHostKind(env, {}), 'site');
   });
 });

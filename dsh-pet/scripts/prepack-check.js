@@ -68,6 +68,9 @@ const stripJsonc = (s) => {
 };
 
 // ---- 1. 必需文件存在性 ----
+// 注意：runtime/electron-helper/main.js 顶层 require 的每个相对模块都必须列在这里 ——
+// files 白名单漏发其中一个，桌面壳启动即 MODULE_NOT_FOUND。
+// 这组清单由 src/host/release-manifest.test.ts 按 main.js 的 require 自动核对。
 const required = [
   'lib/index.js', // 宿主半侧
   'lib/client.js', // 浏览器半侧
@@ -81,6 +84,8 @@ const required = [
   'runtime/electron-helper/dpi-linearization.js', // 桌面模式 DPI 线性化判定与换算（main.js require，缺了会启动即崩）
   'runtime/electron-helper/tray-platform.js', // 桌面模式托盘平台差异判定（main.js require，缺了会启动即崩）
   'runtime/electron-helper/tray-menu.js', // 桌面模式托盘菜单模板（main.js require，缺了会启动即崩）
+  'runtime/electron-helper/probe-command.js', // DPI 探测子进程启动命令构造（main.js require，缺了会启动即崩）
+  'runtime/electron-helper/control-request.js', // 单实例唤回控制请求判定（main.js require，缺了会启动即崩）
   'runtime/electron-helper/desktop-geometry.js', // 活动边界与菜单工作区分离
   'runtime/electron-helper/preload.js', // 桌面模式 preload 桥
   'runtime/electron-helper/renderer.js', // 桌面模式渲染端（宠物本体）

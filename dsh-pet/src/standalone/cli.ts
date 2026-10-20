@@ -19,6 +19,7 @@
  * 余额、碎碎念、对话、系统通知依赖 DSH 的凭证/模型/会话，在独立模式下明确不可用
  * （结构化失败 + 日志，不假装成功）。详见 README 的「独立运行（不打开 DSH）」一节。
  */
+import { HOST_KIND_ENV } from '../host/host-kind';
 import { APP_ROLE_ARGS, parseAppRole } from '../host/launch-plan';
 import { MissingPackageConfigError, startStandalone, type StandaloneHandle } from './app';
 import { runCheck } from './check';
@@ -37,6 +38,10 @@ function exitAfterShutdown(logger: ReturnType<typeof createStandaloneLogger>, sh
 
 /** CLI 入口 */
 async function main(): Promise<number> {
+  // 宿主形态由启动方显式传入（ticket 08）：本入口永远是独立模式 / 站点语义，
+  // 不依赖 host-kind.ts 的 Electron 嗅探回退（纯 Node 进程恰好会回退成 site，
+  // 但显式声明才能让契约在运行期可验证）。已有取值时不覆盖（环境变量优先）。
+  if (!process.env[HOST_KIND_ENV]) process.env[HOST_KIND_ENV] = 'site';
   const argv = process.argv.slice(2);
   // 角色分流（ticket 01）：打包形态由同一个可执行文件承担三种角色；独立模式入口目前恒为宿主。
   // 角色参数先摘掉，免得被自己的 CLI 解析当成未知参数；--port/--check 等是本入口自己的参数，不告警。

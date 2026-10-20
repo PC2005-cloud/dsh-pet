@@ -108,6 +108,30 @@ describe('NSIS 卸载 —— 清理 HKCU Run 启动项', () => {
   });
 });
 
+describe('NSIS 安装 —— 安装完成即默认开启自启（spec 偏差修复）', () => {
+  const nsh = readPackageFile('build/installer.nsh');
+
+  test('customInstall 写入与 Electron 逐字一致的 Run 值', () => {
+    assert.match(nsh, /!macro customInstall/);
+    assert.match(nsh, /WriteRegStr HKCU "Software\\Microsoft\\Windows\\CurrentVersion\\Run" "electron\.app\.DSH Pet"/);
+    assert.match(
+      nsh,
+      /"\$INSTDIR\\\$\{APP_EXECUTABLE_FILENAME\}" --autostart'/,
+      '值数据必须与 setLoginItemSettings 的格式一致',
+    );
+  });
+
+  test('从未初始化过才写：marker 存在时保持用户选择（关闭后重装/升级不写回）', () => {
+    const macroAt = nsh.indexOf('!macro customInstall');
+    const macroEnd = nsh.indexOf('!macroend', macroAt);
+    const macro = nsh.slice(macroAt, macroEnd);
+    const markerGuardAt = macro.indexOf('${FileExists} "$PROFILE\\.dsh\\dsh-pet\\autostart-initialized"');
+    const writeAt = macro.indexOf('WriteRegStr');
+    assert.ok(markerGuardAt >= 0 && markerGuardAt < writeAt, '注册表写入必须包在 marker 不存在的判断里');
+    assert.match(macro, /FileWrite \$0/, '写入成功后落 marker，应用首次启动不再重复初始化');
+  });
+});
+
 describe('构建产物 —— lib/autostart.js 必须进包', () => {
   test('tsdown 产出 autostart 入口', () => {
     assert.match(readPackageFile('tsdown.config.mjs'), /autostart:\s*['"]src\/host\/autostart\.ts['"]/);
