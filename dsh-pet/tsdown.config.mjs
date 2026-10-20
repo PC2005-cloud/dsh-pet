@@ -60,6 +60,9 @@ export default defineConfig([
       // 单实例唤回的启动时序闸门（second-instance ↔ 启动完成）：desktop/main.mjs 直接引它。
       // 单独成入口是为了让打包入口不必加载整个宿主 bundle（helper 角色也会执行 main.mjs）。
       'single-instance': 'src/host/single-instance.ts',
+      // 应用托盘的动作分发/配置拍平（ticket 06）：desktop/tray.mjs 直接引它，
+      // 不经过 lib/index.js（那里只有 Cordis 插件入口）。
+      'tray-actions': 'src/host/tray-actions.ts',
     },
     external: [/^@deepseek-ai\//, /^@electron\//, /^node:/],
   },

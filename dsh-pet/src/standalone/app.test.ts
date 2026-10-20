@@ -86,6 +86,9 @@ test('startStandalone 返回端口/设置页 URL，shutdown 幂等且清理运�
     new RegExp(`^http://127\\.0\\.0\\.1:${handle.port}/standalone-ai/#token=[A-Za-z0-9_-]{43}$`),
     '设置页 URL 必须带一次性 token，端口与句柄一致',
   );
+  // 宿主托盘要用同一份 token 调 POST /pet-display（ticket 06）
+  assert.match(handle.token, /^[A-Za-z0-9_-]{43}$/);
+  assert.ok(handle.settingsUrl.endsWith(`#token=${handle.token}`), '句柄 token 与设置页 URL 必须同源');
 
   // 运行时状态文件：与 CLI 写的是同一份（启动器/托盘将读取它打开设置页）
   const file = runtimeFile(home);
@@ -99,6 +102,7 @@ test('startStandalone 返回端口/设置页 URL，shutdown 幂等且清理运�
   assert.equal(runtime.pid, process.pid);
   assert.equal(runtime.port, handle.port);
   assert.equal(runtime.settingsUrl, handle.settingsUrl);
+  assert.equal(runtime.token, handle.token, '运行时文件与句柄必须是同一份能力令牌');
 
   // 健康检查：200 JSON，且不得泄漏 token
   const health = await fetch(`http://127.0.0.1:${handle.port}/health`);

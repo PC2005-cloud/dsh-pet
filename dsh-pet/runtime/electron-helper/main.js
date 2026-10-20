@@ -823,8 +823,10 @@ app.whenReady().then(() => {
   // macOS：桌面宠物不该占 Dock——托盘才是桌面端的常驻入口，Dock 里多一个图标只会碍事
   if (TRAY_PLATFORM.hideDock && app.dock) app.dock.hide();
 
-  // 托盘：不 await（建窗与建托盘互不依赖），内部自己等 bridge 回调服务就绪
-  void startTray();
+  // 托盘：不 await（建窗与建托盘互不依赖），内部自己等 bridge 回调服务就绪。
+  // 打包形态（DSH_PET_PACKAGED=1）的托盘由宿主进程统一创建（desktop/tray.mjs），壳里再建
+  // 一个就是系统里的第二个图标；插件形态没有宿主托盘，壳仍是唯一入口，必须保留。
+  if (process.env.DSH_PET_PACKAGED !== '1') void startTray();
 
   createPetWindows();
 

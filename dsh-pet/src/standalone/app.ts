@@ -63,6 +63,11 @@ export interface StandaloneHandle {
   /** 带一次性 token 的设置页 URL（能力令牌，不得写日志） */
   settingsUrl: string;
   /**
+   * 本机服务的能力令牌（与 settingsUrl 里的 `#token=` 同一份）。宿主进程内的托盘用它
+   * 调用 `POST /dsh-pet-7340/pet-display`；**不得写日志、不得放进任何 HTTP 响应**。
+   */
+  token: string;
+  /**
    * 唤回已有的宠物窗口（单实例 second-instance 的宿主级入口）：复用 helper 的 bridge
    * 回调通道反向 POST /control，作用于该 helper 的全部窗口。返回是否送达。
    */
@@ -201,6 +206,7 @@ export async function startStandalone(options: StartStandaloneOptions = {}): Pro
   return {
     port: server.port,
     settingsUrl,
+    token: security.token,
     focusWindows: (options?: FocusWaitOptions) => focusDesktopWindows(options),
     shutdown: (reason = 'shutdown') => shutdown(reason),
   };

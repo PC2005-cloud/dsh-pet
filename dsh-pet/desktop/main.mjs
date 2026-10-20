@@ -110,6 +110,21 @@ async function startHost(app) {
     // （Windows 上 GUI 进程通常收不到 SIGTERM；验证/托盘退出走带 token 的 POST /shutdown。）
     process.once('SIGINT', () => exitAfter(() => handle.shutdown('SIGINT')));
     process.once('SIGTERM', () => exitAfter(() => handle.shutdown('SIGTERM')));
+    // 应用托盘（ticket 06）：安装版没有 DSH 桌面应用，托盘是用户唯一的应用入口。
+    // 只在宿主角色、服务与 helper 就绪后创建；托盘是系统 UI，创建失败不应拖垮宿主
+    // （宠物窗口与 POST /shutdown 仍可用），错误在这里收口。
+    //
+    // 必须 **不 await**：本模块是 ESM 入口，Electron 的 ready 要等模块求值结束才触发；
+    // 托盘创建内部会 await app.whenReady()，若在这里顶层等待就会互相死锁（ready 永远不来）。
+    if (process.env.DSH_PET_PACKAGED === '1') {
+      void import('./tray.mjs')
+        .then(({ startAppTray }) => startAppTray({ app, handle }))
+        .catch((error) => {
+          console.error(
+            `[dsh-pet] 托盘创建失败（宿主继续运行）：${error instanceof Error ? error.message : String(error)}`,
+          );
+        });
+    }
   } catch (error) {
     console.error(`[dsh-pet] 宿主启动失败：${error instanceof Error ? (error.stack ?? error.message) : String(error)}`);
     app.exit(1);
