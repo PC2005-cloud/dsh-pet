@@ -68,6 +68,7 @@ dsh-pet 的宿主半侧向 DSH 自己的 Web 服务注册了**一条前缀路由
 | `POST /dsh-pet-7340/config` | 用内置默认整份覆盖用户配置，即「恢复默认」 |
 | `POST /dsh-pet-7340/pet-display` | **改单只宠物的显示位置**（`web` / `desktop` / `both` / `none`），只传 `{ id, display }` |
 | `POST /dsh-pet-7340/reload` | 重载桌面端（重启桌面宠物进程，按最新配置重建窗口） |
+| `GET` / `PUT /dsh-pet-7340/lang` | 界面语言（`zh-CN` 简体 / `zh-TW` 繁体）。GET 返回 `{ lang }`（没存过为 `null`，由渲染端按系统语言判定）；PUT 传 `{ lang }` 存档，浏览器与桌面所有宠物窗口共享 |
 
 ## 六、素材
 

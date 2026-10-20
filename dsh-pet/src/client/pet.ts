@@ -57,6 +57,7 @@ import { registerPose } from './pose';
 // 字体（全局配置 font）：种类 → CSS 字体栈、字号 → 最终 px。换算只在 shared 一处，
 // 与桌面端共用同一份（fontStackOf / resolveFontPx），避免两端各算一套后漂移。
 import { fontStackOf, resolveFontPx } from '../shared/fonts';
+import { languageMenuBranch, petI18n } from '../shared/i18n';
 import { petBridge } from './settings';
 import { notifyFromFrame } from './notify';
 
@@ -1910,6 +1911,11 @@ export function makePetUI(rt: {
           .catch((e: unknown) => console.warn('[dsh-pet] 显示位置切换失败', e));
         return;
       }
+      if (leaf.action === 'set-lang') {
+        // 界面语言（简体 / 繁体）：宿主存档，所有宠物窗口（含桌面端）约 3s 内同步
+        if (leaf.lang) petI18n.setLang(leaf.lang);
+        return;
+      }
       if (leaf.action === 'home') {
         // 回到初始位置：停漫游/移动/抛掷，清掉拖拽/漫游留下的会话位置，回配置角落
         stopThrow();
@@ -1958,6 +1964,7 @@ export function makePetUI(rt: {
         // 显示位置（仅网页/仅桌面/两者/都不）：与桌面端注入**同一份**子菜单。
         // 改成不含 web 的值（仅桌面/都不）后，本宠物会随即从 visiblePets 里消失——字面意义上的"自己走掉"。
         displayMenuBranch(),
+        languageMenuBranch(),
         ...buildMenuTree(petAnims),
       ];
       if (!tree.length) return;

@@ -1082,6 +1082,69 @@ class PetSprite {
     this.startThrow(this.pos.x, this.pos.y, v.vx, v.vy);
   }
 
+  /** 随机弹跳（右键菜单「随机弹跳」）：以固定速度直线飞行，无重力无摩擦；撞到边缘按物理反射的方向再加
+   *  5°~15° 的小幅随机偏转（正负随机），所以每次角度都不同又不违和。边界与抛掷同源（显示器工作区并集，
+   *  confineToScreen 开启时锁定当前屏）。复用 throwToken/throwRef，所以点击、拖拽、右键菜单、回到初始位置
+   *  都经 stopThrow() 停掉它；停下后位置写入 customPos。 */
+  startBounce() {
+    this.stopDragFollow();
+    this.stopThrow();
+    this.stopMove();
+    const lockScreen = this.confineToScreen ? S.screenOfBox(this.throwSpaceOf(), this.pos.x, this.pos.y) : -1;
+    const token = ++this.throwToken;
+    const SPEED = 560; // px/s
+    const RAD = Math.PI / 180;
+    const BOUNCE_PHYSICS = { gravity: 0, restitution: 1, groundFriction: 0, ceilingBounce: true };
+    // 与最近的坐标轴至少相差 minDeg：避免贴着边缘滑行
+    const offAxis = (a, minDeg) => {
+      const mod = Math.abs(a % (Math.PI / 2));
+      return Math.min(mod, Math.PI / 2 - mod) >= minDeg * RAD;
+    };
+    // 起始方向：任意角度（避开贴近水平/垂直）
+    let a0 = 0;
+    do {
+      a0 = Math.random() * 2 * Math.PI;
+    } while (!offAxis(a0, 14));
+    let state = { x: this.pos.x, y: this.pos.y, vx: Math.cos(a0) * SPEED, vy: Math.sin(a0) * SPEED };
+    let last = performance.now();
+    const step = () => {
+      if (this.throwToken !== token) return;
+      const now = performance.now();
+      const dt = Math.min((now - last) / 1000, 0.05);
+      last = now;
+      const res = S.throwStepRegion(state, dt, this.throwSpaceOf(), BOUNCE_PHYSICS, lockScreen);
+      let vx = res.vx;
+      let vy = res.vy;
+      // 速度分量被反射过 = 撞到了对应的墙；needV* 是反弹后该分量必须有的正负号（离开那面墙）
+      const needVx = vx !== state.vx ? Math.sign(vx) : 0;
+      const needVy = vy !== state.vy ? Math.sign(vy) : 0;
+      if (needVx || needVy) {
+        const base = Math.atan2(vy, vx); // 物理反射后的方向
+        let a = base;
+        for (let i = 0; i < 40; i++) {
+          const mag = (5 + Math.random() * 10) * RAD;
+          a = base + (Math.random() < 0.5 ? -mag : mag);
+          if (needVx && Math.sign(Math.cos(a)) !== needVx) continue;
+          if (needVy && Math.sign(Math.sin(a)) !== needVy) continue;
+          if (!offAxis(a, 10)) continue;
+          break;
+        }
+        vx = Math.cos(a) * SPEED;
+        vy = Math.sin(a) * SPEED;
+        if (needVy === -1) {
+          // 撞到底边：Q 弹一下（与抛掷落地同一套）
+          this.startSquash(this.front === 0 ? this.videoA : this.videoB, S.landingSquash(300));
+        }
+      }
+      state = { x: res.x, y: res.y, vx, vy };
+      this.throwState = state;
+      this.sendBounds(res.x, res.y);
+      this.customPos = { rx: (this.pos.x + this.halfW) / VIEW.w, ry: (this.pos.y + this.halfH) / VIEW.h };
+      this.throwRef = requestAnimationFrame(step);
+    };
+    this.throwRef = requestAnimationFrame(step);
+  }
+
   /** 被撞回调（跨窗碰撞 broker 转发）：停当前动作，从落点以新初速抛出去（全复用现有物理） */
   onDeskHit(vx, vy) {
     this.stopMove();
@@ -1541,7 +1604,10 @@ class PetSprite {
     tools.push(
       { label: '碎碎念', action: 'whisper' },
       { label: '对话', action: 'chat' },
+      { label: '随机弹跳', action: 'bounce' },
       { label: '回到初始位置', action: 'home' },
+      // 界面语言（简体 / 繁体）：与浏览器端注入同一份子菜单，选择由宿主存档并在所有宠物窗口间同步
+      S.languageMenuBranch(),
       // 显示位置（仅网页/仅桌面/两者/都不）：改这只宠物的 display 配置 + 宿主重载生效。
       // 与浏览器端注入的是**同一份**子菜单（shared 的 displayMenuBranch），两端文案/取值不会漂移。
       // 为什么不就地关窗/开窗：桌面宠物共用一个 Electron 进程，窗口是进程启动时按 DSH_PET_PETS
@@ -1599,6 +1665,14 @@ class PetSprite {
     }
     if (leaf.action === 'home') {
       this.goHome(); // 停漫游/移动，清会话位置，回配置角落
+      return;
+    }
+    if (leaf.action === 'bounce') {
+      this.startBounce(); // 随机弹跳：直线飞行，撞边后按反射方向小幅随机偏转，点击/拖拽/右键/回到初始位置可停
+      return;
+    }
+    if (leaf.action === 'set-lang') {
+      if (leaf.lang) S.petI18n.setLang(leaf.lang); // 界面语言：宿主存档，所有宠物窗口约 3s 内同步
       return;
     }
     if (leaf.action === 'set-display') {

@@ -51,6 +51,9 @@ function scheduleReboot() {
  */
 let bootFailures = 0;
 
+// i18n（简体 / 繁体）：语言存于宿主 <BASE>/lang，所有宠物窗口共享并轮询同步；整页文案在渲染层即时转换
+S.petI18n.init({ base: BASE });
+
 async function loadConfig() {
   // 唯一配置入口：宿主 /config 的成品聚合（host readAllConfig 已合并并保证绝对正确），
   // 一步拉取 → 拍平成渲染列表，零校验零兜底

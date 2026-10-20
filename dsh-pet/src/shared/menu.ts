@@ -22,6 +22,7 @@
 //   - 点击项 / 点击菜单外 / Esc 关闭。
 //   不再使用"逐项 mouseleave 延迟关闭定时器"——旧实现里鼠标从分类项移向三级面板时，
 //   会同时给父项（动作）排下无人取消的关闭定时器，导致二级+三级一起消失。
+import type { PetLang } from './i18n';
 import type { Animations, Category, PetDisplay } from './types';
 
 /** 叶子：可点击的菜单项 */
@@ -34,10 +35,15 @@ export interface MenuLeaf {
    * 全部桌面宠物窗口按最新配置重建——浏览器端刷新页面即可，不注入此项）；
    * set-display=改这只宠物的显示位置（目标值见 display 字段；**两端都注入**——桌面端拿它把
    * 宠物送走、浏览器端拿它把宠物送到桌面，菜单项统一由 displayMenuBranch() 提供）。
+   * set-lang=切换界面语言（简体 / 繁体，目标值见 lang 字段；两端都注入，languageMenuBranch() 提供）；
+   * bounce=随机弹跳（桌面端专属：在屏幕上直线弹来弹去，撞边后按反射方向小幅随机偏转）。
    * 手动触发均不受 whisperEnabled 影响（该字段只关自动周期轮询） */
-  action?: 'open-site' | 'show-balance' | 'whisper' | 'chat' | 'home' | 'reload' | 'set-display';
+  action?:
+    'open-site' | 'show-balance' | 'whisper' | 'chat' | 'home' | 'reload' | 'set-display' | 'set-lang' | 'bounce';
   /** set-display 的目标显示位置（与设置页「显示位置」下拉框同一套取值） */
   display?: PetDisplay;
+  /** set-lang 的目标语言（i18n：简体 / 繁体，见 shared/i18n.ts 的 languageMenuBranch） */
+  lang?: PetLang;
 }
 
 /** 分支：带子菜单的项 */

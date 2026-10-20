@@ -1261,6 +1261,37 @@ export function apply(ctx: any): void {
       return { kind: 'json', status: 200, obj: { reloading: true } };
     }
 
+    // 界面语言（i18n：zh-CN / zh-TW）：浏览器与桌面所有宠物窗口共享，右键菜单「语言」切换后 PUT 存档，
+    // 各窗口约 3s 轮询 GET 同步。没存过时 lang 为 null，由渲染端按系统语言判定默认值。
+    if (rest === 'lang') {
+      const langFile = join(userRoot, 'lang.json');
+      if (method === 'GET') {
+        let lang: string | null = null;
+        try {
+          const saved = (JSON.parse(readFileSync(langFile, 'utf8')) as { lang?: unknown }).lang;
+          if (saved === 'zh-CN' || saved === 'zh-TW') lang = saved;
+        } catch {
+          // 没存过 / 文件损坏：按未设置处理
+        }
+        return { kind: 'json', status: 200, obj: { lang } };
+      }
+      if (method === 'PUT') {
+        let lang: unknown;
+        try {
+          lang = (JSON.parse(body ?? '') as { lang?: unknown }).lang;
+        } catch {
+          return { kind: 'json', status: 400, obj: { error: 'invalid JSON body' } };
+        }
+        if (lang !== 'zh-CN' && lang !== 'zh-TW') {
+          return { kind: 'json', status: 400, obj: { error: 'lang must be zh-CN or zh-TW' } };
+        }
+        await mkdir(userRoot, { recursive: true });
+        await writeFile(langFile, JSON.stringify({ lang }), 'utf8');
+        return { kind: 'json', status: 200, obj: { lang } };
+      }
+      return { kind: 'json', status: 405, obj: { error: 'method not allowed' } };
+    }
+
     // 配置文件路径 + 存储位置清单（设置页「高级配置」与「卸载与存储」展示用）
     if (rest === 'config/meta') {
       return {

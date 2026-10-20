@@ -1761,6 +1761,57 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /dsh-pet-7340/lang:
+    get:
+      tags: [Action]
+      operationId: getLang
+      summary: 读取界面语言
+      description: |
+        返回已存档的界面语言。没存过时 `lang` 为 `null`，由渲染端按系统语言判定默认值
+        （`zh-TW` / `zh-HK` / `zh-MO` / `zh-Hant` → 繁体，其余 → 简体）。
+      responses:
+        "200":
+          description: 当前存档语言
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [lang]
+                properties:
+                  lang:
+                    type: [string, "null"]
+                    enum: [zh-CN, zh-TW, null]
+    put:
+      tags: [Action]
+      operationId: setLang
+      summary: 存档界面语言
+      description: |
+        右键菜单「语言」切换后调用。浏览器与桌面所有宠物窗口约 3 秒内轮询 GET 同步。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [lang]
+              properties:
+                lang:
+                  type: string
+                  enum: [zh-CN, zh-TW]
+      responses:
+        "200":
+          description: 已存档
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [lang]
+                properties:
+                  lang:
+                    type: string
+                    enum: [zh-CN, zh-TW]
+        "400":
+          description: 请求体不是合法 JSON，或 `lang` 不是 `zh-CN` / `zh-TW`
   /dsh-pet-7340/reload:
     post:
       tags: [Action]
