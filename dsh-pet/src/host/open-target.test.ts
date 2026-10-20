@@ -1,11 +1,16 @@
 /**
- * 「打开网站」按宿主形态自动分派的契约测试（宿主 = DSH 桌面应用 / dsh web）。
+ * 「打开网站」按宿主形态自动分派的契约测试（三种形态，ticket 08）。
  *
- * 需求：同一个工具项，宿主是**桌面应用**时要"打开桌面端"（把主窗口叫回前台），宿主是 web 时才是
- * "打开网站"（浏览器打开站点）。两半各自构建、无法互相 import，所以按本仓库既有做法读源码断言。
+ * 需求：同一个工具项，
+ *   - DSH 桌面应用里 → "打开桌面端"（把主窗口叫回前台，helper 走 dsh://open）；
+ *   - dsh web / 独立模式 CLI → "打开网站"（浏览器打开站点）；
+ *   - **安装版（自带 Electron 运行时）** → 同样是浏览器打开**本机服务地址**，绝不能去唤起
+ *     一个不存在的 dsh:// 协议。
+ * 两半各自构建、无法互相 import，所以按本仓库既有做法读源码断言 + 直接测纯判定函数。
  *
  * 链路（改名/改判据只改一侧即失败）：
- *   宿主 index.ts 判 isDesktopHost → 注入 DSH_PET_OPEN_TARGET=desktop|site
+ *   启动方显式传入 DSH_PET_HOST_KIND（desktop/site/packaged；未设置时兼容嗅探）
+ *   → 宿主 index.ts 经 resolveHostKind / openTargetForHostKind 注入 DSH_PET_OPEN_TARGET=desktop|site
  *   → helper main.js 读该变量（并沿 query 透给渲染端）→ desktop: shell.openExternal('dsh://open')，
  *     site: 原行为 shell.openExternal(站点 URL) → 渲染端据此改菜单文案。
  *
@@ -19,6 +24,8 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
+import { openTargetForHostKind, resolveHostKind } from './host-kind.ts';
+
 /** 包内文件源码（守卫用；相对 src/host/ 解析） */
 const readSource = (rel: string): string => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), 'utf8');
 
@@ -29,15 +36,38 @@ const sprite = readSource('../../runtime/electron-helper/sprite.js');
 const standaloneContext = readSource('../standalone/context.ts');
 
 describe('「打开网站」按宿主形态自动分派', () => {
-  test('宿主：桌面应用判定 + 形态注入', () => {
+  test('宿主：形态由启动方显式传入 + 注入 Helper', () => {
     assert.ok(
-      /const isDesktopHost = \(\): boolean => Boolean\(process\.versions\.electron\)/.test(host),
-      '宿主必须用 process.versions.electron 判定形态（桌面应用以 ELECTRON_RUN_AS_NODE 跑，该字段仍在；dsh web 是纯 Node）',
+      /const hostKind = \(\): HostKind => resolveHostKind\(process\.env, process\.versions\)/.test(host),
+      '宿主必须读显式的 DSH_PET_HOST_KIND（经 resolveHostKind），不能再用裸 process.versions.electron 判定',
     );
     assert.ok(
-      /DSH_PET_OPEN_TARGET: isDesktopHost\(\) \? 'desktop' : 'site'/.test(host),
+      /DSH_PET_OPEN_TARGET: openTargetForHostKind\(hostKind\(\)\)/.test(host),
       'launchHelper 必须把形态注入 Helper（否则桌面宿主下仍只会打开浏览器站点）',
     );
+    assert.ok(
+      !/Boolean\(process\.versions\.electron\)/.test(host),
+      '不得保留「是不是 Electron 进程」这种运行时嗅探式判定（打包形态自己就带 Electron）',
+    );
+  });
+
+  test('三种形态 → 注入去向：packaged 必须得到 site 语义', () => {
+    const cases = [
+      ['desktop', 'desktop'],
+      ['site', 'site'],
+      ['packaged', 'site'],
+    ] as const;
+    for (const [kind, expected] of cases) {
+      assert.equal(
+        openTargetForHostKind(resolveHostKind({ DSH_PET_HOST_KIND: kind }, { electron: '43.3.0' })),
+        expected,
+        `${kind} 形态的去向必须是 ${expected}`,
+      );
+    }
+    // 兼容回退：DSH 桌面应用启动插件时无法注入变量
+    assert.equal(openTargetForHostKind(resolveHostKind({}, { electron: '43.3.0' })), 'desktop');
+    // 独立模式 CLI：未设置且无 Electron
+    assert.equal(openTargetForHostKind(resolveHostKind({}, {})), 'site');
   });
 
   test('helper 主进程：desktop 走 dsh:// 协议，site 保持原行为', () => {

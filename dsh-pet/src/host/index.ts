@@ -162,6 +162,7 @@ import {
   hasGraphicalDisplay,
   resolveElectronPath,
 } from './helper-process';
+import { openTargetForHostKind, resolveHostKind, type HostKind } from './host-kind';
 
 /** 插件行 id（与 cordis.patch.yml 一致） */
 export const name = 'pet';
@@ -181,13 +182,16 @@ const PACKAGE_MEMES_DIR = join(PACKAGE_ROOT_ASSETS, 'memes');
 const ROUTE_PREFIX = '/dsh-pet-7340';
 
 /**
- * 宿主是不是 **DSH 桌面应用**（Electron 宿主）。
+ * 宿主形态（ticket 08）：决定「打开网站」的去向。
  *
- * 判据只用 `process.versions.electron`：桌面应用以 `ELECTRON_RUN_AS_NODE=1` 跑宿主（见 dsh.cmd），
- * 该字段照样在；而 `dsh web` / 独立模式都是纯 Node 进程，取不到它。据此把「打开网站」自动分派：
- * 桌面宿主 → 唤起桌面应用窗口（helper 走 `dsh://open`），其余 → 浏览器打开站点。
+ * **显式优先**：启动方通过 `DSH_PET_HOST_KIND` 声明 desktop / site / packaged ——
+ * 打包安装版（自带 Electron 运行时）由 desktop/main.mjs 在启动 standalone 前设为 packaged，
+ * 否则它会因 `process.versions.electron` 存在而被误判成 DSH 桌面应用。
+ * **嗅探仅兼容一种形态**：DSH 桌面应用启动插件宿主时无法注入环境变量，此时回退到
+ * `process.versions.electron`（它以 ELECTRON_RUN_AS_NODE=1 跑，该字段仍在）；
+ * `dsh web` / 独立模式是纯 Node 进程，未设置时回落 site。
  */
-const isDesktopHost = (): boolean => Boolean(process.versions.electron);
+const hostKind = (): HostKind => resolveHostKind(process.env, process.versions);
 
 /** 不同扩展名对应的 Content-Type 映射 */
 const MIME: Record<string, string> = {
@@ -951,8 +955,8 @@ export function apply(ctx: any): void {
           DSH_PET_SITE_URL: siteUrl,
           // 宿主形态决定工具项「打开网站」的去向（同名菜单项，两端两种语义）：
           //   desktop = 宿主是 DSH 桌面应用 → 唤起桌面应用主窗口（helper 走 dsh://open，见 main.js）
-          //   site    = dsh web / 独立模式 → 系统默认浏览器打开站点（原行为，别破坏）
-          DSH_PET_OPEN_TARGET: isDesktopHost() ? 'desktop' : 'site',
+          //   site    = dsh web / 独立模式 / **打包安装版** → 系统默认浏览器打开本机站点（别破坏）
+          DSH_PET_OPEN_TARGET: openTargetForHostKind(hostKind()),
           DSH_PET_SCALE: '1',
           // 打开 bridge 协议：main.js 注册 dsh-pet-bridge scheme，把渲染端请求经管道转给宿主
           DSH_PET_BRIDGE: '1',
