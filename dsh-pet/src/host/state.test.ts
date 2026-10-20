@@ -78,16 +78,17 @@ describe('PollStateStore —— 写入与读取', () => {
     assert.equal(store.read().sections.notify.data, null);
   });
 
-  test('宠物条目的四个槽位一起建好（没写过的槽位是 {counter:0, data:null}）', () => {
+  test('宠物条目的五个槽位一起建好（没写过的槽位是 {counter:0, data:null}）', () => {
     const store = new PollStateStore();
     store.writePet('main', 'position', { x: 0.5, y: 0.5, mode: 'spring' });
     const entry = store.read().pets.main;
-    // 形状恒定：只要被写过任意一个叶子，四个键就都存在（消费端不必判 undefined）
-    assert.deepEqual(Object.keys(entry).sort(), ['anim', 'position', 'say', 'throw']);
+    // 形状恒定：只要被写过任意一个叶子，五个键就都存在（消费端不必判 undefined）
+    assert.deepEqual(Object.keys(entry).sort(), ['anim', 'lock', 'position', 'say', 'throw']);
     assert.deepEqual(entry.position.data, { x: 0.5, y: 0.5, mode: 'spring' });
     assert.deepEqual(entry.say, { counter: 0, data: null }, '没写过的槽位保持空叶子');
     assert.deepEqual(entry.anim, { counter: 0, data: null });
     assert.deepEqual(entry.throw, { counter: 0, data: null });
+    assert.deepEqual(entry.lock, { counter: 0, data: null }, '占用锁同样是常驻槽位（issue #122 第 4 项）');
   });
 
   test('position 与 throw 各自独立更新 counter（两条指令互不吞掉）', () => {

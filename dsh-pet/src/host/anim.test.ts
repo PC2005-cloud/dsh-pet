@@ -50,7 +50,7 @@ const cfg = {
 
 /** 决策的便捷调用：只覆盖本次关心的参数 */
 const decide = (over: Partial<Parameters<typeof decideAnim>[0]> = {}) =>
-  decideAnim({ cfg, requested: 'main', active: '', name: '东张西望', url: undefined, ...over });
+  decideAnim({ cfg, requested: 'main', name: '东张西望', url: undefined, ...over });
 
 describe('animationNames —— 与右键菜单同一份动画集合', () => {
   test('七个池全部收到（菜单树取的就是这些）', () => {
@@ -137,16 +137,12 @@ describe('decideAnim —— 宠物选择', () => {
     assert.equal(d.ok === true && d.petId, 'test1');
   });
 
-  test('不指定 pet → 落到当前桌宠（active）', () => {
-    const d = decide({ requested: '', active: 'test1' });
-    assert.equal(d.ok, true);
-    assert.equal(d.ok === true && d.petId, 'test1');
-  });
-
-  test('不指定且没有当前桌宠 → 兜底 main', () => {
-    const d = decide({ requested: '', active: '' });
-    assert.equal(d.ok, true);
-    assert.equal(d.ok === true && d.petId, 'main');
+  test('不指定 pet → pet-required（缺省链已删除：绝不退到"当前桌宠"/列表第一只）', () => {
+    for (const empty of ['', '   ']) {
+      const d = decide({ requested: empty });
+      assert.equal(d.ok, false);
+      assert.equal(d.ok === false && d.reason, 'pet-required');
+    }
   });
 
   test('指定不存在的宠物 → unknown-pet', () => {
@@ -231,5 +227,50 @@ describe('decideAnim —— url 形态（第三方自带素材，issue #122 第 
   test('url 形态不看名字：地址里带什么名字都照样放行（不查池、也不查文件名）', () => {
     const d = decide({ name: undefined, url: 'http://127.0.0.1:8080/dsh-pet-wallpaper/a/根本不在池里.webm' });
     assert.equal(d.ok, true);
+  });
+});
+
+describe('decideAnim —— facing（朝向，可选）', () => {
+  test('不传 / null → 通过且 facing 缺席（= 渲染端**不动朝向**，不是回落 left）', () => {
+    for (const over of [{}, { facing: undefined }, { facing: null }]) {
+      const d = decide(over);
+      assert.equal(d.ok, true, JSON.stringify(over) + ' 应通过');
+      assert.equal(d.ok === true && d.facing, undefined);
+    }
+  });
+
+  test('left / right 原样透出', () => {
+    for (const f of ['left', 'right'] as const) {
+      const d = decide({ facing: f });
+      assert.equal(d.ok, true);
+      assert.equal(d.ok === true && d.facing, f);
+    }
+  });
+
+  test('非法值 → bad-request（不静默忽略，与 /position 的 mode 同一口径）', () => {
+    for (const bad of ['LEFT', 'Right', 'up', '', '   ', 42, true, {}, []]) {
+      const d = decide({ facing: bad });
+      assert.equal(d.ok, false, JSON.stringify(bad) + ' 不应通过');
+      assert.equal(d.ok === false && d.reason, 'bad-request');
+      assert.match(d.ok === false ? d.message : '', /facing/);
+    }
+  });
+
+  test('url 形态一样带 facing', () => {
+    const d = decide({ name: undefined, url: 'https://cdn.example.com/x.webm', facing: 'right' });
+    assert.equal(d.ok, true);
+    assert.equal(d.ok === true && d.url, 'https://cdn.example.com/x.webm');
+    assert.equal(d.ok === true && d.facing, 'right');
+  });
+
+  test('facing 非法先于宠物解析报错（参数是调用方的错，先纠它）', () => {
+    const d = decide({ facing: 'up', requested: 'ghost' });
+    assert.equal(d.ok, false);
+    assert.equal(d.ok === false && d.reason, 'bad-request');
+  });
+
+  test('facing 不影响 name / url 二选一那条校验', () => {
+    assert.equal(decide({ name: '东张西望', url: 'https://x/y.webm', facing: 'left' }).ok, false);
+    assert.equal(decide({ name: undefined, url: undefined, facing: 'left' }).ok, false);
   });
 });

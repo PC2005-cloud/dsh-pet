@@ -29,9 +29,9 @@ info:
     # 1. 拉一次统一状态（只读、零副作用，可以随便轮询）
     curl -s $BASE/state
 
-    # 2. 让 main 这只宠物立刻说一句（动作端点：只回 {ok}，内容去 /state 里取）
+    # 2. 让 main 这只宠物立刻说一句（响应里就带 text；同一份同时写进 /state）
     curl -s -X POST "$BASE/whisper?pet=main"
-    curl -s $BASE/state   # → pets.main.say.data.text
+    curl -s $BASE/state   # → pets.main.say.data.text（与上面返回的 text 逐字相同）
     ```
 
     ## 数据流：为什么有"动作端点"和"/state"两套
@@ -40,9 +40,13 @@ info:
 
     1. **数据只有一个出口**：`GET /state`。它返回宿主内存里的一份"已发布状态" S，
        里面是若干 **叶子（leaf）**，每个叶子形如 `{ counter, data }`。
-    2. **动作端点不返回数据**：`POST /balance`、`POST /whisper`、`POST /broadcast`、`POST /bubble/clear`、
-       `POST /anim`、`POST /chat` 只回 `{ ok: true }`，
-       表示"这次动作做完了"。它们在宿主内部把结果**写进 S**，调用方随后拉一拍 `/state` 就能看到。
+    2. **动作端点只回执，不搬数据**：`POST /balance`、`POST /broadcast`、`POST /bubble/clear`、
+       `POST /anim` 只回 `{ ok: true }`，表示"这次动作做完了"。它们在宿主内部把结果**写进 S**，
+       调用方随后拉一拍 `/state` 就能看到。
+
+       例外是**要生成内容的两个端点**：`POST /whisper` 与 `POST /chat` 成功时**额外带回**
+       生成的 `text`（配图时带 `image`）。这只是省一次往返，不是新增的数据出口——同一份文本
+       仍然照旧写进 S，其它消费端的行为完全不变。
     3. **`counter` 是"变了没有"的唯一信号**：它是 `Date.now()` 且**严格递增**（同毫秒连写会 +1），
        宿主重启也不会倒退。消费端只比较 `counter` 是否与自己上次记录的一致，一致就跳过渲染。
        这样前端不需要任何业务知识就能统一处理所有叶子。
@@ -104,7 +108,8 @@ paths:
               "say":      { "counter": 1755000000003, "data": { "text": "……", "duration": 10000, "anim": true } },
               "anim":     { "counter": 1755000000004, "data": { "name": "东张西望" } },
               "position": { "counter": 1755000000005, "data": { "x": 0.5, "y": 0.35, "mode": "spring" } },
-              "throw":    { "counter": 1755000000006, "data": { "angle": 45, "power": 1 } }
+              "throw":    { "counter": 1755000000006, "data": { "angle": 45, "power": 1 } },
+              "lock":     { "counter": 1755000000007, "data": { "locked": false } }
             }
           }
         }
@@ -113,12 +118,16 @@ paths:
         **约定与注意事项**：
 
         - `sections` 是**全局**段，所有端共享一份；`pets.<id>` 是**每只宠物**各自一份。
-        - `pets.<id>` 的四个槽位（`say` / `anim` / `position` / `throw`）**是一起建的**：只要该宠物
-          被写过任意一个叶子，四个键就都存在；没写过的那个是 `{ "counter": 0, "data": null }`。
-          而**从没被写过任何叶子**的宠物，整个条目都不出现在 `pets` 里。
+        - `pets.<id>` 的五个槽位（`say` / `anim` / `position` / `throw` / `lock`）**是一起建的**：
+          只要该宠物被写过任意一个叶子，五个键就都存在；没写过的那个是
+          `{ "counter": 0, "data": null }`。而**从没被写过任何叶子**的宠物，整个条目都不出现在
+          `pets` 里。
         - `position` / `throw` 是**运动指令**（宿主 → 渲染端），与 `anim` 同族：渲染端读到就执行，
           **不往回写**。它们是 `POST /position` 与 `POST /throw` 的落点，本身不含"宠物现在在哪"
           这类状态。
+        - `pets.<id>.lock` 是**占用锁状态**（issue #122 第 4 项），**与上面三个不同：它是状态不是
+          指令**——渲染端读它决定"要不要冻结自己"（随机链不掷骰、暂停当前自播动画、忽略**自动**
+          来源的余额与工作状态表现），并按 `expiresAt` **自己**定时解除。详见 `LockLeaf`。
         - `pets.<id>.say` 有**两种形态**：弹气泡 `{ text, image?, duration?, anim? }` 与
           清空 `{ "clear": true }`（由 `POST /bubble/clear` 写入）。`duration` 缺省 10 秒、
           `0` = 不显示；`anim` 缺省 `true`（联动 `events.whisper` 动画），显式 `false` = 只弹气泡。
@@ -233,8 +242,11 @@ paths:
       operationId: whisper
       summary: 让指定宠物立刻说一句
       description: |
-        按该宠物所属条目的 `whisperPrompt` 人设生成一句碎碎念，写入 `pets.<id>.say`。
-        这是 `POST` 动作端点，**不返回文本**——文本只有一个出口（`/state`）。
+        按该宠物所属条目的 `whisperPrompt` 人设生成一句碎碎念，写入 `pets.<id>.say`，
+        并**随响应带回**生成的文本（`text`，配图开关开着且抽到图时另有 `image`）。
+
+        - 文本仍然照旧写进 `pets.<id>.say`：其它消费端继续从 `/state` 读，返回值只是
+          让调用的这一方不必再拉一拍——两处是同一份文本，不是两个真相。
 
         - `whisperEnabled` 配置**不门控本端点**：那个字段只关自动周期碎碎念，
           手动/接口触发始终可用，不受它影响。
@@ -246,16 +258,23 @@ paths:
           指定模型生成失败时会**自动回落到当前对话的模型**重试一次。
       parameters:
         - $ref: "#/components/parameters/PetIdQuery"
+        - $ref: "#/components/parameters/SurfaceQuery"
       responses:
         "200":
           description: |
             生成结果。注意 HTTP 状态码**恒为 200**（除 405）：失败通过 `ok: false` 表达，
             这样调用方只需解析一层即可，不必区分"HTTP 失败"与"业务失败"。
+
+            `reason` 取值：`provider-missing`（没有可用的模型——独立模式下恒为它）、
+            `generate-error`（生成失败或 IO 失败，带 `message`）、`unknown-pet`（目标宠物在
+            "校验那次读"与生成前那次读之间被删掉了——罕见，但如实报，**不会静默按 `main` 生成**，
+            也不会写下一只已不存在宠物的叶子）、`bad-request`（`surface` 缺省 / 非法）、
+            `pet-not-displayed`（带 `display`）。
           content:
             application/json:
               schema:
                 oneOf:
-                  - $ref: "#/components/schemas/OkResponse"
+                  - $ref: "#/components/schemas/SayResponse"
                   - $ref: "#/components/schemas/FailureResponse"
         "405":
           $ref: "#/components/responses/MethodNotAllowed"
@@ -279,7 +298,7 @@ paths:
         - `text` 必填，`trim()` 后不得为空；
         - **不设长度限制，也不限频**：投喂是显式的调用方行为，内容与频率都由调用方自己负责，
           宿主不做静默丢弃、截断或排队；
-        - `pet` 必须是一只真实存在的桌宠；缺省时落到当前桌宠，仍为空则兜底 `main`；
+        - `pet` **必填**，且必须是一只真实存在的桌宠（没给 → `pet-required`，不存在 → `unknown-pet`）；
         - **配图两种形态，二选一**（issue #122 第 1 条的"资源注册"）：
           - `image`：只接受**该桌宠条目表情包池内**的名称（即该条目 `memes` 里、且在其表情包目录链
             —— `pet/<素材根>-memes/`（独占）或 `memes/` → 包内 `assets/memes/` ——里真实存在的键）。
@@ -304,15 +323,9 @@ paths:
         写入叶子时 `duration` / `anim` 是**解析后的生效值**（缺省也已填成显式值），
         所以读 `/state` 就能看到实际生效的时长与联动开关，不用自己猜缺省是多少。
       parameters:
-        - name: pet
-          in: query
-          required: false
-          description: |
-            目标桌宠 id。**缺省时落到当前桌宠**（宿主内部按已选/首个有效桌宠解析），
-            仍无法确定时兜底 `main`。指定的 id 不存在 → `ok: false` + `reason: unknown-pet`。
-          schema:
-            type: string
-          example: main
+        - $ref: "#/components/parameters/PetIdQuery"
+        - $ref: "#/components/parameters/LockQuery"
+        - $ref: "#/components/parameters/SurfaceQuery"
       requestBody:
         required: true
         content:
@@ -383,8 +396,9 @@ paths:
         "200":
           description: |
             恒为 200（除 405/400）。失败通过 `ok: false` 表达，`reason` 可能是
-            `bad-request`（空文本 / 非法 `duration`）、`unknown-pet`、`unknown-image`、
-            `generate-error`（配置不可读等）。
+            `bad-request`（空文本 / 非法 `duration` / `surface` 缺省或非法）、`pet-required`（没给 pet）、
+            `unknown-pet`、`unknown-image`、`generate-error`（配置不可读等）、
+            `pet-not-displayed`（带 `display`）。
           content:
             application/json:
               schema:
@@ -421,18 +435,21 @@ paths:
         **幂等**：当前没有气泡时同样返回 `{ "ok": true }`——"让气泡消失"这个意图在空状态下已经成立，
         所以本端点**没有"气泡不存在"这种失败**。
 
-        **认不出调用方**：本端点没有租约 token（issue #122 第 4 条尚未实现），谁调都清当前这一个泡。
-        两个第三方同时使用时，后调的那个会把前一个的气泡一并抹掉——这是已知且被接受的后果。
+        **占用门禁**（issue #122 第 4 项）：当前有占用时，只有持锁者（带对的 `?lock=`）能清——
+        否则第三方一调就把别人的气泡抹了。**没有占用时这一步恒放行**，行为与改造前逐字一致。
 
         **无请求体。** 动作端点，只回 `{ ok }`；要确认效果请读 `/state` 的 `pets.<id>.say`。
       parameters:
         - $ref: "#/components/parameters/PetIdQuery"
+        - $ref: "#/components/parameters/LockQuery"
+        - $ref: "#/components/parameters/SurfaceQuery"
       responses:
         "200":
           description: |
             恒为 200（除 405）。失败通过 `ok: false` 表达，`reason` 可能是
-            `unknown-pet`（指定的 id 不存在）、`generate-error`（配置不可读等）。
-            **当前没有气泡不是失败。**
+            `pet-required`（没给 pet）、`unknown-pet`（指定的 id 不存在）、
+            `bad-request`（`surface` 缺省 / 非法）、`pet-not-displayed`（带 `display`）、
+            `generate-error`（配置不可读等）。**当前没有气泡不是失败。**
           content:
             application/json:
               schema:
@@ -467,7 +484,21 @@ paths:
         - `name` 与 `url` 必须**恰好给一个**：两个都给或都不给 → `bad-request`（意图不明，不替
           调用方猜）；
         - `name` 给了就必须在该宠物的动画池内；`url` 给了就必须是 http/https 的完整地址；
-        - `pet` 必须是一只真实存在的桌宠；缺省时落到当前桌宠，仍为空则兜底 `main`。
+        - `pet` **必填**，且必须是一只真实存在的桌宠（没给 → `pet-required`，不存在 → `unknown-pet`）；
+        - `facing` **可选**，给了就必须是 `left` / `right` 之一，否则 → `bad-request`
+          （非法值**不静默忽略**，与 `POST /position` 的 `mode` 同一口径）。
+
+        **朝向（`facing`，可选）**
+
+        `left` = 素材原样，`right` = 镜像（渲染端贴 `scaleX(-1)`）。
+
+        - **不传就不动朝向**：宠物保持它**当前**的朝向——不是"回落 `left`"，`S` 的叶子里连这个
+          字段都不会写（所以"没要求"与"要求 `left`"在形状上可区分）；
+        - 传了就设成它并**一直保持**，直到宠物自己播完一段转向动画（`animations.turn` 池）翻过去，
+          或下一次点播再指定；
+        - `name` 与 `url` 两种形态**都适用**（`url` 形态虽然不走菜单语义，但镜像一样会贴）；
+        - **显式值优先于渲染端"文字类动画（`noMirror` 分类）点播前强制朝左"那条镜像修正**：
+          明确要 `right` 就给 `right`——代价是文字类动画里的文字会跟着镜像。
 
         **跨域不由本插件解决**：两端消费端都是 `fetch` + blob（为了绕开流式加载的 stall），
         所以**跨域地址要求对方自己带 `Access-Control-Allow-Origin`**。插件与第三方插件在同一个
@@ -491,17 +522,9 @@ paths:
         另外同一个动画连续点播两次：`counter` 会递增，正常情况下会重播；但若第二次落在
         播放端上一次切换尚未就绪的窗口内，可能被其防重逻辑吞掉（表现为只播一次）。
       parameters:
-        - name: pet
-          in: query
-          required: false
-          description: |
-            目标桌宠 id。缺省时落到当前桌宠；仍无法确定时兜底 `main`。
-            指定的 id 不存在 → `ok: false` + `reason: unknown-pet`。
-            **多宠物时建议显式传**——缺省落到的是"当前桌宠"，未必是你要点播的那只；
-            而名字必须在**这只宠物所属条目**的动画池内（见上）。
-          schema:
-            type: string
-          example: main
+        - $ref: "#/components/parameters/PetIdQuery"
+        - $ref: "#/components/parameters/LockQuery"
+        - $ref: "#/components/parameters/SurfaceQuery"
       requestBody:
         required: true
         content:
@@ -531,11 +554,25 @@ paths:
                     跨域由浏览器强制、插件绕不过去：外站地址要求对方带 `Access-Control-Allow-Origin`，
                     同源（第三方插件在同一个 DSH 端口上注册自己的路由）则没有这个问题。
                   example: https://cdn.example.com/拉侧栏.webm
+                facing:
+                  type: string
+                  enum: [left, right]
+                  description: |
+                    播放这一段时的**朝向**（可选）。`left` = 素材原样，`right` = 镜像。
+                    **不传就不动朝向**（保持宠物当前朝向，不是回落 `left`）；传了就必须是这两个值
+                    之一，否则 `ok: false` + `reason: bad-request`（非法值不静默忽略）。
+                    显式值优先于"文字类动画点播前强制朝左"那条镜像修正。
+                  example: right
             examples:
               turn:
                 summary: 播一段转向动画（池内名字）
                 value:
                   name: 东张西望
+              facing:
+                summary: 指定朝向（朝右，镜像）
+                value:
+                  name: 东张西望
+                  facing: right
               move:
                 summary: 播一段移动动画（会真的走过去，与菜单一致）
                 value:
@@ -548,8 +585,9 @@ paths:
         "200":
           description: |
             恒为 200（除 405/400）。失败通过 `ok: false` 表达，`reason` 可能是
-            `bad-request`（名字为空）、`unknown-pet`、`unknown-animation`、
-            `generate-error`（配置不可读等）。
+            `bad-request`（名字为空 / `facing` 非法 / `surface` 缺省或非法）、`pet-required`（没给 pet）、
+            `unknown-pet`、`unknown-animation`、`generate-error`（配置不可读等）、
+            `pet-not-displayed`（带 `display`）。
           content:
             application/json:
               schema:
@@ -623,16 +661,9 @@ paths:
         `duration` **只在 `line` 模式下必填**（非负有限数，`0` = 立即到位）；`instant` / `spring`
         给了也**不看**——调用方常把 body 模板整个复用，为此报错只会逼他们删字段。
       parameters:
-        - name: pet
-          in: query
-          required: false
-          description: |
-            目标桌宠 id。缺省时落到当前桌宠；仍无法确定时兜底 `main`。
-            指定的 id 不存在 → `ok: false` + `reason: unknown-pet`。
-            **多宠物时建议显式传**——缺省落到的是"当前桌宠"，未必是你要挪的那只。
-          schema:
-            type: string
-          example: main
+        - $ref: "#/components/parameters/PetIdQuery"
+        - $ref: "#/components/parameters/LockQuery"
+        - $ref: "#/components/parameters/SurfaceQuery"
       requestBody:
         required: true
         content:
@@ -691,6 +722,8 @@ paths:
           description: |
             恒为 200（除 405/400）：失败通过 `ok: false` 表达，这样调用方只需解析一层即可。
             成功时额外回 `x`/`y`——**宿主夹取后的值**。
+            `reason` 另有：`bad-request`（坐标/模式非法 / `surface` 缺省或非法）、
+            `pet-not-displayed`（带 `display`）。
           content:
             application/json:
               schema:
@@ -748,15 +781,9 @@ paths:
 
         **撞上用户拖拽时静默丢弃**：同 `POST /position`，且同样回 `ok: true`。
       parameters:
-        - name: pet
-          in: query
-          required: false
-          description: |
-            目标桌宠 id。缺省时落到当前桌宠；仍无法确定时兜底 `main`。
-            指定的 id 不存在 → `ok: false` + `reason: unknown-pet`。
-          schema:
-            type: string
-          example: main
+        - $ref: "#/components/parameters/PetIdQuery"
+        - $ref: "#/components/parameters/LockQuery"
+        - $ref: "#/components/parameters/SurfaceQuery"
       requestBody:
         required: true
         content:
@@ -793,7 +820,337 @@ paths:
         "200":
           description: |
             恒为 200（除 405/400）。失败通过 `ok: false` 表达，`reason` 可能是
-            `bad-request`（角度/力度非法）、`unknown-pet`、`generate-error`（配置不可读等）。
+            `bad-request`（角度/力度非法 / `surface` 缺省或非法）、`pet-required`（没给 pet）、
+            `unknown-pet`、`generate-error`（配置不可读等）、`pet-not-displayed`（带 `display`）。
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/OkResponse"
+                  - $ref: "#/components/schemas/FailureResponse"
+        "400":
+          description: '请求体不是合法 JSON（`{ "error": "invalid JSON body" }`）'
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+
+  /dsh-pet-7340/lock:
+    post:
+      tags: [Action]
+      operationId: acquireLock
+      summary: 占用锁——取锁 / 续期（二合一）
+      description: |
+        issue #122 第 4 项「独立动作/气泡占用」。第三方插件要演一段联动（拉侧栏 / 跳抓吉祥物 /
+        踢侧栏）时先取锁，这段时间**独占**这只宠物：除持锁者外谁都动不了它——5 个动作端点
+        （`/anim`、`/broadcast`、`/position`、`/throw`、`/bubble/clear`）必须带 `?lock=<lockId>`，
+        宠物自己的随机动画 / 自主走位 / 自动碎碎念 / 自动余额 / 工作状态表现全部让路。
+
+        **取锁会打断正在播的那一次点播**：那一刻前台动画会被暂停，而**解冻不会把它接回来**
+        （解冻走的是回 idle / 恢复档位，等于换源顶掉它），所以它确实不会再播完——回执如实报
+        `cancelled` + `reason: frozen`，而不是一直挂着 `playing` 让挂 `?wait=ended` 的调用方白等
+        一个 timeout。**持锁者自己的点播不受影响**（正常顺序是先取锁再点播；续期也不会重复冻结）。
+
+        **一把锁、全有全无**，且**第三方之间不互相抢占**：先到先得，撞上就回 `locked` + `expiresAt`，
+        据此决定何时重试。只有**用户**能抢占——拖拽 / 点击宠物，或把它隐藏 / 关闭，占用立刻撤销
+        （`POST /lock/release` 的 `force` 形态，由渲染端上报）。
+
+        **取锁与续期是同一个端点**：`lockId` 给了就是续期，没给就是新建。
+        续期是持锁者每隔几秒就要做一次的**心跳**，而这一次调用同时就是"我的锁还在吗"的探测器
+        ——丢了会回 `lock-lost` + `cause`，所以没有单独的"查锁"端点。
+
+        **真值表**（每一格都有确定结论，不替调用方猜）：
+
+        | body | 当前锁 | 结论 |
+        | --- | --- | --- |
+        | 无 `lockId` | 无锁 | 新建 |
+        | 无 `lockId` | 有锁 | `locked` + `expiresAt` |
+        | 有 `lockId` | 一致 | 续期（编号不变） |
+        | 有 `lockId` | 有锁但不一致 | `lock-lost` / `unknown` |
+        | 有 `lockId` | 无锁 | `lock-lost` / 墓碑里的 `cause` |
+
+        **「有 id + 当前无锁」一律报错，不复活**：过期 / 被释放 / 被抢占之后拿旧编号来续期，
+        不能借这条路把锁重新建起来——否则「我丢了锁」这件事会被悄悄抹掉，持锁者会以为演出还在继续。
+
+        **有界**：内存态 + TTL（缺省 2 分钟，上限 30 分钟），插件卸载 / 宿主重启即全部失效——
+        调用方崩溃不会把宠物永久锁死。**没有定时器**：过期是懒判的，`/state` 叶子里的 `expiresAt`
+        是唯一真相，渲染端据此**自己**解除静止（见 `LockLeaf`）。
+
+        **无锁时按「有没有带 `lock`」分流**：没带 → 一切照旧，5 个动作端点行为与改造前逐字一致
+        （issue #122 最重要的边界：「没有有效联动占用时，接口不改变 pet 原有行为」）；带了但查不到锁
+        → `lock-lost` + `cause`，旧租约不能继续执行迟到请求（issue #122 第 4 点）。
+      parameters:
+        - $ref: "#/components/parameters/PetIdQuery"
+        - $ref: "#/components/parameters/SurfaceQuery"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                lockId:
+                  type: string
+                  description: 给了 = **续期**，不给 = **新建**。必须是当前生效的那个编号。
+                  example: lk-mfh2k1-1
+                ttl:
+                  type: number
+                  default: 120000
+                  minimum: 1000
+                  maximum: 1800000
+                  description: |
+                    占用时长（毫秒）。缺省 `120000`（2 分钟），范围 `1000~1800000`（1 秒~30 分钟）；
+                    续期时缺省**沿用原来那一个**。
+                    缺省给到 2 分钟是有意的：一次联动演出通常几十秒到一两分钟，**调用方就算没实现续期、
+                    或者漏了一拍也不会中途丢锁**（丢了会当场解冻，是很难查的现象）。
+                    越界 / 非有限数 → `ok: false` + `reason: bad-request`（**不夹取**：调用方写错时长
+                    应当立刻知道，而不是拿到一把比自己以为的更短或更长的锁）。
+                  example: 120000
+            examples:
+              acquire:
+                summary: 取锁（缺省 2 分钟）
+                value: {}
+              renew:
+                summary: 续期（把同一个编号再延 2 分钟）
+                value:
+                  lockId: lk-mfh2k1-1
+      responses:
+        "200":
+          description: |
+            恒为 200（除 405/400）。失败通过 `ok: false` 表达，`reason` 可能是
+            `bad-request`（`ttl` / `lockId` 非法 / `surface` 缺省或非法）、`pet-required`（没给 pet）、
+            `unknown-pet`、`locked`（带 `expiresAt`）、`lock-lost`（带 `cause`）、
+            `pet-not-displayed`（带 `display`——拿不到锁：这只宠物当前不显示在你要的那一端）。
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - allOf:
+                      - $ref: "#/components/schemas/OkResponse"
+                      - type: object
+                        required: [lockId, petId, expiresAt]
+                        properties:
+                          lockId:
+                            type: string
+                            description: 这次占用的编号。后续所有操作都要带上它（`?lock=`）。
+                            example: lk-mfh2k1-1
+                          petId:
+                            type: string
+                            description: 占用的是哪只宠物。
+                            example: main
+                          expiresAt:
+                            type: integer
+                            format: int64
+                            description: 到什么时候（epoch 毫秒）。
+                            example: 1755000030000
+                  - $ref: "#/components/schemas/FailureResponse"
+        "400":
+          description: '请求体不是合法 JSON（`{ "error": "invalid JSON body" }`）'
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+
+  /dsh-pet-7340/lock/release:
+    post:
+      tags: [Action]
+      operationId: releaseLock
+      summary: 释放占用（持锁者收工 / 用户接管）
+      description: |
+        撤掉这只宠物当前的占用，一切立刻复原（自动来源恢复写入、随机链恢复掷骰、渲染端解冻）。
+
+        **两种形态二选一**（`lockId` 与 `force` **恰好给一个**，都给或都不给 → `bad-request`）：
+
+        - `lockId`：**持锁者自己收工**，`cause` 记为 `released`；
+        - `force: true`：**渲染端**报告「用户接管了」——用户拖拽 / 点击宠物、或把它隐藏 / 关闭时调用，
+          `cause` 记为 `preempted`。第三方不用调它。
+
+        为什么"用户接管"必须由渲染端上报：锁在宿主内存里，而**鼠标事件到不了宿主**——渲染端是唯一
+        知道用户动手了的那个。不报的话，用户拖走宠物之后锁还挂着，宠物会继续被冻到 TTL 到点
+        （issue #122：「用户主动停止、隐藏或关闭时，也应能取消联动，避免宠物被永久锁住」）。
+
+        **幂等**：当前没有占用时同样回 `{ "ok": true }`——"让锁消失"这个意图在空状态下已经成立。
+        但有锁而 `lockId` **不匹配**时必须报错（`lock-lost`）：不许误放别人的锁。
+
+        **不碰动画 / 气泡 / 位置本身**：正在播的照播、气泡照挂到自己的定时器。这里只撤"控制权"。
+      parameters:
+        - $ref: "#/components/parameters/PetIdQuery"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: |
+                `lockId` 与 `force` **恰好给一个**。两个都给或都不给 → `ok: false` + `reason: bad-request`。
+              properties:
+                lockId:
+                  type: string
+                  description: 持锁者收工：当前生效的占用编号。
+                  example: lk-mfh2k1-1
+                force:
+                  type: boolean
+                  description: |
+                    **只认严格 `true`**（宽松口径会把误传当真，代价是撤掉别人的锁——宁可严格）。
+                    渲染端在用户拖拽 / 点击 / 隐藏 / 关闭时用它无条件撤锁。
+                  example: true
+            examples:
+              byHolder:
+                summary: 持锁者收工
+                value:
+                  lockId: lk-mfh2k1-1
+              byUser:
+                summary: 渲染端报告用户接管（拖拽 / 点击）
+                value:
+                  force: true
+      responses:
+        "200":
+          description: |
+            恒为 200（除 405/400）。失败通过 `ok: false` 表达，`reason` 可能是
+            `bad-request`（两个都给 / 都不给 / 类型不对）、`pet-required`（没给 pet）、
+            `unknown-pet`、`lock-lost`（`lockId` 不匹配，带 `cause`）。**当前没有锁不是失败。**
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/OkResponse"
+                  - $ref: "#/components/schemas/FailureResponse"
+        "400":
+          description: '请求体不是合法 JSON（`{ "error": "invalid JSON body" }`）'
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+
+  /dsh-pet-7340/pose:
+    get:
+      tags: [Action]
+      operationId: getPetPose
+      summary: 读桌面端宠物的实况（位置 + 朝向）
+      description: |
+        返回**桌面端**那只宠物最近一次上报的实况：宠物**中心**的归一化坐标 + 朝向。
+
+        **只有桌面端有这条路。** 网页端的宠物位置**天生每个页面一份**（开两个标签页时两边本来就
+        不同），塞进宿主一份快照语义上就是错的（后写者覆盖先写者）——所以网页端走**页面内**的
+        Cordis 只读服务 `petApi7340`：
+
+        ```js
+        // 同页的第三方客户端插件；拿不到 = 老版本，不抛
+        const svc = ctx.get('petApi7340');
+        const pose = svc ? svc.pose('main') : null; // → { x, y, facing } | null
+        ```
+
+        两边**字段名与坐标口径完全一致**，只是"取"的方式不同（网页端按需读、零请求）。
+
+        **不要求 `surface`**：这是**读**端点（`GET /chat`、`GET /playback/{id}` 同样不带），而且它的
+        定义域本身只有一个面。
+
+        坐标与 `POST /position` **同一套**：宠物中心、归一化 0~1，桌面端的基准是**所有屏的并集
+        矩形**——所以读回来的值可以直接喂回 `/position`。宠物被拖出屏幕边缘时中心点可能略出
+        0~1（**不做夹取**：实况要能对得上眼睛）。
+
+        快照是**变化时推 + 节流**（拖拽 / 走位 / 抛掷 / `/position` 指令 / turn 转身）得来的，不是
+        轮询：`updatedAt` 是判断"这份实况有多新"的唯一依据。桌面端没起来或刚重启时回
+        `pose-unavailable`。
+      parameters:
+        - $ref: "#/components/parameters/PetIdQuery"
+      responses:
+        "200":
+          description: |
+            恒为 200（除 405）。失败通过 `ok: false` 表达，`reason` 可能是
+            `pet-required`（没给 pet）、`unknown-pet`（配置里没这只）、
+            `pet-not-displayed`（带 `display`——配置上就不在桌面显示，本端点对它没有意义）、
+            `pose-unavailable`（在桌面显示，但还没收到过上报）、`generate-error`（配置不可读等）。
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - allOf:
+                      - $ref: "#/components/schemas/OkResponse"
+                      - type: object
+                        required: [petId, x, y, facing, updatedAt]
+                        properties:
+                          petId:
+                            type: string
+                            description: 这只宠物的 id（回显，便于调用方核对落点）。
+                            example: main
+                          x:
+                            type: number
+                            description: 宠物**中心**的归一化横坐标（与 `POST /position` 同一口径）。
+                            example: 0.42
+                          y:
+                            type: number
+                            description: 宠物**中心**的归一化纵坐标。
+                            example: 0.87
+                          facing:
+                            type: string
+                            enum: [left, right]
+                            description: 朝向（与 `POST /anim` 的 `facing` 同词）。
+                          updatedAt:
+                            type: integer
+                            format: int64
+                            description: 渲染端上报时刻（epoch 毫秒）——判断"有多新"的唯一依据。
+                            example: 1755000000000
+                  - $ref: "#/components/schemas/FailureResponse"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+
+  /dsh-pet-7340/pose/report:
+    post:
+      tags: [Action]
+      operationId: reportPetPose
+      summary: 桌面渲染端上报实况（内部通道，第三方不用调）
+      description: |
+        **渲染端 → 宿主**的内部通道：桌面宠物在**变化时**上报自己的实况（拖拽结束 / 走位结束 /
+        抛掷落定 / `/position` 指令完成 / turn 转身）。桌面管道（`dsh-pet-bridge://`）与 HTTP 走
+        同一份实现。
+
+        宿主只存一份**内存快照**，**不写 `/state`**——那是"给渲染端读"的单向通道，写进去只会惊动
+        所有挂着的长轮询。
+
+        **节流在渲染端做**（合并到约 2.5 次/秒，且带 trailing edge 保证停下后补上最终值），调用方
+        不需要自己节流。
+      parameters:
+        - $ref: "#/components/parameters/PetIdQuery"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [x, y, facing]
+              properties:
+                x:
+                  type: number
+                  description: 宠物中心的归一化横坐标（有限数字；**越界照收**，不做夹取）
+                  example: 0.42
+                y:
+                  type: number
+                  description: 同上，纵坐标
+                  example: 0.87
+                facing:
+                  type: string
+                  enum: [left, right]
+                  description: 朝向（严格两个字面量，大小写不符即 `bad-request`）
+            examples:
+              typical:
+                summary: 一次常规上报
+                value:
+                  x: 0.42
+                  y: 0.87
+                  facing: right
+      responses:
+        "200":
+          description: |
+            恒为 200（除 405/400）。失败通过 `ok: false` 表达，`reason` 可能是
+            `bad-request`（`x`/`y` 非有限数字、`facing` 非法）、`pet-required`、`unknown-pet`、
+            `generate-error`（配置不可读等）。
           content:
             application/json:
               schema:
@@ -899,7 +1256,9 @@ paths:
                     description: |
                       只在 `failed` / `cancelled` 时出现。当前取值：`asset-load`（素材没拿到）/
                       `decode-error`（解码失败）/ `play-rejected`（自动播放被拒）/
-                      `busy`（移动系统占用，本次点播没能播起来）/ `superseded`（被打断或顶掉）。
+                      `busy`（移动系统占用，本次点播没能播起来）/ `superseded`（被打断或顶掉）/
+                      `frozen`（被**占用锁**冻结打断——解冻走的是回 idle / 恢复档位，**不会把它接回来**，
+                      所以它确实不会再播完，是"打断"而不是"暂停"）。
                   matched:
                     type: boolean
                     description: '`true` = 等到了 `wait` 里的状态；`false` = 超时返回'
@@ -967,7 +1326,7 @@ paths:
                   type: string
                   description: |
                     可选原因（自由字符串）。渲染端当前使用：`asset-load` / `decode-error` /
-                    `play-rejected` / `busy` / `superseded`。
+                    `play-rejected` / `busy` / `superseded` / `frozen`（被占用锁冻结打断）。
               examples:
                 playing:
                   summary: 真的开始播了
@@ -1016,29 +1375,42 @@ paths:
 
         记忆的唯一读写方是宿主（落盘在 `memory.json`），浏览器与桌面两端都只是客户端，
         因此同一 DSH 实例下的两端**天然共享同一份记忆**。文件全量保留、不删除，
-        只是响应时按 `chatMemoryRounds`（默认 5 轮，1 轮 = 1 问 1 答）截取尾部。
+        只是响应时按 `chatMemoryRounds`（默认 5 轮，1 轮 = 1 问 1 答）截取尾部；
+        传了 `?rounds=` 则按传入值截取（只影响本次读取，不改变后续对话的上下文轮数）。
       parameters:
         - $ref: "#/components/parameters/PetIdQuery"
+        - name: rounds
+          in: query
+          description: 本次读取的轮数（0–200）；不传用配置的 `chatMemoryRounds`。非法值 → `bad-request`。
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 200
       responses:
         "200":
-          description: 最近窗口
+          description: |
+            最近窗口。**失败也是 200**（`{ ok: false, reason }`），靠 `ok` 区分：
+            `pet-required`（没给 pet）、`unknown-pet`（没有这只宠物）、`bad-request`（rounds 非法）、
+            `generate-error`（读记忆 / 读配置失败）。
           content:
             application/json:
               schema:
-                type: object
-                required: [ok, messages, rounds]
-                properties:
-                  ok:
-                    type: boolean
-                    const: true
-                  messages:
-                    type: array
-                    description: 按时间正序排列的消息，最多 `rounds * 2` 条
-                    items:
-                      $ref: "#/components/schemas/ChatMemoryMessage"
-                  rounds:
-                    type: integer
-                    description: 该宠物当前生效的轮数（来自配置 `chatMemoryRounds`）
+                oneOf:
+                  - type: object
+                    required: [ok, messages, rounds]
+                    properties:
+                      ok:
+                        type: boolean
+                        const: true
+                      messages:
+                        type: array
+                        description: 按时间正序排列的消息，最多 `rounds * 2` 条
+                        items:
+                          $ref: "#/components/schemas/ChatMemoryMessage"
+                      rounds:
+                        type: integer
+                        description: 本次生效的轮数（传了 `?rounds=` 用传入值，否则来自配置 `chatMemoryRounds`）
+                  - $ref: "#/components/schemas/FailureResponse"
         "405":
           $ref: "#/components/responses/MethodNotAllowed"
         "500":
@@ -1048,10 +1420,11 @@ paths:
       operationId: sendChat
       summary: 对指定宠物说一句话并生成回复
       description: |
-        携带历史上下文生成回复，把「问 + 答」写入记忆，并把回复写进 `pets.<id>.say`。
-        这是动作端点，**只回 `{ ok: true }`**——回复文本从 `/state` 读。
+        携带历史上下文生成回复，把「问 + 答」写入记忆，并把回复写进 `pets.<id>.say`，
+        同时**随响应带回**回复文本（`text`，生成端若选了配图则另有 `image`）。
 
-        调用方收到 `ok` 后应立刻拉一拍 `/state` 即可看到回复，无需额外等待。
+        文本仍然照旧写进 `pets.<id>.say`：其它消费端继续从 `/state` 读，返回值只是
+        让调用的这一方不必再拉一拍——两处是同一份文本，不是两个真相。
 
         - 文本会 `trim()`，空文本 → `{ ok: false, reason: 'bad-request' }`。
         - 文本超过 **2000 字** → `{ ok: false, reason: 'bad-request' }`。
@@ -1060,6 +1433,7 @@ paths:
         - 记忆只存**正文**：配图属展示层，不进上下文（否则下次请求会把标记当历史读回去）。
       parameters:
         - $ref: "#/components/parameters/PetIdQuery"
+        - $ref: "#/components/parameters/SurfaceQuery"
       requestBody:
         required: true
         content:
@@ -1080,13 +1454,15 @@ paths:
       responses:
         "200":
           description: |
-            恒为 200（除 405）。`reason` 取值：`bad-request`（空/超长消息）、
-            `provider-missing`（没有可用的对话服务商）、`generate-error`（生成/IO 失败）。
+            恒为 200（除 405）。`reason` 取值：`pet-required`（没给 pet）、`unknown-pet`（没有这只宠物，
+            或在排队等记忆锁期间被删掉了——这一支**不写记忆也不写气泡**）、
+            `bad-request`（空/超长消息 / `surface` 缺省或非法）、`provider-missing`（没有可用的对话服务商）、
+            `pet-not-displayed`（带 `display`）、`generate-error`（生成/IO 失败）。
           content:
             application/json:
               schema:
                 oneOf:
-                  - $ref: "#/components/schemas/OkResponse"
+                  - $ref: "#/components/schemas/SayResponse"
                   - $ref: "#/components/schemas/FailureResponse"
         "405":
           $ref: "#/components/responses/MethodNotAllowed"
@@ -1292,37 +1668,32 @@ paths:
                   display: web
       responses:
         "200":
-          description: 改动成功，返回改动后的成品聚合
+          description: |
+            **改动成功** → 改动后的成品聚合（与 `GET /config` 同一份）；
+            **业务失败** → `{ ok: false, reason, message }`。两者都是 200，靠 body 区分
+            （成功体没有 `ok` 字段，失败体 `ok` 恒为 `false`）——业务错误不用 400/404 表达，
+            否则调用方会把业务结论当成传输层故障。
+
+            `reason` 取值：`pet-required`（缺 `id` / 空串 / 全空白）、`bad-request`（`display`
+            不在枚举内 / 该层宠物配置非法）、`unknown-pet`（找不到这只宠物，含因 id 与其它条目
+            重复而在合并时被跳过的那种）、`generate-error`（配置读取失败 / 写盘失败 / 条目配置
+            文件找不到）。
           content:
             application/json:
               schema:
-                type: object
-                additionalProperties:
-                  $ref: "#/components/schemas/PetConfigEntry"
+                oneOf:
+                  - type: object
+                    additionalProperties:
+                      $ref: "#/components/schemas/PetConfigEntry"
+                  - $ref: "#/components/schemas/FailureResponse"
         "400":
-          description: |
-            请求体非法：JSON 解析失败（`invalid JSON body`）、缺 `id`（`missing pet id`）、
-            或 `display` 不在枚举内（`invalid display: xxx`）。
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "404":
-          description: |
-            找不到该宠物（`pet not found: xxx`）。该实例因 `id` 与其它条目重复而在合并时被跳过时
-            也走这里——那种情况下它在成品聚合里根本不存在，宿主不会去猜它属于哪个文件。
+          description: '请求体不是合法 JSON（`{ "error": "invalid JSON body" }`）——协议层错误，只有它是 400'
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "405":
           $ref: "#/components/responses/MethodNotAllowed"
-        "500":
-          description: 配置读取失败（安装损坏）或写盘失败
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
 
   /dsh-pet-7340/config/meta:
     get:
@@ -1568,11 +1939,68 @@ components:
       in: query
       required: true
       description: |
-        目标宠物 id（配置里 `pets[].id`，默认 `main`）。
+        目标宠物 id（配置里 `pets[].id`）——**必填**。
+
+        没给 / 空串 / 全空白 → `ok: false` + `reason: pet-required`；
+        给了但配置里没有这只宠物 → `ok: false` + `reason: unknown-pet`。
+        **没有缺省值**：绝不退到"当前桌宠"或列表第一只（issue #122 第 1 条），
+        所以同一句请求的落点不会随用户 `/pet` 的选择而变。
         允许包含点号与中文；**不要**按 `.` 解析由 `/state` 返回的路径键来取它。
       schema:
         type: string
       example: main
+
+    SurfaceQuery:
+      name: surface
+      in: query
+      required: true
+      description: |
+        **调用方期望的显示端**——**必填**（与 `pet` 同级，issue #122 第 1 条）。
+
+        `pet` 只说明"哪一只"，不说明"哪一端"。一只 `display: desktop` 的宠物被当成网页目标时，
+        宿主照旧会受理，但**没有任何渲染端会消费它**：调用方拿到 `ok: true` 却什么都不会发生，
+        一直等到回执超时才知道不对。这个参数就是把那种"必然不可能"提前变成显式失败。
+
+        取值：
+
+        - `web` —— 必须显示在**网页**（`display` 为 `web` / `both`）；
+        - `desktop` —— 必须显示在**桌面**（`display` 为 `desktop` / `both`）；
+        - `both` —— **两端都要**显示（只匹配 `display: both`，比"哪端都行"更严）；
+        - `any` —— **哪端都行**，只要不是不显示（`display` 为 `web` / `desktop` / `both`）。
+
+        失败两种（都是 HTTP 200 + `ok: false`）：
+
+        - 缺省 / 非法（含大小写不符、空串）→ `bad-request`；
+        - 与该宠物的 `display` 对不上（含 `display: none`——`any` 也拒）→ `pet-not-displayed`，
+          并**回带该宠物实际的 `display`**，调用方据此一眼知道该怎么办。
+
+        **这是前置校验，不是"按面分发"**：指令照旧写进同一个叶子、两端内容照旧完全一致。
+        要"网页播 A、桌面播 B"，用**两只宠物**表达（`display: web` / `display: desktop`）。
+
+        **不接受本参数的端点**：`/lock/release`（释放必须永远能成功，否则宠物中途被隐藏就撤不掉锁）
+        与 `GET /chat`（读记忆与宠物显示在哪一端无关）。
+      schema:
+        type: string
+        enum: [web, desktop, both, any]
+      example: web
+
+    LockQuery:
+      name: lock
+      in: query
+      required: false
+      description: |
+        **占用锁编号**（`POST /lock` 返回的 `lockId`，issue #122 第 4 项）。
+
+        - **当前没有占用时**：不传它 → 照旧放行（既有调用方不动就能用，这是「不传 lock = 现状
+          零变化」那条边界）；传了它 → `lock-lost` + `cause`，因为带了编号就说明你以为自己还持有，
+          而锁已经过期 / 被释放 / 被用户抢走了。
+        - 当前**有**占用时：必须传，且必须是当前生效的那个编号。没传 → `lock-required`；
+          传了但不匹配 → `lock-lost`（带 `cause`）。
+        - 占用期间**只有持锁者**能操作这只宠物。用户交互不受限制：用户拖拽 / 点击宠物会直接撤掉占用
+          （`POST /lock/release` 的 `force` 形态，由渲染端上报）。
+      schema:
+        type: string
+      example: lk-mfh2k1-1
 
     AssetFile:
       name: file
@@ -1609,6 +2037,26 @@ components:
           const: true
       description: 动作已完成。数据请从 `GET /state` 读取。
 
+    SayResponse:
+      type: object
+      required: [ok, text]
+      properties:
+        ok:
+          type: boolean
+          const: true
+        text:
+          type: string
+          description: |
+            本次生成的正文。与同时写入 `pets.<id>.say` 的 `text` 是同一个变量——
+            两条出口给的是同一份文本，不存在"接口一份、状态流一份"。
+        image:
+          type: string
+          description: |
+            随文本一起显示的表情包名（条目开启了配图且池内命中时才有；否则该字段不出现）。
+      description: |
+        生成成功。文本**仍然**照旧写进 `pets.<id>.say`——其它消费端（网页、桌面、第三方监听）
+        继续从 `/state` 读；返回值只是让发起的这一方省一次往返，不改变任何现有展示链路。
+
     FailureResponse:
       type: object
       required: [ok, reason]
@@ -1620,9 +2068,53 @@ components:
           type: string
           description: |
             失败原因分类。`bad-request` 参数不合法（空文本/超长）、`provider-missing` 没有可用
-            的对话服务商、`generate-error` 生成或 IO 失败、`unknown-pet` 指定的桌宠不存在、
-            `unknown-image` 配图不在包内表情包池内。
-          enum: [bad-request, provider-missing, generate-error, unknown-pet, unknown-image, unknown-animation]
+            的对话服务商、`generate-error` 生成或 IO 失败、`pet-required` 必填的 pet 没给
+            （缺省 / 空串 / 全空白）、`unknown-pet` 指定的桌宠不存在、
+            `unknown-image` 配图不在包内表情包池内、`unknown-animation` 动画名不在池内。
+
+            占用锁（issue #122 第 4 项）另有三个：`locked` 该宠物已被别人占用（带 `expiresAt`）、
+            `lock-required` 当前有占用但没传 `lock`、`lock-lost` 传的 `lock` 不是当前生效的那个
+            （带 `cause`）。
+
+            显示端对齐（issue #122 第 1 条）另有一个：`pet-not-displayed` 该宠物的 `display`
+            不满足请求里的 `surface`（带 `display` = 该宠物**实际**的显示模式）。
+
+            实况（`GET /pose`）另有一个：`pose-unavailable` 配置上在桌面显示，但还没收到过渲染端
+            上报（桌面端没起来 / 刚重启）。
+          enum:
+            [
+              bad-request,
+              provider-missing,
+              generate-error,
+              pet-required,
+              unknown-pet,
+              unknown-image,
+              unknown-animation,
+              locked,
+              lock-required,
+              lock-lost,
+              pet-not-displayed,
+              pose-unavailable,
+            ]
+        cause:
+          type: string
+          description: |
+            只有 `lock-lost` 带：这把锁**是怎么没的**——`expired` 没及时续期、`released` 已被释放、
+            `preempted` 被**用户**接管（拖拽 / 点击 / 隐藏 / 关闭）、`unknown` 认不出这个编号。
+          enum: [expired, released, preempted, unknown]
+        expiresAt:
+          type: integer
+          format: int64
+          description: |
+            只有 `locked` 带：当前占用**到什么时候**（epoch 毫秒）。据此决定何时重试。
+          example: 1755000030000
+        display:
+          type: string
+          description: |
+            只有 `pet-not-displayed` 带：该宠物**实际**的显示模式（`web` / `desktop` / `both` /
+            `none`），原样透出——调用方据此决定是换 `surface` 还是换 `pet`。
+          enum: [web, desktop, both, none]
+          example: desktop
         message:
           type: string
           description: 人类可读的补充说明（可选）
@@ -1668,7 +2160,7 @@ components:
           description: 每只宠物各自一份；键是宠物 id（**可含点号，勿切分**）
           additionalProperties:
             type: object
-            required: [say, anim, position, throw]
+            required: [say, anim, position, throw, lock]
             properties:
               say:
                 $ref: "#/components/schemas/SayLeaf"
@@ -1678,6 +2170,8 @@ components:
                 $ref: "#/components/schemas/PositionLeaf"
               throw:
                 $ref: "#/components/schemas/ThrowLeaf"
+              lock:
+                $ref: "#/components/schemas/LockLeaf"
       examples:
         typical:
           summary: 一只有余额与碎碎念的宠物
@@ -2018,6 +2512,7 @@ components:
       type: object
       description: |
         要播的一段动画。`name` 与 `url` **恰好一个**（由 `POST /anim` 在写入前保证）。
+        `facing` **可选**：字段缺席 = 调用方没指定朝向，消费端**不动朝向**（不是回落 `left`）。
       properties:
         name:
           type: string
@@ -2035,6 +2530,14 @@ components:
             与 `name` 并列、**由字段名区分**（不靠 `startsWith('http')` 嗅探：名字恰好长得像
             地址时会判错）。
           example: https://cdn.example.com/拉侧栏.webm
+        facing:
+          type: string
+          enum: [left, right]
+          description: |
+            调用方**显式指定**的朝向（`POST /anim` 的 `facing`）。**字段缺席 = 没指定** → 消费端
+            **不动朝向**（保持宠物当前朝向，不是回落 `left`）——所以"没要求"与"要求 `left`"在形状上
+            就是可区分的。`name` / `url` 两种形态都可能有这个字段。
+          example: right
 
     PositionLeaf:
       type: object
@@ -2117,6 +2620,60 @@ components:
             - $ref: "#/components/schemas/Say"
             - $ref: "#/components/schemas/SayClear"
             - type: "null"
+
+    LockLeaf:
+      type: object
+      required: [counter, data]
+      properties:
+        counter:
+          $ref: "#/components/schemas/Counter"
+        data:
+          description: |
+            该宠物的**占用锁状态**（issue #122 第 4 项）；`null` = 从未写过（视为没有占用）。
+            由 `POST /lock` / `POST /lock/release` 写入，过期时宿主也会顺手补写一次
+            （过期是**懒判**的，没有定时器）。
+
+            **这是状态不是指令**（与 `anim` / `position` / `throw` 三个不同）：渲染端读它决定
+            「要不要冻结自己」——随机链不掷骰、暂停当前自播动画、忽略**自动**来源的余额与工作状态
+            表现；显式指令（`say` / `anim` / `position` / `throw`）一概不挡。宿主停不掉一段正在播的
+            视频，所以「完全静止」最终是渲染端执行的。
+
+            **`expiresAt` 是唯一真相**：宿主不会到点推一次「锁没了」，渲染端据此自己定时解除。
+            因此读到 `expiresAt` **已经过去**就等于没有锁（页面刷新后才拿到陈旧叶子时必须这么判）。
+
+            **不含 `lockId`**：那是持锁者的凭证，不放进人人可读的 `/state`。
+          oneOf:
+            - $ref: "#/components/schemas/LockState"
+            - type: "null"
+
+    LockState:
+      description: 占用锁的两种形态，由 `locked` 字段名区分。
+      oneOf:
+        - $ref: "#/components/schemas/LockOn"
+        - $ref: "#/components/schemas/LockOff"
+
+    LockOn:
+      type: object
+      required: [locked, expiresAt]
+      description: 正被第三方占用：宠物应当冻结。
+      properties:
+        locked:
+          type: boolean
+          const: true
+        expiresAt:
+          type: integer
+          format: int64
+          description: 这次占用到什么时候（epoch 毫秒）。
+          example: 1755000030000
+
+    LockOff:
+      type: object
+      required: [locked]
+      description: 没有占用（正常状态：宠物照常随机动画、自主走位、碎碎念、余额、工作状态）。
+      properties:
+        locked:
+          type: boolean
+          const: false
 
     Say:
       type: object

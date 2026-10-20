@@ -38,7 +38,6 @@ const decide = (over: Partial<Parameters<typeof decideBroadcast>[0]> = {}) =>
   decideBroadcast({
     cfg,
     requested: 'main',
-    active: '',
     text: '主人，该喝水了',
     image: undefined,
     url: undefined,
@@ -118,16 +117,12 @@ describe('decideBroadcast —— 宠物选择', () => {
     assert.equal(d.ok === true && d.petId, 'test1');
   });
 
-  test('不指定 pet → 落到当前桌宠（active）', () => {
-    const d = decide({ requested: '', active: 'test1' });
-    assert.equal(d.ok, true);
-    assert.equal(d.ok === true && d.petId, 'test1');
-  });
-
-  test('不指定且没有当前桌宠 → 兜底 main（不静默丢弃）', () => {
-    const d = decide({ requested: '', active: '' });
-    assert.equal(d.ok, true);
-    assert.equal(d.ok === true && d.petId, 'main');
+  test('不指定 pet → pet-required（缺省链已删除：绝不退到"当前桌宠"/列表第一只）', () => {
+    for (const empty of ['', '   ']) {
+      const d = decide({ requested: empty });
+      assert.equal(d.ok, false);
+      assert.equal(d.ok === false && d.reason, 'pet-required');
+    }
   });
 
   test('指定不存在的宠物 → unknown-pet（显式失败，不静默写进一个没人看的叶子）', () => {
@@ -278,20 +273,19 @@ describe('decideBroadcast —— 新参数原样进入结论（写进叶子的�
 
 describe('decideBubbleClear —— 清空气泡（只有"清哪只宠物"会失败）', () => {
   test('指定存在的宠物 → 通过', () => {
-    const d = decideBubbleClear({ cfg, requested: 'test1', active: '' });
+    const d = decideBubbleClear({ cfg, requested: 'test1' });
     assert.equal(d.ok, true);
     assert.equal(d.ok === true && d.petId, 'test1');
   });
 
-  test('pet 缺省的解析链与 /broadcast 完全一致：active → 兜底 main', () => {
-    const a = decideBubbleClear({ cfg, requested: '', active: 'test1' });
-    assert.equal(a.ok === true && a.petId, 'test1');
-    const b = decideBubbleClear({ cfg, requested: '', active: '' });
-    assert.equal(b.ok === true && b.petId, 'main');
+  test('pet 缺省 → pet-required（与 /broadcast 同一条口径）', () => {
+    const d = decideBubbleClear({ cfg, requested: '' });
+    assert.equal(d.ok, false);
+    assert.equal(d.ok === false && d.reason, 'pet-required');
   });
 
   test('不存在的宠物 → unknown-pet（显式失败，不去写一个没人看的叶子）', () => {
-    const d = decideBubbleClear({ cfg, requested: 'ghost', active: '' });
+    const d = decideBubbleClear({ cfg, requested: 'ghost' });
     assert.equal(d.ok, false);
     assert.equal(d.ok === false && d.reason, 'unknown-pet');
     assert.match(d.ok === false ? d.message : '', /ghost/);
@@ -299,7 +293,7 @@ describe('decideBubbleClear —— 清空气泡（只有"清哪只宠物"会失�
 
   test('没有"气泡不存在"这种失败：空状态下也是 ok（幂等）', () => {
     // 决策层看不到气泡当前显隐，本来就不该为它造一个失败分支
-    assert.equal(decideBubbleClear({ cfg, requested: 'main', active: '' }).ok, true);
+    assert.equal(decideBubbleClear({ cfg, requested: 'main' }).ok, true);
   });
 });
 

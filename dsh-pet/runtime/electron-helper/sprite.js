@@ -74,7 +74,10 @@ class PetSprite {
     // 为什么要单独一个字段：this.anim 只是动画名，右键菜单点播与第三方 /anim 可以播同名动画，
     // 光看名字分不出"这一段该不该上报回执"。
     this.playback = null;
-    this.facing = 'left';
+    // 朝向走 accessor（见下方 get/set facing）：赋值即标记实况脏，交给节流上报。
+    // 构造函数里**直接写 `_facing`**，避免在其它字段就绪前就触发一次上报。
+    this._facing = 'left';
+    this.poseTimer = null; // 实况上报的节流定时器（见 markPoseDirty）
     // 交互/移动
     this.dragState = { active: false, dragging: false, sx: 0, sy: 0, petX: 0, petY: 0 };
     this.justDragged = false;
@@ -135,6 +138,10 @@ class PetSprite {
     this.workState = null; // 最近一次工作状态（互动/事件动画播完恢复档位循环用）
     this.prevWorkState = null; // 上一档状态（气泡只在状态变化时点亮/收起，Bug 2）
     this.prevWorkTick = 0;
+    // 占用锁（issue #122 第 4 项）：frozen = 本宠物此刻正被第三方占用（与浏览器 PetCard.frozenRef 同义）。
+    // lockTimer = 按叶子里的 expiresAt 自己到点解除（宿主侧过期是懒判的，不会推"锁没了"）。
+    this.frozen = false;
+    this.lockTimer = null;
     // 对话弹窗（shared 组件）：当前挂载的 close() 句柄 + 开启标记
     // （chatOpen 是穿透守卫：弹窗是窗口内 DOM，期间整窗保持可交互，与 menuOpen 同语义——否则
     //   光标移到输入框（不在身体命中区）就会被 onMouseMove 翻回穿透，点击全被透传）
@@ -289,6 +296,58 @@ class PetSprite {
   // setContentBounds 要**屏幕**坐标：pos 是视口（桌面外接矩形）相对坐标，先加 VIEW.x/y
   // 再统一 ×scale 回物理像素（§3.5 IPC 收口）——主进程收到的数字与线性化旧行为逐位一致，
   // 主进程侧（bounds/去重/碰撞 broker）完全不用改。
+  // ---- 实况（位置 + 朝向）上报（issue #122 第 1 条：取得有效实例及其位置、朝向）----
+  //
+  // 第三方用 `GET /pose` 读桌面端这一份快照。**网页端不走这条路**——它的位置天生每个页面一份
+  // （两个标签页本来就不同），走页面内的 Cordis 只读服务 `petApi7340`（见 src/client/pose.ts）；
+  // 两边字段名与坐标口径**完全一致**，只是取法不同。
+  //
+  // 收口设计（0 个额外调用点）：
+  //   - 位移：全仓**只有 sendBounds 会调 petBridge.setBounds**，所以只要在它末尾标脏，就覆盖了
+  //     全部位移场景（重排/回角落、自主走位、拖拽跟手、抛掷逐帧、/position 三种模式）。
+  //   - 朝向：变化**不一定伴随位移**（原地转身），所以用 accessor 让赋值自动标脏。
+  //
+  // 节流：见 constants.js 的 POSE_THROTTLE_MS（trailing edge，到点读**当前值**推一次）。
+
+  get facing() {
+    return this._facing;
+  }
+
+  set facing(next) {
+    const value = next === 'right' ? 'right' : 'left';
+    if (this._facing === value) return;
+    this._facing = value;
+    this.markPoseDirty();
+  }
+
+  /** 实况变了 → 交给节流器（连续变化被合并成一次冲刷） */
+  markPoseDirty() {
+    if (this.poseTimer !== null) return;
+    this.poseTimer = window.setTimeout(() => {
+      this.poseTimer = null;
+      this.reportPose();
+    }, POSE_THROTTLE_MS);
+  }
+
+  /**
+   * 把当前实况推给宿主（`POST /pose/report`）。**读的是当前值**，所以节流窗口内的连续变化只留下
+   * 最后一帧——这正是要的：第三方要的是"现在在哪"，不是中间过程。
+   *
+   * 坐标与 `POST /position` 同一口径：宠物**中心**的归一化 0~1；桌面端的基准是**所有屏的并集矩形**
+   * （VIEW，与 position() 算窗口位置用的是同一套）——不这样读回来的值就喂不回 /position。
+   */
+  reportPose() {
+    if (!this.pos) return; // 还没摆过位（position() 首次调用前）：不报，免得推 0,0
+    const body = {
+      x: (this.pos.x + this.halfW) / VIEW.w,
+      y: (this.pos.y + this.halfH) / VIEW.h,
+      facing: this._facing,
+    };
+    void S.postAction(POSE_REPORT_URL + '?pet=' + encodeURIComponent(this.pet.id), body).then((ok) => {
+      if (!ok) console.warn('[dsh-pet] 实况上报未送达 pet=' + this.pet.id);
+    });
+  }
+
   sendBounds(px, py) {
     this.pos = { x: Math.round(px), y: Math.round(py) };
     window.__dshPetDebug.dragPos = { x: this.pos.x, y: this.pos.y };
@@ -318,6 +377,8 @@ class PetSprite {
     // 而光标存的是视口坐标，窗口一移，光标相对窗口的位置就变了，不重摆提示会跟着窗口漂走。
     // 只在显示时重摆：漫游逐帧调本函数，没显示提示时不做无谓的 DOM 写入。
     if (this.tipOn) this.renderTip();
+    // 实况标脏（节流上报，见 markPoseDirty）：所有位移都收口在本函数，所以这里一处就够
+    this.markPoseDirty();
   }
 
   // 角落/边距 → 窗口位置；拖拽后按会话内位置（比例）还原——**松手无任何边界夹取**，
@@ -516,8 +577,75 @@ class PetSprite {
     this.playOnce(url, playbackId, url);
   }
 
+  /**
+   * 占用锁（issue #122 第 4 项）：冻结 / 解冻。**与浏览器 PetCard.applyFreeze 同构**。
+   *
+   * 冻结期间只有三件事被挡住，且都在渲染端：① 随机链（playIdle 一句判断）；
+   * ② 当前正在播的自播动画（暂停，定在当前帧）；③ **自动**来源的余额与工作状态表现
+   * （见 events.js 里 onBalanceTick / onWorkTick / showBalanceNotice 的判断）。
+   * 显式指令（say / anim / position / throw 四个叶子）**一概不挡**——那些是持锁者（或用户手动）
+   * 明确要的，正是占用要保护的东西。
+   */
+  applyFreeze(next) {
+    if (this.frozen === next) return;
+    this.frozen = next;
+    const el = this.front === 0 ? this.videoA : this.videoB;
+    const stamp = '[dsh-pet] ' + new Date().toTimeString().slice(0, 8) + ' pet=' + this.pet.id;
+    if (next) {
+      // 停住正在播的那一段：宿主停不掉一段视频，"完全静止"只能由渲染端执行。
+      // 光堵随机链入口不够——那个入口只在动画**播完**时才被调用，不暂停就会把当前这段播完才停。
+      this.stopMove();
+      if (el) el.pause();
+      // 播放回执（issue #122 第 3 项）：冻结**打断了**正在播的那一次第三方点播——如实回
+      // `cancelled`，而不是让回执一直挂着 `playing`（挂 `?wait=ended` 的调用方会白等一个 timeout：
+      // 这一场永远不会 ended）。为什么是"打断"而不是"暂停"：解冻走的是回 idle / 恢复档位
+      // （= 换源顶掉它），**不会把它接回来**，所以它确实不会再播完。
+      // 与浏览器 src/client/pet.ts 的 applyFreeze 同一处、同一 reason。
+      // 先清 this.playback 再上报：免得后续换源又把它当成"被顶掉"再报一次。
+      const interrupted = this.playback;
+      if (interrupted) {
+        this.playback = null;
+        this.reportPlayback(interrupted, 'cancelled', 'frozen');
+      }
+      console.log(stamp + ' 占用锁生效：冻结（随机链停 + 当前动画暂停）');
+      return;
+    }
+    console.log(stamp + ' 占用锁解除：恢复');
+    // 解冻：回到"该播什么就播什么"——非终态工作状态回档位循环，否则回 idle 一次，
+    // 播完由 handleEnded 接回随机链（与浏览器同一语义）。
+    if (this.resumeWorkStatusAnim()) return;
+    if (this.animations.idle.length) this.playOnce(S.pick(this.animations.idle, this.anim));
+  }
+
+  /**
+   * 锁叶子 → 冻结 / 解冻（`pets.<id>.lock`，见 events.js 的 applyLockLeaf）。
+   *
+   * `expiresAt` **已经过去** = 没有锁：窗口重载后才拿到一份陈旧叶子时必须这么判，不能只看 locked。
+   * 宿主不会到点推一次"锁没了"，所以这里自己定时解除——两端的"到点"因此同源（见 src/host/lock.ts）。
+   */
+  setLock(state) {
+    if (this.lockTimer !== null) {
+      window.clearTimeout(this.lockTimer);
+      this.lockTimer = null;
+    }
+    const expiresAt = state && state.locked === true ? state.expiresAt : 0;
+    this.applyFreeze(expiresAt > Date.now());
+    if (expiresAt <= Date.now()) return;
+    this.lockTimer = window.setTimeout(
+      () => {
+        this.lockTimer = null;
+        this.applyFreeze(false);
+      },
+      Math.max(0, expiresAt - Date.now()),
+    );
+  }
+
   // 动画链（与浏览器 pickNext 语义一致，纯逻辑在 shared）
   playIdle() {
+    // 占用锁（issue #122 第 4 项）：锁生效时**不掷骰**。这里是随机链的**唯一**入口（只有动画播完
+    // 才会走到），一句判断就把随机动画、随机转向、自主走位一起停住——宠物停在最后一帧，
+    // 等持锁者的下一条指令（那走 /anim，不经这里）。与浏览器 pickNext 同一处判断。
+    if (this.frozen) return;
     this.stopMove();
     const { animations, animationWeights } = { animations: this.animations, animationWeights: this.weights };
     const roll = Math.random();
@@ -557,6 +685,13 @@ class PetSprite {
       this.reportPlayback(done, 'ended');
     }
     if (this.dragState.active) return;
+    // 占用锁（issue #122 第 4 项）：冻结期间**动画链一律不推进**——事件动画播完就停在最后一帧。
+    // 与浏览器 src/client/pet.ts 的 handleEnded 同一处判断、同一原因：下面四条路都会换源播放，
+    // 而它们读的是**当前工作状态**（this.workState），跟 workTick 无关，所以 onWorkTick 那道门禁
+    // 拦不住它们——③ 事件动画（余额/碎碎念/**说话**）播完恢复档位最容易被撞上：持锁者每投一次
+    // 带 anim 的气泡（默认就是 true），说话动画播完就把工作状态动画点回来，冻结形同虚设。
+    // 播放回执已经在上面上报，不受这一行影响。
+    if (this.frozen) return;
     const { animations } = { animations: this.animations };
     // 事件动画播完：回 idle（与 drag/clicks 同分支，不进随机链）；气泡由定时器自动消失，与动画解耦
     const isEvent = S.isEventAnim(animations.events, this.anim);
@@ -603,6 +738,11 @@ class PetSprite {
   // 互动/事件动画播完后恢复 workStatus 档位循环：非终态 → 按当前状态档位重选动画（多候选档内
   // 随机并避开当前段）；终态/空闲 → false 不接管，调用方走原逻辑（回 idle / 随机池，与浏览器一致）。
   resumeWorkStatusAnim() {
+    // 占用锁：冻结期间不许由这条路把工作状态动画点回来（与浏览器端同名方法同一道自防）。
+    // 它读的是 this.workState（实时状态），跟 workTick 无关——持锁者每投一次带 anim 的气泡，
+    // 说话动画播完就会经 handleEnded 走到这里。解冻路径不受影响：applyFreeze(false) 是先置
+    // this.frozen = false 再调它。
+    if (this.frozen) return false;
     const state = this.workState;
     if (!state || state === 'success' || state === 'error') return false;
     const pool = this.animations.events?.workStatus;
@@ -633,13 +773,24 @@ class PetSprite {
       : actions[Math.floor(Math.random() * actions.length)];
     if (!chosen) return false;
     const mp = Object.assign({}, moves.default, chosen.params || {});
-    const dir = (this.facing === 'right') !== this.animations.turn.includes(this.anim) ? 1 : -1;
+    // 朝向 → 走路方向：**只看当前 facing**（与浏览器 pet.ts 的 tryMove 同一条）。原式的 XOR 是用来
+    // 补"turn 播完 setFacing 异步、紧随的随机链还读到旧 facing"，双端都改成立即同步之后它反而把方向
+    // 多翻一次：turn 播完朝右，这里算出 dir=-1，于是镜像朝右、人往左走。故删掉。
+    const dir = this.facing === 'right' ? 1 : -1;
     const W = VIEW.w;
     const H = VIEW.h;
     const distScale = this.size / S.PET_REF_WIDTH;
+    const cx = this.currentCenterX();
+    const cy = this.currentCenterY();
+    // 落点按显示器判定：默认走**并集**——能骑缝跨屏走，但走不进外接矩形里的空洞。
+    // confineToScreen（设置页「锁定在当前屏幕」）开启时改成只按**宠物现在所在那块屏**判定：
+    // 屏缝与空洞一样当墙，越出当前屏的那一步直接取消（planMove 返回 null ⇒ 本次移动不发车）。
+    // 与抛掷锁定的差别：抛掷是逐帧物理边界（撞到屏缝会弹回来），漫游是一次性落点规划、没有反弹语义。
+    // 宠物被拖到屏外（落在空洞里）时 resolveRect 取最近那块屏，所以锁定态下依然走得动。
+    const wanderArea = this.confineToScreen ? S.resolveRect(AREAS, cx, cy) : null;
     const plan = S.planMove({
-      cx: this.currentCenterX(),
-      cy: this.currentCenterY(),
+      cx,
+      cy,
       W,
       H,
       dir,
@@ -648,8 +799,7 @@ class PetSprite {
       margin: mp.margin, // 同 position() 的 marginX/marginY：页面级缩放统一放大，配置值不再乘 scale（§3.5）
       halfW: this.halfW,
       sideAllow: this.sideAllow,
-      // 落点按显示器并集判定：能骑缝跨屏走，但走不进外接矩形里的空洞
-      areas: AREAS,
+      areas: wanderArea ? [wanderArea] : AREAS,
     });
     if (!plan) return false;
     this.pendingMove = { ...plan, dir, leadSec: mp.leadSec, tailSec: mp.tailSec };
@@ -979,6 +1129,21 @@ class PetSprite {
   onPointerDown(e) {
     // 只认左键：右键进入拖拽判定会与右键菜单打架（右键不拖拽，两端一致）
     if (e.button !== 0) return;
+    // 占用锁（issue #122 第 4 项）：用户**点了或拖了**这只宠物 = 用户接管，立刻撤掉第三方占用。
+    // 这是唯一一处"渲染端 → 宿主"的锁上报——宿主看不见鼠标，而锁在它手里
+    // （/lock/release 的 force 形态；桌面端走 bridge，与播放回执 reportPlayback 同一条路）。
+    // 先本地解冻再上报：叶子回来还有一次往返，等它会让宠物"点了半天才动"；此刻 frozen 为真说明
+    // 确实有锁，所以这次 force 释放必然成功，乐观是安全的。
+    if (this.frozen) {
+      if (this.lockTimer !== null) {
+        window.clearTimeout(this.lockTimer);
+        this.lockTimer = null;
+      }
+      this.applyFreeze(false);
+      S.postAction(BASE + '/lock/release?pet=' + encodeURIComponent(this.pet.id), { force: true }).then((ok) => {
+        if (!ok) console.warn('[dsh-pet] 用户接管上报未送达 pet=' + this.pet.id);
+      });
+    }
     // 抓取速度日志：stopThrow 之前读，否则飞行速度就没了；静止时记录 0（与浏览器同构）
     const grabState = this.throwState;
     console.log(
@@ -1411,7 +1576,9 @@ class PetSprite {
     this.syncInputRegions(); // mountContextMenu 完成布局后才能读取菜单矩形
   }
 
-  onMenuAction(leaf) {
+  /** `keepFacing` = 调用方已**显式指定**朝向（POST /anim 的 facing）：跳过下面"文字类动画点播前
+   *  强制朝左"那条镜像修正——显式值优先。右键菜单点播不传（保持原语义）。 */
+  onMenuAction(leaf, keepFacing) {
     this.closeMenu();
     if (!leaf || typeof leaf !== 'object') return;
     if (leaf.action === 'open-site') {
@@ -1445,8 +1612,9 @@ class PetSprite {
     if (!leaf.anim) return;
     // 回执归属：这一段动画若来自第三方点播，编号要跟着换源一起走（自播动画传 null）
     const playbackId = typeof leaf.playbackId === 'string' && leaf.playbackId ? leaf.playbackId : null;
-    // 文字类（noMirror）朝右站姿是镜像的：点播前强制朝左，避免文字镜像（与浏览器随机链"朝右不选文字"同语义）
-    if (S.isNoMirrorAnimation(this.animations.categories, leaf.anim) && this.facing === 'right') {
+    // 文字类（noMirror）朝右站姿是镜像的：点播前强制朝左，避免文字镜像（与浏览器随机链"朝右不选文字"同语义）。
+    // `keepFacing` 时跳过：调用方已显式指定朝向，显式值优先（要 right 就给 right，哪怕文字会镜像）。
+    if (!keepFacing && S.isNoMirrorAnimation(this.animations.categories, leaf.anim) && this.facing === 'right') {
       this.facing = 'left';
     }
     // 点播移动动画：走真实移动（与随机游走同一套：边界检查 / 随机距离 / leadSec·tailSec / dir），
@@ -1493,7 +1661,8 @@ class PetSprite {
   // 动作不回文本——文本只有一个出口（S），随"版本号变化"唤醒的那一拍长轮询到达并展示。
   // 手动触发不受 whisperEnabled 限制——该字段只关自动周期，手动永远可用。
   showWhisperFromMenu() {
-    S.postAction(WHISPER_URL + '?pet=' + encodeURIComponent(this.pet.id))
+    // surface 必填：本窗口就是桌面端
+    S.postAction(WHISPER_URL + '?pet=' + encodeURIComponent(this.pet.id) + '&surface=desktop')
       .then((ok) => {
         if (!ok) console.warn('[dsh-pet] 菜单碎碎念：生成动作未成功 pet=' + this.pet.id);
       })
@@ -1517,6 +1686,7 @@ class PetSprite {
     const m = S.mountChatDialog({
       petId: this.pet.id,
       baseUrl: BASE + '/chat',
+      surface: 'desktop',
       x: Math.max(4, this.hit.getBoundingClientRect().right + 6),
       y: Math.max(4, this.hit.getBoundingClientRect().top + 6),
       // 弹窗同菜单：只允许在「窗口 ∩ 工作区」内显示，贴边时不被屏幕裁掉（#41）

@@ -27,7 +27,7 @@
  *   便于测试注入临时目录（同 memes.ts 的约定）。
  */
 
-import { findPetInstance, flattenPetList } from './config';
+import { findPetInstance } from './config';
 import { matchMeme, readMemePool } from './memes';
 // url 参数的 scheme 规则与 /anim 是**同一条**（两个"第三方投喂"端点不各写一份，免得走样）
 import { normalizeHttpUrl } from './anim';
@@ -36,8 +36,11 @@ import { normalizeHttpUrl } from './anim';
  *  这个值只用于**把缺省解析成显式值**写进叶子，让 /state 里能看到实际生效的时长。 */
 const DEFAULT_BUBBLE_DURATION_MS = 10 * 1000;
 
+/** pet 参数解析失败的两种分类（三个"pet 必填"端点共用这一对词汇，与 ./anim、./motion-cue 同口径） */
+export type PetFailure = 'pet-required' | 'unknown-pet';
+
 /** 投喂失败的分类（路由原样透出给调用方） */
-export type BroadcastFailure = 'bad-request' | 'unknown-pet' | 'unknown-image';
+export type BroadcastFailure = 'bad-request' | PetFailure | 'unknown-image';
 
 /** 决策结论：通过则给出最终要写进 S 的内容，否则给出显式原因。
  *  `image` 与 `url` **最多一个**（配图两种形态，由字段名区分，见 shared/state.ts 的 SayCue）。
@@ -47,7 +50,7 @@ export type BroadcastDecision =
   | { ok: false; reason: BroadcastFailure; message: string };
 
 /** 清空气泡的决策结论（只有宠物解析这一步会失败） */
-export type BubbleClearDecision = { ok: true; petId: string } | { ok: false; reason: 'unknown-pet'; message: string };
+export type BubbleClearDecision = { ok: true; petId: string } | { ok: false; reason: PetFailure; message: string };
 
 /**
  * 投喂文本规范化：非字符串 / 纯空白 → 空串。
@@ -79,19 +82,26 @@ export function normalizeBroadcastAnim(anim: unknown): boolean {
 }
 
 /**
- * `?pet=` → 实际落点：指定的 → 当前桌宠（active）→ 兜底 `main`。
- * 三个气泡端点共用这一条（兜底而不是静默丢弃，是为了让请求有个确定落点）。
+ * `?pet=` → 实际落点（与 ./anim、./motion-cue 同一口径）：**必填**且必须真实存在。
+ *
+ * 两种失败分开报（issue #122 第 1 条「绝不默认退到列表第一只」）：没给 → `pet-required`；
+ * 给了但配置里没有 → `unknown-pet`。收紧前这里是 `requested || active || 'main'`——`active`
+ * 是"当前桌宠" = **有效宠物列表第一只**，落点随用户 /pet 操作而变，第三方无从预期，故整条删除。
  */
 function resolvePetId(
   cfg: Record<string, Record<string, unknown>>,
   requested: string,
-  active: string,
-): { ok: true; petId: string } | { ok: false; message: string } {
-  const petId = String(requested || active || 'main');
-  if (!flattenPetList(cfg).some((p) => String(p.id) === petId)) {
-    return { ok: false, message: '没有这只桌宠：' + petId };
-  }
-  return { ok: true, petId };
+):
+  | { ok: true; petId: string; entry: string; conf: Record<string, unknown> }
+  | { ok: false; reason: PetFailure; message: string } {
+  const petId = String(requested ?? '').trim();
+  if (!petId) return { ok: false, reason: 'pet-required', message: 'pet 必填：要指定操作哪只桌宠' };
+  // **一次查找同时给出"存在性"与"所属条目"**（entry = 素材根，配图池按它取）：校验与取值用同一份
+  // 结果，后面不必再查一次，也就不留"查不到时兜底 main"那种**不可达分支**（那是老代码的遗留——
+  // 那时 pet 允许缺省，确实可能查不到）。
+  const found = findPetInstance(cfg, petId);
+  if (!found) return { ok: false, reason: 'unknown-pet', message: '没有这只桌宠：' + petId };
+  return { ok: true, petId, entry: found.entry, conf: found.conf };
 }
 
 /**
@@ -101,8 +111,7 @@ function resolvePetId(
  * `url` = 第三方自带的完整地址（**不查池**）。两个都给 = 意图不明，回 bad-request。
  *
  * @param cfg readAllConfig 的合并成品（所有字段已填满，这里不做兜底解析）
- * @param requested `?pet=` 的原值（可为空串）
- * @param active `resolveActivePetId()` 的结果（可为空串；无宠物时为空）
+ * @param requested `?pet=` 的原值（**必填**：空串 → `pet-required`）
  * @param text 外部给的文本（未规范化）
  * @param image 外部给的配图名（未规范化；空/缺省 = 不配图）
  * @param url 外部给的配图地址（未规范化；空/缺省 = 不配图）
@@ -112,8 +121,8 @@ function resolvePetId(
  */
 export function decideBroadcast(args: {
   cfg: Record<string, Record<string, unknown>>;
+  /** `?pet=` 的原值（**必填**：空串 → `pet-required`） */
   requested: string;
-  active: string;
   text: unknown;
   image: unknown;
   url: unknown;
@@ -121,13 +130,13 @@ export function decideBroadcast(args: {
   anim: boolean;
   memeDirs: (entry: string) => string[];
 }): BroadcastDecision {
-  const { cfg, requested, active, memeDirs } = args;
+  const { cfg, requested, memeDirs } = args;
 
   const text = normalizeBroadcastText(args.text);
   if (!text) return { ok: false, reason: 'bad-request', message: 'text 为空' };
 
-  const who = resolvePetId(cfg, requested, active);
-  if (!who.ok) return { ok: false, reason: 'unknown-pet', message: who.message };
+  const who = resolvePetId(cfg, requested);
+  if (!who.ok) return { ok: false, reason: who.reason, message: who.message };
   const petId = who.petId;
 
   const rawImage = typeof args.image === 'string' ? args.image.trim() : '';
@@ -147,9 +156,7 @@ export function decideBroadcast(args: {
 
   // 配图：只认池内命中的名称（命中后用池里的规范名，而不是外部原样传入的字符串）
   // 池按**所属条目**取（与碎碎念/对话同一口径）：配图不跨宠物串池
-  const found = findPetInstance(cfg, petId);
-  const conf = found ? found.conf : (cfg.main ?? {});
-  const hit = matchMeme(readMemePool(conf.memes, memeDirs(found ? found.entry : 'main')), rawImage);
+  const hit = matchMeme(readMemePool(who.conf.memes, memeDirs(who.entry)), rawImage);
   if (!hit) {
     return { ok: false, reason: 'unknown-image', message: '配图不在表情包池内：' + rawImage };
   }
@@ -159,18 +166,19 @@ export function decideBroadcast(args: {
 /**
  * 清空气泡的决策：只需要确定"清哪只宠物的"。
  *
- * **认不出调用方**：这里没有租约 token（issue #122 第 4 条尚未实现），所以谁调都清当前
- * 这一个泡——两个第三方同时用这个端点时会互相抹掉对方的气泡。这是已知且被接受的后果。
+ * **占用门禁不在这里**：本函数只管"清哪一只"，"谁有资格清"由路由层在它之后过一遍
+ * `lockBlocked`（占用期间只有持锁者能清——否则第三方一调就把别人的气泡抹了）。没带 `lock`
+ * 时那一步放行，所以本函数的语义与改造前**逐字一致**；带了失效编号则由 `lockBlocked` 拦下。
  *
  * 与 /broadcast 的区别：**没有"气泡不存在"这种失败**。当前没气泡也返回 ok（幂等），
  * 因为"让气泡消失"这个意图在空状态下已经成立了。
  */
 export function decideBubbleClear(args: {
   cfg: Record<string, Record<string, unknown>>;
+  /** `?pet=` 的原值（**必填**：空串 → `pet-required`） */
   requested: string;
-  active: string;
 }): BubbleClearDecision {
-  const who = resolvePetId(args.cfg, args.requested, args.active);
-  if (!who.ok) return { ok: false, reason: 'unknown-pet', message: who.message };
+  const who = resolvePetId(args.cfg, args.requested);
+  if (!who.ok) return { ok: false, reason: who.reason, message: who.message };
   return { ok: true, petId: who.petId };
 }

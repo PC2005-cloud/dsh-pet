@@ -11,7 +11,7 @@
 import { flattenPetList } from './config';
 
 /** 受理失败的分类（路由原样透出给调用方，与 ./anim 用同一套词汇） */
-export type MotionFailure = 'bad-request' | 'unknown-pet';
+export type MotionFailure = 'bad-request' | 'pet-required' | 'unknown-pet';
 
 /**
  * 位置指令的运动模式（三选一）。
@@ -43,15 +43,21 @@ const positionMode = (v: unknown): PositionMode | null =>
   typeof v === 'string' && (POSITION_MODES as readonly string[]).includes(v) ? (v as PositionMode) : null;
 
 /**
- * 目标宠物解析（与 ./anim 同一口径）：`?pet=` 优先，空则当前桌宠，再空兜底 `main`；
- * 该 id 必须**真实存在**，否则 `unknown-pet`——绝不猜、绝不退到列表第一只。
+ * 目标宠物解析（与 ./anim、./broadcast 同一口径）：`?pet=` **必填**且必须真实存在。
+ *
+ * 两种失败分开报（issue #122 第 1 条「绝不默认退到列表第一只」）：
+ * 没给 → `pet-required`；给了但配置里没有 → `unknown-pet`。
+ *
+ * 收紧前这里是 `requested || active || 'main'`：`active` 是"当前桌宠" = **有效宠物列表第一只**，
+ * 而那个落点是用户 /pet 操作的函数——同一句不带 pet 的调用，落点会随用户操作而变，调用方无从
+ * 预期。所以整条缺省链已删除，pet 与 /pet-display 的 `id` 一样是必填项。
  */
 function resolvePet(
   cfg: Record<string, Record<string, unknown>>,
   requested: string,
-  active: string,
 ): { ok: true; petId: string } | { ok: false; reason: MotionFailure; message: string } {
-  const petId = String(requested || active || 'main');
+  const petId = String(requested ?? '').trim();
+  if (!petId) return { ok: false, reason: 'pet-required', message: 'pet 必填：要指定操作哪只桌宠' };
   if (!flattenPetList(cfg).some((p) => String(p.id) === petId)) {
     return { ok: false, reason: 'unknown-pet', message: '没有这只桌宠：' + petId };
   }
@@ -78,8 +84,8 @@ function resolvePet(
  */
 export function decidePosition(args: {
   cfg: Record<string, Record<string, unknown>>;
+  /** `?pet=` 的原值（**必填**：空串 → `pet-required`） */
   requested: string;
-  active: string;
   x: unknown;
   y: unknown;
   /** 必填：`instant` / `spring` / `line` */
@@ -105,7 +111,7 @@ export function decidePosition(args: {
     duration = d;
   }
 
-  const pet = resolvePet(args.cfg, args.requested, args.active);
+  const pet = resolvePet(args.cfg, args.requested);
   if (!pet.ok) return pet;
 
   return { ok: true, petId: pet.petId, x: clamp01(x), y: clamp01(y), mode, duration };
@@ -134,8 +140,8 @@ export const positionLeafData = (d: {
  */
 export function decideThrow(args: {
   cfg: Record<string, Record<string, unknown>>;
+  /** `?pet=` 的原值（**必填**：空串 → `pet-required`） */
   requested: string;
-  active: string;
   angle: unknown;
   power: unknown;
 }): ThrowDecision {
@@ -146,7 +152,7 @@ export function decideThrow(args: {
     return { ok: false, reason: 'bad-request', message: 'power 必须是大于 0 的有限数字' };
   }
 
-  const pet = resolvePet(args.cfg, args.requested, args.active);
+  const pet = resolvePet(args.cfg, args.requested);
   if (!pet.ok) return pet;
 
   return { ok: true, petId: pet.petId, angle, power };

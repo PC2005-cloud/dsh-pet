@@ -334,6 +334,27 @@ describe('anchorPixel / planMove —— 角落与漫游不进空洞', () => {
     assert.ok(Math.abs(plan.targetRatio * 3795 - 2800) < 1);
   });
 
+  test('锁定语义：areas 只给当前那块屏 ⇒ 同高度跨屏的那一步被拒', () => {
+    // 与上一条同一个起点 / 距离 / 方向：并集下会跨到副屏，只给主屏时必须被拒
+    const common = {
+      cx: 2300,
+      cy: 700, // 主屏与副屏都覆盖这条线
+      W: 3795,
+      H: 2147,
+      minDist: 500,
+      maxDist: 500,
+      margin: 24,
+      halfW: SIZE / 2,
+      sideAllow: SIDE_ALLOW,
+    };
+    assert.ok(planMove({ ...common, dir: 1, areas: AREAS }), '并集：跨屏那一步可达');
+    assert.equal(planMove({ ...common, dir: 1, areas: [MAIN] }), null, '锁定主屏：跨屏那一步必须被拒');
+    // 锁定 ≠ 禁止移动：同一块屏内的小步照常可达
+    assert.ok(planMove({ ...common, cx: 800, dir: 1, areas: [MAIN] }), '锁定主屏：屏内移动不受影响');
+    // 锁的是「当前所在那块屏」而不是主屏：落点落在副屏内 ⇒ 锁副屏时同一步可达
+    assert.ok(planMove({ ...common, dir: 1, areas: [SIDE] }), '锁定副屏：落点在副屏内 ⇒ 可达');
+  });
+
   test('不传 areas 时退化为旧的单矩形判定', () => {
     const base = {
       cx: 500,

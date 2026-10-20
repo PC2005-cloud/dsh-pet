@@ -405,6 +405,7 @@
     }
 
     .chat-head select { width: auto; min-width: 150px; }
+    .chat-head input[type="number"] { width: 150px; }
 
     .messages {
       flex: 1; min-height: 260px; overflow: auto;
@@ -597,6 +598,25 @@
       box-shadow: 0 0 0 3px rgba(79, 70, 229, .18);
       pointer-events: none;
       transition: left .08s linear, top .08s linear;
+    }
+
+    /* 实况标记：绿色圆环 + 箭头方向 = 朝向（宠物**实际**在哪，不是目标）。
+       填充刻意半透明、直径比目标点大一圈——两者重合时蓝点仍能透出来。 */
+    .stage-actual {
+      position: absolute;
+      width: 26px; height: 26px;
+      margin: -13px 0 0 -13px;
+      box-sizing: border-box;
+      line-height: 22px;
+      text-align: center;
+      font-size: 11px;
+      color: var(--ok);
+      background: rgba(21, 128, 61, .14);
+      border: 2px solid var(--ok);
+      border-radius: 50%;
+      pointer-events: none;
+      display: none;
+      transition: left .12s linear, top .12s linear;
     }
 
     .stage-tip {
@@ -817,6 +837,21 @@
               </div>
               <div class="pet-id" id="pet-id"></div>
 
+              <div class="pet-id">
+                <label for="surface-select">显示端</label>
+                <select id="surface-select" style="width:auto">
+                  <option value="any">any（哪端都行）</option>
+                  <option value="web">web（仅网页）</option>
+                  <option value="desktop">desktop（仅桌面）</option>
+                  <option value="both">both（两端都要）</option>
+                </select>
+                <span class="hint">
+                  动作接口的 <span class="mono">?surface=</span>（必填）：宿主拿它跟宠物的
+                  <span class="mono">display</span> 对一下，对不上就回
+                  <span class="mono">pet-not-displayed</span> + 该宠物<b>实际</b>的 display
+                </span>
+              </div>
+
               <div class="bubble-wrap">
                 <div class="bubble empty" id="say-bubble">还没有说过话</div>
                 <div class="bubble-time" id="say-time"></div>
@@ -875,6 +910,70 @@
 
       <!-- ── 动作：以"外部插件"身份让桌宠做事 ── -->
       <section class="view view-action" id="view-action">
+        <!-- 占用锁：issue #122 第 4 项——联动演出期间独占这只宠物，除持锁者外全静音 -->
+        <div class="card">
+          <div class="card-head">
+            <h2>占用锁</h2>
+            <span class="hint">POST /lock · /lock/release</span>
+          </div>
+          <div class="card-body">
+            <details class="desc">
+              <summary>占用期间这只宠物完全静止，动作接口只有持锁者能调</summary>
+              <div class="desc-body">
+                模拟联动演出的第一步（issue #122 第 4 项）：<span class="mono">POST /lock</span> 拿一个
+                <span class="mono">lockId</span>，这段时间<b>这只宠物归你独占</b>——它自己不动、也不弹气泡
+                （随机动画、自主走位、碎碎念、余额、工作状态一概让路）。
+                <br>
+                占用期间，本页其他卡片里的接口（投喂、点播动画、位置、抛掷、清空气泡）
+                <b>必须带上这个编号</b>，否则回 <span class="mono">lock-required</span>；带错编号回
+                <span class="mono">lock-lost</span>（附 <span class="mono">cause</span>：过期 / 已释放 /
+                被用户抢走）。<b>本页会自动带上</b>，不用手填。
+                <br>
+                取锁和续期是<b>同一个接口</b>：给 <span class="mono">lockId</span> 就是续期。续期是持锁者
+                每隔几秒要做一次的心跳——不续期的话，到点锁自己就没了。
+                <br>
+                <b>用户优先</b>：用户拖一下宠物、或把它隐藏/关闭，锁会立刻被撤掉，所以别把它当成能长期占着的东西。
+                没锁的时候那些接口连 <span class="mono">lock</span> 参数都不看，行为跟以前一模一样。
+              </div>
+            </details>
+
+            <div class="row">
+              <label for="lk-pet">目标宠物</label>
+              <div class="ctl">
+                <select id="lk-pet"></select>
+              </div>
+            </div>
+
+            <div class="row">
+              <label for="lk-ttl">占用时长</label>
+              <div class="ctl">
+                <input id="lk-ttl" type="number" min="1000" max="1800000" step="5000" value="120000" style="width:110px">
+                <span class="hint">ms · 1000–1800000（1 秒–30 分钟）· 缺省 120000（2 分钟）· 续期时沿用上次</span>
+              </div>
+            </div>
+
+            <div class="row">
+              <label>当前占用</label>
+              <div class="ctl">
+                <span class="mono" id="lk-id">（没有）</span>
+                <span class="hint" id="lk-remain"></span>
+              </div>
+            </div>
+
+            <div class="row">
+              <label></label>
+              <div class="ctl">
+                <button type="button" class="btn primary" id="lk-acquire">取锁</button>
+                <button type="button" class="btn" id="lk-renew">续期</button>
+                <button type="button" class="btn" id="lk-release">释放</button>
+                <button type="button" class="btn" id="lk-force">模拟用户接管</button>
+                <span class="hint" id="lk-result"></span>
+              </div>
+            </div>
+            <div class="hint-indent" id="lk-hint"></div>
+          </div>
+        </div>
+
         <!-- 第三方投喂：这就是 issue #76 的场景——控制台扮演"别的插件"，把外部文本送进气泡 -->
         <div class="card">
           <div class="card-head">
@@ -1040,6 +1139,21 @@
             </div>
 
             <div class="row">
+              <label for="anim-facing">朝向</label>
+              <div class="ctl">
+                <select id="anim-facing">
+                  <option value="">不指定（不动朝向）</option>
+                  <option value="left">left（素材原样）</option>
+                  <option value="right">right（镜像）</option>
+                </select>
+                <span class="hint">
+                  可选。不指定就<b>不动朝向</b>（保持宠物当前朝向，不是回落 left）；
+                  指定了就设成它，并优先于"文字类动画点播前强制朝左"那条镜像修正。
+                </span>
+              </div>
+            </div>
+
+            <div class="row">
               <label></label>
               <div class="ctl">
                 <button type="button" class="btn primary" id="anim-play">播放</button>
@@ -1122,7 +1236,7 @@
         <div class="card">
           <div class="card-head">
             <h2>位置与抛掷</h2>
-            <span class="hint">POST /position · POST /throw</span>
+            <span class="hint">POST /position · POST /throw · GET /pose</span>
           </div>
           <div class="card-body">
             <details class="desc">
@@ -1149,11 +1263,16 @@
             <!-- ── 位置 ── -->
             <div class="sub">
               位置
-              <span class="hint">x / y = 宠物中心的归一化坐标（0~1，越界会被夹取）</span>
+              <span class="hint">
+                x / y = 宠物中心的归一化坐标（0~1，越界会被夹取）；<b>蓝点</b> = 你要它去的目标，
+                <b style="color:var(--ok)">绿箭头</b> = 它现在实际在哪、朝哪边（点「读实况」后显示）
+              </span>
             </div>
             <div class="stage" id="mv-stage">
               <div class="stage-dot" id="mv-dot"></div>
+              <div class="stage-actual" id="mv-actual"></div>
               <div class="stage-tip">点或拖这里设定宠物中心</div>
+              <div class="stage-tip" style="left:auto;right:9px">绿箭头 = 实况</div>
             </div>
             <div class="row" style="margin-top:9px">
               <label>目标位置</label>
@@ -1178,6 +1297,15 @@
                 <button type="button" class="btn primary" id="mv-go">挪过去</button>
                 <button type="button" class="btn" id="mv-snap">立即到位</button>
                 <span class="hint" id="mv-result"></span>
+              </div>
+            </div>
+            <div class="row">
+              <label>实际位置</label>
+              <div class="ctl">
+                <button type="button" class="btn" id="mv-pose">读实况</button>
+                <span class="hint" id="mv-pose-result">
+                  桌面端才有；网页端走页面内 Cordis 服务 <span class="mono">petApi7340</span>
+                </span>
               </div>
             </div>
 
@@ -1302,6 +1430,7 @@
           <div class="card-body chat-wrap">
             <div class="chat-head">
               <select id="chat-pet-select"></select>
+              <input type="number" id="chat-rounds-input" min="0" max="200" placeholder="轮数（空=配置）">
               <button type="button" class="btn sm" id="chat-reload">刷新历史</button>
               <span class="spacer" style="flex:1"></span>
               <button type="button" class="btn sm ghost" id="chat-clear">清空显示</button>
@@ -1480,6 +1609,8 @@
       awaiting: false,
       activity: [],
       timers: {},
+      lock: null,          // 本页当前**持有**的锁 { petId, lockId, expiresAt }（占用锁，issue #122 第 4 项）
+      lockLeaf: null,      // 最近一次从 /state 读到的占用（真实状态；本页手里那把只是它的副本）
     };
 
     const $ = (id) => document.getElementById(id);
@@ -1645,6 +1776,8 @@
           if (p.startsWith("pets.") && p.endsWith(".say")) applyLeaf(leaf, p, { initial: true });
         }
         await loadPets();
+        syncLock(s);
+        renderLock();
         return;
       }
 
@@ -1656,6 +1789,10 @@
         applyLeaf(leaf, p);
       }
       renderLeaves(leaves, r, changed);
+      // 占用锁（issue #122 第 4 项）：每秒跟着这一拍刷新一次——倒计时要走字，
+      // 而且**宿主不会推"锁没了"**（它那侧是懒判过期），只能靠这里按叶子的 expiresAt 自己判
+      syncLock(s);
+      renderLock();
     }
 
     /** 一个叶子变了 → 更新对应界面（路径当不透明键：用前后缀切片取宠物 id） */
@@ -2009,7 +2146,7 @@
     }
 
     function fillPetSelects() {
-      for (const id of ["pet-select", "chat-pet-select", "bc-pet", "anim-pet", "disp-pet", "mv-pet"]) {
+      for (const id of ["pet-select", "chat-pet-select", "bc-pet", "anim-pet", "disp-pet", "mv-pet", "lk-pet"]) {
         const sel = $(id);
         sel.innerHTML = "";
         for (const p of S.pets) {
@@ -2165,7 +2302,10 @@
     // ═══════════════════════════════════════════════════════════════
 
     async function loadChat() {
-      const r = await GET("/chat?pet=" + encodeURIComponent(S.chatPetId));
+      // 轮数留空 = 用配置的 chatMemoryRounds；填了就让服务端按这个值截取（非法值会被判 bad-request）
+      const n = $("chat-rounds-input").value.trim();
+      const q = n ? "&rounds=" + encodeURIComponent(n) : "";
+      const r = await GET("/chat?pet=" + encodeURIComponent(S.chatPetId) + q);
       if (r.status !== 200 || !r.body || !r.body.ok) {
         $("chat-rounds").textContent = r.status ? "读取失败" : "未连接";
         return;
@@ -2220,7 +2360,7 @@
       $("typing").style.visibility = "visible";
 
       // 动作接口只回 {ok}，回复从 /state 的 pets.<id>.say 拿
-      const r = await POST("/chat?pet=" + encodeURIComponent(S.chatPetId), { body: { text } });
+      const r = await POST("/chat?pet=" + encodeURIComponent(S.chatPetId) + "&surface=" + surfaceOf(), { body: { text } });
 
       if (!r.ok) {
         // 失败：把乐观插入的那条撤掉，并说明原因
@@ -2810,7 +2950,7 @@
       const b = $("btn-whisper");
       b.disabled = true;
       b.textContent = "生成中…";
-      const r = await POST("/whisper?pet=" + encodeURIComponent(S.petId));
+      const r = await POST("/whisper?pet=" + encodeURIComponent(S.petId) + "&surface=" + surfaceOf());
       b.disabled = false;
       b.textContent = "让它说句话";
       if (r.ok && r.body && r.body.ok === false) {
@@ -2934,9 +3074,12 @@
         res.textContent = mode === "url" ? "请填一个动画地址" : "该宠物没有可点播的动画";
         return;
       }
+      // 朝向（可选）：空值 = 不指定，**连字段都不发**——宿主据此区分"没要求"与"要求 left"
+      const facing = $("anim-facing").value;
+      if (facing) body.facing = facing;
       stopPlaybackWatch("重新点播"); // 新的一次点播：先停掉上一次的回执轮询
       res.textContent = "点播中…";
-      const r = await POST("/anim?pet=" + encodeURIComponent(petId), { body });
+      const r = await POST("/anim" + actQuery(petId), { body });
       if (r.status === 200 && r.body && r.body.ok) {
         // 回执编号：宿主受理时生成。老版本 host 不回这个字段 → 回执不可用，明确提示（不静默）
         const pid = typeof r.body.playbackId === "string" ? r.body.playbackId : "";
@@ -2950,8 +3093,7 @@
         // 动作端点不回数据：立刻补拉一拍，让状态位里的 anim counter 及时反映出来
         await poll();
       } else {
-        const why = (r.body && r.body.message) || (r.body && r.body.reason) || r.error || "HTTP " + r.status;
-        res.textContent = "被拒：" + why;
+        res.textContent = "被拒：" + whyOf(r);
       }
     });
 
@@ -3251,6 +3393,57 @@
       stage.addEventListener("pointercancel", () => { down = false; });
     })();
 
+    /**
+     * 读实况（**桌面端**）：`GET /pose` —— 把宠物**实际**中心画进预览框（绿箭头，箭头方向 = 朝向）。
+     *
+     * **不要求 `surface`**：它是读端点（同 GET /chat、GET /playback），surface 只加在会产生渲染端
+     * 可见效果的动作端点上。
+     *
+     * **网页端没有这条路**：它的位置天生每个页面一份（两个标签页本来就不同），走页面内的 Cordis
+     * 只读服务 `ctx.get('petApi7340').pose(petId)`——字段与坐标口径完全一致，只是"取"的方式不同。
+     */
+    $("mv-pose").addEventListener("click", () => {
+      void mvReadPose(false);
+    });
+
+    // 进页面自动读一次（**失败静默**：保留默认提示，不把"还没起来"刷成一行红字）——
+    // 否则绿箭头默认隐藏，用户根本不知道有这个标记
+    window.setTimeout(() => {
+      void mvReadPose(true);
+    }, 900);
+
+    async function mvReadPose(silent) {
+      const petId = $("mv-pet").value || S.petId;
+      const res = $("mv-pose-result");
+      const marker = $("mv-actual");
+      // silent 时**完全不碰这句提示**（保留 HTML 里的 mono 标记，也不把"还没起来"刷成红字）
+      if (!silent) res.textContent = "读取中…";
+      const r = await GET("/pose?pet=" + encodeURIComponent(petId));
+      if (!(r.body && r.body.ok)) {
+        marker.style.display = "none";
+        if (!silent) res.textContent = "被拒：" + whyOf(r) + "（网页端请用 Cordis 服务 petApi7340）";
+        return;
+      }
+      // 夹到框内只是**显示**需要：宠物贴边拖出时中心点可能略出 0~1，接口本身不夹取
+      marker.style.left = Math.max(0, Math.min(1, Number(r.body.x))) * 100 + "%";
+      marker.style.top = Math.max(0, Math.min(1, Number(r.body.y))) * 100 + "%";
+      marker.textContent = r.body.facing === "right" ? "▶" : "◀";
+      // 必须写 "block"：`.stage-actual` 的 `display:none` 写在 CSS 里，置空字符串会**回落**到它，
+      // 于是又藏起来（这是踩过的坑）
+      marker.style.display = "block";
+      const age = Math.max(0, Date.now() - Number(r.body.updatedAt));
+      res.textContent =
+        "x=" +
+        Number(r.body.x).toFixed(3) +
+        " y=" +
+        Number(r.body.y).toFixed(3) +
+        " facing=" +
+        r.body.facing +
+        " · " +
+        age +
+        "ms 前上报";
+    }
+
     // ── 抛掷：角度拨盘 + 力度 ────────────────────────────────────────
 
     function thValues() {
@@ -3309,7 +3502,7 @@
       const res = $("mv-result");
       res.textContent = "发送中…";
       const body = mode === "line" ? { x, y, mode, duration } : { x, y, mode };
-      const r = await POST("/position?pet=" + encodeURIComponent(petId), { body });
+      const r = await POST("/position" + actQuery(petId), { body });
       if (r.status === 200 && r.body && r.body.ok) {
         const ax = Number(r.body.x);
         const ay = Number(r.body.y);
@@ -3323,8 +3516,7 @@
         mvRender();
         await poll(); // 动作端点不回数据：立刻补拉一拍，让叶子表反映出来
       } else {
-        const why = (r.body && r.body.message) || (r.body && r.body.reason) || r.error || "HTTP " + r.status;
-        res.textContent = "被拒：" + why;
+        res.textContent = "被拒：" + whyOf(r);
       }
     }
 
@@ -3339,13 +3531,12 @@
       const { angle, power } = thValues();
       const res = $("th-result");
       res.textContent = "发送中…";
-      const r = await POST("/throw?pet=" + encodeURIComponent(petId), { body: { angle, power } });
+      const r = await POST("/throw" + actQuery(petId), { body: { angle, power } });
       if (r.status === 200 && r.body && r.body.ok) {
         res.textContent = "已受理 · " + r.ms + "ms（宠物从当前位置起飞）";
         await poll();
       } else {
-        const why = (r.body && r.body.message) || (r.body && r.body.reason) || r.error || "HTTP " + r.status;
-        res.textContent = "被拒：" + why;
+        res.textContent = "被拒：" + whyOf(r);
       }
     });
 
@@ -3363,6 +3554,183 @@
 
     mvRender();
     thRender();
+
+    // ═══════════════════════════════════════════════════════════════
+    // 占用锁（issue #122 第 4 项）：取锁 / 续期 / 释放
+    // ═══════════════════════════════════════════════════════════════
+
+    /**
+     * 动作端点的查询串：`?pet=<id>`，**本页持锁且锁就是这只宠物时**再补一个 `&lock=`。
+     *
+     * 占用期间那几个接口必须带 lock，否则回 lock-required；**没有锁时**不传它照旧放行，而传了
+     * 一个查不到的编号会回 lock-lost（说明你以为自己还持有），所以"没锁就不加"是对的。锁按宠物
+     * 分：拿着 main 的锁去操作 pet-2 时不该带它（那份锁对 pet-2 无效）。
+     */
+    function actQuery(petId) {
+      let q = "?pet=" + encodeURIComponent(petId);
+      const lk = S.lock;
+      if (lk && lk.petId === petId && lk.lockId) q += "&lock=" + encodeURIComponent(lk.lockId);
+      q += "&surface=" + surfaceOf();
+      return q;
+    }
+
+    /**
+     * 页面级「显示端」→ `?surface=` 的取值（**必填**，issue #122 第 1 条）。
+     * 动作接口拿它跟宠物的 display 对一下：对不上就回 pet-not-displayed + 实际 display，
+     * 而不是默默受理、然后什么也不发生（见 src/host/surface.ts）。
+     * 默认 any = 哪端都行（只要不是 display:none），与"不校验"最接近但仍会拒掉不显示的宠物。
+     */
+    function surfaceOf() {
+      const el = $("surface-select");
+      return (el && el.value) || "any";
+    }
+
+    /**
+     * 失败原因串。比原来多带上 `cause`：占用锁的两个新错误码要靠它才分得清
+     * （lock-required = 没带；lock-lost = 带了但编号不作数，cause 说明是过期 / 已释放 / 被用户抢走）。
+     */
+    function whyOf(r) {
+      const b = r.body || {};
+      const parts = [];
+      if (b.reason) parts.push(b.reason);
+      if (b.cause) parts.push("cause=" + b.cause);
+      if (b.message) parts.push(b.message);
+      return parts.length ? parts.join(" · ") : (r.error || "HTTP " + r.status);
+    }
+
+    /**
+     * 用 /state 里的**真实**占用校正本页手里的锁。两个方向都要管：
+     *   - 手里有、叶子里没了（过期 / 被释放 / 被用户抢走）→ 把手里的丢掉并说一声；
+     *   - 手里没有、叶子里有（比如刚刷新过页面）→ 卡片上得看得见，否则宠物一直僵着没人知道为什么。
+     */
+    function syncLock(s) {
+      const pets = (s && s.pets) || {};
+      const lk = S.lock;
+      if (lk) {
+        const data = pets[lk.petId] && pets[lk.petId].lock && pets[lk.petId].lock.data;
+        if (data && data.locked === true && typeof data.expiresAt === "number") {
+          lk.expiresAt = data.expiresAt; // 以叶子为准（续期之后这里也跟着走）
+        } else {
+          S.lock = null;
+          $("lk-result").textContent = "锁没了（过期 / 已释放 / 被用户接管）";
+        }
+      }
+      const want = $("lk-pet").value || S.petId;
+      const d = pets[want] && pets[want].lock && pets[want].lock.data;
+      S.lockLeaf =
+        d && d.locked === true && typeof d.expiresAt === "number"
+          ? { petId: want, expiresAt: d.expiresAt }
+          : null;
+    }
+
+    /** 占用锁卡片：本页手里的锁 + 剩余时间（poll 每秒调一次，所以倒计时是走字的） */
+    function renderLock() {
+      const idBox = $("lk-id");
+      const remBox = $("lk-remain");
+      const hint = $("lk-hint");
+      const lk = S.lock;
+      if (lk) {
+        const left = lk.expiresAt - Date.now();
+        idBox.textContent = lk.lockId + " @ " + lk.petId;
+        if (left > 0) {
+          remBox.textContent = "剩余 " + (left / 1000).toFixed(1) + "s";
+          hint.textContent = "";
+        } else {
+          // 宿主那侧是**懒判过期**：本地也别再带着一个死编号去调接口（带了只会回 lock-lost）
+          remBox.textContent = "已过期";
+          hint.textContent = "已过期——要接着占用就点「续期」，重新拿一把就点「取锁」";
+          S.lock = null;
+        }
+        return;
+      }
+      idBox.textContent = "（没有）";
+      if (S.lockLeaf) {
+        const left = S.lockLeaf.expiresAt - Date.now();
+        remBox.textContent = left > 0 ? "被占用 · 剩余 " + (left / 1000).toFixed(1) + "s" : "被占用 · 已过期";
+        hint.textContent =
+          "这只宠物正被占用（可能就是本页刷新前留下的那把锁）。拿不到编号时，点「模拟用户接管」可以撤掉它。";
+        return;
+      }
+      remBox.textContent = "";
+      hint.textContent = "";
+    }
+
+    /** 锁操作的结果行（成功 / 被拒都走它；被拒时带上 reason + cause） */
+    function lockDone(okText, r) {
+      $("lk-result").textContent =
+        r.status === 200 && r.body && r.body.ok ? okText + " · " + r.ms + "ms" : "被拒：" + whyOf(r);
+    }
+
+    // 取锁：不带 lockId 就是新建。撞上 locked 时宿主会带回 expiresAt——告诉用户什么时候能重试
+    $("lk-acquire").addEventListener("click", async () => {
+      const petId = $("lk-pet").value || S.petId;
+      const ttl = Number($("lk-ttl").value);
+      $("lk-result").textContent = "取锁中…";
+      $("lk-hint").textContent = "";
+      const r = await POST("/lock?pet=" + encodeURIComponent(petId) + "&surface=" + surfaceOf(), {
+        body: Number.isFinite(ttl) ? { ttl } : {},
+      });
+      if (r.status === 200 && r.body && r.body.ok) {
+        S.lock = { petId: r.body.petId, lockId: r.body.lockId, expiresAt: r.body.expiresAt };
+        lockDone("已占用", r);
+      } else {
+        lockDone("", r);
+        const exp = r.body && r.body.expiresAt;
+        if (exp) $("lk-hint").textContent = "已被别人占用，到 " + new Date(exp).toLocaleTimeString() + " 才空出来";
+      }
+      await poll();
+    });
+
+    // 续期：**同一个端点**，给了 lockId 就是续期——这就是持锁者每隔几秒要做一次的心跳
+    $("lk-renew").addEventListener("click", async () => {
+      const lk = S.lock;
+      if (!lk) {
+        $("lk-result").textContent = "手里没有锁，先取锁";
+        return;
+      }
+      const ttl = Number($("lk-ttl").value);
+      $("lk-result").textContent = "续期中…";
+      const body = { lockId: lk.lockId };
+      if (Number.isFinite(ttl)) body.ttl = ttl;
+      const r = await POST("/lock?pet=" + encodeURIComponent(lk.petId) + "&surface=" + surfaceOf(), { body });
+      if (r.status === 200 && r.body && r.body.ok) {
+        S.lock = { petId: r.body.petId, lockId: r.body.lockId, expiresAt: r.body.expiresAt };
+        lockDone("已续期", r);
+      } else {
+        lockDone("", r);
+        S.lock = null; // lock-lost：手里的编号已经不作数了，别再带着它去调接口
+      }
+      await poll();
+    });
+
+    // 释放：幂等（本来就没有锁也回 ok）；但拿着**别人的**编号会被拒（lock-lost）
+    $("lk-release").addEventListener("click", async () => {
+      const lk = S.lock;
+      if (!lk) {
+        $("lk-result").textContent = "手里没有锁（释放是幂等的，无事可做）";
+        return;
+      }
+      $("lk-result").textContent = "释放中…";
+      const r = await POST("/lock/release?pet=" + encodeURIComponent(lk.petId), { body: { lockId: lk.lockId } });
+      if (r.status === 200 && r.body && r.body.ok) S.lock = null;
+      lockDone("已释放", r);
+      await poll();
+    });
+
+    // 用户接管：`force: true` 是**渲染端**在用户拖拽 / 点击时发的（第三方不用调）。
+    // 放这里是为了能亲手验证抢占那条路——尤其刷新页面之后手里没编号、宠物却还僵着的时候。
+    $("lk-force").addEventListener("click", async () => {
+      const petId = (S.lock && S.lock.petId) || $("lk-pet").value || S.petId;
+      $("lk-result").textContent = "接管中…";
+      const r = await POST("/lock/release?pet=" + encodeURIComponent(petId), { body: { force: true } });
+      if (r.status === 200 && r.body && r.body.ok) S.lock = null;
+      lockDone("已按用户接管撤锁", r);
+      await poll();
+    });
+
+    $("lk-pet").addEventListener("change", renderLock);
+
+    renderLock();
 
     // 第三方投喂：以"外部插件"的身份把文本写进气泡（issue #76 的场景）
     // 新参数（issue #122 第 5 条）：duration 毫秒（0 = 字面意思「不显示」）、anim 是否联动说话动画
@@ -3385,7 +3753,7 @@
       }
       if (Number.isFinite(duration)) body.duration = duration;
       body.anim = anim;
-      const r = await POST("/broadcast?pet=" + encodeURIComponent(petId), { body });
+      const r = await POST("/broadcast" + actQuery(petId), { body });
       if (r.status === 200 && r.body && r.body.ok) {
         res.textContent = "已投喂 · " + r.ms + "ms";
         // 动作端点不回数据：立刻补拉一拍 /state，0 延迟看到气泡
@@ -3396,8 +3764,7 @@
           if (petId === S.petId) renderSay(leaf.data, petId);
         }
       } else {
-        const why = (r.body && r.body.message) || (r.body && r.body.reason) || r.error || "HTTP " + r.status;
-        res.textContent = "被拒：" + why;
+        res.textContent = "被拒：" + whyOf(r);
       }
     });
 
@@ -3406,7 +3773,7 @@
       const petId = $("bc-pet").value || S.petId;
       const res = $("bc-result");
       res.textContent = "清空中…";
-      const r = await POST("/bubble/clear?pet=" + encodeURIComponent(petId));
+      const r = await POST("/bubble/clear" + actQuery(petId));
       if (r.status === 200 && r.body && r.body.ok) {
         res.textContent = "已清空 · " + r.ms + "ms";
         // 立刻补拉一拍：叶子里会是 { clear: true }
@@ -3417,8 +3784,7 @@
           if (petId === S.petId) renderSay(leaf.data, petId);
         }
       } else {
-        const why = (r.body && r.body.message) || (r.body && r.body.reason) || r.error || "HTTP " + r.status;
-        res.textContent = "被拒：" + why;
+        res.textContent = "被拒：" + whyOf(r);
       }
     });
 
@@ -3431,13 +3797,14 @@
       // 只需 id + display：写哪一层（主配置 / 文件宠物）由宿主按 id 反查，
       // 不像保存配置那样需要回传整段 pets。
       const r = await POST("/pet-display", { body: { id: petId, display } });
-      if (r.status === 200) {
+      // 业务失败是 **200 + {ok:false, reason}**（缺 id / display 非法 / 宠物不存在 / 写盘失败）——
+      // 只看状态码会把失败体当成成品聚合喂给 loadPets。
+      if (r.status === 200 && !(r.body && r.body.ok === false)) {
         res.textContent = "已应用 · " + r.ms + "ms（桌面端会按新配置重建窗口）";
         S.cfg = r.body; // 响应体就是改动后的成品聚合，直接采用（与保存配置同一条路）
         await loadPets();
       } else {
-        const why = (r.body && r.body.error) || r.error || "HTTP " + r.status;
-        res.textContent = "被拒：" + why;
+        res.textContent = "被拒：" + whyOf(r);
       }
     });
 

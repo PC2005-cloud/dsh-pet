@@ -389,6 +389,55 @@ describe('deepseek-account —— DSH 账号路由（走账号服务，不是 HT
     assert.equal(r.data.total, '12.50');
   });
 
+  test('多币种钱包：优先选有余额的那个（USD 0.00 排在前也不显示 $0.00）', () => {
+    const r = parseAccountBalance(
+      {
+        status: 'ready',
+        value: [
+          { currency: 'USD', balance: '0.00' },
+          { currency: 'CNY', balance: '20.00' },
+        ],
+        bonusWallets: [{ currency: 'CNY', balance: '5.00' }],
+      },
+      'deepseek-account',
+    );
+    assert.ok(r.ok && r.shape === 'money');
+    assert.equal(r.data.currency, 'CNY');
+    assert.equal(r.data.toppedUp, '20.00');
+    assert.equal(r.data.granted, '5.00');
+    assert.equal(r.data.total, '25.00');
+  });
+
+  test('多币种钱包且都有余额：取金额大的那个；金额相同/全为 0 时 CNY 优先', () => {
+    const biggerUsd = parseAccountBalance(
+      {
+        status: 'ready',
+        value: [
+          { currency: 'CNY', balance: '1.00' },
+          { currency: 'USD', balance: '30.00' },
+        ],
+      },
+      'deepseek-account',
+    );
+    assert.ok(biggerUsd.ok && biggerUsd.shape === 'money');
+    assert.equal(biggerUsd.data.currency, 'USD');
+    assert.equal(biggerUsd.data.total, '30.00');
+
+    const allZero = parseAccountBalance(
+      {
+        status: 'ready',
+        value: [
+          { currency: 'USD', balance: '0.00' },
+          { currency: 'CNY', balance: '0.00' },
+        ],
+      },
+      'deepseek-account',
+    );
+    assert.ok(allZero.ok && allZero.shape === 'money');
+    assert.equal(allZero.data.currency, 'CNY');
+    assert.equal(allZero.data.total, '0.00');
+  });
+
   test('真实平台精度串（16 位小数）→ 收敛到两位，与官方路由的 ¥8.79 风格一致', () => {
     const r = parseAccountBalance(
       {

@@ -121,16 +121,20 @@ const SETTINGS_CSS = [
   '.dsh-pet-cfg__toggle>label>span{overflow-wrap:anywhere}',
   '.dsh-pet-cfg__toggle input[type=checkbox]{flex:none;width:16px;height:16px;margin:0;accent-color:var(--dsw-alias-state-business-primary);cursor:pointer}',
 
-  // 问号 + 悬浮说明：解释小字全部收进这里（data-tip → ::after）
-  '.dsh-pet-cfg__q{position:relative;display:inline-flex;align-items:center;justify-content:center;flex:none;width:14px;height:14px;border:1px solid var(--dsw-alias-label-tertiary);border-radius:50%;color:var(--dsw-alias-label-tertiary);font-size:10px;font-style:normal;line-height:1;cursor:help;user-select:none}',
-  // 气泡默认**左对齐**到问号（left:-4px），而不是居中。
-  // 为什么不能居中：问号常常贴着卡片左缘（卡片头、栅格第一列、页标题），居中会让气泡
+  // 悬浮说明（通用件）：任何带 data-tip 的元素悬浮即出气泡——问号与保存按钮共用这一套。
+  // 组件侧用 tip() 生成属性（见 makePetConfigSection），不要为它包一层 DOM。
+  '.dsh-pet-cfg [data-tip]{position:relative}',
+  // 气泡默认**左对齐**到宿主（left:-4px），而不是居中。
+  // 为什么不能居中：宿主常常贴着卡片左缘（卡片头、栅格第一列、页标题），居中会让气泡
   // 往左伸出一大截，被设置页的滚动容器（overflow 会连带裁掉横向）切掉——看起来就是
   // 「气泡左边被左边框遮住」。左对齐则一律向右展开，左侧永不出界。
-  '.dsh-pet-cfg__q::after{display:none;content:attr(data-tip);position:absolute;left:-4px;bottom:calc(100% + 8px);width:max-content;max-width:260px;padding:6px 10px;border-radius:8px;background:var(--dsw-alias-tooltip-bg);color:#fff;font-size:12px;font-style:normal;font-weight:400;line-height:18px;text-align:left;white-space:normal;opacity:0;visibility:hidden;pointer-events:none;transition:opacity .12s ease;box-shadow:0 6px 20px rgba(0,0,0,.22);z-index:2147483000}',
-  '.dsh-pet-cfg__q:hover::after{display:block;opacity:1;visibility:visible}',
-  // 最右一列：改为右对齐，避免气泡顶出设置页右缘
-  '.dsh-pet-cfg__q.is-end::after{left:auto;right:-4px}',
+  '.dsh-pet-cfg [data-tip]::after{display:none;content:attr(data-tip);position:absolute;left:-4px;bottom:calc(100% + 8px);width:max-content;max-width:260px;padding:6px 10px;border-radius:8px;background:var(--dsw-alias-tooltip-bg);color:#fff;font-size:12px;font-style:normal;font-weight:400;line-height:18px;text-align:left;white-space:normal;opacity:0;visibility:hidden;pointer-events:none;transition:opacity .12s ease;box-shadow:0 6px 20px rgba(0,0,0,.22);z-index:2147483000}',
+  '.dsh-pet-cfg [data-tip]:hover::after{display:block;opacity:1;visibility:visible}',
+  // 最右一列 / 贴右缘的元素：改为右对齐，避免气泡顶出设置页右缘
+  '.dsh-pet-cfg [data-tip][data-tip-end]::after{left:auto;right:-4px}',
+
+  // 问号：气泡的一个宿主外观（圆形 ?），说明机制本身来自上面的通用规则
+  '.dsh-pet-cfg__q{display:inline-flex;align-items:center;justify-content:center;flex:none;width:14px;height:14px;border:1px solid var(--dsw-alias-label-tertiary);border-radius:50%;color:var(--dsw-alias-label-tertiary);font-size:10px;font-style:normal;line-height:1;cursor:help;user-select:none}',
 
   // 按钮
   '.dsh-pet-cfg__btn{border:1px solid var(--dsw-alias-border-l2);background:transparent;color:var(--dsw-alias-label-primary);border-radius:8px;padding:4px 14px;font:inherit;font-size:12px;line-height:20px;cursor:pointer;white-space:nowrap}',
@@ -237,6 +241,7 @@ export const zh = {
   marginX: '水平偏移',
   marginY: '垂直偏移',
   save: '保存',
+  saveHotkey: 'Ctrl+S / Cmd+S',
   sync: '同步',
   confirmSync: '确定同步吗？将用项目内置的默认配置（完整字段 + 注释）覆盖用户配置，当前的自定义内容会丢失。',
   corruptTitle: '用户配置已损坏，未保存',
@@ -268,9 +273,9 @@ export const zh = {
   chatImageToggle: '对话配图',
   chatImageToggleHint:
     '对话时由 AI 按当前语境从表情包池挑一张配图（可不挑；图片映射在配置文件顶层 memes）。token：每条消息都要把整张清单附进请求，当前约 1.1k 字符（≈650 token，约碎碎念配图的 11 倍），并随图片数量线性增长；关掉则一个字符都不附。',
-  confineToggle: '抛掷锁定在当前屏幕',
+  confineToggle: '锁定在当前屏幕',
   confineToggleHint:
-    '多屏用户：甩出去的宠物只在松手时所在那块屏幕内弹（屏缝当墙，不飞到隔壁屏）；关掉则照常跨屏飞行。只影响桌面模式——浏览器 overlay 本来就只在视口内弹。',
+    '多屏用户：开了之后宠物只在当前所在那块屏幕内活动——甩出去的宠物只在松手时所在那块屏内弹（屏缝当墙，不飞到隔壁屏），自主漫游也只在当前所在那块屏内走（越出屏缝的那一步直接取消）。关掉则照常跨屏飞行 / 跨屏行走。只影响桌面模式——浏览器 overlay 本来就只在视口内活动。',
   physicsTitle: '物理（拖拽抛掷手感）',
   physicsHint:
     '全局默认，所有宠物共用（pet pack 可在自己种类文件里单独覆盖）；随「保存」写入用户配置（不做即时写入）。浏览器保存后即时生效，桌面端由保存重载宠物窗口后生效。',
@@ -410,6 +415,7 @@ export const en = {
   marginX: 'Horizontal offset',
   marginY: 'Vertical offset',
   save: 'Save',
+  saveHotkey: 'Ctrl+S / Cmd+S',
   sync: 'Sync',
   confirmSync:
     'Sync? This overwrites the user config with the bundled default config (all fields + comments); current customizations are lost.',
@@ -443,9 +449,9 @@ export const en = {
   chatImageToggle: 'Chat images',
   chatImageToggleHint:
     'Let the AI pick one meme from the pool that fits the current context (optional; mapping lives in the top-level `memes` config field). Tokens: every message carries the whole catalog — currently ~1.1k chars (~650 tokens, about 11x the whisper case) and growing with the number of images; turning this off appends nothing at all.',
-  confineToggle: 'Lock throws to the current screen',
+  confineToggle: 'Lock to the current screen',
   confineToggleHint:
-    'Multi-monitor: a thrown pet bounces only inside the screen it was released on (screen seams act as walls, so it never flies to the neighbouring monitor); turn this off to let it cross screens as usual. Desktop only — the browser overlay always bounces inside the viewport anyway.',
+    'Multi-monitor: when on, the pet stays inside the screen it is currently on — a thrown pet bounces only inside the screen it was released on (screen seams act as walls, so it never flies to the neighbouring monitor), and autonomous wandering only walks within the screen it is currently on (a step that would cross the seam is simply cancelled). Turn this off to let it cross screens as usual. Desktop only — the browser overlay always stays inside the viewport anyway.',
   physicsTitle: 'Physics (drag & throw feel)',
   physicsHint:
     'Global default, shared by every pet (a pet pack may override it in its own kind file); written to the user config on "Save" (never written immediately). Applies instantly in the browser; on the desktop it applies once Save reloads the pet windows.',
@@ -593,21 +599,30 @@ export function makePetConfigSection(rt: {
   };
 
   /**
-   * 问号 + 悬浮说明（本页所有解释小字的唯一去处）。
+   * 悬浮说明（通用件，本页所有解释小字的唯一去处）：返回**展开到任意元素上**的属性，
+   * 带了它就悬浮出气泡（CSS 的 `[data-tip]::after`）。问号与保存按钮共用这一套。
+   *
+   * 为什么返回属性、而不是包一层 DOM 的组件：宿主常常在 flex 容器里（底部操作区、
+   * 卡片头），包一层会把 gap / 对齐 / 拉伸全打乱。展开属性则对布局零影响。
+   * 为什么走 data-tip + CSS 而不是行内样式：hover 与过渡只有 CSS 能表达。
+   *
+   * @param text 说明正文（已翻译）
+   * @param end 气泡右对齐（给栅格最右一列 / 贴右缘的元素用，免得气泡顶出设置页）
+   */
+  const tip = (text: string, end = false): Record<string, string> =>
+    end ? { 'data-tip': text, 'data-tip-end': '' } : { 'data-tip': text };
+
+  /**
+   * 问号说明入口：只是气泡的一个宿主外观（圆形 `?`），说明文字走 `tip()` 的同一套机制。
    *
    * 为什么用 `<i>` 而不是 `<button>`：它只是说明入口，点了不该有任何行为，也不该被
-   * Tab 当成操作项；真正的可交互入口是它旁边的输入框 / 开关。说明文字走 `data-tip`
-   * 属性，由 SETTINGS_CSS 的 `::after{content:attr(data-tip)}` 画成气泡——CSS 才能
-   * 表达 hover / 过渡，行内样式做不到。
-   *
-   * @param tip 说明正文（已翻译）
-   * @param end 是否右对齐气泡（给栅格最右一列用，免得气泡顶出设置页）
+   * Tab 当成操作项；真正的可交互入口是它旁边的输入框 / 开关。
    */
-  const q = (tip: string, end = false): ReturnType<typeof h> =>
+  const q = (text: string, end = false): ReturnType<typeof h> =>
     h('i', {
-      className: 'dsh-pet-cfg__q' + (end ? ' is-end' : ''),
-      'data-tip': tip,
-      'aria-label': tip,
+      className: 'dsh-pet-cfg__q',
+      ...tip(text, end),
+      'aria-label': text,
       role: 'img',
       children: '?',
     });
@@ -948,6 +963,8 @@ export function makePetConfigSection(rt: {
     const [loadAttempt, setLoadAttempt] = useState(0);
     const busy = saving || loadState !== 'ready';
     const [msg, setMsg] = useState<{ kind: 'ok' | 'err' | ''; text: string }>({ kind: '', text: '' });
+    // 设置页根节点：Ctrl+S 只在它可见时接管（DSH 若在别的设置页保持本组件挂载，不能把别人的快捷键抢走）
+    const rootRef = useRef<HTMLElement | null>(null);
     // 确认/提示弹窗（仿官方弹窗：遮罩 + 居中卡片 + 按钮）：
     //   remove  —— 删除宠物（双按钮：取消 / 删除）
     //   lastOne —— 只剩一只、删不了：同样走弹窗（单按钮「知道了」）。
@@ -1259,6 +1276,29 @@ export function makePetConfigSection(rt: {
       }
     };
 
+    // 快捷键要用**最新**的 save：save 每次渲染都重建（闭包捕获 pets / physics 等状态），
+    // 直接塞进 useEffect([]) 会拿着旧状态去存盘。这里转发一次，与 pet.ts 的 startThrowLatestRef 同一手法。
+    const saveRef = useRef<() => void>(() => {});
+    useEffect(() => {
+      saveRef.current = () => void save();
+    });
+
+    // Ctrl+S / Cmd+S 保存：配置项很长，改完上面几段不必滚到页面底部找「保存」。
+    // 只在本设置页可见时接管，且只在真要保存时才 preventDefault——否则在别处会把浏览器自带的
+    // 「保存网页」也拦掉（Ctrl+S 是浏览器保留键）。
+    useEffect(() => {
+      const onKey = (e: KeyboardEvent): void => {
+        if (!(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey) return;
+        if (e.key.toLowerCase() !== 's') return;
+        const root = rootRef.current;
+        if (!root || !root.isConnected || root.getClientRects().length === 0) return;
+        e.preventDefault();
+        saveRef.current();
+      };
+      document.addEventListener('keydown', onKey);
+      return () => document.removeEventListener('keydown', onKey);
+    }, []);
+
     const sync = () => setDialog({ kind: 'sync' });
 
     const doSync = async () => {
@@ -1389,6 +1429,7 @@ export function makePetConfigSection(rt: {
     };
 
     return h('section', {
+      ref: rootRef,
       className: 'dsh-pet-cfg',
       style: { maxWidth: '720px' },
       children: [
@@ -1457,14 +1498,40 @@ export function makePetConfigSection(rt: {
                   children: [
                     h('span', { key: 't', className: 'dsh-pet-cfg__cardTitle', children: t('petCardTitle') }),
                     q(t('petCardHint')),
-                    h('button', {
-                      key: 'rm',
-                      type: 'button',
-                      onClick: removeSel,
-                      disabled: busy,
-                      className: 'dsh-pet-cfg__btn is-danger is-sm',
-                      style: { marginLeft: 'auto' },
-                      children: t('remove'),
+                    // 右侧动作组：就近保存 + 删除。auto margin 挂在这层 wrapper 上，
+                    // 这样保存结果（msg）出现/消失时按钮位置不会跳。
+                    h('div', {
+                      key: 'acts',
+                      style: { marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '6px' },
+                      children: [
+                        // 保存结果就近反馈（与页面底部同一份 msg 状态）：否则在卡片上点保存看不到任何结果
+                        msg.text
+                          ? h('span', {
+                              key: 'msg',
+                              className: 'dsh-pet-cfg__msg' + (msg.kind === 'err' ? ' is-err' : ''),
+                              children: msg.text,
+                            })
+                          : null,
+                        // 就近保存：宠物这一块改完就地存盘，不必滚到页面底部的「保存」。
+                        // 悬浮按钮即出气泡，内容就是两个键（tip()：与问号同一套机制）
+                        h('button', {
+                          key: 'sv',
+                          type: 'button',
+                          onClick: () => void save(),
+                          disabled: busy,
+                          className: 'dsh-pet-cfg__btn is-primary is-sm',
+                          ...tip(t('saveHotkey')),
+                          children: t('save'),
+                        }),
+                        h('button', {
+                          key: 'rm',
+                          type: 'button',
+                          onClick: removeSel,
+                          disabled: busy,
+                          className: 'dsh-pet-cfg__btn is-danger is-sm',
+                          children: t('remove'),
+                        }),
+                      ],
                     }),
                   ],
                 }),
@@ -1712,6 +1779,8 @@ export function makePetConfigSection(rt: {
               disabled: busy,
               onClick: () => void save(),
               className: 'dsh-pet-cfg__btn is-primary',
+              // 悬浮按钮即出气泡，内容就是两个键（不写多余说明）
+              ...tip(t('saveHotkey')),
               children: t('save'),
             }),
             h('button', {

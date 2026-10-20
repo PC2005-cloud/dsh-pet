@@ -26,11 +26,14 @@ import {
   readAnim,
   readPosition,
   readThrow,
+  readLock,
   readWorkStatus,
   takeChanged,
   type PollState,
   type PositionMode,
   type SayCue,
+  type LockState,
+  type PetFacing,
 } from '../shared/state';
 import { WORK_STATUS_INDEX, type WorkStatusSnapshot } from '../shared/work-status';
 import { makeBalanceBubble, makeWhisperBubble } from './bubble';
@@ -50,6 +53,8 @@ import {
 import { TOOLTIP_CLASS, TOOLTIP_CSS, TOOLTIP_GAP_RATIO, tooltipPlacement } from '../shared/tooltip';
 // 对话弹窗：与桌面共用同一份组件（数据经 host /chat 读写同一份记忆）
 import { mountChatDialog } from '../shared/chat';
+import { registerPose } from './pose';
+import { registerProgress } from './progress';
 // 字体（全局配置 font）：种类 → CSS 字体栈、字号 → 最终 px。换算只在 shared 一处，
 // 与桌面端共用同一份（fontStackOf / resolveFontPx），避免两端各算一套后漂移。
 import { fontStackOf, resolveFontPx } from '../shared/fonts';
@@ -172,6 +177,8 @@ export function makePetUI(rt: {
     posCueTick,
     throwCue,
     throwCueTick,
+    lock,
+    lockTick,
     arena,
   }: {
     cfg: RuntimePet;
@@ -191,8 +198,9 @@ export function makePetUI(rt: {
      *  注意与组件内既有的 `anim`（**当前正在播的**动画名）区分：这个只是"要播什么"的指令。
      *  `name` 与 `url` **恰好一个**（host 判定层保证）：`name` = 池内名字，交给菜单动作处理函数
      *  （镜像修正 / 移动类走真实位移）；`url` = 第三方自带的完整地址，直接换源播一次、
-     *  **不走菜单语义**（裸地址没有"是不是文字类 / 是不是移动类"这些属性）。 */
-    animCue?: { name?: string; url?: string; seq: number; playbackId?: string };
+     *  **不走菜单语义**（裸地址没有"是不是文字类 / 是不是移动类"这些属性）。
+     *  `facing` = 调用方**显式指定**的朝向（可选）：undefined = 没指定 → **不动朝向**（不是回落 left）。 */
+    animCue?: { name?: string; url?: string; seq: number; playbackId?: string; facing?: PetFacing };
     animCueTick: number;
     /** 本宠物的「位置」指令（其他插件经 POST /position 写进 S；容器从 S 分发下来）。
      *  `x`/`y` 是宠物**中心**的归一化坐标（0~1，host 写入前已夹取）；
@@ -203,6 +211,12 @@ export function makePetUI(rt: {
      *  `angle` 单位度（`0` = 正右，逆时针为正）；`power` 是力度倍率。 */
     throwCue?: { angle: number; power: number; seq: number };
     throwCueTick: number;
+    /** 本宠物的「占用锁」状态（其他插件经 POST /lock 写进 S；容器从 S 分发下来，issue #122 第 4 项）。
+     *  `locked: true` = 第三方正占用这只宠物：本组件据此**冻结自己**（随机链不掷骰、暂停自播动画、
+     *  忽略自动来源的余额/工作状态表现）。**`expiresAt` 是唯一真相**——宿主不会到点推送"锁没了"，
+     *  这里自己定时解除（见 shared/state.ts 的 readLock）。 */
+    lock?: LockState;
+    lockTick: number;
     arena: ReactNS.MutableRefObject<{ slots: Record<string, PetCollisionSlot> }>;
   }) {
     // ---- 尺寸（由配置传入；容器/设置页更新后即时跟随）----
@@ -278,6 +292,14 @@ export function makePetUI(rt: {
     /** 当前正在播的第三方点播编号（null = 自播动画，不上报）；播完 / 失败 / 被打断后清空 */
     const playingPlaybackRef = useRef<string | null>(null);
     const genRef = useRef(0);
+    // ---- 占用锁（issue #122 第 4 项）----
+    // `frozenRef` = 本宠物此刻是否被第三方占用（冻结）。初值就从叶子算：页面刷新时若正处在
+    // 占用期间，第一帧就该是冻的，而不是先动一下再冻。
+    // **用 ref 而不是 state**：冻结/解冻只影响"播什么、动不动"，不参与渲染；而随机链入口
+    // （pickNext）与几个事件 effect 都在更早的闭包里读它，读 ref 才是"此刻"。
+    const frozenRef = useRef(lock?.locked === true && lock.expiresAt > Date.now());
+    /** 解冻定时器：宿主不会到点推送"锁没了"，这里按叶子里的 expiresAt 自己解除 */
+    const lockTimerRef = useRef<number | null>(null);
     const dragRef = useRef({
       active: false,
       dragging: false,
@@ -501,10 +523,43 @@ export function makePetUI(rt: {
     }, [anim, once, seq, cuePlayback]);
     useEffect(() => {
       mountedRef.current = true;
+      // 「实况」口子（issue #122 第 1 条）：把这一页里这只宠物的实时位置/朝向注册给 Cordis 只读
+      // 服务 `petApi7340`（见 ./pose）。**按需读**——消费者每次调用都走这个闭包取当前值，所以走位、
+      // 抛掷、拖拽**中途**也能读到，不是快照。
+      // 坐标与 POST /position 同一口径：宠物**中心**的归一化 0~1。
+      const unregisterPose = registerPose(cfg.id, () => ({
+        x: currentCenterX() / window.innerWidth,
+        y: currentCenterY() / window.innerHeight,
+        facing: facingRef.current,
+      }));
+      // 「播放进度」口子（issue #122 第 2 条）：侧栏要跟着视频时间走，得按帧读，做成 HTTP 就是每秒
+      // 几十次回环，所以走同一个 Cordis 入口（见 ./progress）。读的是**前台**那个 video：A/B 双缓冲
+      // 切换期间 back 元素还停在上一段的位置，读它会跳。
+      const unregisterProgress = registerProgress(cfg.id, () => {
+        const el = frontRef.current === 0 ? videoARef.current : videoBRef.current;
+        const playbackId = playingPlaybackRef.current;
+        const anim = animRef.current;
+        if (el === null) {
+          // 首帧还没挂上元素：给出可解析的零值，别让调用方拿到 undefined
+          return { playbackId, anim, currentTime: 0, duration: 0, paused: true, buffering: false };
+        }
+        // duration 在元数据就绪前是 NaN；传给第三方没法处理，统一成 0
+        const duration = Number.isFinite(el.duration) && el.duration > 0 ? el.duration : 0;
+        return {
+          playbackId,
+          anim,
+          currentTime: el.currentTime,
+          duration,
+          paused: el.paused,
+          buffering: el.readyState < 3 || el.seeking,
+        };
+      });
       const bu = blobUrlRef.current;
       const inflight = inflightRef.current;
       return () => {
         mountedRef.current = false;
+        unregisterPose(); // 卸载即摘除：口子静默失效比读到陈旧值安全
+        unregisterProgress();
         for (const c of inflight) c.abort();
         inflight.length = 0;
         stopMove();
@@ -514,6 +569,7 @@ export function makePetUI(rt: {
         if (bu.a) URL.revokeObjectURL(bu.a);
         if (bu.b) URL.revokeObjectURL(bu.b);
       };
+      // eslint-disable-next-line react-hooks/exhaustive-deps -- 挂载/卸载各跑一次：闭包读的是 refs 与稳定 props
     }, []);
     useEffect(
       () => () => {
@@ -546,6 +602,10 @@ export function makePetUI(rt: {
     useEffect(() => {
       if (balanceTick === 0 || balanceTick === prevTickRef.current) return;
       prevTickRef.current = balanceTick;
+      // 占用锁：锁生效时**不看自动余额**（那是宠物自己的行为）；**手动**请求照常放行
+      // （用户右键「查看余额」/ `/balance` 命令——用户交互优先，这是既定口径）。
+      // 判在 tick 消费**之后**：占用期间这一拍就当过去了，解冻后不补播（事件是瞬时的）。
+      if (frozenRef.current && !balanceManual) return;
       if (!balance || !balance.ok) return;
       if (!cfg.balanceEnabled && !balanceManual) return; // 自动轮询受开关门控；手动无条件通过
       const p = balancePercent(balance);
@@ -595,6 +655,8 @@ export function makePetUI(rt: {
       if (!cfg.balanceEnabled && !balanceManual) return; // 自动轮询受开关门控；手动无条件通过
       if (balanceNoticeTick === 0 || balanceNoticeTick === prevNoticeRef.current) return;
       prevNoticeRef.current = balanceNoticeTick;
+      // 占用锁：同上面那条余额事件——自动来源不看，手动请求照常（用户问了就得有答复）
+      if (frozenRef.current && !balanceManual) return;
       if (!balance || balance.ok) return;
       setBubbleOn(true);
       if (bubbleTimerRef.current !== null) window.clearTimeout(bubbleTimerRef.current);
@@ -615,6 +677,12 @@ export function makePetUI(rt: {
       if (!cfg.workStatusEnabled) return; // 未启用工作状态联动 -> 该宠物完全免疫
       if (workStatusTick === 0 || workStatusTick === prevWorkTickRef.current) return;
       prevWorkTickRef.current = workStatusTick;
+      // 占用锁：锁生效时不响应工作状态（它是**自动**来源——任务事件驱动的，没有"用户手动要"这条路）。
+      // 判在 tick 消费**之后**：占用期间的状态变化当过去了，解冻时由 applyFreeze 的
+      // resumeWorkStatusAnim() 重新对齐**当前**状态，所以不会停在旧档位上。
+      // 注意这里不挡宿主：`sections.workStatus` 是所有宠物共用一份，宿主"跳过写入"会连带静音
+      // 别的宠物（issue #122 要的是"只控制指定 main"），所以按宠物在渲染端忽略。
+      if (frozenRef.current) return;
       if (!workStatus || workStatus.state === null) {
         // 调试：状态回空闲（仅打印切换日志；动画改成"播完即停"，见下）
         console.log(
@@ -726,6 +794,16 @@ export function makePetUI(rt: {
     useEffect(() => {
       if (!animCue || animCue.seq === prevAnimSeqRef.current) return;
       prevAnimSeqRef.current = animCue.seq;
+      // 朝向（POST /anim 的 facing，可选）：**必须在换源之前落地**——switchTo 是在 onReady 里按
+      // facingRef.current 贴 scaleX(-1) 的，晚一步就赶不上这一趟。
+      // 且必须连 facingRef **一起立即同步**：setFacing 是异步的，只调它的话本次 switchTo 读到的
+      // 还是旧朝向（与 handleEnded 里 turn 翻转同一个道理）。
+      // **没传 facing 就一个字都不动**：保持宠物当前朝向，而不是回落 left。
+      const explicitFacing = animCue.facing !== undefined;
+      if (animCue.facing !== undefined) {
+        setFacing(animCue.facing);
+        facingRef.current = animCue.facing;
+      }
       // url 形态（issue #122 第 1 条）：第三方自带的素材地址。**不走 handleMenuAction**——
       // 那套是菜单语义（文字类先强制朝左的镜像修正、移动类走真实位移），裸地址没有这些属性。
       // 这里只做"插播一段"：停掉漫游/移动，换源播一次，播完由 handleEnded 回到正常动画链
@@ -740,7 +818,8 @@ export function makePetUI(rt: {
         return;
       }
       if (animCue.name === undefined) return;
-      handleMenuAction({ label: animCue.name, anim: animCue.name }, animCue.playbackId);
+      // keepFacing：显式指定的朝向优先于"文字类强制朝左"那条镜像修正
+      handleMenuAction({ label: animCue.name, anim: animCue.name }, animCue.playbackId, explicitFacing);
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [animCueTick]);
 
@@ -831,6 +910,10 @@ export function makePetUI(rt: {
 
     // ---- 动画链：播完按权重选下一个 ----
     const pickNext = () => {
+      // 占用锁（issue #122 第 4 项）：锁生效时**不掷骰**。这里是随机链的**唯一**入口
+      // （只有动画播完才会走到），所以一句判断就把随机动画、随机转向、自主走位一起停住——
+      // 宠物停在最后一帧，等持锁者的下一条指令（那走 /anim，不经这里）。
+      if (frozenRef.current) return;
       const animations = petAnims;
       const animationWeights = petWeights;
       const roll = Math.random();
@@ -888,6 +971,12 @@ export function makePetUI(rt: {
     // 互动结束应立即回到对应档位循环动画（打断-恢复语义）；无状态/终态返回 false 不接管，
     // 调用方走原逻辑（回 idle / 随机池）。
     const resumeWorkStatusAnim = (): boolean => {
+      // 占用锁：冻结期间不许由这条路把工作状态动画点回来。它读的是**实时**状态（`workStatusRef`），
+      // 跟 `workStatusTick` 无关——持锁者每投一次带 `anim` 的气泡，说话动画播完就会经 handleEnded
+      // 走到这里。自防一道，是为了让"冻结期间不恢复档位动画"成为**这个函数自己的契约**，
+      // 而不是靠每个调用方都记得先判冻结。解冻路径不受影响：`applyFreeze(false)` 是先把
+      // `frozenRef` 置 false 再调这里。
+      if (frozenRef.current) return false;
       const ws = workStatusRef.current;
       if (!ws || !ws.state || ws.state === 'success' || ws.state === 'error') return false;
       const pool = petAnims.events?.workStatus;
@@ -918,6 +1007,18 @@ export function makePetUI(rt: {
       }
       const animations = petAnims;
       if (dragRef.current.active) return;
+      // 占用锁（issue #122 第 4 项）：冻结期间**动画链一律不推进**——事件动画播完就停在最后一帧。
+      //
+      // 为什么必须挡在这一行：下面四条路都会换源播放，而它们读的是**当前工作状态**
+      // （`workStatusRef`），跟 `workStatusTick` 无关——所以上面那个 effect 的门禁拦不住它们：
+      //   ① 非终态多候选档位播完自动轮换（还会一直轮换下去）；
+      //   ② 非终态单候选意外 ended 就续播同一段；
+      //   ③ 事件动画（余额/碎碎念/**说话**）播完 → 恢复工作状态档位；
+      //   ④ 点击/拖拽动画播完 → 恢复工作状态档位。
+      // ③ 是最容易撞上的：持锁者每投一次带 `anim` 的气泡（默认就是 true），说话动画播完就走到这里，
+      // 把工作状态动画点回来——只要用户在跑任务，冻结就形同虚设。
+      // 播放回执已经在上面上报，不受这一行影响。
+      if (frozenRef.current) return;
       // 事件动画播完：回 idle（与 drag/clicks 同分支，不进入随机链）；气泡由定时器自动消失，与动画解耦
       const isEvent = isEventAnim(animations.events, animRef.current);
       // 工作状态循环护栏：非终态档位（thinking/working/result/waiting）期间，workStatus 事件动画
@@ -1071,7 +1172,12 @@ export function makePetUI(rt: {
         : actions[Math.floor(Math.random() * actions.length)];
       if (!chosen) return false;
       const mp = Object.assign({}, moves.default, chosen.params || {});
-      const dir = (facingRef.current === 'right') !== petAnims.turn.includes(animRef.current) ? 1 : -1;
+      // 朝向 → 走路方向：**只看当前 facing**。原式是 `(facingRef.current === 'right') !==
+      // petAnims.turn.includes(animRef.current)`，那个 XOR 是用来补"turn 播完 setFacing 异步、
+      // 紧随的 pickNext 还读到旧 facing"（见 handleEnded）。1ea84ee 起 handleEnded 已立即同步
+      // facingRef，旧朝向不复存在，XOR 反而把方向多翻一次：turn 播完朝右，这里算出 dir=-1，
+      // 于是镜像朝右、人往左走。故删掉。
+      const dir = facingRef.current === 'right' ? 1 : -1;
       const W = window.innerWidth;
       // 移动距离随宠物缩放：config 的 minDist/maxDist 是基准尺寸（462px 宽）下的 px，
       // 按 实际size/基准 等比缩放 —— 小宠物挪小步、大宠物挪大步，与人物自身大小匹配
@@ -1446,10 +1552,95 @@ export function makePetUI(rt: {
       tipEl.style.top = p.y + 'px';
     };
 
+    // ---- 占用锁：冻结 / 解冻（issue #122 第 4 项）----
+    //
+    // 锁在宿主内存里，渲染端靠 S 的 `pets.<id>.lock` 叶子知道它。**宿主不会到点推一次"锁没了"**
+    // （它那一侧的过期是懒判的），所以这里按叶子里的 `expiresAt` 自己定时解除——两端的"到点"因此同源。
+    //
+    // 冻结期间**只有三件事被挡住**，且都在渲染端：
+    //   ① 随机链（pickNext 一句判断，随机动画/随机转向/自主走位全在它后面）；
+    //   ② 当前正在播的自播动画（暂停，定在当前帧）；
+    //   ③ **自动**来源的余额与工作状态表现（见各自 effect 里的判断；手动请求与显式指令照常）。
+    // 显式指令（say / anim / position / throw 四个叶子）**一概不挡**——那些是持锁者（或用户手动）
+    // 明确要的，正是占用要保护的东西。
+    /** 冻结 / 解冻的**实际动作**（只在真的翻转时做事：挂载那一次不动作，否则平白补播一段 idle） */
+    const applyFreeze = (next: boolean): void => {
+      if (frozenRef.current === next) return;
+      frozenRef.current = next;
+      const el = frontRef.current === 0 ? videoARef.current : videoBRef.current;
+      const stamp = '[dsh-pet] ' + new Date().toTimeString().slice(0, 8) + ' pet=' + cfg.id;
+      if (next) {
+        // 停住正在播的那一段：宿主停不掉一段视频，"完全静止"只能由渲染端执行。
+        // 光堵随机链入口不够——那个入口只在动画**播完**时才被调用，不暂停的话会把当前这段播完才停。
+        stopMove();
+        el?.pause();
+        // 播放回执（issue #122 第 3 项）：冻结**打断了**正在播的那一次第三方点播——如实回
+        // `cancelled`，而不是让回执一直挂着 `playing`（那会让挂 `?wait=ended` 的调用方白等一个
+        // timeout：这一场永远不会 ended）。为什么是"打断"而不是"暂停"：解冻走的是回 idle /
+        // 恢复档位（= 换源顶掉它），**不会把它接回来**，所以它确实不会再播完。
+        // 顺序与 onReady 里那条 superseded 一致：先清 playingPlaybackRef 再上报，
+        // 免得后续换源又把同一个编号当成"被顶掉"再报一次。
+        const interrupted = playingPlaybackRef.current;
+        if (interrupted !== null) {
+          playingPlaybackRef.current = null;
+          reportPlayback(interrupted, 'cancelled', 'frozen');
+        }
+        console.log(stamp + ' 占用锁生效：冻结（随机链停 + 当前动画暂停）');
+        return;
+      }
+      console.log(stamp + ' 占用锁解除：恢复');
+      // 解冻：回到"该播什么就播什么"——非终态工作状态回档位循环，否则回 idle 一次，
+      // 播完由 handleEnded 接回随机链（与点击/拖拽结束后的恢复同一条路）。
+      if (resumeWorkStatusAnim()) return;
+      if (petAnims.idle.length) {
+        setAnim(pick(petAnims.idle, animRef.current));
+        setOnce(true);
+        setSeq((s) => s + 1);
+      }
+    };
+
+    useEffect(() => {
+      if (lockTimerRef.current !== null) {
+        window.clearTimeout(lockTimerRef.current);
+        lockTimerRef.current = null;
+      }
+      // `expiresAt` 已经过去 = 没有锁：页面刷新后才拿到一份陈旧叶子时必须这么判，不能只看 locked
+      const expiresAt = lock?.locked === true ? lock.expiresAt : 0;
+      applyFreeze(expiresAt > Date.now());
+      if (expiresAt <= Date.now()) return;
+      lockTimerRef.current = window.setTimeout(
+        () => {
+          lockTimerRef.current = null;
+          applyFreeze(false);
+        },
+        Math.max(0, expiresAt - Date.now()),
+      );
+      return () => {
+        if (lockTimerRef.current !== null) {
+          window.clearTimeout(lockTimerRef.current);
+          lockTimerRef.current = null;
+        }
+      };
+      // applyFreeze 每次渲染都是新函数，但它读的全是 ref 与稳定 setter，刻意不进依赖
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [lockTick, lock]);
+
     // ---- 点击 vs 拖拽 ----
     const handlePointerDown = (e: ReactNS.PointerEvent<HTMLDivElement>) => {
       // 只认左键：右键进入拖拽判定会与右键菜单打架（右键不拖拽，两端一致）
       if (e.button !== 0) return;
+      // 占用锁（issue #122 第 4 项）：用户**点了或拖了**这只宠物 = 用户接管，立刻撤掉第三方占用。
+      // 这是唯一一处"渲染端 → 宿主"的锁上报——宿主看不见鼠标，而锁在它手里（见 /lock/release 的
+      // force 形态）。先本地解冻再上报：叶子回来还有一次往返，等它会让宠物"点了半天才动"；
+      // 此刻 frozenRef 为真说明确实有锁，所以这次 force 释放必然成功，乐观是安全的。
+      if (frozenRef.current) {
+        if (lockTimerRef.current !== null) {
+          window.clearTimeout(lockTimerRef.current);
+          lockTimerRef.current = null;
+        }
+        applyFreeze(false);
+        void postAction('/dsh-pet-7340/lock/release?pet=' + encodeURIComponent(cfg.id), { force: true });
+      }
       // 抓取速度日志：stopThrow 之前读，否则飞行速度就没了；静止时记录 0
       const grabState = throwStateRef.current;
       console.log(
@@ -1666,7 +1857,9 @@ export function makePetUI(rt: {
     // 注意：菜单是独立浮层，只在宠物命中区拦截右键（preventDefault + stopPropagation），
     // 绝不进入/改动 DSH 页面自己的菜单。浏览器端工具项 = 查看余额 / 碎碎念 / 对话 / 回到初始位置
     // （无「打开网站」——宠物就在网页里；无「重载配置」——刷新页面即可）。
-    const handleMenuAction = (leaf: MenuLeaf, playbackId?: string) => {
+    /** `keepFacing` = 调用方已**显式指定**朝向（POST /anim 的 facing）：跳过下面"文字类动画
+     *  点播前强制朝左"那条镜像修正——显式值优先。右键菜单点播不传（保持原语义）。 */
+    const handleMenuAction = (leaf: MenuLeaf, playbackId?: string, keepFacing = false) => {
       if (leaf.action === 'show-balance') {
         // 查看余额（与桌面菜单同一套语义）：POST 动作端点让 host 立即刷新一次并写入 S（manual 标记随数据一起写）。
         // 结果**这里什么都不用做**：写叶子会让版本号变，挂着的长轮询那一拍立刻返回并展示（0 延迟）。
@@ -1684,7 +1877,8 @@ export function makePetUI(rt: {
         // 动作**不回文本**——文本随"版本号变化"唤醒的那一拍长轮询到达并弹气泡（0 延迟）。
         // 手动触发不受 whisperEnabled 限制——该字段只关自动周期，手动永远可用。
         console.info('[dsh-pet] 菜单触发碎碎念 pet=' + cfg.id);
-        postAction('/dsh-pet-7340/whisper?pet=' + encodeURIComponent(cfg.id))
+        // surface 必填：本页面就是网页端
+        postAction('/dsh-pet-7340/whisper?pet=' + encodeURIComponent(cfg.id) + '&surface=web')
           .then((ok: boolean) => {
             if (!ok) console.warn('[dsh-pet] 碎碎念手动触发失败 pet=' + cfg.id);
           })
@@ -1702,6 +1896,7 @@ export function makePetUI(rt: {
         chatRef.current = mountChatDialog({
           petId: cfg.id,
           baseUrl: '/dsh-pet-7340/chat',
+          surface: 'web',
           x: hitRect ? hitRect.right + 6 : window.innerWidth - 256,
           y: hitRect ? hitRect.top + 6 : 8,
           onSent: () => {
@@ -1727,10 +1922,14 @@ export function makePetUI(rt: {
         })
           .then(async (r) => {
             if (!r.ok) throw new Error('pet-display HTTP ' + r.status);
+            const body = (await r.json()) as Record<string, unknown>;
+            // 业务失败是 **HTTP 200 + `{ok:false, reason}`**（缺 id / display 非法 / 宠物不存在 /
+            // 写盘失败全走这一条）——只看状态码会把失败体当成成品聚合喂给 reload。
+            if (body.ok === false) throw new Error('pet-display 被拒：' + String(body.reason ?? ''));
             // 响应体就是改动后的成品聚合（与设置页保存同路），直接交给 reload。
             // **必须传它**：不传参时 reload 会再拉一次 GET /config，那次请求可能拿回陈旧配置，
             // 现场表现就是"浏览器端要刷新才生效"。
-            petBridge.reload((await r.json()) as Record<string, Record<string, unknown>>);
+            petBridge.reload(body as Record<string, Record<string, unknown>>);
           })
           .catch((e: unknown) => console.warn('[dsh-pet] 显示位置切换失败', e));
         return;
@@ -1746,8 +1945,9 @@ export function makePetUI(rt: {
       // 回执归属：这一段动画若来自第三方点播，编号要跟着这次换源一起下发（自播动画传 null，
       // 顺带把上一次的编号清掉，避免陈旧编号串到自播动画上）
       const cuePlaybackId = playbackId ?? null;
-      // 文字类（noMirror）朝右站姿是镜像的：点播前强制朝左，避免文字镜像（与随机链"朝右不选文字"同语义）
-      if (isNoMirrorAnimation(petAnims.categories, leaf.anim) && facingRef.current === 'right') {
+      // 文字类（noMirror）朝右站姿是镜像的：点播前强制朝左，避免文字镜像（与随机链"朝右不选文字"同语义）。
+      // `keepFacing` 时跳过：调用方已显式指定朝向，显式值优先（要 right 就给 right，哪怕文字会镜像）。
+      if (!keepFacing && isNoMirrorAnimation(petAnims.categories, leaf.anim) && facingRef.current === 'right') {
         setFacing('left');
       }
       // 点播移动动画：走真实移动（与随机移动同一套：边界检查 / 随机距离 / leadSec·tailSec 时段 / dir 计算），
@@ -2040,13 +2240,20 @@ export function makePetUI(rt: {
     const [sayTick, setSayTick] = useState(0);
     const sayRef = useRef<Record<string, SayCue & { seq: number }>>({});
     const [animCueTick, setAnimCueTick] = useState(0);
-    const animCueRef = useRef<Record<string, { name?: string; url?: string; seq: number; playbackId?: string }>>({});
+    const animCueRef = useRef<
+      Record<string, { name?: string; url?: string; seq: number; playbackId?: string; facing?: PetFacing }>
+    >({});
     const [posCueTick, setPosCueTick] = useState(0);
     const posCueRef = useRef<
       Record<string, { x: number; y: number; mode: PositionMode; duration: number; seq: number }>
     >({});
     const [throwCueTick, setThrowCueTick] = useState(0);
     const throwCueRef = useRef<Record<string, { angle: number; power: number; seq: number }>>({});
+    // 占用锁（issue #122 第 4 项）：容器统一轮询 pets.<id>.lock，按宠物分发到对应 PetCard。
+    // 与那四个"指令"不同，这是**状态**：PetCard 读它决定要不要冻结自己（随机链停、暂停自播、
+    // 忽略自动来源），并自己按 expiresAt 定时解除——宿主不会到点推一次"锁没了"。
+    const [lockTick, setLockTick] = useState(0);
+    const lockRef = useRef<Record<string, LockState>>({});
     useEffect(() => {
       if (!ready) return;
       let alive = true;
@@ -2101,6 +2308,7 @@ export function makePetUI(rt: {
                 name: hit.name,
                 url: hit.url,
                 playbackId: hit.playbackId,
+                facing: hit.facing,
                 seq: (animCueRef.current[petId]?.seq ?? 0) + 1,
               };
               setAnimCueTick((t) => t + 1);
@@ -2120,6 +2328,16 @@ export function makePetUI(rt: {
             if (hit) {
               throwCueRef.current[petId] = { ...hit, seq: (throwCueRef.current[petId]?.seq ?? 0) + 1 };
               setThrowCueTick((t) => t + 1);
+            }
+          } else if (path.startsWith('pets.') && path.endsWith('.lock')) {
+            // 占用锁叶子：路径形如 pets.<id>.lock（同样按前缀/后缀切片，绝不 split('.')）。
+            // 与上面四个不同，它是**状态**不是指令：PetCard 读它决定要不要冻结自己，
+            // 并按叶子里的 expiresAt 自己定时解除（宿主侧过期是懒判的，不会推"锁没了"）。
+            const petId = path.slice('pets.'.length, -'.lock'.length);
+            const hit = readLock(leaf);
+            if (hit) {
+              lockRef.current[petId] = hit;
+              setLockTick((t) => t + 1);
             }
           }
         }
@@ -2174,6 +2392,8 @@ export function makePetUI(rt: {
             posCueTick,
             throwCue: throwCueRef.current[p.id],
             throwCueTick,
+            lock: lockRef.current[p.id],
+            lockTick,
             arena: arenaRef,
           }),
         )

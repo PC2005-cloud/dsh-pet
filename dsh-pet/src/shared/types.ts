@@ -119,7 +119,7 @@ export interface Pet {
   /** 全局默认：拖拽抛掷物理参数（用户在 main-config.jsonc 里写一次即对所有宠物生效，
    *  含 pet pack；种类文件顶层写了则用自己那份。host 合并已填默认，拍平时吹入） */
   physics?: PhysicsParams;
-  /** 全局默认：拖拽抛掷是否锁定在当前屏幕（归属规则同 physics） */
+  /** 全局默认：是否锁定在当前屏幕（归属规则同 physics）——抛掷与自主漫游都只在当前所在那块屏内活动 */
   confineToScreen?: boolean;
   /** 条目级：工作状态气泡文案（二维数组，外层索引 = workStatus 档位 0..5，内层每档可多句随机抽；
    *  host 合并已填默认，拍平时吹入；整字段缺失 = 不弹工作状态文本，只播动画） */
@@ -185,8 +185,9 @@ export interface ClientConfig {
   whisperImageEnabled: boolean;
   /** 对话配图开关：true=对话时把表情包清单交模型按语境选 1 张（可不选）；false=纯文本 */
   chatImageEnabled: boolean;
-  /** 拖拽抛掷是否锁定在当前屏幕：true=甩出去只在松手时所在那块屏内弹（屏缝当墙）；
-   *  false=跨屏飞行（现状）。根字段（不属于 physics：它不改手感，只改「被允许去哪」），
+  /** 是否锁定在当前屏幕：true=宠物只在当前所在那块屏内活动——甩出去只在松手时所在那块屏内弹
+   *  （屏缝当墙），自主漫游也只在当前所在那块屏内走（越出屏缝的那一步直接取消）；
+   *  false=跨屏飞行 / 跨屏行走（现状）。根字段（不属于 physics：它不改手感，只改「被允许去哪」），
    *  条目级，缺失即配置错误 */
   confineToScreen: boolean;
   pets: Pet[];

@@ -2,6 +2,8 @@
 // 页面代码不在本文件：宠物页面在 pet.ts，设置页在 settings.ts——
 // 类似 Vue 的 App.vue 只挂根组件、SpringBoot 启动类只做装配，不写页面业务。
 import { makePetUI } from './pet';
+import { readPose } from './pose';
+import { readProgress } from './progress';
 import { makePetConfigSection, NS, zh, en, petBridge } from './settings';
 import { initNotify } from './notify';
 import { installCommandFaces, type CommandFace, type CommandUiLike } from './command-faces';
@@ -67,6 +69,20 @@ export function makeFactory(): (require: (mod: string) => any) => any {
       // 本地化字典（设置页文案）
       ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'dsh-pet: dictionaries');
       const t = ctx.locale.bind(NS);
+
+      // 「对外 Cordis 服务」入口（issue #122）：让**同页的第三方客户端插件**按需读这一页里某只
+      // 宠物的实况与播放进度——页面内读内存，零请求，且天然绑定"这个页面里的这只"（网页端的
+      // 位置与播放天生每个页面一份，塞进宿主快照语义上就是错的）。
+      //
+      //   pose(petId)     位置 + 朝向；桌面端对应 `GET /pose`，字段与坐标口径完全一致
+      //   progress(petId) 播放进度（位置/总长/暂停/缓冲）；桌面端没有这条路，也没有 Cordis 容器
+      //
+      // **只开读**：让它播什么、停什么仍走 HTTP 接口，避免控制出现两条通道（契约分叉）。
+      // 服务名带 `7340` 后缀，与 HTTP 路由 `/dsh-pet-7340` 同源：DSH 生态里的桌宠插件有几百个，
+      // 裸名（petPose / petApi）撞名概率太高，而 Cordis 里同名服务二次 provide 会**直接抛错**、
+      // 让整个客户端插件加载失败（overlay 与设置页全都不注册）。消费者用
+      // `ctx.get('petApi7340')` 探测——拿不到就是老版本，不抛。
+      ctx.provide('petApi7340', { pose: readPose, progress: readProgress });
 
       // 系统通知：host 侧监听 DSH 宿主事件生成通知帧，写进 /state 的 sections.notify；
       // 容器的统一轮询发现 counter 变化后调 notifyFromFrame 弹 toast（本引擎不再自己轮询）。

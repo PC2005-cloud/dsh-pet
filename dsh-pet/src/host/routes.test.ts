@@ -570,3 +570,156 @@ describe('pic/memes 路由 —— 素材根不得当路径片段（与 thumb 同
     assert.equal(r.body.includes(SECRET), false);
   });
 });
+
+describe('pet 必填 —— 缺省一律 pet-required（issue #122 第 1 条：绝不退到列表第一只）', () => {
+  // 与 /broadcast 的 duration 同一处境：pet 空串**不必读配置**就能拒，所以这一组在"配置不可达"
+  // 的源码形态下照样能测——断言 reason 同时钉住了**短路顺序**（是 pet-required，不是 generate-error）。
+  // 决策层那 5 条（/anim、/broadcast、/bubble/clear、/position、/throw）的同一分支由各自的
+  // *.test.ts 覆盖：它们的 pet 解析住在决策模块里，路由层拿不到"没读配置"的时机。
+
+  test('/lock 与 /lock/release：不给 pet / 空串 / 全空白 → pet-required', async () => {
+    for (const path of ['lock', 'lock/release']) {
+      for (const q of ['', '?pet=', '?pet=%20%20']) {
+        const r = await call(`/dsh-pet-7340/${path}${q}`, 'POST', '{}');
+        assert.equal(r.status, 200, `${path}${q} 业务失败走 200 + ok:false`);
+        const body = JSON.parse(r.body) as { ok: boolean; reason: string };
+        assert.equal(body.ok, false, `${path}${q}`);
+        assert.equal(body.reason, 'pet-required', `${path}${q}`);
+      }
+    }
+  });
+
+  test('/whisper：不给 pet → pet-required（不再拿空串去生成、再写进没人消费的叶子）', async () => {
+    const r = await call('/dsh-pet-7340/whisper', 'POST');
+    assert.equal(r.status, 200);
+    const body = JSON.parse(r.body) as { ok: boolean; reason: string };
+    assert.equal(body.ok, false);
+    assert.equal(body.reason, 'pet-required');
+  });
+
+  test('/chat：不给 pet → pet-required（GET 与 POST 都是）', async () => {
+    const g = await call('/dsh-pet-7340/chat');
+    assert.equal(g.status, 200);
+    assert.equal((JSON.parse(g.body) as { reason: string }).reason, 'pet-required');
+    const p = await call('/dsh-pet-7340/chat', 'POST', JSON.stringify({ text: '在吗' }));
+    assert.equal(p.status, 200);
+    assert.equal((JSON.parse(p.body) as { reason: string }).reason, 'pet-required');
+  });
+
+  test('/chat：方法不对仍是 405（pet 校验不抢在协议层错误前面）', async () => {
+    assert.equal((await call('/dsh-pet-7340/chat', 'PUT')).status, 405);
+    assert.equal((await call('/dsh-pet-7340/chat', 'DELETE')).status, 405);
+  });
+});
+
+describe('surface 必填 —— 缺省/非法一律 bad-request，且短路在读盘之前（issue #122 第 1 条）', () => {
+  // 与 pet 空串同一处境：surface 的**参数级**校验放在读配置之前，所以这一组在"配置不可达"的
+  // 源码形态下照样能测——断言 reason 同时钉住了**短路顺序**（是 bad-request，不是 generate-error）。
+  test('/lock、/whisper、/chat POST：不给 surface / 非法值 → bad-request', async () => {
+    const cases: Array<[string, string, string | undefined]> = [
+      ['lock', 'POST', '{}'],
+      ['whisper', 'POST', undefined],
+      ['chat', 'POST', JSON.stringify({ text: '在吗' })],
+    ];
+    for (const [path, method, body] of cases) {
+      for (const q of ['', '&surface=nope', '&surface=WEB', '&surface=']) {
+        const r = await call(`/dsh-pet-7340/${path}?pet=main${q}`, method, body);
+        assert.equal(r.status, 200, `${path}${q} 业务失败走 200 + ok:false`);
+        const b = JSON.parse(r.body) as { ok: boolean; reason: string };
+        assert.equal(b.ok, false, `${path}${q}`);
+        assert.equal(b.reason, 'bad-request', `${path}${q} 应是 bad-request（不是 generate-error）`);
+      }
+    }
+  });
+
+  test('/chat GET 与 /lock/release 不校验 surface：照旧走到读配置那一步（generate-error）', async () => {
+    // 释放必须永远能成功（否则宠物中途被隐藏就撤不掉锁）；GET 是读记忆，与显示在哪一端无关。
+    // 两者都**忽略** surface——连非法值也不该报 bad-request。
+    const g = await call('/dsh-pet-7340/chat?pet=main&surface=nope');
+    assert.equal(g.status, 200);
+    assert.equal((JSON.parse(g.body) as { reason: string }).reason, 'generate-error');
+    const rel = await call('/dsh-pet-7340/lock/release?pet=main&surface=nope', 'POST', '{}');
+    assert.equal(rel.status, 200);
+    assert.equal((JSON.parse(rel.body) as { reason: string }).reason, 'generate-error');
+  });
+});
+
+describe('/pose —— 桌面端实况（GET 查询 / POST 上报），与 surface 无关', () => {
+  // 与 /whisper、/chat 的"pet 必填"同一处境：这些断言在"配置不可达"的源码形态下照样成立，
+  // 正好钉住**短路顺序**（pet 先报，surface 根本不参与）。
+  test('/pose：不给 pet → pet-required；方法不对 → 405', async () => {
+    const r = await call('/dsh-pet-7340/pose');
+    assert.equal(r.status, 200);
+    assert.equal((JSON.parse(r.body) as { reason: string }).reason, 'pet-required');
+    assert.equal((await call('/dsh-pet-7340/pose?pet=main', 'POST')).status, 405);
+  });
+
+  test('/pose/report：方法不对 → 405；非法 JSON → 400（协议层错误先于业务）', async () => {
+    assert.equal((await call('/dsh-pet-7340/pose/report?pet=main')).status, 405);
+    assert.equal((await call('/dsh-pet-7340/pose/report?pet=main', 'POST', '{ 不是 json')).status, 400);
+  });
+
+  test('两条都**不校验** surface：连非法值也照旧走到读配置那一步', async () => {
+    // 它们是**读 / 内部**端点（同 GET /chat、GET /playback）——surface 只加在会产生渲染端可见效果
+    // 的动作端点上。这条同时钉住"以后别顺手把 surface 加进来"。
+    const g = await call('/dsh-pet-7340/pose?pet=main&surface=nope');
+    assert.equal(g.status, 200);
+    assert.equal((JSON.parse(g.body) as { reason: string }).reason, 'generate-error');
+    const p = await call(
+      '/dsh-pet-7340/pose/report?pet=main&surface=nope',
+      'POST',
+      JSON.stringify({ x: 0.5, y: 0.5, facing: 'left' }),
+    );
+    assert.equal(p.status, 200);
+    assert.equal((JSON.parse(p.body) as { reason: string }).reason, 'generate-error');
+  });
+});
+
+describe('?rounds= —— 非法值 bad-request，合法值不误杀（issue #141）', () => {
+  // 源码形态下配置不可达：能报 bad-request 就证明校验抢在读盘之前（否则会是 generate-error）。
+  test('非法 → bad-request（负数 / 小数 / 非数字 / 超上限）', async () => {
+    for (const bad of ['-1', '1.5', 'abc', '201']) {
+      const r = await call(`/dsh-pet-7340/chat?pet=main&rounds=${bad}`);
+      const body = JSON.parse(r.body) as { ok: boolean; reason: string };
+      assert.equal(body.ok, false, bad);
+      assert.equal(body.reason, 'bad-request', bad);
+    }
+  });
+
+  test('合法 / 空串 / 不传 → 不报 bad-request（本文件里走到 generate-error）', async () => {
+    for (const q of ['&rounds=0', '&rounds=3', '&rounds=', '']) {
+      const r = await call(`/dsh-pet-7340/chat?pet=main${q}`);
+      assert.equal((JSON.parse(r.body) as { reason: string }).reason, 'generate-error', q);
+    }
+  });
+});
+
+describe('/pet-display —— 业务失败一律 200 + ok:false（不用 400/404 表达业务结论）', () => {
+  test('GET → 405（写端点；方法错是协议层错误，照旧不是 200）', async () => {
+    assert.equal((await call('/dsh-pet-7340/pet-display')).status, 405);
+  });
+
+  test('请求体不是合法 JSON → 400（协议层错误，与其它端点同一口径）', async () => {
+    const r = await call('/dsh-pet-7340/pet-display', 'POST', '{ 不是 json');
+    assert.equal(r.status, 400);
+    assert.match(r.body, /invalid JSON body/);
+  });
+
+  test('缺 id → 200 + pet-required（与 9 条 ?pet= 路由同一对词汇）', async () => {
+    for (const body of [{ display: 'none' }, { id: '   ', display: 'none' }, { display: 'none' }]) {
+      const r = await call('/dsh-pet-7340/pet-display', 'POST', JSON.stringify(body));
+      assert.equal(r.status, 200, JSON.stringify(body));
+      const parsed = JSON.parse(r.body) as { ok: boolean; reason: string };
+      assert.equal(parsed.ok, false);
+      assert.equal(parsed.reason, 'pet-required');
+    }
+  });
+
+  test('display 非法 → 200 + bad-request（白名单 web/desktop/both/none）', async () => {
+    const r = await call('/dsh-pet-7340/pet-display', 'POST', JSON.stringify({ id: 'main', display: 'nope' }));
+    assert.equal(r.status, 200);
+    const body = JSON.parse(r.body) as { ok: boolean; reason: string };
+    assert.equal(body.ok, false);
+    assert.equal(body.reason, 'bad-request');
+  });
+});
