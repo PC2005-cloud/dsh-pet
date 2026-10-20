@@ -60,6 +60,8 @@ const { HOST_POLL_MS, hostIsGone, isBrokenPipeError, parseHostPid } = require('.
 const { shouldLinearize, resolveForcedScale, resolvePetScale } = require('./dpi-linearization.js');
 // 托盘的平台差异（模板图 / 左键是否自动弹菜单 / Dock）：规则住在模块里，main.js 只接线
 const { trayPlatform } = require('./tray-platform.js');
+// 托盘菜单模板（纯逻辑）：宠物勾选 + 后续要接的应用项；main.js 只把描述变成 Electron 菜单
+const { buildTrayMenuTemplate } = require('./tray-menu.js');
 const { buildDeskGeometry } = require('./desktop-geometry.js');
 
 // 允许无用户手势直接播放（余额动画等）
@@ -672,8 +674,6 @@ async function hostRequest(method, url, body) {
   return { status: resp.status, body: await resp.text() };
 }
 
-const isDesktopDisplay = (display) => display === 'desktop' || display === 'both';
-
 /** 翻转「桌面位」：both↔web、desktop↔none——浏览器位保持不动，因此不制造新的单向门 */
 const toggleDisplay = (display) =>
   display === 'both' ? 'web' : display === 'web' ? 'both' : display === 'desktop' ? 'none' : 'desktop';
@@ -727,18 +727,21 @@ async function startTray() {
       }))
       .filter((pet) => pet.id);
     if (!pets.length) return; // 配置里没有任何宠物：没有可切换的对象，不建托盘
+    // 模板由纯函数产出（ticket 01）。当前只接宠物勾选；AI 设置 / 开机自启 / 数据目录 / 说明 / 退出
+    // 是模板里已有的应用项，留给后续 ticket 接线。视觉与行为必须与抽出前完全一致：
+    // 同样的 label、勾选态与点击翻转方向。
+    const petItems = buildTrayMenuTemplate({ pets })
+      .filter((item) => item.action === 'toggle-pet')
+      .map((item) => ({
+        id: item.id,
+        label: item.label,
+        type: item.type,
+        checked: item.checked,
+        click: () => traySetPetDisplay(item.petId, toggleDisplay(item.display)),
+      }));
     tray = new Tray(trayIcon());
     tray.setToolTip('dsh-pet 桌面宠物');
-    tray.setContextMenu(
-      Menu.buildFromTemplate(
-        pets.map((pet) => ({
-          label: pet.name || pet.id,
-          type: 'checkbox',
-          checked: isDesktopDisplay(pet.display),
-          click: () => traySetPetDisplay(pet.id, toggleDisplay(pet.display)),
-        })),
-      ),
-    );
+    tray.setContextMenu(Menu.buildFromTemplate(petItems));
     // Windows 上 setContextMenu 只接管右键，左键默认什么都不做（macOS 相反：左键即弹菜单）
     if (TRAY_PLATFORM.leftClickPopsMenu) tray.on('click', () => tray.popUpContextMenu());
   } catch (e) {

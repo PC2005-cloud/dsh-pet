@@ -174,19 +174,24 @@ describe('守卫：宿主侧必须把 pid 注入（否则 B 永远不生效）',
   test('helper-process.ts：唯一的 spawn 点经 helperSpawnEnv 注入 DSH_PET_HOST_PID', () => {
     const src = readSource('./helper-process.ts');
     assert.ok(
-      /env: helperSpawnEnv\(process\.pid, this\.options\.env\)/.test(src),
-      'spawn 的 env 必须经 helperSpawnEnv 注入宿主 pid（放在唯一 spawn 点，所有调用方自动获得）',
+      /env: helperSpawnEnv\(process\.pid, this\.options\.env, launch\.envDelete\)/.test(src),
+      'spawn 的 env 必须经 helperSpawnEnv 注入宿主 pid，并执行启动计划给出的清理清单',
     );
   });
 
-  test('helperSpawnEnv：删掉会劫持 Electron 启动模式的 ELECTRON_RUN_AS_NODE（issue #63）', () => {
+  test('清理清单由 buildLaunchPlan 返回，helper-process 只负责逐键删除（issue #63）', () => {
+    const planSrc = readSource('./launch-plan.ts');
     const src = readSource('./helper-process.ts');
     assert.ok(
-      /delete env\.ELECTRON_RUN_AS_NODE;/.test(src),
-      '必须**删键**：宿主（如 DSH Desktop）透传这个变量会让 helper 退化成纯 Node 模式、require("electron") 直接崩',
+      /LAUNCH_ENV_DELETE_KEYS[^=]*=\s*\[[^\]]*'ELECTRON_RUN_AS_NODE'/.test(planSrc),
+      'ELECTRON_RUN_AS_NODE 的删除规则必须住在纯函数 launch-plan.ts 里（开发/打包只有一份）',
     );
     assert.ok(
-      !/ELECTRON_RUN_AS_NODE: ''/.test(src),
+      /for \(const key of deleteKeys\) delete env\[key\];/.test(src),
+      'spawn 点/环境构造只执行计划给出的清单，不再硬编码某一个变量',
+    );
+    assert.ok(
+      !/ELECTRON_RUN_AS_NODE: ''/.test(src + planSrc),
       '不得把它设成空字符串——实测 Electron 43.3.0 下空串会直接 abort（exit 134）',
     );
   });

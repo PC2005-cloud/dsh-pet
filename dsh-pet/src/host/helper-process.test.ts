@@ -20,8 +20,10 @@ import {
   HELPER_STABLE_MS,
   HELPER_STOP_GRACE_MS,
   HelperProcess,
-  dshHomeDir,
   defaultElectronExe,
+  defaultHelperMain,
+  defaultLaunch,
+  dshHomeDir,
   ensureElectronDownload,
   hasGraphicalDisplay,
   helperRunIsStable,
@@ -291,6 +293,34 @@ describe('HelperProcess —— 退避/熔断的**接线**（纯函数之外，�
   });
 });
 
+describe('defaultLaunch —— 启动计划（ticket 01）', () => {
+  test('开发形态：Electron 二进制 + helper 脚本 + 计划自带的环境清理清单', () => {
+    withIsolatedHome((dir) => {
+      const fake = join(dir, 'electron.exe');
+      writeFileSync(fake, '');
+      const plan = defaultLaunch({ electronPath: fake });
+      assert.deepEqual(plan, {
+        command: fake,
+        args: [defaultHelperMain],
+        cwd: dshHomeDir(),
+        envDelete: ['ELECTRON_RUN_AS_NODE'],
+      });
+    });
+  });
+
+  test('helperPath 覆盖脚本入口，工作目录可单独指定', () => {
+    withIsolatedHome((dir) => {
+      const fake = join(dir, 'electron.exe');
+      const helper = join(dir, 'custom-helper.js');
+      writeFileSync(fake, '');
+      const plan = defaultLaunch({ electronPath: fake, helperPath: helper, cwd: join(dir, 'work') });
+      assert.equal(plan.command, fake);
+      assert.deepEqual(plan.args, [helper]);
+      assert.equal(plan.cwd, join(dir, 'work'));
+    });
+  });
+});
+
 describe('helperSpawnEnv —— spawn 环境构造（issue #63：ELECTRON_RUN_AS_NODE 必须删键）', () => {
   test('宿主环境带着污染 → 构造出的 env 里没有这个键', () => {
     // 宿主（DSH Desktop）自己就是 Electron 应用，process.env 里可能带着它；透传下去会让 helper
@@ -312,6 +342,16 @@ describe('helperSpawnEnv —— spawn 环境构造（issue #63：ELECTRON_RUN_AS
     assert.equal('ELECTRON_RUN_AS_NODE' in env, false);
     assert.equal(env.DSH_PET_BRIDGE, '1');
     assert.equal(env.DSH_PET_HOST_PID, '7');
+  });
+
+  test('调用方传入删除清单时逐键删除（清理规则由启动计划提供，不在 spawn 点硬编码）', () => {
+    const env = helperSpawnEnv(1, { ELECTRON_RUN_AS_NODE: '1', DSH_PET_TEMP: 'x', DSH_PET_KEEP: 'y' }, [
+      'ELECTRON_RUN_AS_NODE',
+      'DSH_PET_TEMP',
+    ]);
+    assert.equal('ELECTRON_RUN_AS_NODE' in env, false);
+    assert.equal('DSH_PET_TEMP' in env, false);
+    assert.equal(env.DSH_PET_KEEP, 'y');
   });
 
   test('其余宿主环境变量照常继承、extra 覆盖同名键', () => {

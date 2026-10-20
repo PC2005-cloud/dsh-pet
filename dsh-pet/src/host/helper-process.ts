@@ -18,6 +18,8 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve } from 'node:path';
 import { downloadArtifact } from '@electron/get';
 
+import { LAUNCH_ENV_DELETE_KEYS, buildLaunchPlan, type LaunchPlan } from './launch-plan';
+
 const require = createRequire(import.meta.url);
 const here = dirname(fileURLToPath(import.meta.url));
 export const packageRoot = resolve(here, '..');
@@ -250,13 +252,21 @@ export async function ensureElectronDownload(options: EnsureElectronOptions = {}
   }
 }
 
-export function defaultLaunch(options: HelperOptions = {}): { command: string; args: string[] } {
+/**
+ * 开发形态的默认启动计划：Electron 二进制 + helper 脚本。
+ * 打包形态由同一可执行文件带 `--dsh-pet-helper` 启动，计划同样由 buildLaunchPlan 产出（ticket 03 接线）。
+ */
+export function defaultLaunch(options: HelperOptions = {}): LaunchPlan {
   const electronPath = resolveElectronPath([options.electronPath]);
   if (!electronPath) {
     throw new Error('dsh-pet: cannot resolve Electron executable. Set DSH_PET_ELECTRON_PATH or install electron.');
   }
-  const helperPath = options.helperPath || defaultHelperMain;
-  return { command: electronPath, args: [helperPath] };
+  return buildLaunchPlan({
+    packaged: false,
+    executablePath: electronPath,
+    helperEntry: options.helperPath || defaultHelperMain,
+    cwd: options.cwd || dshHomeDir(),
+  });
 }
 
 /** 停止 helper 的等待上限（ms）：超过就升级 SIGKILL（issue #64） */
@@ -277,9 +287,15 @@ export const HELPER_STOP_GRACE_MS = 1000;
  * 设 `''` → 直接 abort（exit 134，`node::CreateEnvironment` 断言失败）；设 `'0'`/`'false'`/`'1'` →
  * 都进纯 Node 模式。运行期再 `delete process.env` 已经晚了（模块加载器在进程启动瞬间就定了）。
  */
-export function helperSpawnEnv(hostPid: number, extra?: Record<string, string | undefined>): NodeJS.ProcessEnv {
+export function helperSpawnEnv(
+  hostPid: number,
+  extra?: Record<string, string | undefined>,
+  deleteKeys: readonly string[] = LAUNCH_ENV_DELETE_KEYS,
+): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = { ...process.env, DSH_PET_HOST_PID: String(hostPid), ...extra };
-  delete env.ELECTRON_RUN_AS_NODE;
+  // 清理清单由启动计划（buildLaunchPlan）提供，spawn 点只负责执行：
+  // 打包形态与开发形态的规则必须只有一份，否则很容易改了一边漏了另一边。
+  for (const key of deleteKeys) delete env[key];
   return env;
 }
 
@@ -310,18 +326,24 @@ export class HelperProcess {
   start(): import('node:child_process').ChildProcess | undefined {
     if (this.child || this.stopping) return this.child;
     this.lastStartAt = Date.now();
-    const helperPath = this.options.helperPath || defaultHelperMain;
+    // 启动计划（命令/参数/工作目录/环境清理）统一由纯函数 buildLaunchPlan 产出：
+    // 开发形态（Electron + 脚本）与打包形态（同一个 exe + 角色参数）的差别不再散落在这里。
     const launch = this.options.command
-      ? { command: this.options.command, args: this.options.args || [helperPath] }
+      ? buildLaunchPlan({
+          packaged: false,
+          executablePath: this.options.command,
+          helperEntry: this.options.helperPath || defaultHelperMain,
+          cwd: this.options.cwd || dshHomeDir(),
+        })
       : defaultLaunch(this.options);
-    const command = launch.command;
+    // 自定义 command 的调用方可以继续覆盖参数（与旧行为一致）
     const args = this.options.args || launch.args;
 
     // issue #88：cwd 必须落在包目录之外 —— Windows 不允许重命名/删除活进程的当前目录，
     // 否则 pnpm 无法 rename 覆盖 node_modules/dsh-pet。助手侧资源解析与 CWD 无关，故用 $DSH_HOME。
-    const cwd = this.options.cwd || dshHomeDir();
+    const cwd = launch.cwd;
     mkdirSync(cwd, { recursive: true }); // spawn 的 cwd 不存在会直接 ENOENT
-    const child = spawn(command, args, {
+    const child = spawn(launch.command, args, {
       cwd,
       // DSH_PET_HOST_PID：把**宿主自己的** pid 交给 helper，让它能判断"宿主还在不在"
       // （helper 侧 host-liveness.js 每 2s kill(pid, 0) 一次；ESRCH 就自行退出，见 issue #56）。
@@ -332,7 +354,7 @@ export class HelperProcess {
       // 兜底，宿主非正常退出后 helper 会一直留着（issue #56 报告的就是这个）。
       // 环境变量统一经 helperSpawnEnv 构造：它会删掉会劫持 Electron 启动模式的 ELECTRON_RUN_AS_NODE
       // （issue #63，详见该函数注释）。
-      env: helperSpawnEnv(process.pid, this.options.env),
+      env: helperSpawnEnv(process.pid, this.options.env, launch.envDelete),
       stdio: ['pipe', 'pipe', 'pipe'], // stdin 也要：bridge 协议响应回写（main.js 请求经 stdout 上来）
       windowsHide: true,
     });

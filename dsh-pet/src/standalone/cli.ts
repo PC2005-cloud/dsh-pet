@@ -24,6 +24,7 @@ import { existsSync } from 'node:fs';
 import { flattenPetList, readAllConfig } from '../host/config';
 import { dshHomeDir, packageRoot } from '../host/helper-process';
 import { apply } from '../host/index';
+import { APP_ROLE_ARGS, parseAppRole, type AppRoleInvocation } from '../host/launch-plan';
 import { runCheck, packageVersion } from './check';
 import { createStandaloneAi } from './ai-provider';
 import { createRequestSecurity } from './request-security';
@@ -38,7 +39,7 @@ import { configPathsFor, describePets, isDesktopVisible, parseArgs, USAGE } from
 import { listenStandaloneServer } from './server';
 
 /** 启动独立模式：先起服务拿到端口，再 `apply`（插件据此拼桌面 Helper 的 configUrl） */
-async function run(logger: StandaloneLogger, options: { port: number }): Promise<void> {
+async function run(logger: StandaloneLogger, options: { port: number }, invocation: AppRoleInvocation): Promise<void> {
   const home = dshHomeDir();
   const paths = configPathsFor(packageRoot, home);
 
@@ -147,6 +148,9 @@ async function run(logger: StandaloneLogger, options: { port: number }): Promise
     desktopVisible.length === 0
       ? '  桌面小窗    0 只：display 需要 desktop 或 both 才会出现透明小窗（服务仍在运行）'
       : `  桌面小窗    ${desktopVisible.length} 只`,
+    // 自启标记已解析进 invocation：静默/延迟启动由打包形态的宿主实现（ticket 09），
+    // 独立模式 CLI 目前只把状态告知用户，不改变启动时序。
+    ...(invocation.autostart ? ['  自启        是（由系统登录项拉起）'] : []),
     ai.isReady()
       ? '  AI          本机 API 已启用；自动碎碎念遵循设置页开关'
       : '  AI          未配置或未启用，不发送模型请求；右键“打开 AI 设置”后在本机填写',
@@ -163,7 +167,16 @@ async function run(logger: StandaloneLogger, options: { port: number }): Promise
 
 /** CLI 入口 */
 async function main(): Promise<number> {
-  const parsed = parseArgs(process.argv.slice(2));
+  const argv = process.argv.slice(2);
+  // 角色分流（ticket 01）：打包形态由同一个可执行文件承担三种角色；独立模式入口目前恒为宿主。
+  // 角色参数先摘掉，免得被自己的 CLI 解析当成未知参数；--port/--check 等是本入口自己的参数，不告警。
+  const invocation = parseAppRole(argv, { knownArgs: ['--port', '--check', '-h', '--help'] });
+  const logger = createStandaloneLogger();
+  for (const warning of invocation.warnings) logger.warn(warning);
+  if (invocation.role !== 'host') {
+    logger.warn(`独立模式 CLI 目前只运行宿主角色（收到 ${invocation.role} 参数），按宿主继续。`);
+  }
+  const parsed = parseArgs(argv.filter((arg) => !APP_ROLE_ARGS.includes(arg)));
   if ('error' in parsed) {
     console.error(`dsh-pet-standalone: ${parsed.error}\n`);
     console.error(USAGE);
@@ -174,9 +187,8 @@ async function main(): Promise<number> {
     console.log(USAGE);
     return 0;
   }
-  const logger = createStandaloneLogger();
   if (options.check) return runCheck(logger);
-  await run(logger, options);
+  await run(logger, options, invocation);
   return 0;
 }
 
