@@ -920,7 +920,8 @@ export function apply(ctx: any): void {
   let displayWarned = false;
 
   /** 用已确认存在的 Electron 路径拉起桌面 Helper（每只桌面宠物一个局部小窗口）。
-   *  packaged = 安装包形态：不传 Electron 路径，由 HelperProcess 用同一个 exe + 角色参数拉起。 */
+   *  packaged = 安装包形态：不传 Electron 路径，由 HelperProcess 用同一个 exe + 角色参数拉起
+   *  （若 DSH_PET_ELECTRON_PATH 指向存在的文件，helperLaunchPlan 会改为显式覆盖计划）。 */
   const launchHelper = (electronPath: string | undefined, packaged = false): void => {
     if (helper || disposed) return;
     if (!hasDesktopPet && !desktopModeEverActive) return; // 无桌面宠物且桌面模式从未启用过：不启动
@@ -1018,6 +1019,9 @@ export function apply(ctx: any): void {
     // 打包形态（ticket 02）：安装包已内置 Electron 运行时，桌面壳由同一个 exe 带
     // `--dsh-pet-helper` 拉起。绝不能走 resolveElectronPath / ensureElectronDownload ——
     // 安装版必须在断网时可用，运行期不许下载。
+    // 例外：DSH_PET_ELECTRON_PATH 指向存在的文件时，helperLaunchPlan 会改用
+    // 「外部 Electron + asar 内 helper 入口」的显式覆盖计划（spec 解析顺序第 1 条）；
+    // 路径为空/不存在则继续用内置运行时，同样不下载。
     if (process.env.DSH_PET_PACKAGED === '1') {
       launchHelper(undefined, true);
       return;

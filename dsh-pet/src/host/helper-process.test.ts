@@ -29,6 +29,7 @@ import {
   helperLaunchPlan,
   helperRunIsStable,
   helperSpawnEnv,
+  packagedElectronOverride,
   restartBackoffDelayMs,
   resolveElectronPath,
   shouldCircuitBreak,
@@ -509,17 +510,65 @@ describe('HelperProcess failed spawn recovery', () => {
   }
 });
 
-describe('helperLaunchPlan —— 打包形态不解析/不下载 Electron（ticket 02）', () => {
+describe('packagedElectronOverride —— 打包形态的显式覆盖判定（spec 解析顺序第 1 条）', () => {
+  const isFile = (path: string): boolean => path === '/exists/electron.exe';
+
+  test('DSH_PET_ELECTRON_PATH 非空且指向存在的文件 → 返回该路径', () => {
+    assert.equal(
+      packagedElectronOverride({ DSH_PET_ELECTRON_PATH: '/exists/electron.exe' }, isFile),
+      '/exists/electron.exe',
+    );
+  });
+
+  test('未设置 / 空字符串 → undefined（保持内置运行时）', () => {
+    assert.equal(packagedElectronOverride({}, isFile), undefined);
+    assert.equal(packagedElectronOverride({ DSH_PET_ELECTRON_PATH: '' }, isFile), undefined);
+  });
+
+  test('路径不存在 → undefined（保持内置运行时，绝不回落到下载）', () => {
+    assert.equal(packagedElectronOverride({ DSH_PET_ELECTRON_PATH: '/missing/electron.exe' }, isFile), undefined);
+  });
+});
+
+describe('helperLaunchPlan —— 打包形态不解析/不下载 Electron（ticket 02 + spec 解析顺序）', () => {
   test('packaged：命令是应用自身 exe，参数是 --dsh-pet-helper', () => {
     withIsolatedHome((dir) => {
-      const fake = join(dir, 'fake-electron.exe');
-      writeFileSync(fake, '');
-      process.env.DSH_PET_ELECTRON_PATH = fake;
       const plan = helperLaunchPlan({ packaged: true, cwd: dir });
       assert.equal(plan.command, process.execPath, '打包形态必须拉起自己，而不是解析出来的 Electron');
       assert.deepEqual(plan.args, ['--dsh-pet-helper']);
       assert.equal(plan.cwd, dir);
       assert.deepEqual(plan.envDelete, ['ELECTRON_RUN_AS_NODE']);
+    });
+  });
+
+  test('packaged + DSH_PET_ELECTRON_PATH 指向存在的文件：显式覆盖为「外部 Electron + helper 入口」', () => {
+    withIsolatedHome((dir) => {
+      const fake = join(dir, 'fake-electron.exe');
+      writeFileSync(fake, '');
+      process.env.DSH_PET_ELECTRON_PATH = fake;
+      const plan = helperLaunchPlan({ packaged: true, cwd: dir });
+      assert.equal(plan.command, fake, '显式覆盖必须优先于内置运行时（spec 解析顺序第 1 条）');
+      assert.deepEqual(plan.args, [defaultHelperMain], '外部 Electron 需要 asar 内的 helper 脚本入口');
+      assert.equal(plan.cwd, dir);
+      assert.deepEqual(plan.envDelete, ['ELECTRON_RUN_AS_NODE']);
+    });
+  });
+
+  test('packaged + DSH_PET_ELECTRON_PATH 不存在：保持应用自身 exe 计划（不下载）', () => {
+    withIsolatedHome((dir) => {
+      process.env.DSH_PET_ELECTRON_PATH = join(dir, 'missing-electron.exe');
+      const plan = helperLaunchPlan({ packaged: true, cwd: dir });
+      assert.equal(plan.command, process.execPath);
+      assert.deepEqual(plan.args, ['--dsh-pet-helper']);
+    });
+  });
+
+  test('packaged + DSH_PET_ELECTRON_PATH 为空：保持应用自身 exe 计划（不下载）', () => {
+    withIsolatedHome((dir) => {
+      process.env.DSH_PET_ELECTRON_PATH = '';
+      const plan = helperLaunchPlan({ packaged: true, cwd: dir });
+      assert.equal(plan.command, process.execPath);
+      assert.deepEqual(plan.args, ['--dsh-pet-helper']);
     });
   });
 

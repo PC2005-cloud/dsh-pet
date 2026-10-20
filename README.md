@@ -220,7 +220,7 @@ npm run build && npm run standalone   # 仓库里（先构建）
 - `standalone-runtime.json` —— 运行期间的本机服务信息（端口与一次性 token），退出时删除
 - `autostart-initialized` —— 默认开机自启的初始化标记（只写一次）
 
-安装版与 DSH 插件形态可以并存，共用上面的配置与素材。但两者桌面小窗的 Chromium 缓存目录都是 `%APPDATA%\dsh-pet-electron-helper`，同时运行可能互相影响（仅告警，重启即可恢复）；安装版宿主自己的 Electron 配置在 `%APPDATA%\dsh-pet`。安装版不读取也不下载 `~/.dsh/electron`——运行时已内置，插件形态的桌面模式仍按上一节自动探测 / 下载。
+安装版与 DSH 插件形态可以并存，共用上面的配置与素材。但两者桌面小窗的 Chromium 缓存目录都是 `%APPDATA%\dsh-pet-electron-helper`，同时运行可能互相影响（仅告警，重启即可恢复）；安装版宿主自己的 Electron 配置在 `%APPDATA%\DSH Pet`。安装版不读取也不下载 `~/.dsh/electron`——运行时已内置，插件形态的桌面模式仍按上一节自动探测 / 下载。
 
 ### 开机自启
 
@@ -249,7 +249,7 @@ npm run build && npm run standalone   # 仓库里（先构建）
 设置 → 应用 → 已安装的应用 → DSH Pet → 卸载；或运行安装目录下的 `Uninstall DSH Pet.exe`。
 
 - 会移除程序文件、开始菜单 / 桌面快捷方式、卸载注册项与开机自启项。
-- **用户数据默认保留**：`~/.dsh/dsh-pet/`（配置、记忆、素材、AI 设置）以及 `%APPDATA%\dsh-pet`、`%APPDATA%\dsh-pet-electron-helper`（缓存）。想彻底清理需手动删除这些目录。
+- **用户数据默认保留**：`~/.dsh/dsh-pet/`（配置、记忆、素材、AI 设置）以及 `%APPDATA%\DSH Pet`、`%APPDATA%\dsh-pet-electron-helper`（缓存）。想彻底清理需手动删除这些目录。
 - 因为 `autostart-initialized` 保留，重装后仍尊重你上次的自启选择（不会重新默认开启）。
 
 ### 维护者：构建安装包

@@ -279,14 +279,42 @@ export function defaultLaunch(options: HelperOptions = {}): LaunchPlan {
 }
 
 /**
+ * 打包形态下的显式 Electron 覆盖（spec「Electron 运行时」解析顺序第 1 条）。
+ *
+ * 只有 `DSH_PET_ELECTRON_PATH` **非空且指向真实存在的文件**才生效；未设置、空串、
+ * 路径不存在都返回 undefined —— 此时保持内置运行时，绝不回落到解析/下载（安装版断网可用）。
+ * env / exists 可注入，单测不需要改全局 process.env 或碰真实磁盘。
+ */
+export function packagedElectronOverride(
+  env: NodeJS.ProcessEnv = process.env,
+  exists: (path: string) => boolean = existsSync,
+): string | undefined {
+  const candidate = env.DSH_PET_ELECTRON_PATH;
+  return candidate && exists(candidate) ? candidate : undefined;
+}
+
+/**
  * 解析一次桌面 Helper 启动（命令 / 参数 / 工作目录 / 环境清理）。
  *
- * 打包形态是 ticket 02 的唯一分支：命令必须是**当前进程自己的可执行文件**，参数是角色参数
+ * 打包形态是 ticket 02 的唯一分支：默认命令是**当前进程自己的可执行文件**，参数是角色参数
  * `--dsh-pet-helper`，不能走 resolveElectronPath / ensureElectronDownload —— 安装包里已经带运行时，
  * 运行期再下载既没必要也会在断网时失败。
+ *
+ * 唯一例外是 spec 解析顺序第 1 条：`DSH_PET_ELECTRON_PATH` 指向存在的文件时改用显式覆盖计划
+ * （外部 Electron 二进制 + asar 内的 helper 入口，即开发形态的命令构造）。路径不可用时仍走
+ * 内置运行时，两个分支都**不会触发下载**。
  */
 export function helperLaunchPlan(options: HelperOptions = {}): LaunchPlan {
   if (options.packaged) {
+    const override = packagedElectronOverride();
+    if (override) {
+      return buildLaunchPlan({
+        packaged: false, // 外部 Electron 二进制 + helper 脚本入口
+        executablePath: override,
+        helperEntry: defaultHelperMain,
+        cwd: options.cwd || dshHomeDir(),
+      });
+    }
     return buildLaunchPlan({
       packaged: true,
       executablePath: process.execPath,
