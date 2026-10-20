@@ -114,8 +114,9 @@ dsh-pet-standalone --port 3100
 npm run build && npm run standalone   # 仓库里（先构建）
 ```
 
-- **能用**：动画链、点击/拖拽/甩抛、右键菜单、多开、自定义动画与表情包、pet pack。
-- **不可用**：余额、碎碎念、对话、系统通知——返回带 `reason` 的结构化失败，不假装成功。
+- **能用**：动画链、点击/拖拽/甩抛、右键菜单、多开、自定义动画与表情包、pet pack；在 AI 设置页配置 API 后，碎碎念与对话也可用。
+- **AI 设置**：启动后会写出本机设置页地址（`$DSH_HOME/dsh-pet/standalone-runtime.json` 的 `settingsUrl`，含一次性 token）；装成安装版后可直接从托盘或右键菜单打开。未配置或未启用时不发送模型请求。
+- **不可用**：余额、DSH 会话工作状态、系统通知——依赖 DSH 宿主的凭证与会话事件，返回带 `reason` 的结构化失败，不假装成功。
 - **配置**：与 DSH 同一份（`$DSH_HOME/dsh-pet/main-config.jsonc` → 包内默认）。
 - **只显示 `display` 含 `desktop`/`both` 的实例**；端口默认 3080；`Ctrl+C` 或 `POST /shutdown` 退出。
 - **与 DSH 内运行可同时开**，但共用 `%APPDATA%\dsh-pet-electron-helper`，可能互相踩缓存（仅告警）。

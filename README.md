@@ -171,11 +171,100 @@ dsh-pet-standalone --port 3100
 npm run build && npm run standalone   # 仓库里（先构建）
 ```
 
-- **能用**：动画链、点击/拖拽/甩抛、右键菜单、多开、自定义动画与表情包、pet pack。
-- **不可用**：余额、碎碎念、对话、系统通知——返回带 `reason` 的结构化失败（见 [`API.md`](API.md)）。
+- **能用**：动画链、点击/拖拽/甩抛、右键菜单、多开、自定义动画与表情包、pet pack；在 AI 设置页配置 API 后，碎碎念与对话也可用。
+- **AI 设置**：启动后会写出本机设置页地址（`$DSH_HOME/dsh-pet/standalone-runtime.json` 的 `settingsUrl`，含一次性 token）；装成安装版后可直接从托盘或右键菜单打开。未配置或未启用时不发送模型请求。
+- **不可用**：余额、DSH 会话工作状态、系统通知——依赖 DSH 宿主的凭证与会话事件，返回带 `reason` 的结构化失败（见 [`API.md`](API.md)）。
 - **配置**：与 DSH 同一份（`$DSH_HOME/dsh-pet/main-config.jsonc` → 包内默认）。
 - **只显示 `display` 含 `desktop`/`both` 的实例**；端口默认 3080；`Ctrl+C` 或 `POST /shutdown` 退出。
 - **与 DSH 内运行可同时开**，但共用 `%APPDATA%\dsh-pet-electron-helper`，可能互相踩缓存（仅告警）。
+
+## 🪟 Windows 安装版
+
+不想装 DSH、也不想碰命令行的用户，可以直接装 Windows 桌面版：安装包内置 Electron 运行时与全部动画素材，不依赖 DSH 与 Node，断网也能用。目前只提供 Windows x64 安装包。
+
+### 下载与安装
+
+1. 拿到 `dsh-pet-Setup-<version>.exe`（如 `dsh-pet-Setup-0.3.7.exe`），双击运行。
+2. 按向导「下一步 → 下一步 → 安装」；安装目录可改（默认 `%LOCALAPPDATA%\Programs\DSH Pet`）。
+3. 完成后可勾选「立即运行」；之后从开始菜单或桌面快捷方式启动即可。
+
+- 每用户安装，不请求管理员权限（不弹 UAC）。
+- 安装包约 162MB（0.3.7 实测），Electron 与素材都在包里，首次启动不需要联网下载。
+
+### 首次启动：SmartScreen 提示
+
+安装包没有代码签名，从网络下载后首次运行时，Windows 可能弹出「Windows 已保护你的电脑」，发布者显示为「未知发布者」。这是未签名应用的正常提示：
+
+1. 点「更多信息」；
+2. 点「仍要运行」。
+
+若文件被标记为来自网络而无法直接运行，可右键安装包 →「属性」→ 勾选「解除锁定」→「确定」后再运行。
+
+启动后，宠物出现在配置的角落（默认右上角），托盘出现桌宠图标。再次双击图标不会开第二套，而是把已有宠物窗口唤到前台。
+
+### 能用什么、不能用什么
+
+- **可用**：动画链与全部互动（点击回应、拖拽甩抛、屏幕漫游）、右键动作菜单、托盘、多开（编辑配置添加，托盘可分别开关）、自定义动画与表情包、pet pack、开机自启。
+- **不可用**：余额查询、DSH 会话工作状态、系统通知——它们依赖 DSH 宿主的凭证与会话事件，而安装版没有 DSH 进程；相关入口会给出可读提示，不会静默失败。
+- **对话与碎碎念**：在 AI 设置页配置模型后可用。托盘「打开 AI 设置…」或右键宠物「AI 设置…」→ 系统浏览器打开本机设置页 → 选 OpenAI 兼容 / Anthropic 协议，填 Base URL、模型与 API Key →「测试连接」→ 保存。未配置 / 未启用时不发送模型请求；「自动碎碎念」需要在设置页显式勾选。API Key 只保存在本机私有文件里。
+
+### 数据目录与两种形态共存
+
+用户数据在 `~/.dsh/dsh-pet/`（Windows 上即 `%USERPROFILE%\.dsh\dsh-pet\`；设置 `DSH_HOME` 时以它为准），与 DSH 插件形态共用同一份：
+
+- `main-config.jsonc` —— 主宠物配置（大小 / 位置 / 多开 / 动画池……）
+- `memory.json` —— 对话记忆
+- `main-animation/`、`memes/` —— 自定义动画与表情包
+- `pet/` —— 额外宠物种类（pet pack）
+- `standalone-ai.json` —— 安装版 / 独立模式的 AI 设置（含 API Key，仅本机私有文件）
+- `standalone-runtime.json` —— 运行期间的本机服务信息（端口与一次性 token），退出时删除
+- `autostart-initialized` —— 默认开机自启的初始化标记（只写一次）
+
+安装版与 DSH 插件形态可以并存，共用上面的配置与素材。但两者桌面小窗的 Chromium 缓存目录都是 `%APPDATA%\dsh-pet-electron-helper`，同时运行可能互相影响（仅告警，重启即可恢复）；安装版宿主自己的 Electron 配置在 `%APPDATA%\dsh-pet`。安装版不读取也不下载 `~/.dsh/electron`——运行时已内置，插件形态的桌面模式仍按上一节自动探测 / 下载。
+
+### 开机自启
+
+默认开启：安装后第一次启动会把 DSH Pet 写入当前用户的登录启动项（`HKCU\Software\Microsoft\Windows\CurrentVersion\Run`，带 `--autostart`）；安装向导结束时应用会自动启动一次，因此装完即生效。
+
+- **关闭 / 开启**：托盘菜单勾选「开机自启」，立即写入或移除系统启动项；关闭后保持关闭，后续启动不会自动写回。
+- **启动行为**：自启启动会先延迟约 4 秒，期间不创建任何窗口、不抢焦点；延迟结束后宠物静默出现。
+- **任务管理器**：「启动」页能看到该项（`electron.app.DSH Pet`），也可以在那里禁用；托盘的勾选始终以系统真实状态为准。
+- **卸载**：自动移除启动项（升级安装不会误删）。
+
+### 托盘与右键菜单
+
+托盘图标是安装版的统一入口：
+
+- 每只宠物的显示勾选（直接写配置，立即显示 / 隐藏桌面小窗）
+- 「打开 AI 设置…」（运行时文件可用时出现，系统浏览器打开）
+- 「开机自启」勾选
+- 「打开数据目录」→ `~/.dsh/dsh-pet/`
+- 「使用说明」
+- 「退出」——正规停机：先停宠物窗口，再关本机服务、清理运行时文件
+
+右键宠物也有「AI 设置…」，与托盘入口一致。安装版没有主窗口，退出请走托盘「退出」。
+
+### 卸载
+
+设置 → 应用 → 已安装的应用 → DSH Pet → 卸载；或运行安装目录下的 `Uninstall DSH Pet.exe`。
+
+- 会移除程序文件、开始菜单 / 桌面快捷方式、卸载注册项与开机自启项。
+- **用户数据默认保留**：`~/.dsh/dsh-pet/`（配置、记忆、素材、AI 设置）以及 `%APPDATA%\dsh-pet`、`%APPDATA%\dsh-pet-electron-helper`（缓存）。想彻底清理需手动删除这些目录。
+- 因为 `autostart-initialized` 保留，重装后仍尊重你上次的自启选择（不会重新默认开启）。
+
+### 维护者：构建安装包
+
+```sh
+cd dsh-pet
+pnpm install
+npm run dist        # = npm run build && node scripts/dist.mjs
+```
+
+- **产物**：`dsh-pet/dist/dsh-pet-Setup-<version>.exe`；`dist/` 已被 gitignore，构建后手动分发。同目录的 `dist/win-unpacked/DSH Pet.exe` 可直接运行，用于冒烟测试。
+- **前置**：Node.js ≥ 22.12 与 pnpm；首次构建时 electron-builder 会下载 NSIS 打包工具（需要网络，之后走缓存）。本机 `~/.dsh/electron` 存在时会作为 `electronDist` 直接复用，不重复下载 Electron；不存在时回退到 electron-builder 下载（`scripts/dist.mjs` 会把镜像指向 npmmirror）。
+- **体积**：安装包排除 `assets/preview`（README 展示用 GIF，约 65MB），0.3.7 实测约 162MB。
+- **不做代码签名**：没有购买证书，也避免引入签名与分发的额外复杂度；代价是 SmartScreen 会提示「未知发布者」（见上）。同时不做自动更新与 CI 构建——安装包本地构建后手动分发；升级 = 运行新版安装包覆盖安装，用户数据与自启状态保留。
+- **发布检查**：`node scripts/prepack-check.js` 的 200MB 上限针对 npm 包，`dist/` 已被该检查跳过；它不约束安装包体积。
 
 ## ⚙️ 余额展示（Balance）
 
