@@ -32,6 +32,9 @@ npm-debug.log*
 # ── 临时/备份目录 ──
 temp/
 
+# ── Agent 技能工作区（docs/agents 的本地 Markdown issue tracker，见 CLAUDE.md）──
+.scratch/
+
 # ── dsh-pet 构建产物（全部由 src/ 构建生成，不入仓库；克隆后先 npm run prepare:webm）──
 #   lib/                      tsdown bundle（lib/index.js、lib/client.js）+ tsc 声明（lib/types/*.d.ts，npm run types）
 #   runtime/electron-helper/shared-core.js  桌面共享纯逻辑（scripts/build-desktop-core.mjs 产出，window.PetShared）

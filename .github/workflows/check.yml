@@ -1,0 +1,47 @@
+name: check
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'dsh-pet/**'
+      - '.github/workflows/check.yml'
+  pull_request:
+    paths:
+      - 'dsh-pet/**'
+      - '.github/workflows/check.yml'
+
+# 所有检查彼此独立，任一失败即整体失败
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: dsh-pet
+    steps:
+      - uses: actions/checkout@v4
+
+      # Node 版本取 engines.node 的下界（>=22.12.0），与开发机保持一致
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      # 与开发机主版本保持一致（lockfileVersion 9.0）
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12
+
+      - name: 安装依赖（frozen lockfile：锁文件与 package.json 不一致就失败）
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: 类型检查
+        run: pnpm run typecheck
+
+      - name: 单元测试
+        run: pnpm test
+
+      - name: Lint
+        run: pnpm run lint
+
+      - name: 格式检查
+        run: pnpm run format:check
