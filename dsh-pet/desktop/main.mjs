@@ -40,6 +40,11 @@ if (invocation.role === 'helper' || invocation.role === 'dpi-probe') {
   // 相对路径刻意保留包内布局：desktop/ 与 runtime/、lib/ 同级。
   require('../runtime/electron-helper/main.js');
 } else {
+  // 宿主形态显式传入（ticket 08）：打包宿主自己就是 Electron 进程，若让宿主半边靠
+  // process.versions.electron 嗅探，会被误判成「DSH 桌面应用」，「打开网站」就会去唤起
+  // 一个不存在的 dsh:// 协议。必须在加载 lib/ 产物、调用 startStandalone 之前设置：
+  // 宿主据此把 DSH_PET_OPEN_TARGET 注入成 site（系统浏览器打开本机服务地址）。
+  process.env.DSH_PET_HOST_KIND = 'packaged';
   // 宿主角色：走独立模式的可编程入口（不要 import lib/standalone.js —— 那是 CLI，
   // 被 import 就会解析 argv 并 process.exit）。
   const { app } = require('electron');

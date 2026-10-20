@@ -37,6 +37,18 @@ describe('desktop/main.mjs —— 打包后的主进程入口（角色分流）'
   test('宿主角色设置 DSH_PET_PACKAGED，且它会随 process.env 传给子进程', () => {
     assert.match(source, /DSH_PET_PACKAGED/);
   });
+
+  test('打包宿主显式声明 DSH_PET_HOST_KIND=packaged（不能靠 Electron 嗅探）', () => {
+    assert.match(
+      source,
+      /process\.env\.DSH_PET_HOST_KIND\s*=\s*'packaged'/,
+      '打包宿主自己就是 Electron 进程，必须显式声明形态，否则「打开网站」会被误判为 DSH 桌面应用',
+    );
+    const kindAt = source.indexOf("process.env.DSH_PET_HOST_KIND = 'packaged'");
+    const startAt = source.indexOf('await startStandalone(');
+    assert.ok(startAt > 0, '宿主角色必须调用 startStandalone');
+    assert.ok(kindAt >= 0 && kindAt < startAt, '形态变量必须在 startStandalone（apply 读取它）之前设置');
+  });
 });
 
 describe('electron-builder.yml —— NSIS 安装包配置', () => {
