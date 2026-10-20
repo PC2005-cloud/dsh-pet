@@ -149,6 +149,7 @@ export function makePetUI(rt: {
   // 用 React 命名空间类型而非 typeof：type-only import 的 hook 无法进入声明导出（TS4078）
   useEffect: (effect: ReactNS.EffectCallback, deps?: ReactNS.DependencyList) => void;
   useRef: <T>(initial: T) => ReactNS.MutableRefObject<T>;
+  speak?: (text: string) => void;
 }): () => ReactNode {
   const { h, useState, useEffect, useRef } = rt;
   injectCss();
@@ -2090,6 +2091,7 @@ export function makePetUI(rt: {
   function PetMulti() {
     const [pets, setPets] = useState<Pet[]>([]);
     const [ready, setReady] = useState(false);
+    const speechEnabledRef = useRef(false);
     // 共享碰撞站场（宠物间碰撞）：每只 PetCard 注册自己的槽位；飞行中的宠物在 startThrow
     // 每帧读数碰撞。纯 ref 同步，不触发 React 重渲染。
     const arenaRef = useRef<{ slots: Record<string, PetCollisionSlot> }>({ slots: {} });
@@ -2151,6 +2153,7 @@ export function makePetUI(rt: {
           throw new Error('配置响应不是成品聚合（host 版本不匹配？）');
         }
         const flattened = flattenConfigPets(merged);
+        speechEnabledRef.current = main.speechEnabled === true;
         petBridge.current = flattened;
         // 「添加宠物」模板 = main 条目 pets[0]（内置默认或用户覆盖后的主宠物）
         petBridge.template = Array.isArray(main.pets) ? ((main.pets as Pet[])[0] ?? undefined) : undefined;
@@ -2261,6 +2264,16 @@ export function makePetUI(rt: {
             if (said) {
               sayRef.current[petId] = { ...said, seq: (sayRef.current[petId]?.seq ?? 0) + 1 };
               setSayTick((t) => t + 1);
+              const pet = petBridge.current.find((p) => p.id === petId);
+              if (
+                speechEnabledRef.current &&
+                pet &&
+                pet.display !== 'none' &&
+                said.kind === 'say' &&
+                said.duration !== 0
+              ) {
+                rt.speak?.(said.text);
+              }
             }
           } else if (path.startsWith('pets.') && path.endsWith('.anim')) {
             // 点播动画叶子：路径形如 pets.<id>.anim。同样按前缀/后缀切片，绝不 split('.')。

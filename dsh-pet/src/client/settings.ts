@@ -266,6 +266,9 @@ export const zh = {
   extraPetsHint:
     '另 {n} 只额外宠物由 pet/ 目录文件定义（<名>-config.json + <名>-animation/ + <名>-memes/），它们不在此列表——改文件后浏览器刷新页面、桌面端右键「重载配置」即可生效。',
   notifyToggle: '系统通知',
+  speechToggle: '语音联动',
+  speechToggleHint:
+    '默认关闭。通过 dsh-xiaomi-tts 朗读碎碎念、聊天回复和投喂；需启用语音插件并保持 DSH 网页打开，桌面宠物也可联动。',
   notifyToggleHint: '对话完成 / 生成失败 / 权限申请 / 用户选择，在窗口失焦时弹出系统级通知（桌面右下角）。',
   whisperImageToggle: '碎碎念配图',
   whisperImageToggleHint:
@@ -441,6 +444,9 @@ export const en = {
   extraPetsHint:
     '{n} extra pet(s) are file-defined in the pet/ directory (<name>-config.json + <name>-animation/ + <name>-memes/). They are not in this list — after editing the files, refresh the page (browser) or right-click a desktop pet → "Reload config".',
   notifyToggle: 'System notifications',
+  speechToggle: 'Read aloud',
+  speechToggleHint:
+    'Off by default. Read whispers, replies and broadcasts via dsh-xiaomi-tts. Enable the speech plugin and keep a DSH page open; desktop pets are also supported.',
   notifyToggleHint:
     'OS-level toasts (bottom-right of the desktop) for conversation completion, failures, permission requests, and questions — only while this window is unfocused.',
   whisperImageToggle: 'Whisper images',
@@ -1000,6 +1006,7 @@ export function makePetConfigSection(rt: {
     // 拖拽落点清空、宠物跳回配置角落），于是"改个通知开关，桌面被重置"，与其它开关行为不一致。
     // 引擎重读放在 save() 成功之后（reloadNotifications）：保存后即时生效，无需刷新页面。
     const [notifyEnabled, setNotifyEnabled] = useState(true);
+    const [speechEnabled, setSpeechEnabled] = useState(false);
     // 表情包配图开关（全局：写用户级配置；与「保存」一起提交，不做即时写入）
     const [whisperImage, setWhisperImage] = useState(false);
     const [chatImage, setChatImage] = useState(false);
@@ -1039,6 +1046,7 @@ export function makePetConfigSection(rt: {
       setPets(loadedPets.map((p) => ({ ...p, position: { ...p.position } })));
       setSelId((id) => (loadedPets.some((p) => p.id === id) ? id : (loadedPets[0]?.id ?? '')));
       if (typeof m.notificationsEnabled === 'boolean') setNotifyEnabled(m.notificationsEnabled);
+      setSpeechEnabled(m.speechEnabled === true);
       if (typeof m.whisperImageEnabled === 'boolean') setWhisperImage(m.whisperImageEnabled);
       if (typeof m.chatImageEnabled === 'boolean') setChatImage(m.chatImageEnabled);
       if (typeof m.confineToScreen === 'boolean') setConfineScreen(m.confineToScreen);
@@ -1230,6 +1238,7 @@ export function makePetConfigSection(rt: {
         const body: Record<string, unknown> = {
           pets: pets,
           notificationsEnabled: notifyEnabled,
+          speechEnabled,
           whisperImageEnabled: whisperImage,
           chatImageEnabled: chatImage,
           confineToScreen: confineScreen,
@@ -1644,6 +1653,7 @@ export function makePetConfigSection(rt: {
               className: 'dsh-pet-cfg__grid4',
               children: [
                 toggleCell('notifyToggle', notifyEnabled, busy, (v) => void toggleNotify(v)),
+                toggleCell('speechToggle', speechEnabled, busy, setSpeechEnabled),
                 toggleCell('whisperImageToggle', whisperImage, busy, setWhisperImage),
                 toggleCell('chatImageToggle', chatImage, busy, setChatImage),
                 toggleCell('confineToggle', confineScreen, busy, setConfineScreen, true),

@@ -369,6 +369,7 @@ function topFieldValid(key: string, value: unknown): boolean {
       return Number.isFinite(n) && n >= 0;
     }
     case 'notificationsEnabled':
+    case 'speechEnabled':
       return typeof value === 'boolean';
     case 'whisperImageEnabled':
       return typeof value === 'boolean';
@@ -689,6 +690,8 @@ export function saveUserConfig(
   }
   const ne = o.notificationsEnabled;
   if (ne !== undefined && typeof ne !== 'boolean') return null;
+  const se = o.speechEnabled;
+  if (se !== undefined && typeof se !== 'boolean') return null;
   const wie = o.whisperImageEnabled;
   if (wie !== undefined && typeof wie !== 'boolean') return null;
   const cie = o.chatImageEnabled;
@@ -729,6 +732,7 @@ export function saveUserConfig(
   // 对话历史条数）同样只在请求体**真的传了**时才写（未传则走下面的透传保留，不凭空造值）
   const outConfig: { pets: unknown[]; [key: string]: unknown } = { pets: out };
   if (ne !== undefined) outConfig.notificationsEnabled = ne;
+  if (se !== undefined) outConfig.speechEnabled = se;
   if (wie !== undefined) outConfig.whisperImageEnabled = wie;
   if (cie !== undefined) outConfig.chatImageEnabled = cie;
   if (cts !== undefined) outConfig.confineToScreen = cts;
@@ -745,6 +749,7 @@ export function saveUserConfig(
   // 否则整包调用的调用方漏传一个字段，就会把用户既有设置悄悄抹成默认。
   const bodyOwned = new Set(['pets']);
   if (ne !== undefined) bodyOwned.add('notificationsEnabled');
+  if (se !== undefined) bodyOwned.add('speechEnabled');
   if (wie !== undefined) bodyOwned.add('whisperImageEnabled');
   if (cie !== undefined) bodyOwned.add('chatImageEnabled');
   if (cts !== undefined) bodyOwned.add('confineToScreen');
