@@ -7,6 +7,7 @@ import { makePetConfigSection, NS, zh, en, petBridge } from './settings';
 import { initNotify } from './notify';
 import { installCommandFaces, type CommandFace, type CommandUiLike } from './command-faces';
 import { installSectionNavIcon } from './nav-icon';
+import { installSettingsOpener } from './open-settings';
 import type * as ReactNS from 'react';
 import type * as PrimitivesNS from '@deepseek-ai/dsh-client-ui-primitives';
 
@@ -152,6 +153,10 @@ export function makeFactory(): (require: (mod: string) => any) => any {
         }
         return installSectionNavIcon({ label: () => t('nav'), renderSvg: () => renderIcon(icon) });
       }, 'dsh-pet: settings nav icon');
+
+      // 右键菜单「桌宠配置」的打开器：宠物页面不持有 ctx，这里把 ctx 交给 open-settings 模块
+      // （打开设置面板并定位到 pet-config 分区；依据与降级策略见 open-settings.ts 模块注释）
+      ctx.effect(() => installSettingsOpener(ctx, () => t('nav')), 'dsh-pet: settings opener');
 
       // 宠物 overlay（多开：容器渲染多个 PetCard）
       ctx.slots.inject('shell.overlay', function* () {

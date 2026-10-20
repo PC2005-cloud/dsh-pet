@@ -96,7 +96,7 @@ describe('插件宿主半边在独立模式下跑起来了', () => {
       sections: Record<string, { counter: number; data: unknown }>;
       pets: Record<string, unknown>;
     };
-    assert.deepEqual(Object.keys(body.sections).sort(), ['balance', 'config', 'notify', 'workStatus']);
+    assert.deepEqual(Object.keys(body.sections).sort(), ['balance', 'config', 'notify', 'openSettings', 'workStatus']);
     assert.equal(body.sections.balance?.counter, 0);
     assert.equal(body.sections.balance?.data, null);
     assert.equal(body.sections.config?.counter, 0, '配置变更信号也没人写过');

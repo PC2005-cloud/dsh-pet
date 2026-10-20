@@ -1542,6 +1542,9 @@ class PetSprite {
       { label: '碎碎念', action: 'whisper' },
       { label: '对话', action: 'chat' },
       { label: '回到初始位置', action: 'home' },
+      // 桌宠配置：设置面板在 DSH 页面里——请宿主发信号让页面打开它并定位到「桌宠配置」分区，
+      // 宿主是桌面应用时顺带把主窗口唤到前台（dsh://open）。与浏览器端同名同语义。
+      { label: '桌宠配置', action: 'open-settings' },
       // 显示位置（仅网页/仅桌面/两者/都不）：改这只宠物的 display 配置 + 宿主重载生效。
       // 与浏览器端注入的是**同一份**子菜单（shared 的 displayMenuBranch），两端文案/取值不会漂移。
       // 为什么不就地关窗/开窗：桌面宠物共用一个 Electron 进程，窗口是进程启动时按 DSH_PET_PETS
@@ -1599,6 +1602,10 @@ class PetSprite {
     }
     if (leaf.action === 'home') {
       this.goHome(); // 停漫游/移动，清会话位置，回配置角落
+      return;
+    }
+    if (leaf.action === 'open-settings') {
+      this.openSettingsFromMenu(); // 让 DSH 页面打开设置面板并定位到「桌宠配置」（桌面应用宿主时唤起主窗口）
       return;
     }
     if (leaf.action === 'set-display') {
@@ -1729,6 +1736,23 @@ class PetSprite {
     fetch(BASE + '/reload', { method: 'POST' }).catch((e) => {
       console.warn('[dsh-pet] 重载配置请求失败（宿主不可达？）', e);
     });
+  }
+
+  // 「桌宠配置」菜单：设置面板长在 DSH 页面里，本窗口（file:// 透明小窗）够不着 ——
+  //   1. POST /open-settings：宿主写全局指令叶子 sections.openSettings，DSH 页面统一轮询读到即
+  //      打开设置面板并定位到「桌宠配置」（见 src/client/open-settings.ts）；
+  //   2. 宿主是 DSH 桌面应用（OPEN_TARGET=desktop）时，再走「打开 DeepSeek Harness」同一条路
+  //      （dsh://open）把主窗口唤到前台——应用没开时会被拉起，页面首拉时按 at 新鲜度照样执行。
+  //   site 形态（dsh web / 独立模式）不主动开浏览器标签：已开着的 DSH 页面会响应，避免每点一次多一个标签。
+  // 先发信号再唤窗口：窗口被拉起后的首拉一定能看到这条请求。
+  openSettingsFromMenu() {
+    fetch(BASE + '/open-settings', { method: 'POST' })
+      .catch((e) => {
+        console.warn('[dsh-pet] 打开桌宠配置请求失败（宿主不可达？）', e);
+      })
+      .finally(() => {
+        if (OPEN_TARGET === 'desktop' && window.petBridge) window.petBridge.openDshSite(ORIGIN);
+      });
   }
 
   // 「显示位置」菜单：改**这一只**宠物的 display（仅网页/仅桌面/两者/都不）—— 写它自己的配置，

@@ -1761,6 +1761,33 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /dsh-pet-7340/open-settings:
+    post:
+      tags: [Action]
+      operationId: openSettings
+      summary: 让 DSH 页面打开设置面板（定位到「桌宠配置」）
+      description: |
+        桌面宠物右键「桌宠配置」调用。设置面板在 DSH 页面里，桌面 Helper 够不着，所以宿主只写全局
+        指令叶子 `sections.openSettings`，由 DSH 页面的统一轮询读到后打开设置面板并定位到「桌宠配置」分区。
+        把桌面应用主窗口唤到前台由 Helper 自己负责（`dsh://open`）。没有任何 DSH 页面开着时本请求无可见效果。
+      responses:
+        "200":
+          description: 已写入指令
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, at]
+                properties:
+                  ok:
+                    type: boolean
+                    const: true
+                  at:
+                    type: integer
+                    description: 写入时刻（Unix 毫秒）
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+
   /dsh-pet-7340/reload:
     post:
       tags: [Action]
@@ -2115,7 +2142,7 @@ components:
         sections:
           type: object
           description: 全局段（所有端共享一份）
-          required: [balance, workStatus, notify, config]
+          required: [balance, workStatus, notify, config, openSettings]
           properties:
             balance:
               $ref: "#/components/schemas/BalanceLeaf"
@@ -2125,6 +2152,8 @@ components:
               $ref: "#/components/schemas/NotifyLeaf"
             config:
               $ref: "#/components/schemas/ConfigLeaf"
+            openSettings:
+              $ref: "#/components/schemas/OpenSettingsLeaf"
         pets:
           type: object
           description: 每只宠物各自一份；键是宠物 id（**可含点号，勿切分**）
@@ -2349,6 +2378,28 @@ components:
           oneOf:
             - $ref: "#/components/schemas/NotifyFrame"
             - type: "null"
+
+    OpenSettingsLeaf:
+      type: object
+      required: [counter, data]
+      description: |
+        **打开设置面板指令**（全局指令叶子）。由 `POST /open-settings` 写入（桌面宠物右键「桌宠配置」），
+        DSH 页面读到 `counter` 变化即打开设置面板并定位到「桌宠配置」分区。
+        `data.at` 是写入时刻（毫秒）：页面首拉时只对 15 秒内的请求生效——覆盖"桌面应用被
+        `dsh://open` 刚拉起来、页面首拉前请求就已写入"的情形，又不会在刷新页面时重放旧请求。
+        从未写过时 `data` 为 `null`。
+      properties:
+        counter:
+          $ref: "#/components/schemas/Counter"
+        data:
+          oneOf:
+            - type: "null"
+            - type: object
+              required: [at]
+              properties:
+                at:
+                  type: integer
+                  description: 写入时刻（Unix 毫秒）
 
     ConfigLeaf:
       type: object

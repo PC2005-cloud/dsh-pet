@@ -23,6 +23,8 @@
  *   /dsh-pet-7340/reload              → 桌面端「重载配置」（右键菜单，POST）：重启桌面 Helper，全部桌面
  *                                宠物窗口按最新配置重建（改配置文件后不必回设置页点保存）；与保存走
  *                                **同一条**重启路径（syncDesktop），宠物数量/display/size 变化同样生效
+ *   /dsh-pet-7340/open-settings       → 桌面端右键「桌宠配置」（POST）：写全局指令叶子 sections.openSettings，
+ *                                DSH 页面读到即打开设置面板并定位到「桌宠配置」分区
  *   /dsh-pet-7340/config/meta         → 配置文件与素材目录路径 + 全部存储位置清单
  *                                       （设置页「高级配置」「卸载与存储」展示用）
  *   /dsh-pet-7340/models              → 可选「服务商 + 模型」清单（设置页「AI 模型」下拉框数据源；
@@ -1255,6 +1257,17 @@ export function apply(ctx: any): void {
     // 所以宠物数量 / display / size 的变化同样生效——渲染端就地重拉配置做不到这几项
     // （每只宠物一个窗口，是宿主启动时按 DSH_PET_PETS 建的）。
     // 注意：发起者就是**即将被重启的那个 helper**，本响应不保证送达，因此不 await 重启、立刻回 200。
+    // 桌面宠物右键「桌宠配置」：设置面板长在 DSH 页面里，桌面 Helper 够不着——这里只写一个
+    // 全局指令叶子 sections.openSettings（data.at = 写入时刻），DSH 页面的统一轮询读到即打开设置面板
+    // 并定位到「桌宠配置」分区（见 src/client/open-settings.ts）。把桌面应用主窗口唤到前台是
+    // Helper 自己的事（dsh://open，与「打开 DeepSeek Harness」同一条路），不在宿主这里做。
+    if (rest === 'open-settings') {
+      if (method !== 'POST') return { kind: 'json', status: 405, obj: { error: 'method not allowed' } };
+      const at = Date.now();
+      state.writeSection('openSettings', { at });
+      return { kind: 'json', status: 200, obj: { ok: true, at } };
+    }
+
     if (rest === 'reload') {
       if (method !== 'POST') return { kind: 'json', status: 405, obj: { error: 'method not allowed' } };
       void syncDesktop();

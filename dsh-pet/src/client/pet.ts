@@ -39,6 +39,8 @@ import { WORK_STATUS_INDEX, type WorkStatusSnapshot } from '../shared/work-statu
 import { makeBalanceBubble, makeWhisperBubble } from './bubble';
 import { clickScore, SCORE_MIN_SPEED, mountScorePopup, spawnScoreBurst } from '../shared/score-popup';
 import { CANVAS_H, FEET_Y, HIT_BOX, DRAG_THRESHOLD, PET_REF_WIDTH, ANIMATION_EXT } from '../shared/constants';
+// 右键「桌宠配置」：打开 DSH 设置面板并定位到本插件分区（实现与降级见 open-settings.ts）
+import { openPetSettings, OPEN_SETTINGS_FRESH_MS, readOpenSettingsAt } from './open-settings';
 // 统一右键菜单：与桌面共用同一份组件（树 + 渲染 + 样式，src/shared/menu.ts）
 import {
   buildMenuTree,
@@ -1885,6 +1887,12 @@ export function makePetUI(rt: {
         });
         return;
       }
+      if (leaf.action === 'open-settings') {
+        // 桌宠配置：本页就是 DSH 页面，直接就地打开设置面板并定位到「桌宠配置」分区
+        console.info('[dsh-pet] 菜单打开桌宠配置 pet=' + cfg.id);
+        openPetSettings();
+        return;
+      }
       if (leaf.action === 'set-display') {
         // 显示位置：POST 到宿主写配置，成功后再用**权威成品**重拉配置。
         // 改成不含 web 的值（仅桌面/都不）时 visiblePets 会把它过滤掉——宠物即从页面消失。
@@ -1955,6 +1963,8 @@ export function makePetUI(rt: {
         { label: '碎碎念', action: 'whisper' },
         { label: '对话', action: 'chat' },
         { label: '回到初始位置', action: 'home' },
+        // 桌宠配置：打开 DSH 设置面板并直接定位到「桌宠配置」分区（与桌面端同名同语义）
+        { label: '桌宠配置', action: 'open-settings' },
         // 显示位置（仅网页/仅桌面/两者/都不）：与桌面端注入**同一份**子菜单。
         // 改成不含 web 的值（仅桌面/都不）后，本宠物会随即从 visiblePets 里消失——字面意义上的"自己走掉"。
         displayMenuBranch(),
@@ -2243,6 +2253,11 @@ export function makePetUI(rt: {
       const applyState = (s: PollState) => {
         if (baseline === null) {
           baseline = flattenCounters(s); // 首拉：只记基线，不渲染
+          // 例外：桌面宠物右键「桌宠配置」时，DSH 窗口可能是被 dsh://open **刚拉起来**的——
+          // 那条请求在本页首拉之前就写进了 S，按基线规则会被吞掉。所以首拉时只要它足够新鲜
+          // （OPEN_SETTINGS_FRESH_MS 以内）也照样执行；旧请求（刷新页面时残留的）照旧忽略。
+          const at = readOpenSettingsAt(s.sections?.openSettings?.data);
+          if (at !== undefined && Date.now() - at < OPEN_SETTINGS_FRESH_MS) openPetSettings();
           return;
         }
         for (const { path, leaf } of takeChanged(s, baseline)) {
@@ -2253,6 +2268,10 @@ export function makePetUI(rt: {
             // 叶子 data 恒为 {}（纯信号），配置本体太大不能塞进 /state，所以这里再拉一次。
             // 长轮询下这个信号一到就醒，比改造前的 1s 更快。
             petBridge.reload(); // 内部 GET /config（该响应已带 no-cache）→ applyMerged → visiblePets 重算
+          } else if (path === 'sections.openSettings') {
+            // 桌面宠物右键「桌宠配置」（POST /open-settings）→ 在本页打开设置面板并定位到「桌宠配置」。
+            // 多个 DSH 页面同时开着时每页都会打开——与 sections.config 一样是全局信号。
+            openPetSettings();
           } else if (path === 'sections.balance') {
             const hit = readBalance(leaf);
             if (hit) applyBalanceRef.current(hit.state, hit.manual);

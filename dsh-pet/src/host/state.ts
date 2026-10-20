@@ -44,8 +44,10 @@ export interface StateLeaf {
  *  消费端据此重拉 `GET /config`（配置本体太大，不能塞进每秒一次的 /state）。
  *  当前只有 `POST /pet-display` 写它：那是唯一一个**不是发起页面自己**的配置改动
  *  （桌面端右键改显示位置），浏览器端只能靠这个信号知道。
- *  保存 / 同步配置（PUT / POST /config）**不写**——它们的调用方自己就拿到了成品聚合。 */
-export type SectionName = 'balance' | 'workStatus' | 'notify' | 'config';
+ *  保存 / 同步配置（PUT / POST /config）**不写**——它们的调用方自己就拿到了成品聚合。
+ *  `openSettings` 是**指令叶子**：`data = { at }`（写入时刻 ms）。桌面宠物右键「桌宠配置」→
+ *  `POST /open-settings` 写它，DSH 页面读到即打开设置面板并定位到「桌宠配置」分区。 */
+export type SectionName = 'balance' | 'workStatus' | 'notify' | 'config' | 'openSettings';
 
 /** 每宠物段（say = 要说的话；anim = 要播的动画名；position = 要挪到的位置；throw = 要给的初速度；
  *  lock = 占用锁状态）。
@@ -131,7 +133,13 @@ export class PollStateStore {
 
   constructor() {
     this.last = 0;
-    this.sections = { balance: emptyLeaf(), workStatus: emptyLeaf(), notify: emptyLeaf(), config: emptyLeaf() };
+    this.sections = {
+      balance: emptyLeaf(),
+      workStatus: emptyLeaf(),
+      notify: emptyLeaf(),
+      config: emptyLeaf(),
+      openSettings: emptyLeaf(),
+    };
     this.pets = new Map();
     this.waiters = new Set();
   }

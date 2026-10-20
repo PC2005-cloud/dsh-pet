@@ -32,10 +32,12 @@ export interface MenuLeaf {
   /** 自定义动作：open-site=打开网站 / show-balance=查看余额；whisper=立即碎碎念一句；
    * chat=打开对话弹窗；home=回到初始位置；reload=重载配置（桌面端专属：重启桌面 Helper，
    * 全部桌面宠物窗口按最新配置重建——浏览器端刷新页面即可，不注入此项）；
+   * open-settings=打开 DSH 设置面板并定位到「桌宠配置」分区（浏览器端就地打开；桌面端经宿主
+   * 信号让 DSH 页面打开，并把桌面应用主窗口唤到前台）；
    * set-display=改这只宠物的显示位置（目标值见 display 字段；**两端都注入**——桌面端拿它把
    * 宠物送走、浏览器端拿它把宠物送到桌面，菜单项统一由 displayMenuBranch() 提供）。
    * 手动触发均不受 whisperEnabled 影响（该字段只关自动周期轮询） */
-  action?: 'open-site' | 'show-balance' | 'whisper' | 'chat' | 'home' | 'reload' | 'set-display';
+  action?: 'open-site' | 'show-balance' | 'whisper' | 'chat' | 'home' | 'reload' | 'set-display' | 'open-settings';
   /** set-display 的目标显示位置（与设置页「显示位置」下拉框同一套取值） */
   display?: PetDisplay;
 }
