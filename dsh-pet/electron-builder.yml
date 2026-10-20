@@ -1,0 +1,70 @@
+# electron-builder 配置 —— Windows NSIS 安装包（ticket 02）
+#
+# 为什么单独放一个文件、不写进 package.json：
+#   1. scripts/prepare.js 每次构建都会**重写** package.json 的 files 白名单，
+#      打包时排除 assets/preview（约 65MB README 素材）的规则只写在那里会被覆盖；
+#   2. package.json 的 main/exports 是 DSH 插件入口，不能被安装包入口覆盖 —— 这里用
+#      extraMetadata 只改「打进安装包的那份 package.json」。
+#
+# 包内布局约束（不要改）：lib/、assets/、runtime/electron-helper/、desktop/ 的相对位置
+# 必须与仓库一致 —— src/host/index.ts 的 PACKAGE_ROOT 由 lib/index.js 的位置反推。
+
+appId: com.dsh.pet
+productName: DSH Pet
+copyright: Copyright © 2026 DSH Pet Contributors
+# 与 scripts/ensure-electron.mjs、src/host/helper-process.ts 的默认版本保持一致
+electronVersion: 43.3.0
+
+# 不重新编译原生依赖：打包形态不会调用 @electron-internal/extract-zip（下载只在开发/插件形态发生），
+# 避免在没有 VS 构建链的机器上因 node-gyp 失败卡住打包。
+npmRebuild: false
+
+extraMetadata:
+  # 安装包内的主进程入口。仓库 package.json 的 main 仍是 lib/index.js（DSH 插件入口）。
+  main: desktop/main.mjs
+  # exe 属性页的「公司名」取自 package.json author.name（electron-builder 的 AppInfo.companyName）
+  author:
+    name: DSH Pet
+  # 安装程序 exe 的 FileDescription；应用 exe 的 FileDescription 固定为 productName
+  description: DSH Pet 桌面宠物（独立运行，不需要 DSH）
+
+directories:
+  output: dist
+
+# files 白名单：显式列出，避免把 assets/preview、src/、scripts/、devDependencies 打进包。
+# 生产依赖（@electron/get 等）由 electron-builder 依据 package.json 的 dependencies 收集。
+files:
+  - package.json
+  - lib/**/*
+  - assets/config.jsonc
+  - assets/logo.png
+  - assets/webm/**/*
+  - assets/fonts/**/*
+  - assets/pic/**/*
+  - assets/memes/**/*
+  - runtime/electron-helper/**/*
+  - desktop/**/*
+  - node_modules/**/*
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  # 256×256 PNG，electron-builder 负责生成多尺寸 .ico（应用、开始菜单、安装程序共用）
+  icon: assets/logo.png
+  # 每用户安装，不弹 UAC（与 nsis.perMachine: false 配套）
+  requestedExecutionLevel: asInvoker
+  # 不使用 UPX：压缩壳是杀软误报的常见来源
+  compression: normal
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: DSH Pet
+  artifactName: dsh-pet-Setup-${version}.${ext}
+  # 卸载时保留用户数据（~/.dsh/dsh-pet 与 %APPDATA% 下的 Chromium profile）
+  deleteAppDataOnUninstall: false

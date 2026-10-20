@@ -26,6 +26,7 @@ import {
   dshHomeDir,
   ensureElectronDownload,
   hasGraphicalDisplay,
+  helperLaunchPlan,
   helperRunIsStable,
   helperSpawnEnv,
   restartBackoffDelayMs,
@@ -506,4 +507,38 @@ describe('HelperProcess failed spawn recovery', () => {
       },
     );
   }
+});
+
+describe('helperLaunchPlan —— 打包形态不解析/不下载 Electron（ticket 02）', () => {
+  test('packaged：命令是应用自身 exe，参数是 --dsh-pet-helper', () => {
+    withIsolatedHome((dir) => {
+      const fake = join(dir, 'fake-electron.exe');
+      writeFileSync(fake, '');
+      process.env.DSH_PET_ELECTRON_PATH = fake;
+      const plan = helperLaunchPlan({ packaged: true, cwd: dir });
+      assert.equal(plan.command, process.execPath, '打包形态必须拉起自己，而不是解析出来的 Electron');
+      assert.deepEqual(plan.args, ['--dsh-pet-helper']);
+      assert.equal(plan.cwd, dir);
+      assert.deepEqual(plan.envDelete, ['ELECTRON_RUN_AS_NODE']);
+    });
+  });
+
+  test('packaged：显式 electronPath 也不能覆盖（启动计划是单一事实来源）', () => {
+    withIsolatedHome((dir) => {
+      const fake = join(dir, 'fake-electron.exe');
+      writeFileSync(fake, '');
+      const plan = helperLaunchPlan({ packaged: true, electronPath: fake, cwd: dir });
+      assert.equal(plan.command, process.execPath);
+    });
+  });
+
+  test('开发形态仍走 Electron 二进制 + helper 脚本（打包分支不污染原有行为）', () => {
+    withIsolatedHome((dir) => {
+      const fake = join(dir, 'fake-electron.exe');
+      writeFileSync(fake, '');
+      const plan = helperLaunchPlan({ electronPath: fake, cwd: dir });
+      assert.equal(plan.command, fake);
+      assert.deepEqual(plan.args, [defaultHelperMain]);
+    });
+  });
 });

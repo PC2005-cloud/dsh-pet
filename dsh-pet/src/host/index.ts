@@ -915,8 +915,9 @@ export function apply(ctx: any): void {
   /** 「无图形环境」提示只在进程生命周期内打一次，避免守护循环刷屏 */
   let displayWarned = false;
 
-  /** 用已确认存在的 Electron 路径拉起桌面 Helper（每只桌面宠物一个局部小窗口）。 */
-  const launchHelper = (electronPath: string | undefined): void => {
+  /** 用已确认存在的 Electron 路径拉起桌面 Helper（每只桌面宠物一个局部小窗口）。
+   *  packaged = 安装包形态：不传 Electron 路径，由 HelperProcess 用同一个 exe + 角色参数拉起。 */
+  const launchHelper = (electronPath: string | undefined, packaged = false): void => {
     if (helper || disposed) return;
     if (!hasDesktopPet && !desktopModeEverActive) return; // 无桌面宠物且桌面模式从未启用过：不启动
     const port = typeof ctx.webServer?.port === 'number' ? ctx.webServer.port : 0;
@@ -925,7 +926,7 @@ export function apply(ctx: any): void {
       if (!startRetryTimer) {
         startRetryTimer = setTimeout(() => {
           startRetryTimer = undefined;
-          launchHelper(electronPath);
+          launchHelper(electronPath, packaged);
         }, 500);
         startRetryTimer.unref?.();
       }
@@ -943,6 +944,7 @@ export function apply(ctx: any): void {
     helper = new HelperProcess(
       {
         electronPath,
+        packaged,
         env: {
           DSH_PET_CONFIG_URL: configUrl,
           // 已鉴权站点 URL（含本进程启动令牌）：只供 helper 的「打开网站」使用，任何日志都不许出现它
@@ -1007,6 +1009,13 @@ export function apply(ctx: any): void {
             '浏览器内宠物不受影响；如需在服务器上启用桌面模式，请配置 Xvfb 后设置 DSH_PET_DESKTOP_FORCE=1。',
         );
       }
+      return;
+    }
+    // 打包形态（ticket 02）：安装包已内置 Electron 运行时，桌面壳由同一个 exe 带
+    // `--dsh-pet-helper` 拉起。绝不能走 resolveElectronPath / ensureElectronDownload ——
+    // 安装版必须在断网时可用，运行期不许下载。
+    if (process.env.DSH_PET_PACKAGED === '1') {
+      launchHelper(undefined, true);
       return;
     }
     const found = resolveElectronPath();

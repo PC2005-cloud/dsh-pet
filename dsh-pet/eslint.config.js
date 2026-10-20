@@ -8,7 +8,7 @@ import tseslint from 'typescript-eslint';
 import reactHooks from 'eslint-plugin-react-hooks';
 
 export default tseslint.config(
-  { ignores: ['lib/**', 'scripts/**', 'assets/**', 'runtime/**', 'node_modules/**'] },
+  { ignores: ['lib/**', 'dist/**', 'scripts/**', 'assets/**', 'runtime/**', 'node_modules/**'] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
@@ -33,6 +33,13 @@ export default tseslint.config(
     files: ['eslint.config.js'],
     rules: {
       'no-undef': 'off',
+    },
+  },
+  {
+    // 打包后的 Electron 主进程：Node 环境（process/console 由 Electron 提供），没有浏览器全局
+    files: ['desktop/**/*.mjs'],
+    languageOptions: {
+      globals: { process: 'readonly', console: 'readonly' },
     },
   },
 );

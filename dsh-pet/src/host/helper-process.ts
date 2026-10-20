@@ -51,7 +51,7 @@ export interface BridgeResponse {
 /** bridge 请求处理器（宿主侧与 handlePetRoute 对接；main.js 不在收到请求时带出宿主动作） */
 export type BridgeHandler = (req: BridgeRequest) => Promise<BridgeResponse>;
 
-interface HelperOptions {
+export interface HelperOptions {
   electronPath?: string;
   helperPath?: string;
   command?: string;
@@ -59,6 +59,11 @@ interface HelperOptions {
   cwd?: string;
   env?: Record<string, string | undefined>;
   restartDelayMs?: number;
+  /**
+   * 打包形态：宿主本身就是应用 exe，桌面壳由**同一个可执行文件**带 `--dsh-pet-helper`
+   * 拉起（角色分流见 desktop/main.mjs）。此时不解析 Electron、不触发下载。
+   */
+  packaged?: boolean;
   /** bridge 协议处理器：renderer 的每条请求（配置/余额/碎碎念/素材等）都经它应答 */
   bridgeHandler?: BridgeHandler;
 }
@@ -269,6 +274,33 @@ export function defaultLaunch(options: HelperOptions = {}): LaunchPlan {
   });
 }
 
+/**
+ * 解析一次桌面 Helper 启动（命令 / 参数 / 工作目录 / 环境清理）。
+ *
+ * 打包形态是 ticket 02 的唯一分支：命令必须是**当前进程自己的可执行文件**，参数是角色参数
+ * `--dsh-pet-helper`，不能走 resolveElectronPath / ensureElectronDownload —— 安装包里已经带运行时，
+ * 运行期再下载既没必要也会在断网时失败。
+ */
+export function helperLaunchPlan(options: HelperOptions = {}): LaunchPlan {
+  if (options.packaged) {
+    return buildLaunchPlan({
+      packaged: true,
+      executablePath: process.execPath,
+      helperEntry: '',
+      cwd: options.cwd || dshHomeDir(),
+    });
+  }
+  if (options.command) {
+    return buildLaunchPlan({
+      packaged: false,
+      executablePath: options.command,
+      helperEntry: options.helperPath || defaultHelperMain,
+      cwd: options.cwd || dshHomeDir(),
+    });
+  }
+  return defaultLaunch(options);
+}
+
 /** 停止 helper 的等待上限（ms）：超过就升级 SIGKILL（issue #64） */
 export const HELPER_STOP_TIMEOUT_MS = 3000;
 /** SIGKILL 之后还给进程多久退出（ms）；到点仍未退出就放弃等待，绝不无限挂住调用方 */
@@ -326,16 +358,9 @@ export class HelperProcess {
   start(): import('node:child_process').ChildProcess | undefined {
     if (this.child || this.stopping) return this.child;
     this.lastStartAt = Date.now();
-    // 启动计划（命令/参数/工作目录/环境清理）统一由纯函数 buildLaunchPlan 产出：
+    // 启动计划（命令/参数/工作目录/环境清理）统一由 helperLaunchPlan 产出：
     // 开发形态（Electron + 脚本）与打包形态（同一个 exe + 角色参数）的差别不再散落在这里。
-    const launch = this.options.command
-      ? buildLaunchPlan({
-          packaged: false,
-          executablePath: this.options.command,
-          helperEntry: this.options.helperPath || defaultHelperMain,
-          cwd: this.options.cwd || dshHomeDir(),
-        })
-      : defaultLaunch(this.options);
+    const launch = helperLaunchPlan(this.options);
     // 自定义 command 的调用方可以继续覆盖参数（与旧行为一致）
     const args = this.options.args || launch.args;
 

@@ -41,6 +41,8 @@ temp/
 # （lib/types 曾是手写声明才保留跟踪；自 gen-types.mjs 起为生成产物，与 lib/*.js 同等对待）
 dsh-pet/lib/
 dsh-pet/runtime/electron-helper/shared-core.js
+#   安装包产物（npm run dist → dsh-pet/dist/，本地构建后手动分发）
+dsh-pet/dist/
 
 # ── IDE / 编辑器 ──
 .idea/
