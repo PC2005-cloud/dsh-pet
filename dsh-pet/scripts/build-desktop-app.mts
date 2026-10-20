@@ -170,7 +170,15 @@ const builderConfig = {
   asar: false,
   files: ['**/*'],
   win: { target: ['nsis', 'portable'] },
-  nsis: { oneClick: true, unicode: true, artifactName: 'yellow-hair-Setup-${version}.exe' },
+  nsis: {
+    oneClick: true,
+    unicode: true,
+    // 必须显式清空：electron-builder 默认把 .webm 当作「已压缩文件」从 nsis 的 7z 包中排除，
+    // 而 portable 与 nsis 共用同一个 7z 归档缓存、且 portable 不会像 nsis 那样再用 File 单独补回，
+    // 结果便携版 assets/webm 会整体丢失（安装版正常）。清空后 webm 正常进 7z，两个 target 都完好。
+    preCompressedFileExtensions: [] as string[],
+    artifactName: 'yellow-hair-Setup-${version}.exe',
+  },
   portable: { artifactName: 'yellow-hair-${version}.exe', requestExecutionLevel: 'user' },
 };
 if (hasLocalElectron) builderConfig.electronDist = electronLanding;
