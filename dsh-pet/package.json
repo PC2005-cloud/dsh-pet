@@ -142,6 +142,7 @@
     "eslint": "^10.9.0",
     "eslint-plugin-react-hooks": "^7.1.1",
     "js-yaml": "^5.4.2",
+    "matter-js": "0.20.0",
     "playwright": "1.63.0",
     "prettier": "^3.9.6",
     "react": "^18.2.0",

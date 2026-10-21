@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self' http: https: data: blob:; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' http: https: data: blob:; media-src 'self' http: https: blob:; font-src 'self' http: https: data:"
+    />
+    <title>弹弓</title>
+    <style>
+      /* 透明窗口：没有背景、没有任何面板。画面里只有宠物、弹弓、泡泡和必要的动态反馈。 */
+      html,
+      body {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: transparent;
+        user-select: none;
+        font-family:
+          'ShangshouSoftCandy', 'Yuanti SC', 'YouYuan', '幼圆', 'Microsoft YaHei UI', 'PingFang SC', sans-serif;
+      }
+      #stage {
+        position: fixed;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        display: block;
+        touch-action: none;
+      }
+      /* 动画视频只作 canvas 的帧源：挂在文档里（解码不被节流），但不可见、不挡交互 */
+      .clip {
+        position: fixed;
+        left: 0;
+        top: 0;
+        width: 2px;
+        height: 2px;
+        opacity: 0;
+        pointer-events: none;
+      }
+      /* 第一次进入时宠物头顶冒的一句话：与桌宠气泡同一套样子（白色圆润泡 + 小尾巴），几秒后淡出，之后不再出现 */
+      .say {
+        position: fixed;
+        left: 0;
+        top: 0;
+        transform: translate(-50%, -100%);
+        width: max-content;
+        max-width: 260px;
+        padding: 7px 12px 8px;
+        border-radius: 12px;
+        background: rgba(255, 255, 255, 0.92);
+        color: #2b2b2b;
+        font-size: 15px;
+        line-height: 1.55;
+        text-align: center;
+        box-shadow:
+          0 3px 12px rgba(0, 0, 0, 0.14),
+          0 1px 3px rgba(0, 0, 0, 0.08);
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity 0.35s ease;
+      }
+      .say::after {
+        content: '';
+        position: absolute;
+        left: 50%;
+        bottom: -6px;
+        transform: translateX(-50%);
+        border: 6px solid transparent;
+        border-top-color: rgba(255, 255, 255, 0.92);
+        border-bottom: none;
+      }
+      .say small {
+        display: block;
+        font-size: 12px;
+        color: rgba(43, 43, 43, 0.55);
+      }
+      .say.is-on {
+        opacity: 1;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="stage"></canvas>
+    <div class="say" id="say">拽住我往后拉，松手就飞出去啦～<small>右键可以回到桌面</small></div>
+
+    <!-- 共享纯逻辑（window.PetShared：弹弓 / 木箱垛 / 右键菜单）→ 刚体物理（matter-js + 封装）→ 弹弓素材元数据 → 画面 → 宠物帧去噪 → 控制器 -->
+    <script src="./shared-core.js"></script>
+    <script src="./vendor/matter.min.js"></script>
+    <script src="./game-physics.js"></script>
+    <script src="./game-assets/sling-meta.js"></script>
+    <script src="./game-art.js"></script>
+    <script src="./pet-frame-filter.js"></script>
+    <script src="./game.js"></script>
+  </body>
+</html>

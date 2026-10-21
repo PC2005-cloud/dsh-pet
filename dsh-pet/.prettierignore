@@ -2,6 +2,9 @@ lib
 node_modules
 assets
 runtime/electron-helper/shared-core.js
+runtime/electron-helper/vendor
+runtime/electron-helper/game-assets/sling.json
+runtime/electron-helper/game-assets/sling-meta.js
 cordis.patch.yml
 package-lock.json
 pnpm-lock.yaml

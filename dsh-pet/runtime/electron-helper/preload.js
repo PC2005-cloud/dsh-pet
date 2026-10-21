@@ -65,6 +65,16 @@ contextBridge.exposeInMainWorld('petBridge', {
   onPetHit(cb) {
     ipcRenderer.on('pet:hit', (e, payload) => cb(payload));
   },
+  // ---- 右键「弹弓」小互动窗口 ----
+  //   openGame：请主进程开游戏窗口（载荷 = 宠物名 + 素材根 + 动画池，主进程过 sanitizeGameInit 校验）；
+  //   onGameState：游戏窗口显示 / 关闭时主进程推 {active}——active=true 本窗口已被藏起、宠物该冻结，
+  //   false = 游戏结束、宠物回到桌面恢复随机链。
+  openGame(payload) {
+    ipcRenderer.send('pet:open-game', payload);
+  },
+  onGameState(cb) {
+    ipcRenderer.on('pet:game-state', (e, state) => cb(state));
+  },
   // 显示器热更新：分辨率/缩放变化、插拔屏、旋转后主进程重算桌面几何并推来
   // （{hull, areas, primaryIndex}，屏幕坐标）——渲染端就地重挂视口与边界。
   onDisplays(cb) {

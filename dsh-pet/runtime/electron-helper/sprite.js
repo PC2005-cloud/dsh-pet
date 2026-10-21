@@ -142,6 +142,10 @@ class PetSprite {
     // lockTimer = 按叶子里的 expiresAt 自己到点解除（宿主侧过期是懒判的，不会推"锁没了"）。
     this.frozen = false;
     this.lockTimer = null;
+    // frozen 的两个来源：占用锁（lockFrozen）与「弹弓」窗口开着（inGame，宠物跳进弹弓、本窗口被藏起）。
+    // 任一生效即冻结，两者都解除才恢复——互不覆盖（游戏中锁到期不会把宠物提前放出来，反之亦然）。
+    this.lockFrozen = false;
+    this.inGame = false;
     // 对话弹窗（shared 组件）：当前挂载的 close() 句柄 + 开启标记
     // （chatOpen 是穿透守卫：弹窗是窗口内 DOM，期间整窗保持可交互，与 menuOpen 同语义——否则
     //   光标移到输入框（不在身体命中区）就会被 onMouseMove 翻回穿透，点击全被透传）
@@ -629,15 +633,54 @@ class PetSprite {
       this.lockTimer = null;
     }
     const expiresAt = state && state.locked === true ? state.expiresAt : 0;
-    this.applyFreeze(expiresAt > Date.now());
+    this.lockFrozen = expiresAt > Date.now();
+    this.applyFreeze(this.lockFrozen || this.inGame);
     if (expiresAt <= Date.now()) return;
     this.lockTimer = window.setTimeout(
       () => {
         this.lockTimer = null;
-        this.applyFreeze(false);
+        this.lockFrozen = false;
+        this.applyFreeze(this.inGame);
       },
       Math.max(0, expiresAt - Date.now()),
     );
+  }
+
+  /**
+   * 「弹弓」窗口开 / 关（主进程经 pet:game-state 推来）：开着时本窗口已被主进程藏起，
+   * 这里收掉菜单 / 拖拽并走占用锁同一条冻结路径（随机链、漫游、自动气泡全停）；
+   * 关掉后与锁合并判定，锁也没了才恢复。
+   * 正在飞的抛掷**不停**：让它照常落地（停在半空的话，游戏结束后宠物会悬在空中）。
+   * 游戏期间的位移来源（被撞 / 位置与抛掷指令）由 onDeskHit / moveToCenter / throwWith 各自挡掉。
+   */
+  setInGame(active) {
+    const next = active === true;
+    if (this.inGame === next) return;
+    this.inGame = next;
+    if (next) {
+      this.closeMenu();
+      this.stopDragFollow();
+    }
+    this.applyFreeze(this.inGame || this.lockFrozen);
+  }
+
+  /**
+   * 右键「弹弓」：把宠物名 + 素材根 + 动画交给主进程开弹弓窗口（窗口里播的是这只宠物自己的动画）。
+   *   cheer = 整垛木箱都被推倒时的欢呼：点击回应池里挑开心的那段（按名字关键词，挑不到就第一个）；
+   */
+  openSlingshot() {
+    if (!window.petBridge || !window.petBridge.openGame) return;
+    const clicks = this.animations.clicks || [];
+    const cheer = clicks.find((n) => /开心|元气|雀跃/.test(n)) || clicks[0] || '';
+    window.petBridge.openGame({
+      petName: this.pet.name || this.pet.id,
+      petSize: this.size, // CSS 像素（两个窗口同一套页面级缩放）：弹弓里的宠物与桌面上一样大
+      base: BASE,
+      assetBase: this.assetBase,
+      idle: this.animations.idle,
+      drag: this.animations.drag,
+      cheer,
+    });
   }
 
   // 动画链（与浏览器 pickNext 语义一致，纯逻辑在 shared）
@@ -1003,6 +1046,7 @@ class PetSprite {
    */
   moveToCenter(rx, ry, mode, duration) {
     if (this.dragState.active) return; // 用户交互优先
+    if (this.inGame) return; // 宠物在「弹弓」里：退出后要回到原处，不接受位置指令
     this.stopThrow(); // 先显式接管：停掉飞行与走路（stopMove 顺带停掉上一次的位置跟随）
     this.stopMove();
     // 归一化空间是**外接矩形**（VIEW = AREAS 的 hull），不规则布局里含大片不属于任何屏的空洞
@@ -1078,12 +1122,14 @@ class PetSprite {
    */
   throwWith(angleDeg, power) {
     if (this.dragState.active) return; // 用户交互优先
+    if (this.inGame) return; // 宠物在「弹弓」里（同 moveToCenter）
     const v = S.throwVelocity(angleDeg, power);
     this.startThrow(this.pos.x, this.pos.y, v.vx, v.vy);
   }
 
   /** 被撞回调（跨窗碰撞 broker 转发）：停当前动作，从落点以新初速抛出去（全复用现有物理） */
   onDeskHit(vx, vy) {
+    if (this.inGame) return; // 藏起来的宠物不该被撞飞（主进程已不转发，这里兜住途中的陈旧消息）
     this.stopMove();
     this.stopDragFollow();
     this.stopThrow();
@@ -1129,6 +1175,8 @@ class PetSprite {
   onPointerDown(e) {
     // 只认左键：右键进入拖拽判定会与右键菜单打架（右键不拖拽，两端一致）
     if (e.button !== 0) return;
+    // 宠物在「弹弓」里（本窗口被藏起）：不接任何输入——尤其不能走下面的「用户接管」把冻结解掉
+    if (this.inGame) return;
     // 占用锁（issue #122 第 4 项）：用户**点了或拖了**这只宠物 = 用户接管，立刻撤掉第三方占用。
     // 这是唯一一处"渲染端 → 宿主"的锁上报——宿主看不见鼠标，而锁在它手里
     // （/lock/release 的 force 形态；桌面端走 bridge，与播放回执 reportPlayback 同一条路）。
@@ -1139,6 +1187,7 @@ class PetSprite {
         window.clearTimeout(this.lockTimer);
         this.lockTimer = null;
       }
+      this.lockFrozen = false; // 否则锁叶子回来之前开一局游戏，关游戏时 setInGame(false) 会按陈旧标记重新冻住
       this.applyFreeze(false);
       S.postAction(BASE + '/lock/release?pet=' + encodeURIComponent(this.pet.id), { force: true }).then((ok) => {
         if (!ok) console.warn('[dsh-pet] 用户接管上报未送达 pet=' + this.pet.id);
@@ -1541,6 +1590,8 @@ class PetSprite {
     tools.push(
       { label: '碎碎念', action: 'whisper' },
       { label: '对话', action: 'chat' },
+      // 弹弓小互动（桌面端专属）：宠物跳进桌面上的透明弹弓窗口，被拽出去撞木箱
+      { label: '弹弓', action: 'slingshot-game' },
       { label: '回到初始位置', action: 'home' },
       // 显示位置（仅网页/仅桌面/两者/都不）：改这只宠物的 display 配置 + 宿主重载生效。
       // 与浏览器端注入的是**同一份**子菜单（shared 的 displayMenuBranch），两端文案/取值不会漂移。
@@ -1595,6 +1646,10 @@ class PetSprite {
     }
     if (leaf.action === 'chat') {
       this.showChatFromMenu(); // 打开对话弹窗（记忆经 host /chat 读写，浏览器/桌面同一实例共享）
+      return;
+    }
+    if (leaf.action === 'slingshot-game') {
+      this.openSlingshot(); // 冻结与藏窗由主进程在游戏窗口显示后经 pet:game-state 通知（setInGame）
       return;
     }
     if (leaf.action === 'home') {

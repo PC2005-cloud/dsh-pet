@@ -35,9 +35,11 @@ temp/
 # ── dsh-pet 构建产物（全部由 src/ 构建生成，不入仓库；克隆后先 npm run prepare:webm）──
 #   lib/                      tsdown bundle（lib/index.js、lib/client.js）+ tsc 声明（lib/types/*.d.ts，npm run types）
 #   runtime/electron-helper/shared-core.js  桌面共享纯逻辑（scripts/build-desktop-core.mjs 产出，window.PetShared）
+#   runtime/electron-helper/vendor/         弹弓窗口的 matter-js（同一脚本从 node_modules 拷来，window.Matter）
 # （lib/types 曾是手写声明才保留跟踪；自 gen-types.mjs 起为生成产物，与 lib/*.js 同等对待）
 dsh-pet/lib/
 dsh-pet/runtime/electron-helper/shared-core.js
+dsh-pet/runtime/electron-helper/vendor/
 
 # ── IDE / 编辑器 ──
 .idea/
