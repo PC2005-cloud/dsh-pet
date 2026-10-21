@@ -698,7 +698,11 @@ export function apply(ctx: any): void {
    *  收 `findPetInstance` 的**命中结果**而不是 `(petId, cfg)`：两个调用方都已经解析过了，这里再查一次
    *  只会多出一处"查不到就兜底 main"的不可达分支。 */
   const petSystemPrompt = (found: { conf: Record<string, unknown>; pet: Record<string, unknown> }): string => {
-    const prompt = typeof found.conf.whisperPrompt === 'string' ? found.conf.whisperPrompt : '';
+    // 人设的取值优先级：这只宠物自己的 persona（可选覆盖）→ 所属条目的 whisperPrompt。
+    // persona 只在 mergePet / saveUserConfig 里以「非空才落盘」的形态存在，所以这里再做一次
+    // trim 兜底就够；两端都为空的极端情况仍有 nameLine，不会产生空 system。
+    const own = typeof found.pet.persona === 'string' ? found.pet.persona.trim() : '';
+    const prompt = own || (typeof found.conf.whisperPrompt === 'string' ? found.conf.whisperPrompt : '');
     const name = String(found.pet.name || found.pet.id);
     const nameLine = '你的名字是“' + name + '”。';
     const base = prompt ? prompt + '\n' + nameLine : nameLine;

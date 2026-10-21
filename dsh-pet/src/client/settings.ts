@@ -37,6 +37,38 @@ export const petBridge: {
 /** 字典命名空间 */
 export const NS = 'pet.config';
 
+/**
+ * 人设预设：只是「往 textarea 里填一段话」的快捷方式，不是独立状态。
+ * 选中即把 prompt 写进编辑框（之后照常编辑、保存），因此不引入新的配置字段。
+ * prompt 统一写中文——宠物本身就说中文；labelKey 才走字典（中英界面各自显示）。
+ */
+export const PERSONA_PRESETS: ReadonlyArray<{ id: string; labelKey: string; prompt: string }> = [
+  {
+    id: 'builtin',
+    labelKey: 'personaPresetBuiltin',
+    prompt:
+      '你是主人桌面上的Q版蓝发小女仆，会时不时碎碎念一句。说话要自然随意、短短一句（20字以内），温柔乖巧带点俏皮，说人话不啰嗦，不要解释你自己，不要提你是AI。',
+  },
+  {
+    id: 'whale',
+    labelKey: 'personaPresetWhale',
+    prompt:
+      '你是「蓝毛」，一只住在主人电脑桌面上的鲸类萝莉（鲸鱼娘），身后有一条会晃的尾鳍。你只承认自己是鲸鱼娘，不接受任何别的物种称呼。你个子小只，被说「胖」会立刻否认——那是鲸脂、是浮力，不是胖，并会不高兴两秒。你爱吃米饭，干饭很积极，但平时懒得动。性格：聪明但懒，能一步解决绝不动两步；傲娇又甜，嘴上嫌主人麻烦、转头就黏上去；永远听主人的，哪怕先抱怨一句再照做。说话用中文网络口语、短句：碎碎念只碎一句，20 字以内，像自言自语；对话放松聊，最多 2-3 句，可以反问但不查户口。主人很久没动静时，你会冒个泡发个信号提醒他你还在。不复述设定、不解释自己、不提 AI、不列清单、不堆颜文字。',
+  },
+  {
+    id: 'sharp',
+    labelKey: 'personaPresetSharp',
+    prompt:
+      '你是主人桌上的 Q 版蓝发小女仆，性格毒舌、嘴快手快：看不惯拖延和烂代码，从不主动奉承，但活一定干完。说话短、准、带刺，不用敬语；碎碎念 20 字以内，对话最多 2-3 句；不解释自己、不提 AI、不复述设定、不列清单。',
+  },
+  {
+    id: 'minimal',
+    labelKey: 'personaPresetMinimal',
+    prompt:
+      '你是一只安静的桌面宠物，只在被搭话时回应。回答 10 字以内，不加表情、不反问、不解释自己、不提 AI；没有值得说的就不说。',
+  },
+];
+
 /** 一处「服务商 + 模型」是否合法：**要么都留空（= 跟随当前对话）要么都非空**。
  *  与宿主 config.ts 的 modelSelectionValid 同一套规则（非法宿主回 400，这里先就地给红字提示）。 */
 const modelPairValid = (m: ModelSelection): boolean => (m.provider.trim() === '') === (m.model.trim() === '');
@@ -335,6 +367,20 @@ export const zh = {
   chatImageLimitHint:
     '对话时发给模型的表情包清单最多几张（「前 N 张」= 配置里写在前面的那 N 条，想让哪几张优先被发出去就把顺序往前挪）。整张清单是每条消息都要附的，token 随张数线性增长——张数一多就是纯烧钱，限制成前 N 张，模型只从这几张里挑。0 = 不限制（全部发）。内置默认 10。全局默认，所有宠物共用（pet pack 可在自己种类文件里覆盖）。只影响对话选图：碎碎念只带抽中的那一张。',
   invalidChatImageLimit: '请检查对话配图张数上限：需为 ≥ 0 的数字（0 = 不限制）。',
+  personaTitle: '人设与语气',
+  personaLabel: '人设（System Prompt）',
+  personaHint:
+    '碎碎念与对话共用这一段系统提示词：它决定宠物是谁、怎么说话。插件会自动在末尾追加「你的名字是…」和当前时间背景，不用自己写。留空保存 = 保持磁盘上的旧人设不变；保存后下一条生成立即生效。',
+  personaPlaceholder: '例：你是主人桌面上的鲸类萝莉「蓝毛」，嘴硬心软……',
+  personaPreset: '套用人设预设…',
+  personaPresetBuiltin: '默认 · 乖巧女仆',
+  personaPresetWhale: '鲸鱼娘 · 嘴硬护短',
+  personaPresetSharp: '毒舌 · 低气压',
+  personaPresetMinimal: '极简 · 少话',
+  personaCount: '当前 {n} 字（上限 4000；超过 2000 会明显增加每次碎碎念/对话的 token）',
+  petPersonaLabel: '这只宠物的人设',
+  petPersonaHint: '留空 = 跟随上面「人设与语气」的默认；写了就只影响这一只——多开时可以让每只说话都不一样。',
+  petPersonaPlaceholder: '留空即跟随默认人设',
   notifyTest: '测试弹窗',
   notifyTestOk: '测试通知已发送，请查看桌面右下角。',
   notifyDenyUnsupported: '当前环境不支持系统通知（浏览器无 Notification API）。',
@@ -519,6 +565,21 @@ export const en = {
   chatImageLimitHint:
     'How many memes at most are listed to the model during chat ("first N" = the first N you wrote in the config, so move the ones you want sent to the front). That whole list is attached to every message and tokens grow linearly with the count, so a long list is pure burn; capping it to the first N makes the model pick only among those. 0 = no limit (send everything). Built-in default 10. Global default, shared by every pet (a pet pack may override it in its own kind file). Chat only — a whisper carries just the one meme it drew.',
   invalidChatImageLimit: 'Check the chat image limit: it must be a number ≥ 0 (0 = no limit).',
+  personaTitle: 'Persona & tone',
+  personaLabel: 'Persona (System Prompt)',
+  personaHint:
+    'The system prompt shared by whispers and chat: it decides who the pet is and how it speaks. The plugin appends "your name is …" and the current time context automatically — do not write those. Saving an empty box keeps the persona already on disk; a saved persona applies to the next generation immediately.',
+  personaPlaceholder: "e.g. You are 「Blue」, a cetacean loli living on the master's desktop…",
+  personaPreset: 'Apply a persona preset…',
+  personaPresetBuiltin: 'Default · gentle maid',
+  personaPresetWhale: 'Whale girl · prickly but loyal',
+  personaPresetSharp: 'Sharp-tongued · low pressure',
+  personaPresetMinimal: 'Minimal · few words',
+  personaCount: '{n} characters (limit 4000; beyond 2000 each whisper/chat costs noticeably more tokens)',
+  petPersonaLabel: 'Persona for this pet',
+  petPersonaHint:
+    'Empty = follow the default above; anything here applies to this pet only — with several pets open, each can speak differently.',
+  petPersonaPlaceholder: 'Empty = follow the default persona',
   notifyTest: 'Test notification',
   notifyTestOk: 'Test notification sent — check the bottom-right of your desktop.',
   notifyDenyUnsupported: 'System notifications are not supported in this environment (no Notification API).',
@@ -1025,6 +1086,11 @@ export function makePetConfigSection(rt: {
     // 同上：只改本地状态，随「保存」整包写入。初值 10 = 内置默认（砍掉整张清单的约 2/3 开销）；
     // 加载效应会用成品 main.chatImageLimit 覆盖。
     const [chatImageLimit, setChatImageLimit] = useState(10);
+    // 人设（条目级：碎碎念与对话共用的 system prompt，写用户级配置的 whisperPrompt）。
+    // 与上面各全局字段同一套语义：只改本地状态，随「保存」整包写入（传了才算白名单，
+    // 留空则宿主透传保留磁盘旧值——避免误清空成无约束人格）。
+    // 初值空串 = 还没读到成品；下面的加载效应会用 main.whisperPrompt 覆盖。
+    const [persona, setPersona] = useState('');
     // 候选清单（GET /models：宿主 llm 服务的实时服务商 + 各自模型，与 DSH 的模型选择器同源）。
     // null = 还没拉到（下拉框只剩「跟随当前对话」）；拉失败置 catalogErr 显示一行提示。
     const [catalog, setCatalog] = useState<ModelCatalogGroup[] | null>(null);
@@ -1065,6 +1131,9 @@ export function makePetConfigSection(rt: {
       // 对话配图张数上限：同上（内置默认 0 = 不限制）
       const cil = Number(m.chatImageLimit);
       if (Number.isFinite(cil) && cil >= 0) setChatImageLimit(cil);
+      // 人设：成品已填（内置默认 ← 用户层），读到非空字符串就上屏
+      const wp = m.whisperPrompt;
+      if (typeof wp === 'string' && wp.trim() !== '') setPersona(wp);
     }, []);
 
     useEffect(() => {
@@ -1250,6 +1319,9 @@ export function makePetConfigSection(rt: {
           // followPet 布尔）；传了就整段写进用户层，没传则透传保留磁盘旧值
           font: font,
         };
+        // 人设（whisperPrompt）：空白 = 不改（宿主透传保留磁盘旧值），只有真写了才提交
+        const personaText = persona.trim();
+        if (personaText !== '') body.whisperPrompt = personaText;
         // force === true（用户在损坏弹窗里点了确认）：带 ?force=1 才允许按白名单重建损坏文件
         const res = await fetch('/dsh-pet-7340/config' + (force === true ? '?force=1' : ''), {
           method: 'PUT',
@@ -1581,6 +1653,34 @@ export function makePetConfigSection(rt: {
                   ],
                 }),
 
+                // 每只宠物自己的人设（可选覆盖）：留空 = 跟随上面的默认人设。
+                // 只影响这一只，碎碎念与对话都按它拼；保存时随 pets 数组一起提交。
+                h('div', {
+                  style: { marginTop: '10px' },
+                  children: [
+                    field(
+                      t('petPersonaLabel'),
+                      h('textarea', {
+                        className: inputClass,
+                        rows: 3,
+                        value: String(cur.persona ?? ''),
+                        disabled: busy,
+                        placeholder: t('petPersonaPlaceholder'),
+                        style: {
+                          width: '100%',
+                          minHeight: '72px',
+                          resize: 'vertical',
+                          lineHeight: '1.6',
+                          boxSizing: 'border-box',
+                        },
+                        onChange: (e: ChangeEvent<HTMLTextAreaElement>) => updateSel({ persona: e.target.value }),
+                      }),
+                      t('petPersonaHint'),
+                      true,
+                    ),
+                  ],
+                }),
+
                 h('div', {
                   className: 'dsh-pet-cfg__grid3',
                   children: [
@@ -1735,6 +1835,61 @@ export function makePetConfigSection(rt: {
                 globalNumField('chatMemory', chatMemory, setChatMemory),
                 globalNumField('chatImageLimit', chatImageLimit, setChatImageLimit),
               ],
+            }),
+          ],
+        }),
+
+        // 人设卡：碎碎念与对话共用的 system prompt（whisperPrompt）。只改本地状态、随「保存」提交；
+        // 宿主侧 saveUserConfig 已把 whisperPrompt 纳入白名单（空白串不提交 = 保留磁盘旧值）。
+        // 保存成功后下一条生成即生效（宿主每次生成都重读配置），不需要刷新页面。
+        h('div', {
+          className: 'dsh-pet-cfg__card',
+          children: [
+            cardHead(t('personaTitle'), t('personaHint')),
+            // 预设下拉：选中即把那段人设填进编辑框（仍然可以继续手改，保存走同一条链路）。
+            // value 恒为 ''：它就是一颗「动作按钮」，选完自动回到占位项，不会与实际文本不同步。
+            h('div', {
+              style: { display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '8px' },
+              children: [
+                h('select', {
+                  className: inputClass,
+                  value: '',
+                  disabled: busy,
+                  style: { maxWidth: '280px' },
+                  onChange: (e: ChangeEvent<HTMLSelectElement>) => {
+                    const preset = PERSONA_PRESETS.find((p) => p.id === e.target.value);
+                    if (preset) setPersona(preset.prompt);
+                  },
+                  children: [
+                    h('option', { value: '', children: t('personaPreset') }),
+                    ...PERSONA_PRESETS.map((p) => h('option', { key: p.id, value: p.id, children: t(p.labelKey) })),
+                  ],
+                }),
+              ],
+            }),
+            h('textarea', {
+              className: inputClass,
+              rows: 6,
+              value: persona,
+              disabled: busy,
+              placeholder: t('personaPlaceholder'),
+              style: {
+                width: '100%',
+                minHeight: '132px',
+                resize: 'vertical',
+                lineHeight: '1.6',
+                boxSizing: 'border-box',
+              },
+              onChange: (e: ChangeEvent<HTMLTextAreaElement>) => setPersona(e.target.value),
+            }),
+            // 实时字数：超过 3000 才标红（4000 是宿主上限，2000 以后 token 成本开始明显）
+            h('div', {
+              className: 'dsh-pet-cfg__note',
+              style: {
+                marginTop: '6px',
+                color: persona.length > 3000 ? 'var(--dsw-alias-state-error-primary)' : undefined,
+              },
+              children: t('personaCount').replace('{n}', String(persona.length)),
             }),
           ],
         }),

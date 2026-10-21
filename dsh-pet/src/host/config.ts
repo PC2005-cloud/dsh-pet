@@ -551,6 +551,9 @@ function mergePet(
   const basePos = base.position && typeof base.position === 'object' ? (base.position as Record<string, unknown>) : {};
   const ownPos = p.position && typeof p.position === 'object' ? (p.position as Record<string, unknown>) : {};
 
+  // 每只宠物自己的人设（可选）：只认自己写的那份，**不继承 pets[0] 模板**（模板人设会让
+  // 新加的宠物莫名带上别人的口吻）；留空/非字符串 = 不写这个键，消费端回落到条目 whisperPrompt。
+  const persona = typeof p.persona === 'string' ? p.persona.trim() : '';
   return {
     id,
     name,
@@ -565,6 +568,7 @@ function mergePet(
       marginX: petNumber(ownPos.marginX, basePos.marginX, -Infinity, label, 'position.marginX', id),
       marginY: petNumber(ownPos.marginY, basePos.marginY, -Infinity, label, 'position.marginY', id),
     },
+    ...(persona ? { persona } : {}),
   };
 }
 
@@ -675,6 +679,12 @@ export function saveUserConfig(
     const marginX = Number(pos.marginX);
     const marginY = Number(pos.marginY);
     if (!Number.isFinite(marginX) || !Number.isFinite(marginY)) return null;
+    // 每只宠物的人设（可选）：传了必须是字符串且 ≤ 4000；空白串视为「删掉这份覆盖」
+    // （落盘时不写这个键 → 回落条目 whisperPrompt），与全局人设的空白语义保持一致。
+    const personaRaw = pp.persona;
+    if (personaRaw !== undefined && typeof personaRaw !== 'string') return null;
+    const persona = typeof personaRaw === 'string' ? personaRaw.trim() : '';
+    if (persona.length > 4000) return null;
     out.push({
       id,
       name,
@@ -685,6 +695,7 @@ export function saveUserConfig(
       fixedEnabled,
       display,
       position: { corner, marginX, marginY },
+      ...(persona ? { persona } : {}),
     });
   }
   const ne = o.notificationsEnabled;
@@ -721,6 +732,12 @@ export function saveUserConfig(
   // 与 chatMemoryRounds 同一套语义——传了就校验后进白名单，没传则走下面的透传保留。
   const cil = o.chatImageLimit;
   if (cil !== undefined && !topFieldValid('chatImageLimit', cil)) return null;
+  // whisperPrompt（人设 / System Prompt；设置页「人设与语气」卡片写的就是它）：
+  // 与 chatMemoryRounds 同一套语义——传了就校验后进白名单，没传则走下面的透传保留。
+  // 约束：非空字符串、长度 ≤ 4000（一段提示词，不需要更多）；空白串视为非法，
+  // 因为空人设会让碎碎念/对话失去约束，读侧虽有默认兜底，但那是「没配过」的语义。
+  const wp = o.whisperPrompt;
+  if (wp !== undefined && (typeof wp !== 'string' || wp.trim().length === 0 || wp.length > 4000)) return null;
   const cleanModel = (v: Record<string, unknown>): { provider: string; model: string } => ({
     provider: String(v.provider).trim(),
     model: String(v.model).trim(),
@@ -739,6 +756,7 @@ export function saveUserConfig(
   // 数值归一化落盘：请求体传 "9" 也存成 9（与读取侧 topFieldValid 的 Number() 口径一致）
   if (cmr !== undefined) outConfig.chatMemoryRounds = Number(cmr);
   if (cil !== undefined) outConfig.chatImageLimit = Number(cil);
+  if (wp !== undefined) outConfig.whisperPrompt = wp;
   // 透传保留：请求体未携带的顶层字段，从 existing（磁盘现有用户文件）原样带回——
   // 设置页只提交 pets(+全局开关+physics+模型+对话历史条数)，手改的 whisperPrompt/memes/... 借此保住。
   // 白名单字段只在「请求体传了」时才算白名单（已由上方写入）；未传时走这里透传磁盘旧值——
@@ -754,6 +772,7 @@ export function saveUserConfig(
   if (cm !== undefined) bodyOwned.add('chatModel');
   if (cmr !== undefined) bodyOwned.add('chatMemoryRounds');
   if (cil !== undefined) bodyOwned.add('chatImageLimit');
+  if (wp !== undefined) bodyOwned.add('whisperPrompt');
   if (existing && typeof existing === 'object') {
     for (const key of Object.keys(existing)) {
       if (bodyOwned.has(key)) continue; // 白名单字段由请求体决定

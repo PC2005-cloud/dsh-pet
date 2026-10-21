@@ -109,6 +109,9 @@ export interface Pet {
   /** 显示位置（web/desktop/both/none，必填）：缺失即配置错误，代码不做兜底 */
   display: PetDisplay;
   position: { corner: Corner; marginX: number; marginY: number };
+  /** 每只宠物自己的人设（可选）：写了就覆盖所属条目的 whisperPrompt，留空/缺失 = 跟随条目默认。
+   *  只影响这只宠物：碎碎念与对话的 system prompt 都按它拼（名字与时间背景仍由 host 追加）。 */
+  persona?: string;
   animations?: Animations;
   animationWeights?: Weights;
   extra?: boolean;
