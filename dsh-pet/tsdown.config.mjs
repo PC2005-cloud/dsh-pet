@@ -3,7 +3,7 @@
 //       window.__ModuleLoader__.load({ id, factory }) 单文件形态；
 //       react / react/jsx-runtime / @deepseek-ai/* 保持外部 require（不打包）。
 //
-// 三份配置：
+// 四份配置：
 //   1) 浏览器半侧（client → lib/client.js）—— 与 DSH 内运行一致，@deepseek-ai/* 全部
 //      外部化（那些包由 DSH 宿主提供）；产物额外包一层 IIFE，理由见该份配置里的注释。
 //   2) 宿主半侧（index → lib/index.js）—— 保持 ESM，由 DSH 的 Loader import。
@@ -13,6 +13,11 @@
 //      因此用 alias 把它们换成本地替身（src/standalone/shims/*）：替身只做
 //      "转调插件自己的同口径实现" 或 "明确降级"，没有任何生成/网络逻辑（细节见各文件头）。
 //      其余 @deepseek-ai/* 仍按外部处理（负向断言），避免哪天误把 DSH 代码打进产物。
+//   4) 桌面应用宿主入口（desktop → lib/desktop.js）—— 仅在 DSH_PET_DESKTOP_BUILD=1 时构建
+//      （scripts/build-desktop-app.mjs 打包 exe 时设置）：npm publish 的 lib 不含它。
+//      与第 3 份同口径（alias 三个 DSH 替身），额外把 @electron/get 与
+//      @electron-internal/extract-zip 换成 stub —— 应用自身即 Electron，
+//      "下载/解压 Electron" 的路径不该随包发布（详见两个 stub 的文件头）。
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'tsdown';
@@ -33,7 +38,11 @@ const shared = {
   clean: false,
 };
 
-export default defineConfig([
+/** 第 4 份配置（桌面应用宿主入口）：仅打包桌面应用时启用，npm publish 的 lib 不含它 */
+const desktopEnabled = process.env.DSH_PET_DESKTOP_BUILD === '1';
+
+/** 前三份配置（正式发布形态） */
+const configs = [
   {
     ...shared,
     entry: {
@@ -80,4 +89,28 @@ export default defineConfig([
       '@deepseek-ai/dsh-llm': shim('dsh-llm'),
     },
   },
-]);
+];
+
+if (desktopEnabled) {
+  configs.push({
+    ...shared,
+    // 与第 3 份同理：宿主半边模块图里的三个 DSH 专有包换成替身
+    target: 'es2022',
+    entry: {
+      desktop: 'src/standalone/desktop.ts',
+    },
+    noExternal: [/^@deepseek-ai\/(?:dsh-home-paths|dsh-credentials|dsh-llm)$/],
+    // electron 是打包产物自带的运行时（必须留外部引用）；@electron/* 不再外部 ——
+    // 它们的引用被下面的 alias 换成本地 stub（应用自身即 Electron，无需下载/解压）
+    external: [/^electron$/, /^node:/, /^@deepseek-ai\/(?!dsh-home-paths$|dsh-credentials$|dsh-llm$)/],
+    alias: {
+      '@deepseek-ai/dsh-home-paths': shim('dsh-home-paths'),
+      '@deepseek-ai/dsh-credentials': shim('dsh-credentials'),
+      '@deepseek-ai/dsh-llm': shim('dsh-llm'),
+      '@electron/get': shim('electron-get'),
+      '@electron-internal/extract-zip': shim('extract-zip'),
+    },
+  });
+}
+
+export default defineConfig(configs);
