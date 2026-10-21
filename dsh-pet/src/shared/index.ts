@@ -24,3 +24,4 @@ export * from './score-popup'; // 点击积分弹窗 + 粒子爆发（menu/chat 
 export * from './work-status'; // 工作状态联动（DSH 会话事件 → 档位动画/气泡：档位常量 + reducer + 文案，浏览器消费）
 export * from './state'; // 轮询统一状态 S 的客户端侧纯逻辑（拉取 / 拍平 / 比对；两端共用）
 export * from './tooltip'; // 悬浮提示（替代原生 title 属性：class + 样式 + 翻转判据，两端共用同一份）
+export * from './slingshot-game'; // 弹弓小互动（桌面透明窗口）：弹弓初速 / 瞄准轨迹 / 泡泡命中 / 会话状态，纯逻辑

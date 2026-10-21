@@ -84,6 +84,25 @@ const required = [
   'runtime/electron-helper/renderer.js', // 桌面模式渲染端（宠物本体）
   'runtime/electron-helper/shared-core.js', // 桌面模式共享纯逻辑（src/shared 构建产物，window.PetShared）
   'runtime/electron-helper/index.html', // 桌面模式页面壳
+  'runtime/electron-helper/game-launch.js', // 弹弓窗口的载荷校验 / 尺寸 / 穿透判定（main.js require，缺了会启动即崩）
+  'runtime/electron-helper/game-preload.js', // 弹弓窗口 preload（main.js 建窗时引用）
+  'runtime/electron-helper/game.html', // 弹弓页面
+  'runtime/electron-helper/game.js', // 弹弓控制器
+  'runtime/electron-helper/game-art.js', // 弹弓贴图层
+  'runtime/electron-helper/game-assets/sling-meta.js', // 弹弓叉尖元数据（scripts/game-art/paint-slingshot.py 生成）
+  'runtime/electron-helper/game-assets/sling.png', // 弹弓（位图素材，规格见 scripts/game-art/README.md）
+  'runtime/electron-helper/game-assets/band.png',
+  'runtime/electron-helper/game-assets/pouch.png',
+  'runtime/electron-helper/game-assets/shadow.png',
+  'runtime/electron-helper/game-assets/bubble-s1.png', // 小泡泡（瞄准 / 拖尾，抠自宠物动画「鲸鱼吐泡泡特效」）
+  'runtime/electron-helper/game-physics.js', // 弹弓刚体物理封装（matter-js 之上）
+  'runtime/electron-helper/pet-frame-filter.js', // 弹弓里宠物视频帧的 alpha 去噪（WebGL）
+  'runtime/electron-helper/vendor/matter.min.js', // matter-js 浏览器构建（build-desktop-core.mjs 拷入）
+  'runtime/electron-helper/vendor/matter-js.LICENSE', // matter-js 的 MIT 许可证全文（随包分发必须带上）
+  'runtime/electron-helper/game-assets/crate.png', // 木箱 / 碎片 / 木屑（scripts/game-art/paint-crates.py）
+  'runtime/electron-helper/game-assets/crate-cracked.png',
+  'runtime/electron-helper/game-assets/shard-1.png',
+  'runtime/electron-helper/game-assets/dust.png',
 ];
 for (const f of required) {
   existsSync(join(ROOT, f)) ? ok(`exists ${f}`) : fail(`missing ${f}`);

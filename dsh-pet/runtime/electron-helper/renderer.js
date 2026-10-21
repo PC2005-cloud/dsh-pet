@@ -152,6 +152,13 @@ if (window.petBridge && window.petBridge.onDisplays) {
   });
 }
 
+// 「弹弓」窗口开 / 关：主进程藏起 / 放回本窗口后推来，宠物随之冻结 / 恢复（见 PetSprite.setInGame）
+if (window.petBridge && window.petBridge.onGameState) {
+  window.petBridge.onGameState((state) => {
+    for (const s of sprites) s.setInGame(!!(state && state.active));
+  });
+}
+
 // 窗口内容区尺寸异常时按当前位置重新规整。
 // 守卫：拖拽/飞行/漫游中**绝不**重设位置——这三种状态下位置由输入或物理驱动，而 position()
 // 会把宠物拉回 customPos（上一次的落点）。跨屏时 Windows 会因 WM_DPICHANGED 主动改窗口尺寸，

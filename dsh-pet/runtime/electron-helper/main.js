@@ -61,6 +61,8 @@ const { shouldLinearize, resolveForcedScale, resolvePetScale } = require('./dpi-
 // 托盘的平台差异（模板图 / 左键是否自动弹菜单 / Dock）：规则住在模块里，main.js 只接线
 const { trayPlatform } = require('./tray-platform.js');
 const { buildDeskGeometry } = require('./desktop-geometry.js');
+// 「弹弓」小互动窗口：载荷校验 + 窗口尺寸 + 点击穿透判定（纯函数；为什么是独立透明窗口见该文件头）
+const { sanitizeGameInit, gameWindowBounds, sanitizeGameInput, gameIgnoresMouse } = require('./game-launch.js');
 
 // 允许无用户手势直接播放（余额动画等）
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
@@ -307,6 +309,7 @@ const petStates = new Map();
 function broadcastPetStates() {
   const states = {};
   for (const [pid, s] of petStates) {
+    if (pid === gamePetId) continue; // 跳进「弹弓」的宠物此刻不在桌面上
     states[pid] = { x: s.x, y: s.y, vx: s.vx, vy: s.vy, size: s.size, bottomPad: s.bottomPad };
   }
   for (const win of windows.values()) {
@@ -548,6 +551,157 @@ function createPetWindows() {
       });
     windows.set(pet.id, win);
   }
+}
+
+// ---------- 「弹弓」小互动窗口（宠物右键菜单打开；同一时间只开一个） ----------
+// 透明无边框、**不置顶**：弹弓 / 木箱 / 宠物直接画在桌面上（没有背景），铺满宠物所在屏的整个工作区
+// （底边贴任务栏）。除宠物身体（与右键菜单）外整窗点击穿透——透明处照常操作桌面，就像桌宠本身。
+// 不置顶 = 不满足 DWM 黑屏「透明置顶」那一项，见 game-launch.js 文件头。退出：Esc / 宠物右键「回到桌面」。
+// 宠物「跳进弹弓」：窗口显示后藏起发起它的宠物窗口并通知其冻结；窗口关闭后宠物回到桌面原处。
+// 每次进入都是**全新的窗口与页面**：页面里没有任何跨会话状态，关窗即全部释放（物理循环、视频、粒子）。
+let gameWin = null;
+/** 弹弓开着时被藏起的那只宠物：碰撞站场不广播它、撞击也不转发给它（看不见的宠物不该被撞飞，
+ *  否则退出时它会出现在别处，违背「回到原处」） */
+let gamePetId = null;
+/** 已开着时又点了「弹弓」：先关掉旧窗口（宠物归位），关完再按这次的请求开新窗口 */
+let pendingGameOpen = null;
+/** 页面上报的交互区域（CSS 像素）+ 是否正拿着鼠标（拖拽 / 菜单） */
+let gameInput = { regions: [], busy: false };
+/** busy 从什么时候开始一直为真（ms）；0 = 不忙 */
+let gameBusySince = 0;
+/** busy 最长认多久：页面若在拖拽 / 菜单途中出了问题再也报不出 busy=false，过时后照常按光标判穿透，
+ *  不让一个铺满工作区的透明窗口一直吞掉桌面点击（正常拖拽 / 菜单远用不到这么久） */
+const GAME_BUSY_MAX_MS = 30000;
+/** 主进程按真实光标位置判穿透的轮询周期（与宠物窗口的兜底通道同频） */
+const GAME_POINTER_POLL_MS = 40;
+
+/** 弹弓窗口的安全阀：不依赖页面脚本也能 Esc 退出；拖进来的文件 / 链接不导航；渲染进程挂了直接收掉——
+ *  否则一个铺满工作区的透明窗口会留在桌面上，宠物也回不来 */
+function guardGameWindow(win) {
+  win.webContents.on('before-input-event', (event, input) => {
+    if (input.type === 'keyDown' && input.key === 'Escape') win.close();
+  });
+  win.webContents.on('will-navigate', (event) => event.preventDefault());
+  win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  win.webContents.on('render-process-gone', () => {
+    if (!win.isDestroyed()) win.destroy();
+  });
+  win.webContents.on('context-menu', (event) => event.preventDefault());
+}
+
+/** 点击穿透：默认整窗穿透；光标进到宠物身体（或拖拽 / 菜单进行中）才接住鼠标。返回停止轮询的函数。
+ *  翻转一律走 setWindowIgnore（与宠物窗口同一个出口，镜像状态不失步） */
+function startGamePointerPoll(win, zoom) {
+  const id = win.id;
+  setWindowIgnore(win, true);
+  const timer = setInterval(() => {
+    if (win.isDestroyed()) return;
+    const next = gameIgnoresMouse({
+      bounds: win.getContentBounds(),
+      point: screen.getCursorScreenPoint(),
+      zoom,
+      regions: gameInput.regions,
+      busy: gameInput.busy && Date.now() - gameBusySince < GAME_BUSY_MAX_MS,
+    });
+    if (next !== windowIgnore.get(id)) setWindowIgnore(win, next);
+  }, GAME_POINTER_POLL_MS);
+  return () => {
+    clearInterval(timer);
+    windowIgnore.delete(id);
+  };
+}
+
+function onGameWindowClosed(petWin, stopPoll, onPetClosed) {
+  stopPoll();
+  gameWin = null;
+  gamePetId = null;
+  gameInput = { regions: [], busy: false };
+  gameBusySince = 0;
+  if (!petWin.isDestroyed()) petWin.removeListener('closed', onPetClosed);
+  broadcastPetStates(); // 宠物回到碰撞站场
+  if (!petWin.isDestroyed()) {
+    petWin.showInactive();
+    petWin.webContents.send('pet:game-state', { active: false });
+  }
+  const next = pendingGameOpen;
+  pendingGameOpen = null;
+  if (next && !next.petWin.isDestroyed()) openGameWindow(next.petWin, next.init);
+}
+
+function openGameWindow(petWin, init) {
+  if (gameWin && !gameWin.isDestroyed()) {
+    pendingGameOpen = { petWin, init };
+    gameWin.close();
+    return;
+  }
+  const scale = petScale();
+  const bounds = gameWindowBounds({ workArea: screen.getDisplayMatching(petWin.getBounds()).workArea });
+  const win = new BrowserWindow({
+    ...bounds,
+    useContentSize: true,
+    show: false,
+    title: '弹弓 · ' + init.petName,
+    frame: false,
+    transparent: true,
+    backgroundColor: '#00000000',
+    hasShadow: false,
+    resizable: false,
+    maximizable: false,
+    fullscreenable: false,
+    alwaysOnTop: false,
+    webPreferences: {
+      preload: path.join(__dirname, 'game-preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true, // preload 只暴露 reportInput 一个口子；素材走 bridge scheme / 本机 HTTP，退出用 window.close()
+      spellcheck: false,
+      backgroundThrottling: false, // 被别的窗口盖住时也照常推进物理与动画
+    },
+  });
+  win.removeMenu();
+  guardGameWindow(win);
+  gameInput = { regions: [], busy: false };
+  gameBusySince = 0;
+  const stopPoll = startGamePointerPoll(win, scale);
+  // 显示窗口并让宠物「跳进去」：藏起宠物窗口、通知其冻结、从碰撞站场拿掉（幂等，只做一次）
+  let revealed = false;
+  const reveal = () => {
+    if (revealed || win.isDestroyed()) return;
+    revealed = true;
+    win.show();
+    if (petWin.isDestroyed()) return;
+    gamePetId = [...windows.keys()].find((id) => windows.get(id) === petWin) || null;
+    petWin.hide();
+    // 弹弓开着期间宠物窗口必须一直藏着：它自己的首次显示（ready-to-show / #55 兜底）若恰好晚于这里，
+    // 会把刚藏起的窗口又显示出来——那样桌面上同时有两只宠物，藏着的那只还能被点到
+    petWin.on('show', keepPetHidden);
+    petWin.webContents.send('pet:game-state', { active: true });
+    broadcastPetStates();
+  };
+  win.once('ready-to-show', reveal);
+  win.webContents.on('did-finish-load', () => {
+    // 与宠物窗口同一套页面级缩放：DPI 线性化后提示气泡 / 菜单按主屏缩放放大回正常观感
+    win.webContents.setZoomFactor(scale);
+    // [#55 同款兜底] ready-to-show 可能永不触发：页面加载完仍没显示就强制显示一次
+    setTimeout(reveal, 400);
+  });
+  function keepPetHidden() {
+    if (!win.isDestroyed() && !petWin.isDestroyed()) petWin.hide();
+  }
+  // 发起它的宠物窗口没了（重载配置 / 显示器变化重建桌面宠物）：弹弓跟着收掉，新窗口里的宠物才不会被当成「还在弹弓里」
+  const onPetClosed = () => {
+    if (!win.isDestroyed()) win.close();
+  };
+  petWin.once('closed', onPetClosed);
+  win.on('closed', () => {
+    if (!petWin.isDestroyed()) petWin.removeListener('show', keepPetHidden);
+    onGameWindowClosed(petWin, stopPoll, onPetClosed);
+  });
+  win.loadFile('game.html', { query: { init: JSON.stringify(init) } }).catch((error) => {
+    console.error('[dsh-pet-desktop-helper] slingshot page load failed:', error);
+    if (!win.isDestroyed()) win.destroy();
+  });
+  gameWin = win;
 }
 
 // ---------- bridge 协议（渲染端 custom scheme → 本进程 → 宿主 stdout JSON 行 + 本地回调） ----------
@@ -856,6 +1010,7 @@ app.whenReady().then(() => {
     const vx = Number(payload?.vx);
     const vy = Number(payload?.vy);
     if (!targetId || !Number.isFinite(vx) || !Number.isFinite(vy)) return;
+    if (targetId === gamePetId) return; // 在游戏里的宠物不在桌面上（站场里也没广播它，这里兜一层陈旧状态）
     const targetWin = windows.get(targetId);
     if (targetWin && !targetWin.isDestroyed()) {
       targetWin.webContents.send('pet:hit', { vx, vy });
@@ -942,6 +1097,27 @@ app.whenReady().then(() => {
       return;
     }
     openSite(url);
+  });
+
+  // 右键「弹弓」：载荷（宠物名 + 素材根 + 动画）过校验后开弹弓窗口；已开着则先关旧的再开新的（每次都是新会话）
+  ipcMain.on('pet:open-game', (event, payload) => {
+    const petWin = BrowserWindow.fromWebContents(event.sender);
+    if (!petWin || petWin.isDestroyed()) return;
+    const init = sanitizeGameInit(payload);
+    if (!init) {
+      console.error('[dsh-pet-desktop-helper] pet:open-game rejected: invalid payload');
+      return;
+    }
+    openGameWindow(petWin, init);
+  });
+
+  // 弹弓页面上报交互区域（宠物身体 / 菜单）与是否正拿着鼠标：只认当前弹弓窗口发来的
+  ipcMain.on('game:input', (event, payload) => {
+    if (!gameWin || gameWin.isDestroyed() || event.sender !== gameWin.webContents) return;
+    const next = sanitizeGameInput(payload);
+    if (next.busy && !gameInput.busy) gameBusySince = Date.now();
+    if (!next.busy) gameBusySince = 0;
+    gameInput = next;
   });
 
   // 显示器热更新：分辨率/缩放变化、插拔屏、旋转都会让桌面几何失效。原先几何只在
