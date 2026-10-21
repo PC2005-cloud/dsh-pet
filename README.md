@@ -8,7 +8,6 @@
   <br><sub>右键「弹弓」：透明窗口直接画在桌面上（图里的蓝底只是为了看清透明区域）。上：开局；下：撞上木箱之后。</sub>
 </p>
 
-上游的 dsh-pet 是一只住在 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（DSH）里的桌面宠物，也能用 `dsh-pet-standalone` 脱离 DSH 单独运行——但独立模式下**对话、碎碎念不可用**（它们依赖 DSH 的模型与凭证）。
 
 这个 fork 面向**只用桌面宠物、不装 DSH** 的场景，补上了三块：
 
@@ -32,9 +31,6 @@ npm run build               # 构建 lib + 桌面共享核心 + 弹弓用的 mat
 npm run standalone          # 启动：http://127.0.0.1:3080/dsh-pet-7340/（端口被占会顺延）
 ```
 
-- 首次启动会自动下载 Electron（放在 `DSH_HOME` 下），之后桌面上出现透明置顶的宠物小窗。
-- `node lib/standalone.js --port 3100` 换端口；`--check` 只体检不开窗口；`Ctrl+C` 或 `POST /shutdown` 退出。
-- 宠物配置与上游同一份：`$DSH_HOME/dsh-pet/main-config.jsonc`（大小、位置、动画权重……），字段说明见上游 README。
 
 ---
 

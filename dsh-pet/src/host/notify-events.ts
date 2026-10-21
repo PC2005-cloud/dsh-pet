@@ -70,6 +70,17 @@ export function sessionIdOf(session: unknown): string {
 }
 
 /**
+ * 把会话 id 附到通知帧上 —— 点击通知时网页据此跳到那条会话（客户端 `uiWorkspace.openSession`）。
+ *
+ * `sessionIdOf` 的兜底值是字符串 `'unknown'`（它同时是活动门定时器的 Map 键，必须有值），
+ * 但那不是一条真会话，不能拿去跳转：只有真 id 才写进帧，取不到就原样返回，点击退化成
+ * 「只把窗口叫回前台」——与「判据不可用时放行」同一条兜底原则。
+ */
+export function withSessionId(frame: HostNotifyFrame, sessionId: string): HostNotifyFrame {
+  return sessionId === 'unknown' ? frame : { ...frame, sessionId };
+}
+
+/**
  * 这一条事件是不是「对话完成」——活动门（issue #114）只拦它。
  *
  * 只认 `turn/end` + `reason.kind === 'completed'`：生成失败 / 输出截断（error / max-tokens）是

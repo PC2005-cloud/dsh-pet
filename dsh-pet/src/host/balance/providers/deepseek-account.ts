@@ -8,7 +8,7 @@
  * 金额语义也对齐官方定义 —— `total` = 赠送 + 充值（`granted` + `toppedUp`）。差异只在取数。
  * 档位基准与峰谷档位取自 ./deepseek-common.ts（两条 deepseek 路由同一套口径）。
  */
-import { DEEPSEEK_FULL_BALANCE, deepseekPricingTier } from '../deepseek-common';
+import { deepseekFullBalance, deepseekPricingTier } from '../deepseek-common';
 import { money, obj, sumMoney } from '../internal';
 import type { AccountBalanceSnapshot, BalanceProvider, BalanceSuccess } from '../types';
 
@@ -18,7 +18,8 @@ import type { AccountBalanceSnapshot, BalanceProvider, BalanceSuccess } from '..
  * 失败口径：没有可用的充值钱包（未登录 / 查询失败 / 空数组）→ 抛错，由调用方落成 `fetch-error`；
  * 金额非法同理 —— **绝不伪造 0 余额**。
  *
- * 币种：钱包自带 `CNY`/`USD`，这里一并带出去，展示层据此选符号（CNY → ¥）。
+ * 多币种：账号可能同时持有 CNY / USD 钱包，**每个币种各出一条**（`data.wallets`），
+ * 选哪个显示交给展示层（它才知道气泡宽度、要不要显示为 0 的币种）。
  */
 export function parseAccountBalance(
   snapshot: AccountBalanceSnapshot | null | undefined,
@@ -29,44 +30,50 @@ export function parseAccountBalance(
   const wallets = Array.isArray(snapshot.value) ? snapshot.value : [];
   // 充值钱包为空 = 这个账号没有可展示的余额（常见于只送不充的新号）→ 报错而非显示 ¥0.00
   if (wallets.length === 0) throw new Error('dsh-pet: 账号没有充值钱包余额');
-  // 账号可能同时持有多个币种钱包（例如「USD 0.00 + CNY 有余额」）。旧实现只取 wallets[0]，
-  // 会把排在前面的空 USD 钱包当成账户余额，显示成 $0.00。这里改为：先挑余额最大的那个
-  // （有余额的才是用户真正关心的），金额相同或全为 0 时 CNY 优先。
+  // 旧实现只取 wallets[0]，会把排在前面的空 USD 钱包当成账户余额，显示成 $0.00。
+  // 现在**全部搬出去**（多币种各一条），由展示层决定显示哪些——选哪个币种不该在取数层丢掉。
   const candidates = wallets.map((w) => obj(w as unknown)).filter((w): w is Record<string, unknown> => w !== undefined);
   if (candidates.length === 0) throw new Error('dsh-pet: 账号钱包结构非法');
-  const walletAmount = (w: Record<string, unknown>): number => {
-    const n = Number(w.balance);
-    return Number.isFinite(n) ? n : 0;
-  };
-  const chosen = [...candidates].sort((a, b) => {
-    const byAmount = walletAmount(b) - walletAmount(a);
-    if (byAmount !== 0) return byAmount;
-    const rank = (w: Record<string, unknown>) => (w.currency === 'CNY' ? 0 : 1);
-    return rank(a) - rank(b);
-  })[0] as Record<string, unknown>;
-  const currency = typeof chosen.currency === 'string' && chosen.currency.length > 0 ? chosen.currency : 'CNY';
-  const toppedUp = money(chosen.balance, 'balance');
-  // 赠送钱包：与充值同币种的那个（币种不同不硬配，见下）
-  const bonus = (Array.isArray(snapshot.bonusWallets) ? snapshot.bonusWallets : [])
-    .map((w) => obj(w as unknown))
-    .find((w) => w !== undefined && w.currency === currency);
-  const granted = bonus ? money(bonus.balance, 'bonus balance') : '0.00';
+
+  // 充值额按币种聚合（同币种出现多条钱包时累加，不丢钱）
+  const toppedUpBy = new Map<string, string>();
+  for (const w of candidates) {
+    const currency = typeof w.currency === 'string' && w.currency.length > 0 ? w.currency : 'CNY';
+    const amount = money(w.balance, 'balance');
+    const prev = toppedUpBy.get(currency);
+    toppedUpBy.set(currency, prev === undefined ? amount : sumMoney(prev, amount));
+  }
+  // 赠送额同样按币种聚合；币种非法的那条跳过（无法归属，不硬配）
+  const grantedBy = new Map<string, string>();
+  for (const raw of Array.isArray(snapshot.bonusWallets) ? snapshot.bonusWallets : []) {
+    const w = obj(raw as unknown);
+    if (!w || typeof w.currency !== 'string' || w.currency.length === 0) continue;
+    const amount = money(w.balance, 'bonus balance');
+    const prev = grantedBy.get(w.currency);
+    grantedBy.set(w.currency, prev === undefined ? amount : sumMoney(prev, amount));
+  }
+  // 只在赠送钱包里出现的币种也补一条：那笔余额是真实可用的，不能因为"没有充值钱包"就凭空消失
+  for (const currency of grantedBy.keys()) {
+    if (!toppedUpBy.has(currency)) toppedUpBy.set(currency, '0.00');
+  }
+
+  const walletsOut = [...toppedUpBy.entries()].map(([currency, toppedUp]) => {
+    const granted = grantedBy.get(currency) ?? '0.00';
+    const fullBalance = deepseekFullBalance(currency);
+    return {
+      currency,
+      // 与官方路由**同构**：官方文档定义 total_balance = 赠送 + 充值，这里由两个钱包加出来
+      total: sumMoney(granted, toppedUp),
+      granted,
+      toppedUp,
+      ...(fullBalance === undefined ? {} : { fullBalance }),
+    };
+  });
   return {
     ok: true,
     provider,
     shape: 'money',
-    data: {
-      currency,
-      // 与官方路由**同构**：官方文档定义 total_balance = "The total available balance,
-      // including the granted balance and the topped-up balance" —— 即 赠送 + 充值。
-      // 只取充值会漏掉赠送额，让可用余额偏小。
-      total: sumMoney(granted, toppedUp),
-      // deepseek-official 的 granted/toppedUp 语义在账号侧对应「赠送 / 充值」两个钱包
-      granted,
-      toppedUp,
-      fullBalance: DEEPSEEK_FULL_BALANCE,
-      tier: deepseekPricingTier(),
-    },
+    data: { wallets: walletsOut, tier: deepseekPricingTier() },
   };
 }
 

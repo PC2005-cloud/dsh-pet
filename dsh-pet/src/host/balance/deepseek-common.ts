@@ -7,12 +7,18 @@
 import type { PricingTier } from './types';
 
 /**
- * 余额档位基准（¥）：余额 ≥ 该值视为 100%（未消耗），据此把余额折算成「已用百分比」驱动档位动画。
- * 余额 20 元 → 0%，10 元 → 50%，0 元 → 100%。
+ * 余额档位基准（**按币种**）：余额 ≥ 该值视为 100%（未消耗），据此把余额折算成「已用百分比」驱动档位动画。
+ * 人民币 20 元 → 0%，10 元 → 50%，0 元 → 100%；美元 5 元同理。
  *
- * 为什么是 ¥20：DeepSeek 充值以 10 元为最小档，20 元是「余量充足」的常用参照；低于它才开始示警。
+ * 为什么是这两个数：DeepSeek 充值以 10 元为最小档，20 元是「余量充足」的常用参照；美元侧取 5 美元。
+ * **币种不同，基准不能互相换算**——各算各的比例再叠加，不需要汇率。
  */
-export const DEEPSEEK_FULL_BALANCE = '20';
+export const DEEPSEEK_FULL_BALANCE: Record<string, string> = { CNY: '20', USD: '5' };
+
+/** 取某币种的档位基准；没有基准的币种返回 undefined（不参与档位折算，也不替它猜一个） */
+export function deepseekFullBalance(currency: string): string | undefined {
+  return DEEPSEEK_FULL_BALANCE[currency];
+}
 
 /**
  * DeepSeek 峰谷计价档位（北京时间）：

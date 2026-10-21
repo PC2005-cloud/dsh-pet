@@ -70,9 +70,53 @@ export const NOTIFY_ICONS = {
 /** 当前生效的总开关（运行中可被 reloadNotifications 更新——设置页保存后即时生效，无需刷新） */
 let notifyEnabled = true;
 
+/**
+ * 会话跳转器：由 app.ts 装配时注入（包装 DSH 客户端的 `uiWorkspace.openSession`）。
+ * 抽成接口是为了让本模块不 direct 依赖 DSH 服务类型，取不到服务时天然退化成"不跳会话"。
+ */
+export interface SessionNavigator {
+  openSession(sessionId: string): void;
+}
+
+/** 当前生效的会话跳转器（app.ts 注入；旧版 DSH 没有 uiWorkspace 时为 undefined） */
+let sessionNavigator: SessionNavigator | undefined;
+
+/**
+ * 点通知 → 切到那条会话 + 聚焦页面 + 请桌面壳把主窗口叫回前台。
+ *
+ * 1. `openSession(sessionId)`：**页内**切会话。只改前端状态，窗口还在后台也能切——先切再叫窗口，
+ *    用户看到窗口的那一刻就是目标会话，不会先闪一下旧对话；
+ * 2. `window.focus()`：浏览器宿主下由浏览器把页签带到前台；
+ * 3. 隐藏 iframe 导航 `dsh://open`：页面只能聚焦自己这一层，恢复不了**最小化**的宿主窗口
+ *    （那是 Electron 主进程的事）→ 协议 → 第二实例锁 → `focusPrimaryWindow()`。零子进程、零新接口。
+ *    只在 Electron 宿主里发：浏览器里导航 `dsh://` 会弹拦截框，而浏览器点通知本来就会带前页签。
+ *
+ * `sessionId` 缺失（旧版宿主 / 拿不到会话位置的事件）时跳过第 1 步，其余照旧。
+ */
+export function wireNotificationClick(n: Notification, sessionId?: string): void {
+  n.onclick = () => {
+    n.close();
+    if (sessionId !== undefined) {
+      // 跳转失败（会话已删 / 旧版没有该服务）绝不能连累"把窗口叫回来"那条腿
+      try {
+        sessionNavigator?.openSession(sessionId);
+      } catch {
+        /* 不跳会话而已，继续叫窗口 */
+      }
+    }
+    window.focus();
+    if (!/electron/i.test(navigator.userAgent)) return;
+    const frame = document.createElement('iframe');
+    frame.style.display = 'none';
+    frame.src = 'dsh://open';
+    document.body.append(frame);
+    setTimeout(() => frame.remove(), 1000);
+  };
+}
+
 /** 发一条系统通知；总开关关闭 / 环境不支持 / 未授权 / 聚焦本页 时静默跳过。
  * 日志（【弹窗】类型：内容）在门之后记录——只有真正发出通知时才记，被门拦下的触发不产生日志。 */
-function toast(title: string, body?: string, icon?: string): void {
+function toast(title: string, body?: string, icon?: string, sessionId?: string): void {
   if (!notifyEnabled) return;
   if (isPageActive()) return;
   if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
@@ -81,22 +125,20 @@ function toast(title: string, body?: string, icon?: string): void {
     const opts: NotificationOptions = {};
     if (body) opts.body = truncate(body);
     if (icon) opts.icon = icon;
-    // 点击通知：聚焦回 DSH 页面并关闭该通知（图标加载失败只降级为无图标，绝不关闭弹窗）
+    // 点击通知：跳到那条会话 + 聚焦回 DSH 页面 + 把桌面宿主窗口叫回前台（图标加载失败只降级为无图标，绝不关闭弹窗）
     const n = new Notification(title, opts);
-    n.onclick = () => {
-      window.focus();
-      n.close();
-    };
+    wireNotificationClick(n, sessionId);
   } catch {
     /* 个别环境（e.g. 部分桌面壳）可能在构造时抛错：忽略，不打断业务 */
   }
 }
 
-/** 帧 → toast 并发出（映射来自 shared；未知帧静默跳过） */
+/** 帧 → toast 并发出（映射来自 shared；未知帧静默跳过）。
+ * 帧里的 sessionId 一并透传：点击时据此跳到那条会话。 */
 function toastFrame(frame: NotifyFrame): void {
   const t = frameToToast(frame);
   if (!t) return;
-  toast(t.title, t.body, PIC(t.icon));
+  toast(t.title, t.body, PIC(t.icon), typeof frame.sessionId === 'string' ? frame.sessionId : undefined);
 }
 
 /** 申请浏览器通知权限的结果：ok=true 已授予；ok=false 带失败原因（供设置页红字展示） */
@@ -153,11 +195,13 @@ export function notifyFromFrame(frame: unknown): void {
 }
 
 /**
- * 初始化系统通知引擎（**不做轮询**）：读总开关 + 兜底申请权限 + 跟踪页面聚焦。
+ * 初始化系统通知引擎（**不做轮询**）：读总开关 + 兜底申请权限 + 跟踪页面聚焦 + 记住会话跳转器。
  * 帧的消费改为容器统一轮询 /state 后调 notifyFromFrame（见 pet.ts 的分发）。
  * 返回释放函数（摘掉聚焦监听），由 ctx.effect 在插件卸载时调用。
+ * @param navigator 会话跳转器（app.ts 包装 DSH 的 uiWorkspace）；不传 = 点击只叫窗口、不跳会话
  */
-export function initNotify(): () => void {
+export function initNotify(navigator?: SessionNavigator): () => void {
+  sessionNavigator = navigator;
   // 总开关读成品配置（拉取失败不阻塞，默认开启）；之后由设置页保存后 reloadNotifications 重读
   void readNotificationsEnabled().then((enabled) => {
     notifyEnabled = enabled;

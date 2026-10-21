@@ -98,7 +98,7 @@ describe('balanceBubbleView —— 不可用状态必须给出可读的文字说
       provider: 'deepseek-official',
       ok: true,
       shape: 'money',
-      total: '8.79',
+      wallets: [{ currency: 'CNY', total: '8.79', granted: '0.00', toppedUp: '8.79' }],
       tier: 'idle',
     });
     assert.equal(ds[0]?.text, '余额（');
@@ -111,8 +111,7 @@ describe('balanceBubbleView —— 不可用状态必须给出可读的文字说
       provider: 'some-wallet',
       ok: true,
       shape: 'money',
-      currency: 'CNY',
-      total: '8.79',
+      wallets: [{ currency: 'CNY', total: '8.79', granted: '0.00', toppedUp: '8.79' }],
     });
     assert.deepEqual(rows, [{ role: 'label', text: '余额 ¥8.79' }]);
   });
@@ -136,7 +135,7 @@ describe('balanceBubbleView —— 不可用状态必须给出可读的文字说
       provider: 'deepseek-official',
       ok: true,
       shape: 'money',
-      total: '8.79',
+      wallets: [{ currency: 'CNY', total: '8.79', granted: '0.00', toppedUp: '8.79' }],
       tier: 'idle',
     });
     // 账号路由：同一 shape、同一结构
@@ -144,8 +143,7 @@ describe('balanceBubbleView —— 不可用状态必须给出可读的文字说
       provider: 'deepseek-account',
       ok: true,
       shape: 'money',
-      currency: 'CNY',
-      total: '9.99',
+      wallets: [{ currency: 'CNY', total: '9.99', granted: '0.00', toppedUp: '9.99' }],
       tier: 'idle',
     });
     assert.deepEqual(
@@ -161,8 +159,7 @@ describe('balanceBubbleView —— 不可用状态必须给出可读的文字说
       provider: 'deepseek-account',
       ok: true,
       shape: 'money',
-      currency: 'USD',
-      total: '12.50',
+      wallets: [{ currency: 'USD', total: '12.50', granted: '0.00', toppedUp: '12.50' }],
       tier: 'idle',
     });
     assert.equal(usd[2]?.text, '）$12.50');
@@ -331,8 +328,15 @@ describe('money —— 档位基准由数据带出（展示层不再写死任何
     provider: 'some-wallet',
     shape: 'money',
     ok: true,
-    total,
-    fullBalance,
+    wallets: [
+      {
+        currency: 'CNY',
+        total,
+        granted: '0.00',
+        toppedUp: total,
+        ...(fullBalance === undefined ? {} : { fullBalance }),
+      },
+    ],
   });
 
   test('基准 20：余额 20 → 0%，10 → 50%，0 → 100%，负数按已用完', () => {
@@ -355,24 +359,68 @@ describe('money —— 档位基准由数据带出（展示层不再写死任何
     assert.equal(balancePercent(view('20', 'abc')), undefined);
   });
 
-  test('toBalanceState：money 叶子带出基准与档位装饰；非法档位值视为没给', () => {
+  test('多币种：各币种按自己的基准算剩余比例再叠加（不需要汇率）', () => {
+    const multi = (cny: string, usd: string): BalanceView => ({
+      provider: 'deepseek-account',
+      shape: 'money',
+      ok: true,
+      wallets: [
+        { currency: 'CNY', total: cny, granted: '0.00', toppedUp: cny, fullBalance: '20' },
+        { currency: 'USD', total: usd, granted: '0.00', toppedUp: usd, fullBalance: '5' },
+      ],
+    });
+    // 100 − 100×(8.16/20 + 0/5) = 59.2（二进制浮点会有尾差，比到 1e-9）
+    const near = (a: number | undefined, b: number): boolean => a !== undefined && Math.abs(a - b) < 1e-9;
+    assert.ok(near(balancePercent(multi('8.16', '0.00')), 59.2), String(balancePercent(multi('8.16', '0.00'))));
+    // 100 − 100×(8.16/20 + 5/5) = −40.8 → 夹到 0（美元满额把消耗抵掉了）
+    assert.equal(balancePercent(multi('8.16', '5.00')), 0);
+    // 两个都空 → 100
+    assert.equal(balancePercent(multi('0.00', '0.00')), 100);
+    // 一个币种没有基准 → 它不参与，只按有的那个算
+    const partial: BalanceView = {
+      provider: 'x',
+      shape: 'money',
+      ok: true,
+      wallets: [{ currency: 'JPY', total: '100', granted: '0.00', toppedUp: '100' }],
+    };
+    assert.equal(balancePercent(partial), undefined, '全都没有基准 → 不播档位');
+  });
+
+  test('toBalanceState：money 叶子带出钱包数组与档位装饰；非法档位值视为没给', () => {
     const s = toBalanceState({
       ok: true,
       provider: 'some-wallet',
       shape: 'money',
-      data: { currency: 'CNY', total: '8.79', fullBalance: '20', tier: 'peak' },
+      data: {
+        wallets: [{ currency: 'CNY', total: '8.79', granted: '1.00', toppedUp: '7.79', fullBalance: '20' }],
+        tier: 'peak',
+      },
     });
     assert.ok(s && s.ok && s.shape === 'money');
-    assert.equal(s.fullBalance, '20');
+    assert.deepEqual(s.wallets, [
+      { currency: 'CNY', total: '8.79', granted: '1.00', toppedUp: '7.79', fullBalance: '20' },
+    ]);
     assert.equal(s.tier, 'peak');
+
     const bad = toBalanceState({
       ok: true,
       provider: 'some-wallet',
       shape: 'money',
-      data: { currency: 'CNY', total: '8.79', tier: '???', fullBalance: 20 },
+      data: { wallets: [{ currency: 'CNY', total: '8.79', fullBalance: 20 }], tier: '???' },
     });
     assert.ok(bad && bad.ok && bad.shape === 'money');
     assert.equal(bad.tier, undefined, '不认识的档位值 → 不渲染峰谷');
-    assert.equal(bad.fullBalance, undefined, '非字符串基准 → 视为没给');
+    assert.equal(bad.wallets?.[0]?.fullBalance, undefined, '非字符串基准 → 视为没给');
+    assert.equal(bad.wallets?.[0]?.granted, '0.00', '缺分项 → 记 0.00');
+  });
+
+  test('toBalanceState：wallets 为空/结构非法 → null（认不出响应，不渲染这一拍）', () => {
+    assert.equal(toBalanceState({ ok: true, provider: 'x', shape: 'money', data: { wallets: [] } }), null);
+    assert.equal(toBalanceState({ ok: true, provider: 'x', shape: 'money', data: {} }), null);
+    assert.equal(
+      toBalanceState({ ok: true, provider: 'x', shape: 'money', data: { wallets: [{ total: '8.79' }] } }),
+      null,
+      '缺 currency 的项被丢弃，丢光就是认不出',
+    );
   });
 });

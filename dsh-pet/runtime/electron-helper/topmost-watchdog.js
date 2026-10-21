@@ -1,28 +1,107 @@
 /**
  * dsh-pet desktop helper —— 置顶看门狗（纯判定部分）。
  *
- * 【现场】0.3.6 桌面模式，Windows + 双屏，DSH 主窗最大化：桌宠整只沉到 DSH 主窗下面，
- * 用户看到的就是「宠物不见了」——而进程活着、渲染也正常（PrintWindow 抓得到宠物和气泡）、
- * 动画照跑，就是屏幕上没有。实测 z 序：DSH 主窗（普通窗，非置顶）在桌宠窗之上，
- * 而桌宠窗的 `WS_EX_TOPMOST` 位**仍然是真**。
+ * ┌────────────────────────────────────────────────────────────────────────────┐
+ * │ 【当前状态：默认关闭】`TOPMOST_WATCHDOG_ENABLED = false`（见下方常量）        │
+ * │                                                                              │
+ * │ 关掉不是因为它没用，而是它兜的是一个没查清的 bug，代价却由别的场景替它承担。   │
+ * └────────────────────────────────────────────────────────────────────────────┘
  *
- * 【为什么样式位为真也说明不了问题】`WS_EX_TOPMOST` 只是**样式位**，窗口在不在「置顶带」是
- * 另一回事：Win32 规定该位必须经 `SetWindowPos(HWND_TOPMOST | HWND_NOTOPMOST)` 才能真正落带，
- * 直接写 `GWL_EXSTYLE` 只会把位写上去、**不会**把窗口挪回置顶带——于是出现「位在、带不在」
- * 这个自相矛盾的状态（本机实测：对已沉底的窗口按 `GetWindowLong` 原值或回写该位，窗口依旧在
- * 普通带里）。而 Electron 在 Windows 上翻转点击穿透用的正是 `SetWindowLong(GWL_EXSTYLE)`
- * 读-改-写（native_window_views.cc 的 `SetIgnoreMouseEvents`）：桌宠每进出一次身体命中区、
- * 外加 60ms 兜底轮询，都会把它写一遍，所以这个位随时可能被写回，却与「谁在最上面」无关。
+ * ---------------------------------------------------------------------------
+ * 一、它在兜什么
+ * ---------------------------------------------------------------------------
  *
- * 【为什么要复查】建窗时那一次 `setAlwaysOnTop(true, 'screen-saver')` 之后再没有任何地方检查过
- * 窗口是否还在置顶带；外部任何一次 z 序扰动（桌面上同时跑着多个置顶浮层：输入法候选、别的桌宠、
- * 桌面歌词、任务栏……）都可能让桌宠永久沉底，直到 helper 重启才恢复。
+ * 0.3.6 现场（Windows 双屏 + DSH 主窗最大化）：桌宠整只沉到 DSH 主窗下面，
+ * 进程活着、渲染正常（PrintWindow 抓得到宠物和气泡）、动画照跑，就是屏幕上没有。
+ * 实测 z 序：DSH 主窗（普通窗，非置顶）在桌宠窗之上，而桌宠窗的 `WS_EX_TOPMOST` 位**仍为真**。
  *
- * 【为什么可以无脑复查】`setAlwaysOnTop(true, 'screen-saver')` 在 Electron / Chromium 里最终就是
- * 一次 `SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE)`
- * （NativeWindowViews::SetAlwaysOnTop → DesktopWindowTreeHostWin::SetZOrderLevel →
- * HWNDMessageHandler::SetAlwaysOnTop，全链无早退、无状态比较）：不移动、不缩放、不重绘、不抢焦点。
- * 反过来，`moveTop()`（HWND_TOP）对已沉底的窗口**无效**（实测仍在普通带里），不能拿来当兜底。
+ * 成因是「样式位 ≠ 置顶带」：`WS_EX_TOPMOST` 必须经 `SetWindowPos(HWND_TOPMOST)` 才真正落带，
+ * 直接写 `GWL_EXSTYLE` 只把位写上去、不挪带（本机实测：回写该位后窗口仍在普通带）。
+ * 于是查位的人（`isAlwaysOnTop()`、`GetWindowLong`）永远得到 true ——「宠物没了」这件事
+ * 从常规检查里根本看不出来，只能在外部盲钉。
+ *
+ * 看门狗的做法：每 `TOPMOST_REASSERT_MS`（5s）调一次 `setAlwaysOnTop(true, 'screen-saver')`，
+ * 落到 Win32 就是一次 `SetWindowPos(hwnd, HWND_TOPMOST, …SWP_NOMOVE|SWP_NOSIZE|SWP_NOACTIVATE)`。
+ * 不移动、不缩放、不重绘、不抢焦点 —— 在它自己的尺度上「无副作用」。
+ *
+ * ---------------------------------------------------------------------------
+ * 二、代价：它会把宠物抬到**所有**置顶窗口之上
+ * ---------------------------------------------------------------------------
+ *
+ * `HWND_TOPMOST` 落带 = 放到置顶带**最上面**；Windows 没有「带内垫底」的 API
+ * （`HWND_BOTTOM` 是踢出置顶带，不是带内垫底）。所以每 5 秒一次的重钉会把桌宠压到
+ * 别的置顶窗口头顶上：
+ *
+ *   - 全屏游戏（LOL、绝地潜兵等）：宠物视觉上被游戏盖住，但点击宠物区域会让宠物拿到前台，
+ *     游戏立刻失去全屏掉回桌面（#139 / #113）。报告者明确指出「0.3.7 有、0.3.6 无」，
+ *     而看门狗正是在 0.3.7 引入的 —— 时间上吻合，不是因果证明，但足以作为主要嫌疑。
+ *   - 截图（微信 / 企业微信 / 系统截图）：截图工具的浮层同样是置顶窗口，被宠物压住之后，
+ *     光标进入宠物区域会变回宠物交互光标，截图无法完成。
+ *   - 录屏、共享屏幕、全屏演示：同理，宠物会出现在本该只有内容的最上层。
+ *
+ * 注意：以上都是「重新开启看门狗之后会回来的代价」，不是当前状态。默认关闭时宠物不会
+ * 主动抢任何置顶窗口的位置，截图与全屏游戏都正常。
+ *
+ * ---------------------------------------------------------------------------
+ * 三、一个稳定复现的沉底样本（2026-10 现场）
+ * ---------------------------------------------------------------------------
+ *
+ * 这是看门狗要兜的一类问题：宠物被别的置顶窗口挡在后面。看门狗开着时，每 5 秒那次重钉
+ * 能把宠物从对方底下压回来（画面会闪）；默认关闭后宠物就一直被挡。
+ *
+ * 现象：某次「显示桌面 + 恢复」之后，**当时最上面的那个窗口**被写成 `WS_EX_TOPMOST`，
+ * 盖住任务栏和桌宠。实测 Edge 的 exstyle 为 `0x00200108`，其中 `0x8` 就是 TOPMOST。
+ *
+ * 复现步骤（稳定）：
+ *   1. 桌宠静止时怎么折腾都不触发；
+ *   2. 让桌宠处于移动状态（鼠标拖拽，或正在播放自动移动动画）；
+ *   3. 保持移动，三指下滑 / 点右下角执行「显示桌面」——
+ *      宠物不会被最小化（它是无边框窗口，系统的最小化名单里没有它；同时它置顶，桌面也盖不住）；
+ *   4. 恢复桌面：此时当时 z 序最上面的窗口被顶成 topmost。
+ *
+ * 排查中已被排除的假设（都做过单变量实验，仍能复现）：
+ *   - 移动期间逐帧写 `setContentBounds`：暂停位置更新（挡下 53~119 帧），仍触发；
+ *   - 退出时补写位置：完全不补写，仍触发；
+ *   - 宠物窗口「在场」：显示桌面期间整个 `hide()` 掉，仍触发。
+ *
+ * 结论：诱因在 Windows 的「显示桌面 / 恢复」流程本身 —— 它先最小化一批窗口，再把桌面
+ * 提到栈顶、恢复时再放下去，是一次大范围 z 序重排。dsh-pet 侧没有能阻止它的操作。
+ * Windows 11 上也有同类公开报告（打开「画图」会让其它进程的 TOPMOST 窗口暂时失效），
+ * 微软至今没有说明或修复。
+ *
+ * **这个沉底/误置顶 bug 目前没有找到解决方法，只能规避**：
+ * 不要在桌宠移动时执行「显示桌面」。
+ *
+ * ---------------------------------------------------------------------------
+ * 四、为什么默认关闭
+ * ---------------------------------------------------------------------------
+ *
+ * 看门狗是给「不知道原因的沉底」兜底的手段，不是修复。它打断全屏游戏、干扰截图，
+ * 对用户的实际伤害大于「偶尔看不见桌宠」，而且会掩盖真正的根因。
+ * 所以这里默认关闭，把「找到沉底成因」留成待办，而不是长期挂一个高副作用的后台动作。
+ *
+ * 反过来说：只要沉底的成因被找到并修掉，看门狗就没有存在的必要了。第三节那个样本
+ * 就是还没修掉的一条——它每被修掉一条，看门狗离删除就更近一步。
+ *
+ * 需要它时把 `TOPMOST_WATCHDOG_ENABLED` 改成 `true` 重新构建，
+ * 但请先接受第二节列出的代价。
+ *
+ * ---------------------------------------------------------------------------
+ * 五、系统环境
+ * ---------------------------------------------------------------------------
+ *
+ * Windows 10 / 11，Electron 桌面模式（`runtime/electron-helper`）。
+ * 本文件的判定只在 Windows 上使用；其它平台不经过这条 `SetWindowPos` 路径。
+ *
+ * ---------------------------------------------------------------------------
+ * 六、技术附录：为什么重钉可以「无脑」重复
+ * ---------------------------------------------------------------------------
+ *
+ * 全链 `NativeWindowViews::SetAlwaysOnTop → DesktopWindowTreeHostWin::SetZOrderLevel →
+ * HWNDMessageHandler::SetAlwaysOnTop` 没有早退、没有状态比较，最终就是一次
+ * `SetWindowPos(…SWP_NOMOVE|SWP_NOSIZE|SWP_NOACTIVATE)`：不移动、不缩放、不重绘、不抢焦点。
+ * 反过来，`moveTop()`（`HWND_TOP`）对已沉底的窗口**无效**（实测仍在普通带里），
+ * 不能拿来当兜底。
  *
  * 本文件只放纯判定：不 require('electron')，可被 node:test 直接加载单测（同 pointer-target.js）。
  */
@@ -35,6 +114,23 @@ const TOPMOST_WATCHDOG_TICK_MS = 1000;
 /** 重新置顶的最小间隔（ms）：真正的 SetWindowPos 至多这么频繁（低频，避免和别的置顶窗抢带） */
 const TOPMOST_REASSERT_MS = 5000;
 
+/** macOS 使用普通悬浮层，为更高层级的截图窗口让位；其它平台保持原行为 */
+function topmostLevel(platform) {
+  return platform === 'darwin' ? 'floating' : 'screen-saver';
+}
+
+/**
+ * 置顶看门狗总开关 —— 整个看门狗只有这一个开关。
+ *
+ * 当前为 `false`（默认关闭）：窗口建好之后不再被主动重钉，一次 `SetWindowPos` 都不发。
+ * 关闭的理由、代价和已知的未解 bug 见文件头第二 ~ 四节。
+ * 需要时改成 `true` 重新构建，但要先接受那些代价。
+ *
+ * 关闭后定时器仍按 `TOPMOST_WATCHDOG_TICK_MS` 空转（每秒一次纯判定，只读几个布尔值，
+ * 开销可忽略）；保留它是因为源码守卫测试锚在 `topmostTimer = setInterval(...)` 上。
+ */
+const TOPMOST_WATCHDOG_ENABLED = false;
+
 /**
  * 这一拍要不要重新置顶。
  *
@@ -42,10 +138,15 @@ const TOPMOST_REASSERT_MS = 5000;
  * 隐藏期间钉了没意义（show 之后本来就会进带），冒烟自检期间钉了会干扰断言；
  * 而这些条件随时会变（渲染端首帧、自检结束），所以判定每秒跑一次、这一拍被拦就下一拍补上。
  *
+ * `enabled` 默认 `true`：这是判定逻辑本身的口径，与总开关当前取值无关。生产调用由
+ * `main.js` 显式传入 `TOPMOST_WATCHDOG_ENABLED`；单测靠第二个参数覆盖「关掉」这一支。
+ *
  * @param {{nowMs:number,lastAssertMs:number,destroyed:boolean,visible:boolean,paused:boolean}} state
+ * @param {boolean} [enabled]
  * @returns {boolean}
  */
-function shouldReassertTopmost(state) {
+function shouldReassertTopmost(state, enabled = true) {
+  if (!enabled) return false;
   const { nowMs, lastAssertMs, destroyed, visible, paused } = state || {};
   if (destroyed || !visible || paused) return false;
   const elapsed = nowMs - lastAssertMs;
@@ -53,4 +154,10 @@ function shouldReassertTopmost(state) {
   return !(elapsed >= 0 && elapsed < TOPMOST_REASSERT_MS);
 }
 
-module.exports = { TOPMOST_WATCHDOG_TICK_MS, TOPMOST_REASSERT_MS, shouldReassertTopmost };
+module.exports = {
+  TOPMOST_WATCHDOG_TICK_MS,
+  TOPMOST_REASSERT_MS,
+  TOPMOST_WATCHDOG_ENABLED,
+  shouldReassertTopmost,
+  topmostLevel,
+};

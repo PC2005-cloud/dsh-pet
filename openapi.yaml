@@ -2182,13 +2182,15 @@ components:
                 counter: 1755000000000
                 data:
                   ok: true
-                  provider: deepseek
-                  kind: deepseek
+                  provider: deepseek-official
+                  shape: money
                   data:
-                    currency: CNY
-                    total: "42.00"
-                    granted: "10.00"
-                    toppedUp: "32.00"
+                    wallets:
+                      - currency: CNY
+                        total: "42.00"
+                        granted: "10.00"
+                        toppedUp: "32.00"
+                        fullBalance: "20"
               workStatus:
                 counter: 1755000000100
                 data:
@@ -2245,7 +2247,7 @@ components:
 
     BalanceView:
       type: object
-      required: [ok, provider, kind]
+      required: [ok, provider, shape]
       description: 余额可用
       properties:
         ok:
@@ -2253,14 +2255,13 @@ components:
           const: true
         provider:
           type: string
-          example: deepseek
-        kind:
+          example: deepseek-official
+        shape:
           type: string
           description: |
-            服务商类型。`opencode` / `commandcode` 走三窗口用量（百分比），`deepseek` 走账户金额。
-            `opencode` 三窗口均返回；`commandcode` 的 `monthly` 必有，`rolling`（5h）/ `weekly`
-            只在套餐有窗口限制时返回——字段缺省表示「没有这个窗口」，不是「已用 0%」。
-          enum: [opencode, deepseek, commandcode]
+            展示形态。`windows` = 三窗口用量（百分比，opencode / commandcode）；
+            `money` = 账户金额（DeepSeek 两条路由）。
+          enum: [windows, money]
         manual:
           type: boolean
           description: |
@@ -2296,18 +2297,37 @@ components:
         monthlyCapUsd:
           type: number
           description: commandcode：月窗口满额度（USD）= 当期消耗 + 剩余额度；无额度也无消耗时缺省
-        currency:
-          type: string
-          description: deepseek：币种
-        total:
-          type: string
-          description: deepseek：总余额（字符串，与上游接口一致）
-        granted:
-          type: string
-          description: deepseek：赠送额度
-        toppedUp:
-          type: string
-          description: deepseek：充值额度
+        wallets:
+          type: array
+          description: |
+            money：多币种钱包，**每个币种一条**。账户可能同时持有 CNY 与 USD（如「USD 0.00 + CNY 有余额」），
+            所以是数组；不同币种的基准不能互相换算，各算各的比例再叠加。
+            展示层据此选符号、过滤为 0 的币种（负数要显示）、折算档位。
+          items:
+            type: object
+            required: [currency, total, granted, toppedUp]
+            properties:
+              currency:
+                type: string
+                example: CNY
+              total:
+                type: string
+                description: 该币种总余额（字符串，与上游一致；**可能为负数 = 透支**）
+                example: "8.16"
+              granted:
+                type: string
+                description: 赠送额度（官方路由原样透传；账号路由按同币种赠金钱包配出，没有则 "0.00"）
+                example: "3.85"
+              toppedUp:
+                type: string
+                description: 充值额度
+                example: "4.31"
+              fullBalance:
+                type: string
+                description: |
+                  该币种的档位基准（同币种单位）——余额 ≥ 该值视为未消耗。
+                  缺省 = 这个币种没有基准，不参与档位折算（不替它猜一个）。DeepSeek：CNY 20 / USD 5。
+                example: "20"
 
     BalanceUnavailable:
       type: object
@@ -2426,6 +2446,8 @@ components:
         type:
           type: string
           const: session/event
+        sessionId:
+          $ref: "#/components/schemas/NotifySessionId"
         event:
           type: object
           required: [type, data]
@@ -2456,6 +2478,8 @@ components:
         type:
           type: string
           const: approval/requested
+        sessionId:
+          $ref: "#/components/schemas/NotifySessionId"
         toolName:
           type: string
           description: 申请权限的工具名（可选）
@@ -2471,6 +2495,8 @@ components:
         type:
           type: string
           const: question/requested
+        sessionId:
+          $ref: "#/components/schemas/NotifySessionId"
         questions:
           type: array
           minItems: 1
@@ -2483,13 +2509,22 @@ components:
     AgentErrorFrame:
       type: object
       required: [type, message]
-      description: 无回合位置的生成失败（DSH 0.1.5+ 的 `agent/error` 事件）
+      description: |
+        无回合位置的生成失败（DSH 0.1.5+ 的 `agent/error` 事件）。
+        **不带 `sessionId`**：该事件载荷里没有会话标识，因此点击这类通知只叫窗口、不跳会话。
       properties:
         type:
           type: string
           const: host/agent-error
         message:
           type: string
+
+    NotifySessionId:
+      type: string
+      description: |
+        发出这条通知的会话 id（宿主从 `session/event` 的会话参数上取；取不到真 id 时该字段缺失）。
+        点击通知时网页据此跳到该会话（客户端 `uiWorkspace.openSession`）；
+        缺失（旧版宿主 / 拿不到会话位置的事件）= 只把窗口叫回前台，不做任何猜测。
 
     AnimLeaf:
       type: object

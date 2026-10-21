@@ -92,21 +92,30 @@ export interface WindowsUsage {
 }
 
 /**
- * 账户金额（`shape: 'money'`）。DeepSeek 官方路由与 DSH 账号路由**同构**，展示层共用同一套气泡。
+ * 一个币种的余额（`shape: 'money'` 的数组元素）。DeepSeek 官方路由与 DSH 账号路由**同构**。
  *
  * - `total` / `granted` / `toppedUp`：金额字符串，与接口一致（不做换算、不重算）；
- * - `fullBalance`：**档位基准**（同 currency 单位）—— 余额 ≥ 该值视为未消耗，据此把余额折算成
- *   「已用百分比」以驱动档位动画。缺省 = 该服务商不提供基准，此时**不播档位动画**
- *   （不替它猜一个基准）。基准是服务商自己的业务事实（DeepSeek 用 ¥20），故由数据带出；
- * - `tier`：计价档位装饰（峰/谷）。**只有提供该规则的服务商会带**（DeepSeek 的高峰时段计价），
- *   不带就渲染成不带峰谷的「余额 ¥x.xx」。
+ * - `fullBalance`：**该币种的档位基准**（同 currency 单位）——余额 ≥ 该值视为未消耗。缺省 = 这个币种
+ *   没有基准，**不参与档位折算**（不替它猜一个）。基准是服务商自己的业务事实（DeepSeek：CNY 20 / USD 5），
+ *   故由数据带出、不写死在展示层；
+ * - 账户可能同时持有多个币种（如「USD 0.00 + CNY 有余额」），所以是数组；不同币种的基准不能互换。
  */
-export interface MoneyBalance {
+export interface MoneyWallet {
   currency: string;
   total: string;
   granted: string;
   toppedUp: string;
   fullBalance?: string;
+}
+
+/**
+ * 账户金额（`shape: 'money'`）。
+ *
+ * `tier`：计价档位装饰（峰/谷）。**只有提供该规则的服务商会带**（DeepSeek 的高峰时段计价），
+ * 不带就渲染成不带峰谷的「余额 ¥x.xx」。
+ */
+export interface MoneyBalance {
+  wallets: MoneyWallet[];
   tier?: PricingTier;
 }
 

@@ -102,14 +102,17 @@ describe('takeChanged —— counter 变了才算变化', () => {
 });
 
 describe('readBalance —— 余额叶子 → 客户端视图', () => {
-  test('money：raw.data 摊平到视图顶层（含数据自带的档位基准与峰谷装饰）', () => {
+  test('money：raw.data 摊平到视图顶层（含多币种钱包与峰谷装饰）', () => {
     const hit = readBalance({
       counter: 1,
       data: {
         ok: true,
         provider: 'deepseek',
         shape: 'money',
-        data: { currency: 'CNY', total: '10.00', fullBalance: '20', tier: 'idle' },
+        data: {
+          wallets: [{ currency: 'CNY', total: '10.00', granted: '0.00', toppedUp: '10.00', fullBalance: '20' }],
+          tier: 'idle',
+        },
       },
     });
     assert.deepEqual(hit, {
@@ -117,11 +120,7 @@ describe('readBalance —— 余额叶子 → 客户端视图', () => {
         provider: 'deepseek',
         shape: 'money',
         ok: true,
-        currency: 'CNY',
-        total: '10.00',
-        granted: undefined,
-        toppedUp: undefined,
-        fullBalance: '20',
+        wallets: [{ currency: 'CNY', total: '10.00', granted: '0.00', toppedUp: '10.00', fullBalance: '20' }],
         tier: 'idle',
       },
       manual: false,

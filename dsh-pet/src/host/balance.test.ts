@@ -350,21 +350,13 @@ describe('deepseek-account —— DSH 账号路由（走账号服务，不是 HT
     assert.equal(typeof def?.fetch, 'function');
   });
 
-  test('ready：total = 充值 + 赠送（与官方 total_balance 同构），两者分别进 toppedUp / granted', () => {
+  test('ready：每个币种一条钱包，total = 充值 + 赠送（与官方 total_balance 同构）', () => {
     const r = parseAccountBalance(READY, 'deepseek-account');
     assert.ok(r.ok && r.shape === 'money');
     assert.equal(r.provider, 'deepseek-account');
-    assert.deepEqual(
-      { ...r.data, tier: undefined }, // 峰/谷随时间变化，这里不钉它的值
-      {
-        currency: 'CNY',
-        total: '13.79',
-        granted: '5.00',
-        toppedUp: '8.79',
-        fullBalance: '20',
-        tier: undefined,
-      },
-    );
+    assert.deepEqual(r.data.wallets, [
+      { currency: 'CNY', total: '13.79', granted: '5.00', toppedUp: '8.79', fullBalance: '20' },
+    ]);
     assert.ok(r.data.tier === 'peak' || r.data.tier === 'idle', '档位由服务商算好后随数据带出');
   });
 
@@ -374,22 +366,23 @@ describe('deepseek-account —— DSH 账号路由（走账号服务，不是 HT
       'deepseek-account',
     );
     assert.ok(r.ok && r.shape === 'money');
-    assert.equal(r.data.total, '8.79');
-    assert.equal(r.data.granted, '0.00');
-    assert.equal(r.data.toppedUp, '8.79');
+    assert.deepEqual(r.data.wallets, [
+      { currency: 'CNY', total: '8.79', granted: '0.00', toppedUp: '8.79', fullBalance: '20' },
+    ]);
   });
 
-  test('USD 钱包：币种原样带出（展示层据此选符号），金额不做换算', () => {
+  test('USD 钱包：币种原样带出（展示层据此选符号），金额不做换算，基准按币种查表', () => {
     const r = parseAccountBalance(
       { status: 'ready', value: [{ currency: 'USD', balance: '12.5' }], bonusWallets: [] },
       'deepseek-account',
     );
     assert.ok(r.ok && r.shape === 'money');
-    assert.equal(r.data.currency, 'USD');
-    assert.equal(r.data.total, '12.50');
+    assert.deepEqual(r.data.wallets, [
+      { currency: 'USD', total: '12.50', granted: '0.00', toppedUp: '12.50', fullBalance: '5' },
+    ]);
   });
 
-  test('多币种钱包：优先选有余额的那个（USD 0.00 排在前也不显示 $0.00）', () => {
+  test('多币种钱包：全部搬出去（不再只挑一个），每个币种各一条', () => {
     const r = parseAccountBalance(
       {
         status: 'ready',
@@ -402,40 +395,28 @@ describe('deepseek-account —— DSH 账号路由（走账号服务，不是 HT
       'deepseek-account',
     );
     assert.ok(r.ok && r.shape === 'money');
-    assert.equal(r.data.currency, 'CNY');
-    assert.equal(r.data.toppedUp, '20.00');
-    assert.equal(r.data.granted, '5.00');
-    assert.equal(r.data.total, '25.00');
+    assert.deepEqual(r.data.wallets, [
+      { currency: 'USD', total: '0.00', granted: '0.00', toppedUp: '0.00', fullBalance: '5' },
+      { currency: 'CNY', total: '25.00', granted: '5.00', toppedUp: '20.00', fullBalance: '20' },
+    ]);
   });
 
-  test('多币种钱包且都有余额：取金额大的那个；金额相同/全为 0 时 CNY 优先', () => {
-    const biggerUsd = parseAccountBalance(
+  test('同币种多条钱包 → 累加，不丢钱', () => {
+    const r = parseAccountBalance(
       {
         status: 'ready',
         value: [
           { currency: 'CNY', balance: '1.00' },
-          { currency: 'USD', balance: '30.00' },
+          { currency: 'CNY', balance: '2.50' },
         ],
+        bonusWallets: [{ currency: 'CNY', balance: '0.50' }],
       },
       'deepseek-account',
     );
-    assert.ok(biggerUsd.ok && biggerUsd.shape === 'money');
-    assert.equal(biggerUsd.data.currency, 'USD');
-    assert.equal(biggerUsd.data.total, '30.00');
-
-    const allZero = parseAccountBalance(
-      {
-        status: 'ready',
-        value: [
-          { currency: 'USD', balance: '0.00' },
-          { currency: 'CNY', balance: '0.00' },
-        ],
-      },
-      'deepseek-account',
-    );
-    assert.ok(allZero.ok && allZero.shape === 'money');
-    assert.equal(allZero.data.currency, 'CNY');
-    assert.equal(allZero.data.total, '0.00');
+    assert.ok(r.ok && r.shape === 'money');
+    assert.deepEqual(r.data.wallets, [
+      { currency: 'CNY', total: '4.00', granted: '0.50', toppedUp: '3.50', fullBalance: '20' },
+    ]);
   });
 
   test('真实平台精度串（16 位小数）→ 收敛到两位，与官方路由的 ¥8.79 风格一致', () => {
@@ -448,11 +429,11 @@ describe('deepseek-account —— DSH 账号路由（走账号服务，不是 HT
       'deepseek-account',
     );
     assert.ok(r.ok && r.shape === 'money');
-    assert.equal(r.data.total, '9.99');
-    assert.equal(r.data.granted, '0.00');
+    assert.equal(r.data.wallets[0]?.total, '9.99');
+    assert.equal(r.data.wallets[0]?.granted, '0.00');
   });
 
-  test('赠送钱包币种不同 → 不硬配（granted 记 0.00，不拿另一种币种凑数）', () => {
+  test('赠送钱包币种不同 → 各归各的：CNY 没有赠金，USD 那条把赠金带上', () => {
     const r = parseAccountBalance(
       {
         status: 'ready',
@@ -462,8 +443,10 @@ describe('deepseek-account —— DSH 账号路由（走账号服务，不是 HT
       'deepseek-account',
     );
     assert.ok(r.ok && r.shape === 'money');
-    assert.equal(r.data.granted, '0.00');
-    assert.equal(r.data.total, '8.79');
+    assert.deepEqual(r.data.wallets, [
+      { currency: 'CNY', total: '8.79', granted: '0.00', toppedUp: '8.79', fullBalance: '20' },
+      { currency: 'USD', total: '1.00', granted: '1.00', toppedUp: '0.00', fullBalance: '5' },
+    ]);
   });
 
   test('null（未登录）/ failed（查询失败）/ 空钱包 → 一律抛错，绝不伪造 0 余额', () => {
@@ -497,7 +480,11 @@ describe('deepseek-account —— DSH 账号路由（走账号服务，不是 HT
         async () => READY,
       );
       assert.ok(r.ok && r.shape === 'money');
-      assert.equal(r.data.total, '13.79', '与 parseAccountBalance 同一口径：赠送 5.00 + 充值 8.79');
+      assert.equal(
+        r.data.wallets.find((w) => w.currency === 'CNY')?.total,
+        '13.79',
+        '与 parseAccountBalance 同一口径：赠送 5.00 + 充值 8.79',
+      );
       assert.equal(asked, 0, '账号路由没有 API Key 可解析');
       assert.deepEqual(stub.calls, [], '账号路由不走 fetch');
     } finally {
