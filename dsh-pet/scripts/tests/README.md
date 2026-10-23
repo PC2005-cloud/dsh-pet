@@ -12,4 +12,6 @@ Linux CI 缺少系统库时用 `pnpm exec playwright install --with-deps chromiu
 
 测试用真实 React 和 Chromium 渲染设置页，拦截配置与模型接口，验证加载、失败重试、恢复默认与保存，以及中英文窄窗口布局。只访问临时本地服务，不读取或修改用户的 DSH 配置。与 `npm test` 的 Node 单元测试分开运行，普通插件安装不下载浏览器。
 
+`config-sync.test.mjs` 另外构建真实宿主路由，以隔离配置文件和两个浏览器页面验证保存、恢复默认后的 overlay 同步，以及失败保存不发通知。
+
 可选设置 `DSH_PET_UI_ARTIFACTS` 为输出目录，保存布局截图。桌面 Electron 窗口、操作系统点击穿透和显示器缩放仍需另做运行时测试。

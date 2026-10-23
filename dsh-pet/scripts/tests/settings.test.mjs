@@ -121,7 +121,7 @@ async function open(t, { get = customized, viewport = { width: 900, height: 900 
 async function save(page) {
   await Promise.all([
     page.waitForResponse((response) => response.request().method() === 'PUT'),
-    page.getByRole('button', { name: 'Save', exact: true }).click(),
+    page.getByRole('button', { name: 'Save', exact: true }).first().click(),
   ]);
 }
 
@@ -137,7 +137,9 @@ test('pending config prevents editing and saving placeholder defaults', async (t
     },
   });
   try {
-    assert.equal(await page.getByRole('button', { name: 'Save', exact: true }).isDisabled(), true);
+    for (const button of await page.getByRole('button', { name: 'Save', exact: true }).all()) {
+      assert.equal(await button.isDisabled(), true);
+    }
     assert.equal(await page.locator('input[type=text]').first().isDisabled(), true);
     assert.deepEqual(writes, []);
   } finally {
@@ -159,7 +161,9 @@ for (const failure of ['http', 'network', 'malformed', 'null']) {
               ),
     });
     await page.getByRole('alert').waitFor();
-    assert.equal(await page.getByRole('button', { name: 'Save', exact: true }).isDisabled(), true);
+    for (const button of await page.getByRole('button', { name: 'Save', exact: true }).all()) {
+      assert.equal(await button.isDisabled(), true);
+    }
     assert.deepEqual(writes, []);
     fail = false;
     await page.getByRole('button', { name: 'Retry', exact: true }).click();

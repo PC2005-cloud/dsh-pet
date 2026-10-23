@@ -2408,8 +2408,7 @@ export function makePetUI(rt: {
         for (const { path, leaf } of takeChanged(s, baseline)) {
           if (leaf.data === null) continue;
           if (path === 'sections.config') {
-            // 配置被别处改过 → 重拉配置重拍平。**唯一的写方是 POST /pet-display**
-            // （桌面端右键改显示位置）——那个改动不是本页面发起的，只能靠这个信号知道。
+            // 配置被别处保存、同步或通过右键改过 → 重拉配置重拍平。
             // 叶子 data 恒为 {}（纯信号），配置本体太大不能塞进 /state，所以这里再拉一次。
             // 长轮询下这个信号一到就醒，比改造前的 1s 更快。
             petBridge.reload(); // 内部 GET /config（该响应已带 no-cache）→ applyMerged → visiblePets 重算

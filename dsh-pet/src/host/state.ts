@@ -42,9 +42,8 @@ export interface StateLeaf {
 /** 全局段（所有端共享一份）。
  *  `config` 是**纯信号叶子**：`data` 恒为 `{}`，只看 `counter`——它变了就说明配置被写过，
  *  消费端据此重拉 `GET /config`（配置本体太大，不能塞进每秒一次的 /state）。
- *  当前只有 `POST /pet-display` 写它：那是唯一一个**不是发起页面自己**的配置改动
- *  （桌面端右键改显示位置），浏览器端只能靠这个信号知道。
- *  保存 / 同步配置（PUT / POST /config）**不写**——它们的调用方自己就拿到了成品聚合。 */
+ *  保存 / 同步配置（PUT / POST /config）与 POST /pet-display 写它，
+ *  让未发起修改的浏览器页面也能重读配置。 */
 export type SectionName = 'balance' | 'workStatus' | 'notify' | 'config' | 'menu';
 
 /** 每宠物段（say = 要说的话；anim = 要播的动画名；position = 要挪到的位置；throw = 要给的初速度；
