@@ -100,11 +100,21 @@ function windowsPercent(v: BalanceView): number | undefined {
   return Math.max(v.rolling ?? 0, v.weekly ?? 0, v.monthly ?? 0);
 }
 
-/** windows：两行 —— 最紧迫窗口的「已用 N%」+ 重置倒计时 */
+/** windows：收起态 —— 标题（如有）+ 最紧迫窗口的「已用/剩余 N%」+ 重置倒计时 */
 function windowsRows(v: BalanceView): BalanceBubbleRow[] {
   const w = urgentWindow(v);
   if (!w) return [{ role: 'label', text: '额度数据不可用' }];
   const reset = resetInText(w.resetsAt);
+
+  if (v.provider === 'google-antigravity') {
+    const remainingPct = Math.max(0, Math.min(100, Math.round(100 - w.percent)));
+    return [
+      { role: 'sub', text: 'google-antigravity' },
+      { role: 'label', text: w.label + '额度剩余 ' + remainingPct + '%' },
+      { role: 'sub', text: reset ? reset + '重置' : '已重置' },
+    ];
+  }
+
   return [
     { role: 'label', text: w.label + '额度已用 ' + Math.round(w.percent) + '%' },
     { role: 'sub', text: reset ? reset + '重置' : '已重置' },
@@ -112,7 +122,7 @@ function windowsRows(v: BalanceView): BalanceBubbleRow[] {
 }
 
 /**
- * windows：展开态每个存在窗口一行 —— 窗口名 + 进度条 + 已用百分比 + 重置倒计时。
+ * windows：展开态每个存在窗口一行 —— 窗口名 + 进度条 + 已用/剩余百分比 + 重置倒计时。
  * 只列**存在**的窗口：`rolling` / `weekly` 缺省 = 该服务商没有这个窗口，不补 0、不画空条。
  */
 function windowsDetail(v: BalanceView): BalanceBubbleRow[] {
@@ -122,22 +132,42 @@ function windowsDetail(v: BalanceView): BalanceBubbleRow[] {
     monthly: v.monthlyResetsAt,
   };
   const rows: BalanceBubbleRow[] = [];
+  if (v.provider === 'google-antigravity') {
+    rows.push({ role: 'sub', text: 'google-antigravity' });
+  }
   for (const w of ['rolling', 'weekly', 'monthly'] as WindowKey[]) {
     const percent = v[w];
     if (percent === undefined) continue;
     // 与收起态同一套重置文案（"已重置" / "N.x 小时重置"），两端直接原样渲染
     const reset = resetInText(resets[w]);
-    const usedText = Math.round(percent) + '%';
     const resetText = reset === '' ? '已重置' : reset + '重置';
-    rows.push({
-      role: 'quota',
-      text: windowLabel(v, w) + ' ' + usedText + ' ' + resetText,
-      label: windowLabel(v, w),
-      percent,
-      tone: quotaTone(percent),
-      usedText,
-      resetText,
-    });
+
+    if (v.provider === 'google-antigravity') {
+      const remainingPct = Math.max(0, Math.min(100, Math.round(100 - percent)));
+      // 剩余口径配色：剩余 <= 10% 告警红色，<= 30% 预警黄色，其余正常绿色
+      const tone = remainingPct <= 10 ? 'crit' : remainingPct <= 30 ? 'warn' : 'ok';
+      const usedText = '剩余 ' + remainingPct + '%';
+      rows.push({
+        role: 'quota',
+        text: windowLabel(v, w) + ' ' + usedText + ' ' + resetText,
+        label: windowLabel(v, w),
+        percent: remainingPct,
+        tone,
+        usedText,
+        resetText,
+      });
+    } else {
+      const usedText = Math.round(percent) + '%';
+      rows.push({
+        role: 'quota',
+        text: windowLabel(v, w) + ' ' + usedText + ' ' + resetText,
+        label: windowLabel(v, w),
+        percent,
+        tone: quotaTone(percent),
+        usedText,
+        resetText,
+      });
+    }
   }
   return rows.length > 0 ? rows : windowsRows(v);
 }

@@ -19,6 +19,7 @@ import {
   matchBalanceProvider,
   parseAccountBalance,
   parseCommandCode,
+  parseGoogleAntigravityQuota,
   queryBalance,
   registerBalanceProvider,
   type BalanceResult,
@@ -627,3 +628,87 @@ describe('注册表 —— 第三方 provider（register / list / match）', () 
     });
   });
 });
+
+describe('Google Antigravity 配额查询（provider id google-antigravity）', () => {
+  const MOCK_ANTIGRAVITY_QUOTA = {
+    state: 'available',
+    checkedAt: '2026-10-23T06:00:00.000Z',
+    groups: [
+      {
+        group: 'gemini',
+        modelCount: 10,
+        windows: [
+          { window: '5h', remainingFraction: 0.8, resetTime: '2026-10-23T10:00:00.000Z' },
+          { window: 'weekly', remainingFraction: 0.65, resetTime: '2026-10-26T00:00:00.000Z' },
+        ],
+      },
+      {
+        group: 'non-gemini',
+        modelCount: 3,
+        windows: [
+          { window: '5h', remainingFraction: 0.5, resetTime: '2026-10-23T11:00:00.000Z' },
+          { window: 'weekly', remainingFraction: 0.4, resetTime: '2026-10-27T00:00:00.000Z' },
+        ],
+      },
+    ],
+  };
+
+  test('常规 Gemini 模型：匹配 gemini 分组，剩余转已用百分比', () => {
+    const res = parseGoogleAntigravityQuota(MOCK_ANTIGRAVITY_QUOTA, 'google-antigravity', 'gemini-2.5-pro');
+    assert.equal(res.ok, true);
+    assert.equal(res.shape, 'windows');
+    assert.equal(res.data.rolling, 20); // (1 - 0.8) * 100
+    assert.equal(res.data.rollingLabel, '5h');
+    assert.equal(res.data.rollingResetsAt, '2026-10-23T10:00:00.000Z');
+    assert.equal(res.data.weekly, 35); // (1 - 0.65) * 100
+    assert.equal(res.data.weeklyResetsAt, '2026-10-26T00:00:00.000Z');
+    assert.equal(res.data.monthly, undefined);
+  });
+
+  test('Claude / 3P 模型：自动切换到 non-gemini 分组', () => {
+    const res = parseGoogleAntigravityQuota(MOCK_ANTIGRAVITY_QUOTA, 'google-antigravity', 'claude-3-7-sonnet');
+    assert.equal(res.ok, true);
+    assert.equal(res.shape, 'windows');
+    assert.equal(res.data.rolling, 50); // (1 - 0.5) * 100
+    assert.equal(res.data.weekly, 60); // (1 - 0.4) * 100
+  });
+
+  test('未登录状态抛出可读错误', () => {
+    assert.throws(
+      () => parseGoogleAntigravityQuota({ state: 'unauthenticated' }, 'google-antigravity'),
+      /Antigravity 未登录/,
+    );
+  });
+
+  test('限流状态抛出可读错误', () => {
+    assert.throws(
+      () => parseGoogleAntigravityQuota({ state: 'rate-limited' }, 'google-antigravity'),
+      /配额查询被限流/,
+    );
+  });
+
+  test('queryBalance 缺少 resolveAntigravity 时报 credential-missing', async () => {
+    const res = await queryBalance('google-antigravity', async () => 'k');
+    assert.equal(res.ok, false);
+    if (!res.ok) {
+      assert.equal(res.reason, 'credential-missing');
+      assert.match(res.message ?? '', /缺少 Antigravity 服务/);
+    }
+  });
+
+  test('queryBalance 成功链路', async () => {
+    const res = await queryBalance(
+      'google-antigravity',
+      async () => 'k',
+      undefined,
+      async () => MOCK_ANTIGRAVITY_QUOTA,
+      'gemini-2.5-flash',
+    );
+    assert.equal(res.ok, true);
+    if (res.ok && res.shape === 'windows') {
+      assert.equal(res.data.rolling, 20);
+      assert.equal(res.data.weekly, 35);
+    }
+  });
+});
+

@@ -960,6 +960,15 @@ export function apply(ctx: any): void {
           if (!account) return undefined;
           return account.getBalance(accountClientMetadata());
         },
+        // `google-antigravity` 没有 API Key：凭证与配额由 dsh-tool-antigravity 插件管理。
+        // Antigravity 服务是**可选**服务（软取，不放进 inject）——没装或未启用时它不在场，
+        // 此时报 credential-missing。
+        async () => {
+          const antigravity = ctx.get('antigravityAuth', false);
+          if (!antigravity) return undefined;
+          return antigravity.usage();
+        },
+        sel.model,
       );
       state.writeSection('balance', mark(result));
     } catch (e) {

@@ -44,10 +44,11 @@ export function toBalanceState(raw: unknown): BalanceState | null {
     const rollingCapUsd = optNum(d.rollingCapUsd);
     const weeklyCapUsd = optNum(d.weeklyCapUsd);
     const monthlyCapUsd = optNum(d.monthlyCapUsd);
-    // 月度窗口是这份数据的底线：缺了/非法 = 认不出响应（滚动窗与周窗口、各窗口额度都是可选）
-    if (monthly === undefined || monthly === null) return null;
+    // 至少需要有一个有效窗口（如 rolling、weekly 或 monthly）
+    if (monthly === undefined && rolling === undefined && weekly === undefined) return null;
     // 出现但非法（optNum 返回 null）→ 整拍跳过，不把坏数字送进展示层
     if (
+      monthly === null ||
       rolling === null ||
       weekly === null ||
       rollingCapUsd === null ||

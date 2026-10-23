@@ -46,12 +46,17 @@ function fetchFailed(provider: string, e: unknown): BalanceResult {
  * @param resolveKey 凭证解析：ref 名 → key（由调用方注入 ctx.credentials.resolve）
  * @param resolveAccount 账号余额查询（由调用方注入 ctx.deepseekAccount.getBalance）；
  *   只被 `deepseek-account` 用到。缺省时该路由报 `credential-missing`（账号服务不在场）
+ * @param resolveAntigravity Antigravity 配额查询（由调用方注入 ctx.get('antigravityAuth', false)?.usage）；
+ *   只被 `google-antigravity` 用到。缺省时该路由报 `credential-missing`（Antigravity 服务不在场）
+ * @param model 当前选中的模型（用于 Antigravity 区分模型分组）
  * @returns 结构化结果：成功 / 不支持 / 缺凭证 / 抓取失败（失败带 message，绝不返回伪造数字）
  */
 export async function queryBalance(
   provider: string,
   resolveKey: (ref: string) => Promise<string | undefined>,
   resolveAccount?: () => Promise<AccountBalanceSnapshot | null | undefined>,
+  resolveAntigravity?: () => Promise<unknown>,
+  model?: string,
 ): Promise<BalanceResult> {
   const def = matchBalanceProvider(provider);
   if (!def) return failed(provider, 'unsupported');
@@ -67,18 +72,22 @@ export async function queryBalance(
   }
 
   // 内置路由：凭证前置检查放在 try 之外 —— 解析凭证本身抛错属于意外异常，由调用方（refreshBalance）
-  // 兜底。账号路由没有 API Key，改为判定「账号服务在不在场」。
+  // 兜底。账号路由与 Antigravity 路由没有 API Key，改为判定对应服务在不在场。
   let key = '';
   if (def.credential.mode === 'ref') {
     const resolved = await resolveKey(def.credential.ref);
     if (!resolved) return failed(provider, 'credential-missing', '缺少凭证 ' + def.credential.ref);
     key = resolved;
+  } else if (provider === 'google-antigravity') {
+    if (!resolveAntigravity) {
+      return failed(provider, 'credential-missing', '缺少 Antigravity 服务（' + provider + '）');
+    }
   } else if (!resolveAccount) {
     return failed(provider, 'credential-missing', '缺少账号服务（' + provider + '）');
   }
 
   try {
-    return await def.fetch({ provider, key, resolveAccount });
+    return await def.fetch({ provider, key, resolveAccount, resolveAntigravity, model });
   } catch (e) {
     return fetchFailed(provider, e);
   }
@@ -87,6 +96,7 @@ export async function queryBalance(
 // ---- 对外再导出：调用方（宿主与测试）只需要认这一个入口 ----
 export { parseAccountBalance } from './providers/deepseek-account';
 export { parseCommandCode } from './providers/commandcode';
+export { parseGoogleAntigravityQuota } from './providers/google-antigravity';
 export type {
   AccountBalanceSnapshot,
   BalanceFetchContext,

@@ -29,6 +29,10 @@ export interface BalanceFetchContext {
   key: string;
   /** 账号余额查询（调用方注入 ctx.deepseekAccount.getBalance）；仅 `mode === 'none'` 使用 */
   resolveAccount?: () => Promise<AccountBalanceSnapshot | null | undefined>;
+  /** Antigravity 额度查询（调用方注入 ctx.antigravityAuth.usage）；仅 `google-antigravity` 使用 */
+  resolveAntigravity?: () => Promise<unknown>;
+  /** 当前选中的 model（用于按模型区分 gemini / non-gemini 配额组） */
+  model?: string;
 }
 
 /**
@@ -102,7 +106,7 @@ export type PricingTier = 'peak' | 'idle';
  * - `*ResetsAt` 缺省按「已重置」处理。
  */
 export interface WindowsUsage {
-  monthly: number;
+  monthly?: number;
   rolling?: number;
   weekly?: number;
   rollingCapUsd?: number;

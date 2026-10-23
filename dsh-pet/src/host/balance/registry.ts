@@ -6,11 +6,18 @@
 import { commandCode } from './providers/commandcode';
 import { deepseekAccount } from './providers/deepseek-account';
 import { deepseekOfficial } from './providers/deepseek-official';
+import { googleAntigravity } from './providers/google-antigravity';
 import { opencodeGo } from './providers/opencode-go';
 import type { BalanceProvider, PluginProvider } from './types';
 
 /** 内置服务商：编译期登记，顺序即优先级。 */
-export const BUILTIN_PROVIDERS: BalanceProvider[] = [opencodeGo, commandCode, deepseekOfficial, deepseekAccount];
+export const BUILTIN_PROVIDERS: BalanceProvider[] = [
+  opencodeGo,
+  commandCode,
+  googleAntigravity,
+  deepseekOfficial,
+  deepseekAccount,
+];
 
 /** 第三方运行时注册：provider id → 定义。 */
 const external = new Map<string, PluginProvider>();

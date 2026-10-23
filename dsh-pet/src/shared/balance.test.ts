@@ -271,17 +271,67 @@ describe('commandcode —— 三窗口用量走与 opencode 同一套展示口�
     assert.equal(rows[1]?.role, 'sub');
   });
 
-  test('月度窗缺失 / 出现的字段非法 → null（不把 NaN 送进展示层）', () => {
+  test('窗口全缺 / 出现的字段非法 → null（不把 NaN 送进展示层）；无月度窗但有滚动/周窗允许展示', () => {
     const leaf = (data: Record<string, unknown>) => ({
       ok: true,
       provider: 'commandcode',
       shape: 'windows',
       data,
     });
-    assert.equal(toBalanceState(leaf({ rolling: 10 })), null, '缺月度窗 = 认不出响应');
+    assert.equal(toBalanceState(leaf({})), null, '窗口全缺 = 认不出响应');
     assert.equal(toBalanceState(leaf({ monthly: 'x' })), null);
     assert.equal(toBalanceState(leaf({ monthly: 10, rolling: 'x' })), null, '5h 窗出现但非法 → 整拍跳过');
     assert.equal(toBalanceState(leaf({ monthly: 10, monthlyCapUsd: 'x' })), null);
+
+    // Google Antigravity 模式（只有 5h 和周窗口，无月度窗口）
+    const agyLeaf = toBalanceState(
+      leaf({
+        rolling: 20,
+        rollingLabel: '5h',
+        rollingResetsAt: '2026-10-23T10:00:00.000Z',
+        weekly: 35,
+        weeklyResetsAt: '2026-10-26T00:00:00.000Z',
+      }),
+    );
+    assert.ok(agyLeaf && agyLeaf.ok);
+    assert.equal(agyLeaf.rolling, 20);
+    assert.equal(agyLeaf.weekly, 35);
+    assert.equal(agyLeaf.monthly, undefined);
+  });
+
+  test('Google Antigravity：气泡带服务商标题，且已用转为剩余', () => {
+    const view: BalanceView = {
+      provider: 'google-antigravity',
+      shape: 'windows',
+      ok: true,
+      rolling: 12,
+      weekly: 4,
+      rollingLabel: '5h',
+      rollingResetsAt: '2026-10-23T10:00:00.000Z',
+      weeklyResetsAt: '2026-10-29T00:00:00.000Z',
+    };
+    const rows = balanceBubbleView(view);
+    assert.equal(rows[0]?.role, 'sub');
+    assert.equal(rows[0]?.text, 'google-antigravity');
+    assert.equal(rows[1]?.role, 'label');
+    assert.equal(rows[1]?.text, '5h额度剩余 88%');
+
+    const detail = balanceDetailView(view);
+    assert.equal(detail[0]?.role, 'sub');
+    assert.equal(detail[0]?.text, 'google-antigravity');
+    assert.equal(detail[1]?.role, 'quota');
+    if (detail[1]?.role === 'quota') {
+      assert.equal(detail[1].label, '5h');
+      assert.equal(detail[1].usedText, '剩余 88%');
+      assert.equal(detail[1].percent, 88);
+      assert.equal(detail[1].tone, 'ok');
+    }
+    if (detail[2]?.role === 'quota') {
+      assert.equal(detail[2].label, '周');
+      assert.equal(detail[2].usedText, '剩余 96%');
+      assert.equal(detail[2].percent, 96);
+      assert.equal(detail[2].tone, 'ok');
+    }
   });
 
   test('告急窗口：满额度齐全 → 绝对口径（剩余额度最少者），与 opencode 同一规则', () => {
