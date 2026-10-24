@@ -13,6 +13,17 @@ const OPEN_SHORTCUT_HINT = /Mac/i.test(navigator.platform || navigator.userAgent
 /** 本次点击是否按住了「呼出 DSH」的修饰键（Ctrl / Cmd） */
 const isOpenShortcut = (e) => !!(e && (e.ctrlKey || e.metaKey));
 
+// ---------- 多宠摆位去重（静态重叠避让） ----------
+// 每只桌面宠物是独立进程/窗口，启动有先后，互相不知道对方最终停在哪。跨窗 broker 只负责
+// **运动**碰撞（飞行中撞到别人），对「多只配了同一个角落、静止时叠罗汉」无能为力——
+// 于是在开机后自检一次：我的配置角落里是否已经站着别的宠物；是则按 petIndex 绕四角轮换，
+// 同角落内第 5 只起再沿水平轴级联错开（LAYOUT_GAP 为视觉间距）。
+const LAYOUT_CHECK_MS = 1500;
+const LAYOUT_GAP = 80;
+// 自检撞上飞行/漫游（开机轻推的滑行可长达数秒）时的改期重试总上限：超过则认命
+// （broker 的静止轻推仍会保证不重叠，只是不再有漂亮的四角分布）。
+const LAYOUT_CHECK_MAX_WAIT = 5000;
+
 // ---------- 点击音效（内置 assets/sound/click-duck.wav） ----------
 // 与浏览器端 client/pet.ts 同一套参数：单例 <audio>、音量 0.5、100ms 节流、失败静默。
 // 复用素材通道：bridge 模式由主进程取回音频，普通模式仍走 HTTP。
@@ -144,6 +155,10 @@ class PetSprite {
     this.moveToken = 0;
     this.pendingMove = null;
     this.customPos = null; // 拖拽后的会话内位置（{rx, ry} 比例）；restart 回角落
+    this.userPlaced = false; // customPos 是否来自**用户**操作（拖拽松手/甩抛落定）——
+    // 抛掷落定/漫游落点/relayout 拉回也写 customPos，但那是系统驱动的位置，不是用户意图；
+    // 摆位避让只尊重 userPlaced 的位置，否则开机轻推的滑行落点会被误判成"用户摆过"而放弃避让。
+    this.layoutShifted = false; // 摆位避让：开机自检发现配置角落被占 → 按 petIndex 轮换（见 scheduleLayoutCheck）
     // 右键菜单（统一自绘组件，两端共用同一份：树+渲染均来自 shared-core）
     this.menuOpen = false; // 菜单开启期间强制整窗可交互（悬停菜单不触发穿透翻转）
     this.menuClose = null; // 当前菜单的 close()（打开时挂载，关闭后置空）
@@ -245,6 +260,8 @@ class PetSprite {
     this.el.appendChild(stage);
     rootEl.appendChild(this.el);
     this.position();
+    // 多宠不叠：等兄弟窗口上电后自检配置角落是否被占（整个会话只此一次）
+    this.scheduleLayoutCheck();
 
     // 事件（与浏览器同一套：pointerdown/move、click、window pointerup/cancel）
     const ac = new AbortController();
@@ -290,6 +307,8 @@ class PetSprite {
     // 宠物间碰撞（跨窗 broker）：订阅其它宠物状态广播（碰撞检测用）+ 「被撞」事件 → onDeskHit。
     // 注意：退订由窗口销毁自然回收（webContents 销毁后 ipc 事件不再派发），无需显式取消。
     this.others = {}; // petId -> {x,y,vx,vy,size,bottomPad}（其它宠物的最新状态，来自主进程广播）
+    this.sawOverlap = false; // 开机窗口期内是否见过别的宠物压着我的配置角落（锁存，见 noteLayoutOverlap）
+    this.layoutCheckDone = false; // 摆位自检已跑过（之后不再锁存，漫游碰撞不触发重摆）
     this.throwState = null; // 飞行中的实时状态（被撞查询 / 其它窗碰撞检测时上报用）
     this.pressScoreFired = false; // 按下瞬间已触发过积分（pointerdown 即触发；click 据此不重复弹，同浏览器）
     this.lastFlightReport = 0;
@@ -311,6 +330,7 @@ class PetSprite {
           };
         }
         this.others = next;
+        this.noteLayoutOverlap();
       });
       window.petBridge.onPetHit((payload) => {
         const vx = Number(payload && payload.vx);
@@ -443,15 +463,15 @@ class PetSprite {
     } else {
       // 角落取**主屏**而不是外接矩形：不规则多屏布局下外接矩形的角落可能不属于任何显示器
       // （实测右倒 T 型双屏，top-left 落在主屏上方的空洞里），配了该角落的宠物开机即隐身。
+      // 摆位避让：角落/边距经 layoutAnchor() 轮换（未触发避让时与配置逐字相同）
+      const pos = this.layoutAnchor();
       const anchor = S.anchorPixel({
-        corner: this.pet.position.corner,
+        corner: pos.corner,
         // marginX/marginY 是配置里的绝对像素：页面级缩放（§3.5）已统一放大整窗，
         // 配置值不再手工乘 CONFIG.scale——150% 屏上与「线性化 + 旧 CONFIG.scale 补偿」观感一致
-        marginX: this.pet.position.marginX,
+        marginX: pos.marginX,
         // macOS 顶部边距对齐身体命中盒，扣掉动画画布头顶留白。
-        marginY:
-          this.pet.position.marginY -
-          (this.pet.position.corner.startsWith('top-') ? this.size * CONFIG.topInsetRatio : 0),
+        marginY: pos.marginY - (pos.corner.startsWith('top-') ? this.size * CONFIG.topInsetRatio : 0),
         size: this.size,
         W,
         H,
@@ -461,6 +481,97 @@ class PetSprite {
       y = anchor.y;
     }
     this.sendBounds(x, y);
+  }
+
+  /**
+   * 初始摆位（无 customPos 时）：默认即配置角落；开机自检发现被别的宠物占着
+   * （scheduleLayoutCheck 置 layoutShifted）后，按 petIndex 轮换到空角落——
+   * 以配置角落为起点绕四角（BL→BR→TL→TR），第 5 只起同角落内沿水平轴级联错开。
+   * 用户拖过的宠物走 customPos 不受影响；「回到初始位置」回到避让后的角落，不会又叠回去。
+   */
+  layoutAnchor() {
+    const base = this.pet.position || {};
+    const corner = typeof base.corner === 'string' ? base.corner : 'bottom-left';
+    const marginX = Number(base.marginX) || 0;
+    const marginY = Number(base.marginY) || 0;
+    // 本窗口只承载一只宠物，petIndex 由主进程按 DSH_PET_PETS 顺序注入（renderer.js 用同一个
+    // 下标取 pet），因此它就是「桌面可见宠物全量列表」里的序号，轮换直接拿它当轮换下标。
+    const idx = Number(CONFIG.petIndex) || 0;
+    if (!this.layoutShifted || idx <= 0) return { corner: corner, marginX: marginX, marginY: marginY };
+    const order = ['bottom-left', 'bottom-right', 'top-left', 'top-right'];
+    const start = order.indexOf(corner) >= 0 ? order.indexOf(corner) : 0;
+    const rot = order[(start + idx) % 4];
+    const intra = Math.floor(idx / 4);
+    const dir = rot.endsWith('left') ? 1 : -1;
+    return { corner: rot, marginX: marginX + dir * intra * (this.size + LAYOUT_GAP), marginY: marginY };
+  }
+
+  /** 我的**配置角落**对应的身体包围盒（即还没被避让改动过的那个角落） */
+  configCornerBox() {
+    const base = this.pet.position || {};
+    const corner = typeof base.corner === 'string' ? base.corner : 'bottom-left';
+    const anchor = S.anchorPixel({
+      corner: corner,
+      marginX: Number(base.marginX) || 0,
+      marginY: (Number(base.marginY) || 0) - (corner.startsWith('top-') ? this.size * CONFIG.topInsetRatio : 0),
+      size: this.size,
+      W: VIEW.w,
+      H: VIEW.h,
+      area: PRIMARY_AREA || undefined,
+    });
+    return S.bodyPixelBox({ x: anchor.x, y: anchor.y, size: this.size, bottomPad: this.bottomPad });
+  }
+
+  /**
+   * 摆位避让自检（开机一次，LAYOUT_CHECK_MS 后）：配置角落里是否已经站着别的宠物。
+   * 判定素材 = 碰撞站场广播的其它宠物实时包围盒（this.others，主进程 broker 汇聚，
+   * 与跨窗碰撞检测同一份）；只在"真的会叠"时才轮换——用户给不同宠物配了不同角落时
+   * 不该被擅自改掉。兄弟窗口各自独立进程、启动有先后：本轮没看到任何人就不判，
+   * 后启动的宠物会看到我、由它们自己避让。
+   *
+   * 为什么判据用"锁存的 sawOverlap"而不是当场重算：静止轻推（broker 的 REST 分支）
+   * 比本自检触发得早——状态一对上 broker 就把叠在一起的宠物滑开了，等 1.5s 后自检时
+   * 大家早已不重叠，当场重算永远错过。锁存标志在每次广播时更新，第一次广播（此时宠物
+   * 还压在配置角落里）就记下"会叠"，自检时照判不误。
+   */
+  noteLayoutOverlap() {
+    if (this.sawOverlap || this.layoutShifted || this.layoutCheckDone) return;
+    if (this.customPos && this.userPlaced) return;
+    const others = this.others || {};
+    const ids = Object.keys(others).filter((pid) => others[pid] && others[pid].size > 0);
+    if (ids.length === 0) return;
+    const mine = this.configCornerBox();
+    this.sawOverlap = ids.some((pid) => {
+      const o = others[pid];
+      return S.rectsOverlap(mine, S.bodyPixelBox({ x: o.x, y: o.y, size: o.size, bottomPad: o.bottomPad }));
+    });
+  }
+
+  scheduleLayoutCheck() {
+    if (this.layoutShifted) return;
+    window.setTimeout(() => this.layoutCheckBody(), LAYOUT_CHECK_MS);
+  }
+
+  /** 摆位避让自检体（scheduleLayoutCheck 延时后跑；忙碌时由本体重试） */
+  layoutCheckBody() {
+    this.layoutCheckDone = true;
+    if (this.layoutShifted) return;
+    if (this.customPos && this.userPlaced) return;
+    if (this.dragState.active || this.menuOpen || this.chatOpen) return;
+    if (this.throwRef !== null || this.moveRef !== null) {
+      // 位置正被飞行/漫游驱动：改期重试而不是放弃——开机轻推的滑行可长达数秒，
+      // 当场放弃等于这一局再也不摆位。最多重试到 LAYOUT_CHECK_MAX_WAIT 后认命。
+      // 注意：重试的是**检查体**（500ms 后直接重跑），不是 scheduleLayoutCheck——
+      // 后者会重设 LAYOUT_CHECK_MS(1500ms) 定时器，改期节奏会被拖成 2s 一轮。
+      this.layoutCheckTries = (this.layoutCheckTries || 0) + 1;
+      if (this.layoutCheckTries * 500 >= LAYOUT_CHECK_MAX_WAIT) return;
+      this.layoutCheckDone = false;
+      window.setTimeout(() => this.layoutCheckBody(), 500);
+      return;
+    }
+    if (!this.sawOverlap) return;
+    this.layoutShifted = true;
+    this.position();
   }
 
   /** 抛掷空间（逐屏 AABB）。AREAS/PANELS 变化时由 relayout() 置空重建——飞行中每帧重算太浪费 */
@@ -1385,6 +1496,9 @@ class PetSprite {
       if (!this.resumeWorkStatusAnim()) {
         if (this.animations.idle.length) this.playOnce(S.pick(this.animations.idle, this.anim));
       }
+      // 用户拖拽/甩抛 = 用户意图位置：此后 customPos 带"用户摆过"语义，
+      // 开机摆位避让自检见此退出（不再擅自轮换角落）
+      this.userPlaced = true;
       // 释放位置 = 弹簧跟随后的实际包围盒左上角（this.pos 实时；不是指针目标——
       // 跟手滞后时落点跟随宠物实际位置，与浏览器 boxPx 同语义）
       const px = this.pos.x;
@@ -1892,6 +2006,7 @@ class PetSprite {
     this.stopThrow();
     this.stopMove();
     this.customPos = null;
+    this.userPlaced = false; // 重回"系统摆位"语义：避让可以再次接手
     this.position();
   }
 
