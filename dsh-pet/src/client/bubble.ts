@@ -259,7 +259,7 @@ export function makeBalanceBubble(rt: {
         wrap +
         (on ? ' is-on' : '') +
         (clickable ? ' is-clickable' : '') +
-        (shown > 0 ? ' is-expanded' : '') +
+        (!isCustom && shown > 0 ? ' is-expanded' : '') +
         (fading ? ' is-fading' : ''),
       // 就地吞掉：宠物本体（.dsh-pet-hit）的点击/拖拽不能被这次点击碰到
       onClick: clickable
