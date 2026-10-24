@@ -504,21 +504,30 @@ export function makePetUI(rt: {
       // 元素级失败（解码 / 格式不支持）：既有实现**完全没有检测**（只表现为"点了没反应"），
       // 这里补一条回执——只上报，不改播放控制（换源时与 onended 一起清掉，见 onReady）
       el.onerror = cuePlaybackId === null ? null : () => reportPlayback(cuePlaybackId, 'failed', 'decode-error');
-      // 素材加载走 fetch+blob：一次拿全整文件，绕开 video 流式加载在 DSH WebServer 上偶发的
+      // 素材加载：macOS WebKit（Safari/WKWebView，见 prefersMov）**必须直连**——
+      // HEVC-alpha 一旦以 blob: URL 作为 source，WebKit 只保留画面、丢掉 alpha 层：动画照播，
+      // 背景变黑（本机 Safari 实测：http 直连透明、fetch→blob→createObjectURL 黑底；
+      // transform / 交叉淡入 / 暂停都不影响 alpha，只有 blob 这一条路径会）。其余引擎继续走
+      // fetch+blob：一次拿全整文件，绕开 video 流式加载在 DSH WebServer 上偶发的
       // stalled/连接竞争（用户环境实测：慢点 5 次全部 stall、动画永不切换）。10s 超时兜底。
       // cache 用默认策略：服务端 cache-control 是 max-age=3600（src/host/index.ts:140），有效期内
       // 本来就不走网络；**不能用 force-cache**——它会连过期条目也照用，用户把
       // $DSH_HOME/dsh-pet/main-animation/webm/ 里的自定义动画换成同名文件后会一直看到旧动画。
+      // 直连时下层 revokeObjectURL(assetUrl) 对 http(s) 地址是空操作，blobUrlRef 的清理无需分支。
       const targetIsB = frontRef.current === 0;
       const ac = new AbortController();
       inflightRef.current.push(ac);
       const fetchTimer = window.setTimeout(() => ac.abort(), 10000);
-      fetch(assetUrl, { cache: 'default', signal: ac.signal })
-        .then((r) => {
-          if (!r.ok) throw new Error('asset HTTP ' + r.status);
-          return r.blob();
-        })
-        .then((blob) => {
+      const loadSource: Promise<string> = prefersMov()
+        ? Promise.resolve(assetUrl)
+        : fetch(assetUrl, { cache: 'default', signal: ac.signal })
+            .then((r) => {
+              if (!r.ok) throw new Error('asset HTTP ' + r.status);
+              return r.blob();
+            })
+            .then((blob) => URL.createObjectURL(blob));
+      loadSource
+        .then((src) => {
           window.clearTimeout(fetchTimer);
           const ix = inflightRef.current.indexOf(ac);
           if (ix !== -1) inflightRef.current.splice(ix, 1);
@@ -527,9 +536,8 @@ export function makePetUI(rt: {
           const slot = targetIsB ? 'b' : 'a';
           const oldUrl = blobUrlRef.current[slot];
           if (oldUrl) URL.revokeObjectURL(oldUrl);
-          const obj = URL.createObjectURL(blob);
-          blobUrlRef.current[slot] = obj;
-          el.src = obj;
+          blobUrlRef.current[slot] = src;
+          el.src = src;
           el.load();
         })
         .catch((err) => {
