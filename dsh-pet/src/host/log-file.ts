@@ -6,19 +6,20 @@
  * 用户只能看到「宠物不见了」）。本模块给所有日志一个与终端无关的出口。
  *
  * 性能约束（这是本文件存在的意义，改实现前先读）：
- *   - **调用不碰盘**：每条日志只做一次数组 push + 一次字符串拼接，O(1)。
- *   - **批量落盘**：攒够 `flushThreshold` 条或满 `flushIntervalMs` 才写一次，一次 `appendFile`
- *     写完多行。默认 64 条 / 1 秒，最坏情况下每秒一次写。
+ *   - **运行期间调用不碰盘**：每条日志只做一次数组 push + 一次字符串拼接，O(1)。
+ *   - **批量落盘**：攒够 `flushThreshold` 条或满 `flushIntervalMs` 才写一次，一次追加
+ *     写完多行。默认 64 条 / 1 秒。
  *   - **大小检查在 flush 时做**，不是每条——每条 `stat` 会把这变成每秒几十次系统调用。
- *   - **异步 IO + 串行化**：`flush()` 期间不会并发再开一次；写盘失败静默（日志失败绝不能再打日志）。
+ *   - **批次串行提交**：目录准备、大小检查与读取异步进行；追加和截断同步完成，退出补写可以准确
+ *     区分尚未提交的内容。`flush()` 不并发提交；写盘失败静默（日志失败绝不能再打日志）。
  *   - **内存有上限**：`maxPending` 条封顶，超了丢最旧的，避免日志风暴把宿主内存吃穿。
  *   - **退出兜底**：`process.once('exit')` 用同步写补齐最后一批（异步 IO 在 exit 里不会执行）。
  *
  * 单文件 + 按大小截断（issue #178 后续）：不轮转多份，超过 `maxBytes` 时只保留尾部
  * `keepBytes`。截断发生在 flush 之后，读一次、写一次，成本与日志量无关。
  */
-import { appendFileSync, mkdirSync } from 'node:fs';
-import { appendFile, mkdir, readFile, stat, writeFile } from 'node:fs/promises';
+import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs';
+import { mkdir, readFile, stat } from 'node:fs/promises';
 import { dirname } from 'node:path';
 
 export type LogLevel = 'info' | 'warn' | 'error' | 'debug';
@@ -41,7 +42,7 @@ export interface FileLogger extends Required<LoggerLike> {
    * 调用方在进程退出前应 `await` 它。
    */
   flush(): Promise<void>;
-  /** 停掉定时器并补一次 flush（不 await；需要确保落盘请先 `await flush()`） */
+  /** 停掉定时器并同步补写未提交日志；已启动的异步检查结束后不再截断文件。 */
   dispose(): void;
 }
 
@@ -119,6 +120,8 @@ export function createFileLogger(options: FileLoggerOptions): FileLogger {
 
   let pending: string[] = [];
   let dropped = 0;
+  /** 已离开 pending、正在等待目录准备的批次；提交前始终可由退出路径补写。 */
+  let activeChunk = '';
   let flushing: Promise<void> | null = null;
   let disposed = false;
   /** 目录只建一次（首次 flush 时）；失败后不再重试，日志静默降级 */
@@ -127,6 +130,27 @@ export function createFileLogger(options: FileLoggerOptions): FileLogger {
     (dirReady ??= mkdir(dirname(file), { recursive: true })
       .then(() => undefined)
       .catch(() => undefined));
+
+  const takePending = (): string => {
+    const note = dropped > 0 ? formatLogLine('warn', `日志缓冲溢出，丢弃 ${dropped} 条`, now()) : '';
+    const chunk = note + pending.join('');
+    pending = [];
+    dropped = 0;
+    return chunk;
+  };
+
+  /** 退出与 dispose 共用；批次追加没有异步写入窗口，因此只需补尚未提交的内容。 */
+  const flushSync = (): void => {
+    const chunk = activeChunk + takePending();
+    activeChunk = '';
+    if (!chunk) return;
+    try {
+      mkdirSync(dirname(file), { recursive: true });
+      appendFileSync(file, chunk, 'utf8');
+    } catch {
+      /* 日志写入失败不影响退出清理 */
+    }
+  };
 
   const push = (level: LogLevel, message: string): void => {
     if (level === 'debug' && !debugEnabled) return;
@@ -142,38 +166,43 @@ export function createFileLogger(options: FileLoggerOptions): FileLogger {
       dropped += pending.length - maxPending;
       pending.splice(0, pending.length - maxPending);
     }
-    if (pending.length >= threshold) void flush();
+    // app 的退出清理可能在 dispose 之后继续记录日志；此时没有定时器与 exit 监听可依赖。
+    if (disposed) flushSync();
+    else if (pending.length >= threshold) void flush();
   };
 
   const flush = async (): Promise<void> => {
     // 循环而不是「等一次就返回」：调用方在写入过程中调 flush 时，缓冲里可能还有后到的行。
     // 只等当前那次写盘会把它们留在内存里（测试里表现为「最后几条日志不见了」）。
     for (;;) {
+      if (disposed) {
+        flushSync();
+        return;
+      }
       if (flushing) {
         await flushing;
         continue;
       }
       if (pending.length === 0) return;
-      const chunk = pending.join('');
-      const droppedNote = dropped;
-      pending = [];
-      dropped = 0;
+      activeChunk = takePending();
       flushing = (async () => {
         await ensureDir();
         try {
-          if (droppedNote > 0) {
-            await appendFile(file, formatLogLine('warn', `日志缓冲溢出，丢弃 ${droppedNote} 条`, now()), 'utf8');
-          }
-          await appendFile(file, chunk, 'utf8');
+          // 追加与清空标记在同一段同步执行；dispose 若已补写，这里不会重复追加。
+          const chunk = activeChunk;
+          activeChunk = '';
+          if (chunk) appendFileSync(file, chunk, 'utf8');
         } catch {
           return; // 写盘失败：静默。日志系统不能因为磁盘问题把宿主拖垮
         }
+        if (disposed) return;
         try {
           // 大小检查放在 flush 之后、每次 flush 至多一次 stat：这是「不每条碰盘」的关键
           const info = await stat(file);
-          if (info.size > maxBytes) {
+          if (!disposed && info.size > maxBytes) {
             const content = await readFile(file);
-            await writeFile(file, tailForTrim(content, keepBytes));
+            // 读取期间若已 dispose，退出补写的日志可能在读取快照之外，不能再用旧内容覆盖。
+            if (!disposed) writeFileSync(file, tailForTrim(content, keepBytes));
           }
         } catch {
           /* 截断失败不影响后续写入（下一次 flush 会再试） */
@@ -192,19 +221,7 @@ export function createFileLogger(options: FileLoggerOptions): FileLogger {
   timer.unref?.();
 
   // exit 里异步 IO 不会执行：用同步写补齐最后一批（不截断——退出路径上不值得再读一次文件）
-  const onExit = (): void => {
-    if (pending.length === 0) return;
-    const chunk = pending.join('');
-    pending = [];
-    try {
-      // 必须先建目录：首次运行且一次异步 flush 都没发生过时，父目录还不存在，
-      // 直接 appendFileSync 会 ENOENT 并被下面的 catch 吞掉（表现为「日志文件根本没生成」）。
-      mkdirSync(dirname(file), { recursive: true });
-      appendFileSync(file, chunk, 'utf8');
-    } catch {
-      /* 进程都要退了，静默 */
-    }
-  };
+  const onExit = (): void => flushSync();
   process.once('exit', onExit);
 
   return {
@@ -220,7 +237,7 @@ export function createFileLogger(options: FileLoggerOptions): FileLogger {
       disposed = true;
       clearInterval(timer);
       process.removeListener('exit', onExit);
-      void flush();
+      flushSync();
     },
   };
 }
