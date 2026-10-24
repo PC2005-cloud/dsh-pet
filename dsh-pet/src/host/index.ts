@@ -679,17 +679,11 @@ export function apply(ctx: any): void {
    */
   const lastTodoText = new Map<string, string | null>();
   /**
-   * 每会话「正在跑、且气泡上有具体描述」的工具数（不是布尔）：并行工具调用时，先返回的那个
-   * 不该把仍在中途的另一个的具体描述顶掉——归零才恢复 todo 文案。
+   * 每会话正在执行的工具详情，按 callId 对应结果；完成后显示剩余调用中最近开始的那一项。
    * 只统计**拿到了目标**的调用（`toolDetailFromEvent` 返回非 null）：没写出描述就不该占位，
    * 否则一次没带参数的 `read` 会平白挡住 todo 文案。
    */
-  const toolsInFlight = new Map<string, number>();
-  const bumpToolsInFlight = (sessionId: string, delta: number): void => {
-    const next = (toolsInFlight.get(sessionId) ?? 0) + delta;
-    if (next > 0) toolsInFlight.set(sessionId, next);
-    else toolsInFlight.delete(sessionId);
-  };
+  const toolsInFlight = new Map<string, Map<string | symbol, string>>();
   /** 取消某会话待执行的终态清理：会话已回到非终态，那次清理到点后既不清理也不重排，留着只会误导 */
   const cancelTerminalCleanup = (sessionId: string): void => {
     const t = terminalTimers.get(sessionId);
@@ -2576,7 +2570,7 @@ export function apply(ctx: any): void {
         // 缓存无条件更新：工具跑完要靠它把气泡恢复回来（见下方 tool/call 的接线）
         lastTodoText.set(sessionId, text);
         // 工具正在执行时不覆盖气泡：「修改 index.ts」比清单里那句更能说明此刻在动什么
-        if ((toolsInFlight.get(sessionId) ?? 0) > 0) return;
+        if (toolsInFlight.get(sessionId)?.size) return;
         if (workStatus.has(sessionId)) {
           workStatus.setTask(sessionId, text);
           publishWorkStatus(); // 任务文案变化也要写 S（气泡内容靠它更新）
@@ -2616,7 +2610,7 @@ export function apply(ctx: any): void {
           turnFlags.set(sessionId, flags);
         }
       }
-      const next = reduceWorkStatus(
+      let next = reduceWorkStatus(
         event as { type?: string; data?: Record<string, unknown> & { reason?: { kind?: string } } },
         turnFlags.get(sessionId),
       );
@@ -2640,18 +2634,35 @@ export function apply(ctx: any): void {
       // 正是 setState 建出来的——顺序反了这一句会被静默丢弃（不报错，最难查的那种）。
       const detail =
         type === 'tool/call' ? toolDetailFromEvent(event as { data?: { name?: unknown; arguments?: unknown } }) : null;
-      const changed = workStatus.setState(sessionId, next, seq);
+      const data = (
+        event as {
+          data?: { callId?: unknown; message?: { source?: { callId?: unknown } } };
+        }
+      ).data;
+      const rawCallId = type === 'tool/result' ? (data?.message?.source?.callId ?? data?.callId) : data?.callId;
+      const callId = typeof rawCallId === 'string' && rawCallId !== '' ? rawCallId : undefined;
+      let task: string | null | undefined;
       if (detail !== null) {
         // 有具体描述才「占位」：占位期间 todo/write 不覆盖它（见 todo/write 分支）
-        bumpToolsInFlight(sessionId, 1);
-        workStatus.setTask(sessionId, detail);
+        let pending = toolsInFlight.get(sessionId);
+        if (!pending) toolsInFlight.set(sessionId, (pending = new Map()));
+        pending.set(callId ?? Symbol(), detail);
+        task = detail;
       } else if (type === 'tool/result') {
-        if ((toolsInFlight.get(sessionId) ?? 0) > 0) bumpToolsInFlight(sessionId, -1);
-        // 占位全清空：把气泡还给最近一条 todo 文案（没有就 null → 回落档位文案）
-        if ((toolsInFlight.get(sessionId) ?? 0) === 0) {
-          workStatus.setTask(sessionId, lastTodoText.get(sessionId) ?? null);
+        const pending = toolsInFlight.get(sessionId);
+        // 兼容缺少标识的旧事件：只释放一个无标识调用，不猜测具名调用的归属。
+        const key = callId ?? [...(pending?.keys() ?? [])].find((id) => typeof id === 'symbol');
+        if (key !== undefined) pending?.delete(key);
+        const activeDetail = [...(pending?.values() ?? [])].pop();
+        if (pending?.size === 0) toolsInFlight.delete(sessionId);
+        task = activeDetail ?? lastTodoText.get(sessionId) ?? null;
+        if (activeDetail !== undefined) {
+          // 还有具体操作未结束，继续工作档；同档详情更新沿用原有即时发布路径。
+          next = 'working';
         }
       }
+      const changed = workStatus.setState(sessionId, next, seq);
+      if (task !== undefined) workStatus.setTask(sessionId, task);
       publishWorkStatus(); // 档位或文案变了 → 写 S（内容没变时它自己会短路，不产生多余写入）
       // 同会话同状态不重复更新（防刷屏）：写已经落定，这里只负责跳过终态清理的重排
       if (!changed) return;

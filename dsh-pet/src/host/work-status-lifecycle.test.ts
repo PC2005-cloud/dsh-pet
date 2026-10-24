@@ -152,6 +152,125 @@ const TODO = (seq: number, ...items: Array<[string, string]>): Record<string, un
   data: { todos: items.map(([status, content]) => ({ status, content })) },
 });
 
+const DETAILED_CALL = (seq: number, callId: string | undefined, file: string): Record<string, unknown> => ({
+  type: 'tool/call',
+  seq,
+  data: { name: 'read', callId, arguments: JSON.stringify({ file_path: file }) },
+});
+// DSH 的结果事件通过 message.source.callId 关联调用。
+const TOOL_RESULT = (seq: number, callId?: string): Record<string, unknown> => ({
+  type: 'tool/result',
+  seq,
+  data: { message: { source: { kind: 'tool', callId } } },
+});
+
+describe('并行工具的详情与调用对应', () => {
+  test('无详情工具返回时保留仍在执行的文件操作，全部结束后恢复最新 todo', async (t) => {
+    let now = Date.now();
+    t.mock.method(Date, 'now', () => now);
+    const h = setup();
+    t.after(h.dispose);
+    h.emit('s', TURN_START(1));
+    h.emit('s', TODO(2, ['in_progress', '原清单']));
+    h.emit('s', DETAILED_CALL(3, 'read-A', 'active.ts'));
+    h.emit('s', { type: 'tool/call', seq: 4, data: { name: 'get_goal', callId: 'goal-B', arguments: '{}' } });
+    now += 6000; // 越过原有档位缓冲，直接验证最终可见状态。
+    h.emit('s', TOOL_RESULT(5, 'goal-B'));
+    assert.equal((await h.snapshot()).state, 'working');
+    assert.match((await h.snapshot()).task ?? '', /active\.ts/);
+    h.emit('s', TODO(6, ['in_progress', '最新清单']));
+    assert.match((await h.snapshot()).task ?? '', /active\.ts/);
+    now += 6000;
+    h.emit('s', TOOL_RESULT(7, 'read-A'));
+    assert.deepEqual(await h.snapshot(), { state: 'result', task: '最新清单' });
+  });
+
+  test('最后开始的工具先完成时，立即显示另一项仍在执行的操作', async (t) => {
+    const h = setup();
+    t.after(h.dispose);
+    h.emit('s', TURN_START(1));
+    h.emit('s', DETAILED_CALL(2, 'read-A', 'active.ts'));
+    h.emit('s', DETAILED_CALL(3, 'read-B', 'finished.ts'));
+    h.emit('s', TOOL_RESULT(4, 'read-B'));
+    assert.equal((await h.snapshot()).state, 'working');
+    assert.match((await h.snapshot()).task ?? '', /active\.ts/);
+  });
+
+  test('先开始的工具先完成时，剩余操作继续显示工作状态', async (t) => {
+    let now = Date.now();
+    t.mock.method(Date, 'now', () => now);
+    const h = setup();
+    t.after(h.dispose);
+    h.emit('s', TURN_START(1));
+    h.emit('s', DETAILED_CALL(2, 'read-A', 'finished.ts'));
+    h.emit('s', DETAILED_CALL(3, 'read-B', 'active.ts'));
+    now += 6000;
+    h.emit('s', TOOL_RESULT(4, 'read-A'));
+    assert.equal((await h.snapshot()).state, 'working');
+    assert.match((await h.snapshot()).task ?? '', /active\.ts/);
+  });
+
+  test('未知和重复结果不能移除其他调用的详情', async (t) => {
+    let now = Date.now();
+    t.mock.method(Date, 'now', () => now);
+    const h = setup();
+    t.after(h.dispose);
+    h.emit('s', TURN_START(1));
+    h.emit('s', DETAILED_CALL(2, 'read-A', 'finished.ts'));
+    h.emit('s', DETAILED_CALL(3, 'read-B', 'active.ts'));
+    h.emit('s', TOOL_RESULT(4, 'read-A'));
+    now += 6000;
+    for (const [seq, id] of [
+      [5, 'read-A'],
+      [6, 'unknown'],
+    ] as const) {
+      h.emit('s', TOOL_RESULT(seq, id));
+      assert.equal((await h.snapshot()).state, 'working');
+      assert.match((await h.snapshot()).task ?? '', /active\.ts/);
+    }
+  });
+
+  test('不同会话可以使用相同的调用标识', async (t) => {
+    const h = setup();
+    t.after(h.dispose);
+    h.emit('a', TURN_START(1));
+    h.emit('a', DETAILED_CALL(2, 'same-id', 'first.ts'));
+    h.emit('b', TURN_START(3));
+    h.emit('b', DETAILED_CALL(4, 'same-id', 'second.ts'));
+    h.emit('b', TOOL_RESULT(5, 'same-id'));
+    assert.equal((await h.snapshot()).state, 'working');
+    assert.match((await h.snapshot()).task ?? '', /first\.ts/);
+  });
+
+  for (const interrupted of [false, true]) {
+    test(`${interrupted ? '回合中断后' : '新回合开始时'}清理上一轮未完成的工具`, async (t) => {
+      let now = Date.now();
+      t.mock.method(Date, 'now', () => now);
+      const h = setup();
+      t.after(h.dispose);
+      h.emit('s', TURN_START(1));
+      h.emit('s', DETAILED_CALL(2, 'old', 'old.ts'));
+      if (interrupted) h.emit('s', TURN_END(3, 'aborted'));
+      h.emit('s', TURN_START(4));
+      h.emit('s', DETAILED_CALL(5, 'new', 'new.ts'));
+      now += 6000;
+      h.emit('s', TOOL_RESULT(6, 'new'));
+      assert.deepEqual(await h.snapshot(), { state: 'result', task: null });
+    });
+  }
+
+  test('缺少调用标识的结果只释放无标识调用，不影响已识别的工具', async (t) => {
+    const h = setup();
+    t.after(h.dispose);
+    h.emit('s', TURN_START(1));
+    h.emit('s', DETAILED_CALL(2, 'identified', 'active.ts'));
+    h.emit('s', DETAILED_CALL(3, undefined, 'anonymous.ts'));
+    h.emit('s', TOOL_RESULT(4));
+    assert.equal((await h.snapshot()).state, 'working');
+    assert.match((await h.snapshot()).task ?? '', /active\.ts/);
+  });
+});
+
 describe('任务文案生命周期 —— 现场场景 1：分阶段任务', () => {
   test('文案随当前进行中的步骤走：多个 in_progress 时取最后一个', async (t) => {
     const h = setup();
