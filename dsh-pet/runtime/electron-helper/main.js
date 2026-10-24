@@ -140,6 +140,19 @@ if (!DPI_PROBE && HOST_PID > 0) {
 // 不影响浏览器形态与主 DSH（独立进程）；非 Windows（macOS/Linux）合成路径不同，保留硬件加速。
 if (process.platform === 'win32') {
   app.disableHardwareAcceleration();
+  // disableHardwareAcceleration() 只关硬件 GL，**并不会去掉 Chromium 的 GPU 进程**：
+  // 机器上装了虚拟显示器（ToDesk / GameViewer / MuMu / 远程桌面 IDD 之类）时，GPU 进程的
+  // 沙箱在初始化阶段会以 STATUS_BREAKPOINT(0x80000003) 反复崩掉，随后浏览器进程直接
+  //   FATAL:gpu_data_manager_impl_private.cc:416] GPU process isn't usable. Goodbye.
+  // 以 0x80000003(2147483651) 退出 —— helper 每起必崩、桌面宠物永远不出现，宿主侧只能看到
+  // 一行无信息量的 "helper exited (code=2147483651)"，最后被熔断逻辑彻底放弃。
+  // 关掉 GPU 沙箱即可恢复（实测：单独 --disable-gpu / --use-angle=swiftshader 均无效，
+  // --disable-gpu-sandbox 与 --in-process-gpu 有效；这里选前者，对渲染路径改动最小）。
+  // 本进程只渲染本地素材、不加载任何不可信内容，放宽 GPU 沙箱是可接受的代价；
+  // 需要保留沙箱的环境可设 DSH_PET_GPU_SANDBOX=1。
+  if (process.env.DSH_PET_GPU_SANDBOX !== '1') {
+    app.commandLine.appendSwitch('disable-gpu-sandbox');
+  }
 }
 
 // ---------- 全局 DPI 线性化（多显示器异构缩放的根因修复） ----------
