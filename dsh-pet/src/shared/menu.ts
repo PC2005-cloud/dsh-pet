@@ -200,6 +200,77 @@ function isBranchNode(n: MenuNode): n is MenuBranch {
  *  级联：指针在菜单树内绝不自动收起，整体离开（root mouseleave，软 200ms）才关闭整棵菜单。
  *  clamp：允许占用的矩形（视口局部坐标）；桌面传「窗口 ∩ 工作区」——宠物贴边时窗口外扩的部分
  *  会被 OS 裁掉，约束进去即可完整显示，窗口与宠物零移动。 */
+/** 面板/项的矩形（只需定位用到的那几个边）。 */
+export interface PanelBox {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+}
+
+/** {@link pickPanelPosition} 的入参。 */
+export interface PanelPositionInput {
+  /** 待摆放面板的尺寸 */
+  panel: { w: number; h: number };
+  /** 触发它的菜单项 */
+  item: { left: number; right: number; top: number };
+  /** 它所属的那一层面板（子面板平级挂载，只有 DOM 父节点能给出正确的层） */
+  parent: { left: number; right: number; top: number };
+  /** 其它已展开面板的矩形：新面板不得与其中任何一个相交 */
+  others: PanelBox[];
+  /** 允许显示的范围（窗口 ∩ 工作区，视口坐标） */
+  clamp: { x: number; y: number; w: number; h: number };
+}
+
+/** 面板与边界的间距，以及面板之间的间隙（px）。 */
+const PANEL_GAP = 4;
+
+/**
+ * 决定一个子面板该摆在哪：**优先不与任何已展开面板重叠**。
+ *
+ * 候选按优先级排列（右侧展开优先、其次左侧；先对齐触发项、再对齐父面板顶），取第一个
+ * 「完整落在 clamp 内 且 与 others 都不相交」的；都不满足时退而求其次取第一个不与 others 相交的；
+ * 仍然没有（窗口太窄，任何位置都会压到）就贴父面板右侧并在 clamp 内夹取——宁可贴边，也不要叠在一起。
+ *
+ * 纯函数：不碰 DOM、不读全局，便于单测（多级菜单的重叠是几何问题，不是渲染问题）。
+ * @param input 面板尺寸、触发项/父面板矩形、其它面板矩形与 clamp 范围
+ * @returns 面板左上角在视口坐标里的落点
+ */
+export function pickPanelPosition(input: PanelPositionInput): { left: number; top: number } {
+  const { panel, item, parent, others, clamp } = input;
+  const minLeft = clamp.x + PANEL_GAP;
+  const minTop = clamp.y + PANEL_GAP;
+  const maxLeft = clamp.x + clamp.w - PANEL_GAP - panel.w;
+  const maxTop = clamp.y + clamp.h - PANEL_GAP - panel.h;
+  const clampTop = (top: number): number => Math.max(minTop, Math.min(top, maxTop));
+  const hitsOther = (left: number, top: number): boolean =>
+    others.some(
+      (b) => left < b.right && left + panel.w > b.left && top < b.bottom && top + panel.h > b.top,
+    );
+  const fitsClamp = (left: number, top: number): boolean =>
+    left >= minLeft - 0.5 && left <= maxLeft + 0.5 && top >= minTop - 0.5 && top <= maxTop + 0.5;
+  const topAtItem = clampTop(item.top);
+  const topAtParent = clampTop(parent.top);
+  const cands = [
+    { left: parent.right + PANEL_GAP, top: topAtItem },
+    { left: parent.left - PANEL_GAP - panel.w, top: topAtItem },
+    { left: parent.right + PANEL_GAP, top: topAtParent },
+    { left: parent.left - PANEL_GAP - panel.w, top: topAtParent },
+  ];
+  // ① 理想落点：完整落在 clamp 内且不压任何面板
+  const ideal = cands.find((cd) => fitsClamp(cd.left, cd.top) && !hitsOther(cd.left, cd.top));
+  if (ideal) return ideal;
+  // ② 次优：把候选夹进 clamp 后再看能不能避开其它面板（贴边但至少不重叠）
+  const clampX = (v: number): number => Math.max(minLeft, Math.min(v, Math.max(minLeft, maxLeft)));
+  const clampY = (v: number): number => Math.max(minTop, Math.min(v, Math.max(minTop, maxTop)));
+  const fitted = cands
+    .map((cd) => ({ left: clampX(cd.left), top: clampY(cd.top) }))
+    .find((cd) => !hitsOther(cd.left, cd.top));
+  if (fitted) return fitted;
+  // ③ 兜底：窗口太窄，任何位置都会压到——贴父面板右侧并在 clamp 内夹取（宁可贴边，也不叠在一起）
+  return { left: clampX(parent.right + PANEL_GAP), top: clampY(topAtItem) };
+}
+
 export function mountContextMenu(opts: {
   tree: MenuNode[];
   x: number;
@@ -240,18 +311,36 @@ export function mountContextMenu(opts: {
   };
 
   /** 把面板显示在触发项旁边：右缘展开，贴右/下边缘自动翻转夹取（在 clamp 矩形内） */
+  /**
+   * 把子面板摆到触发项旁边：**不许压住任何一层已展开的面板**。
+   *
+   * 旧实现只判断"右侧放不下就翻到触发项左侧"——而触发项就长在父面板里，翻左等于直接压在父面板上；
+   * 三级同理，翻左会压在二级或一级上（实测多级菜单叠成一坨）。几何决策抽到
+   * {@link pickPanelPosition}，这里只负责读 DOM 与写样式。
+   * @param panel 待摆放的子面板（已 display:block，尺寸可读）
+   * @param item 触发它的菜单项
+   */
   const showPanel = (panel: HTMLElement, item: HTMLElement): void => {
     const rect = item.getBoundingClientRect();
     panel.style.left = '';
     panel.style.top = '';
     panel.style.display = 'block';
-    let left = rect.right + 4;
-    if (left + panel.offsetWidth > c.x + c.w - 4) left = rect.left - panel.offsetWidth - 4;
-    left = Math.max(c.x + 4, left);
-    let top = rect.top;
-    if (top + panel.offsetHeight > c.y + c.h - 4) top = Math.max(c.y + 4, c.y + c.h - 4 - panel.offsetHeight);
-    panel.style.left = left + 'px';
-    panel.style.top = top + 'px';
+    const parentEl = item.parentElement;
+    const pr = parentEl ? parentEl.getBoundingClientRect() : rect;
+    const pick = pickPanelPosition({
+      panel: { w: panel.offsetWidth, h: panel.offsetHeight },
+      item: { left: rect.left, right: rect.right, top: rect.top },
+      parent: { left: pr.left, right: pr.right, top: pr.top },
+      others: Array.from(root.querySelectorAll<HTMLElement>('.dsh-pet-menu-column'))
+        .filter((p) => p !== panel && p.style.display !== 'none')
+        .map((p) => {
+          const b = p.getBoundingClientRect();
+          return { left: b.left, top: b.top, right: b.right, bottom: b.bottom };
+        }),
+      clamp: { x: c.x, y: c.y, w: c.w, h: c.h },
+    });
+    panel.style.left = pick.left + 'px';
+    panel.style.top = pick.top + 'px';
   };
 
   /** 构建一层面板；分支项的子面板平级挂到 root 下、不嵌套。
