@@ -22,8 +22,7 @@ try {
   );
   process.exit(3);
 }
-const { app, BrowserWindow, ipcMain, screen, shell, protocol, Tray, Menu, nativeImage, powerMonitor } =
-  electronApi;
+const { app, BrowserWindow, ipcMain, screen, shell, protocol, Tray, Menu, nativeImage, powerMonitor } = electronApi;
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 const { readFileSync, writeFileSync } = require('node:fs');
@@ -295,10 +294,90 @@ function updatePetState(petId, partial) {
 /** 每窗口当前穿透状态的镜像（Electron 没有取值 API）：所有翻转都经 setWindowIgnore，供冒烟断言/排查 */
 const windowIgnore = new Map();
 
+/**
+ * 输入模型。
+ *
+ * `ignore` = 历史实现：`setIgnoreMouseEvents` 翻转 + 主进程光标轮询（Windows/macOS 默认，行为不变）。
+ * `shape`  = Linux 默认：永不调用 `setIgnoreMouseEvents`，改用 `win.setShape(rects)`——形状之外
+ *            **既不绘制也不接收鼠标**，事件落到下层应用。渲染端上报"宠物可见盒 + 覆盖层矩形"，
+ *            主进程只负责应用，不需要任何光标轮询。
+ * `always` = 整窗永远可交互（不穿透）。`setShape` 在某些合成器上不可用时的兜底。
+ *
+ * 为什么 Linux 不能用 `ignore`：X11 分支里 ignore=true 把窗口 ShapeInput 设成 **1×1**
+ * （`x11::Shape::Rectangles`），ignore=false 才用 `Mask(source_bitmap: None)` 清掉；而 Xwayland 的
+ * 输入区域取自 ShapeInput（`xwl_window_set_input_region(..., wInputShape(toplevel))`），清不干净
+ * 就永久停在 1×1 穿透态——宠物看得见、钉得稳，鼠标却全部落到下层应用，点不中、拖不动。
+ * @type {'ignore' | 'shape' | 'always'}
+ */
+const INPUT_MODE = (() => {
+  const raw = String(process.env.DSH_PET_INPUT || '')
+    .trim()
+    .toLowerCase();
+  if (raw === 'shape' || raw === 'ignore' || raw === 'always') return raw;
+  return process.platform === 'linux' ? 'shape' : 'ignore';
+})();
+
+/** win.id → 上一次应用过的形状（JSON）：形状逐帧算也没关系，重复值不发系统调用 */
+const windowShapeKey = new Map();
+
+/**
+ * 应用窗口形状（仅 `shape` 模式）。`rects` 是**窗口内容区坐标**。
+ *
+ * 空列表会被忽略：`setShape([])` 的语义是"恢复矩形窗口"，那会让整窗变成可交互、把下层应用全挡住。
+ * @param win 目标窗口
+ * @param rects 形状矩形列表（窗口内容区坐标，整数）
+ */
+function applyWindowShape(win, rects) {
+  if (INPUT_MODE !== 'shape') return;
+  const clean = [];
+  for (const r of Array.isArray(rects) ? rects : []) {
+    if (!r) continue;
+    const x = Math.round(Number(r.x));
+    const y = Math.round(Number(r.y));
+    const width = Math.round(Number(r.width));
+    const height = Math.round(Number(r.height));
+    if (![x, y, width, height].every(Number.isFinite) || width <= 0 || height <= 0) continue;
+    clean.push({ x, y, width, height });
+  }
+  if (clean.length === 0) return;
+  const key = JSON.stringify(clean);
+  if (windowShapeKey.get(win.id) === key) return;
+  windowShapeKey.set(win.id, key);
+  try {
+    if (typeof win.setShape === 'function') win.setShape(clean);
+  } catch (e) {
+    console.error('[dsh-pet-desktop-helper] setShape failed:', String(e && e.message ? e.message : e));
+  }
+}
+
+/**
+ * 建窗时的临时形状：渲染端首帧上报前，别让整窗（含四周透明余量）一直挡点击。
+ * @param sizePx 宠物包围盒边长（物理像素）
+ * @param winW 窗口内容区宽
+ * @param winH 窗口内容区高
+ */
+function initialShapeFor(sizePx, winW, winH) {
+  const w = Math.max(8, Math.min(winW, sizePx));
+  const h = Math.max(8, Math.min(winH, (sizePx * 360) / 640));
+  return [
+    {
+      x: Math.round((winW - w) / 2),
+      y: Math.round(Math.max(0, (winH - h) / 2)),
+      width: Math.round(w),
+      height: Math.round(h),
+    },
+  ];
+}
+
 /** 翻转整窗穿透的唯一出口：状态与镜像永远一起更新（穿透期间保留 forward） */
 function setWindowIgnore(win, ignore) {
-  win.setIgnoreMouseEvents(ignore, { forward: true });
+  // 先记镜像（兜底轮询 / 冒烟断言都读它），再决定要不要真的调系统 API。
   windowIgnore.set(win.id, ignore);
+  // `shape` / `always` 模式下**绝不调用 setIgnoreMouseEvents**：X11 上 ignore=true 会把窗口
+  // ShapeInput 设成 1×1，而 ignore=false 那步（Mask + source_bitmap None）在 KDE/KWin + XWayland
+  // 实测不生效 → 窗口永久穿透，宠物看得见却点不中、拖不动。Linux 改走窗口形状（见 INPUT_MODE）。
+  if (INPUT_MODE !== 'ignore') return;
+  win.setIgnoreMouseEvents(ignore, { forward: true });
 }
 
 /** 兜底通道的光标轮询间隔（ms） */
@@ -431,6 +510,9 @@ function createPetWindows() {
     // 默认整窗点击穿透（渲染端在光标进出身体命中区时经 IPC 翻转）；
     // forward:true 保证穿透期间 mousemove 仍转发进渲染端做命中判定。
     setWindowIgnore(win, true);
+    // `shape` 模式：先给一个"宠物包围盒"量级的形状，渲染端首帧上报后再换成精确值
+    // （否则从建窗到首帧之间，整窗矩形会把下方应用的点击吞掉）
+    applyWindowShape(win, initialShapeFor(pet.size * scale, width, height));
     // 任务栏按钮可能在 show / ready-to-show / 唤醒 / 显示器变化后重建（见 keepOffTaskbar）
     win.on('show', () => keepOffTaskbar(win));
     win.once('ready-to-show', () => {
@@ -450,6 +532,9 @@ function createPetWindows() {
     // 判定区域一致（状态未变不翻转）。唯一不能自行决定的是 busy：渲染端正拿着输入时不得翻回穿透
     // （主进程光看光标与窗口位移分不清拖拽跟手和漫游/抛掷，所以由渲染端上报）。
     const pointerTimer = setInterval(() => {
+      // `shape` 模式不用光标轮询：窗口形状已经决定了哪里接收鼠标（见 INPUT_MODE）。
+      // `always` 模式整窗永远可交互，也不需要翻转。
+      if (INPUT_MODE !== 'ignore') return;
       if (pointerFallbackPaused || win.isDestroyed()) return;
       const b = win.getBounds();
       if (b.width < 8 || b.height < 8) return; // 尺寸还没落定（renderer 首帧上报前）
@@ -492,6 +577,7 @@ function createPetWindows() {
       lastRequestedBounds.delete(win.id);
       winMargins.delete(win.id);
       windowIgnore.delete(win.id);
+      windowShapeKey.delete(win.id);
       inputBusy.delete(win.id);
       inputRegions.delete(win.id);
       offBodyMs.delete(win.id);
@@ -795,6 +881,14 @@ app.whenReady().then(() => {
   };
   powerMonitor.on('resume', reassertTaskbar);
   powerMonitor.on('unlock-screen', reassertTaskbar);
+
+  // 窗口形状上报（Linux `shape` 模式）：渲染端把"宠物可见盒 + 气泡/提示/菜单/对话/积分弹窗"
+  // 算成一组矩形发上来，主进程只负责应用。形状之外不绘制也不接收鼠标 → 事件落到下层应用。
+  ipcMain.on('pet:shape', (event, input) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (!win || win.isDestroyed() || !input || !Array.isArray(input.rects)) return;
+    applyWindowShape(win, input.rects);
+  });
 
   // 宠物窗口跟随：renderer 逐帧上报窗口内容区位置/尺寸
   ipcMain.on('pet:set-bounds', (event, bounds) => {

@@ -10,6 +10,11 @@
 
 // 左键 + 修饰键 = 「呼出 DSH」的快捷键。Windows / Linux 用 Ctrl；macOS 上 Ctrl+左键是系统右键
 // （先触发 contextmenu、拿不到 click），所以改用 Cmd。快捷键文案按平台取，判定统一走 isOpenShortcut。
+/** 空闲时窗口四周余量（CSS px）：窗口≈宠物盒，宠物才能贴到屏幕边（见 desiredMargin） */
+const IDLE_MARGIN_PX = 4;
+/** 菜单/对话窗打开时窗口四周至少留出的余量（CSS px）：够两层菜单面板并排 */
+const MENU_ROOM_PX = 260;
+
 const OPEN_SHORTCUT_HINT = /Mac/i.test(navigator.platform || navigator.userAgent) ? 'Cmd+左键' : 'Ctrl+左键';
 /** 本次点击是否按住了「呼出 DSH」的修饰键（Ctrl / Cmd） */
 const isOpenShortcut = (e) => !!(e && (e.ctrlKey || e.metaKey));
@@ -61,15 +66,17 @@ class PetSprite {
       h: ((S.HIT_BOX.y1 - S.HIT_BOX.y0) / 360) * this.height,
     };
     window.__dshPetDebug.hitRect = this.hitRect;
+    // 宠物**主体盒**（窗口坐标系）—— 就是上面 hitRect 那块（HIT_BOX 像素化，略大于角色本身）。
+    // 实测角色只占画布的 x 218..425 / y 62..328（左右各约 1/3 是纯透明留白），所以桌面端把窗口
+    // 按主体盒来算：画布以**负余量**溢出窗口、被裁掉的只是透明留白，换来的是角色能贴到屏幕边。
+    this.body = { x: this.hitRect.x, y: this.hitRect.y, w: this.hitRect.w, h: this.hitRect.h };
     // 左右透明边余量（视频盒内宠物身体居中）：让边界按身体贴边——宠物能走到屏幕边缘，但身体永不越界。
     this.sideAllow = (S.HIT_BOX.x0 / 640) * this.size;
     window.__dshPetDebug.sideAllow = this.sideAllow;
-    // 窗口四周外扩：左右下 = WINDOW_MARGIN_RATIO×宠物尺寸；上边距按气泡最大高度算——气泡锚字号、
-    // 窗口余量锚宠物，宠物变小或字号固定时半只宠物的余量装不下气泡，气泡顶端会被窗口上沿切掉。
-    // 余量透明且点击穿透，加高没有副作用；但它自此不再四边相等，所以命中区要由主进程按上报值算。
-    const m = this.size * WINDOW_MARGIN_RATIO;
+    // 窗口余量**按当前状态算**（见 desiredMargin）：空闲贴着主体盒，有气泡/菜单时才外扩。
+    // fontConf 仍在这里取好：下面 this.font 要用同一份字号（上边距与气泡字号必须同源）。
     const fontConf = pet.font || config.font || S.DEFAULT_FONT;
-    this.margin = { t: Math.max(m, S.bubbleTopMarginPx(fontConf, this.size)), r: m, b: m, l: m };
+    this.margin = this.desiredMargin();
     window.__dshPetDebug.winMargin = this.margin;
     // 宠物包围盒左上角在【工作区】坐标系里的位置（本窗口的位置 = 宠物的位置）
     this.pos = { x: 0, y: 0 };
@@ -125,6 +132,14 @@ class PetSprite {
     this.squashToken = 0;
     this.pendingSquash = false;
     this._interactive = null; // 当前可交互状态（null=未定；只在变化时发 IPC，避免逐帧刷屏）
+    // 窗口形状（Linux `shape` 输入模型）的镜像与安全网：覆盖层的显隐路径很多（气泡/提示/菜单/
+    // 对话/积分），逐个挂回调容易漏，1.5s 兜底一次（主进程按矩形去重，重复值不产生系统调用）。
+    this._shapeKey = null;
+    this._marginBusy = false;
+    this.shapeTimer = window.setInterval(() => {
+      this.syncMargin();
+      this.syncShape();
+    }, 1500);
     this.moveRef = null;
     this.moveToken = 0;
     this.pendingMove = null;
@@ -173,8 +188,9 @@ class PetSprite {
     // DOM：sprite 钉在窗口内 (margin.l, margin.t)；宠物"位置"= sprite 位置，窗口随余量外扩
     this.el = document.createElement('div');
     this.el.className = 'pet-sprite';
-    this.el.style.left = this.margin.l + 'px';
-    this.el.style.top = this.margin.t + 'px';
+    // 画布原点 = 余量 − 主体盒偏移（余量相对主体盒，可能是负的外扩）
+    this.el.style.left = this.margin.l - this.body.x + 'px';
+    this.el.style.top = this.margin.t - this.body.y + 'px';
     this.el.style.setProperty('--pet-size', this.size + 'px');
     // 字号（配置 font）：按本宠物尺寸算好最终 px 注入，气泡与提示的 CSS 读这两个变量
     const fontPx = S.resolveFontPx(this.font, this.size);
@@ -246,7 +262,9 @@ class PetSprite {
       'blur',
       () => {
         // 切到其它应用后旧菜单不该继续占着透明窗口；丢失松手时也释放拖拽。
-        this.closeMenu();
+        // 但**开菜单瞬间**的 blur 往往是本进程改窗口尺寸/形状引起的，宽限期内忽略（见 menuJustOpened）。
+        if (!this.menuJustOpened()) this.closeMenu();
+        this.setTip(false);
         if (this.dragState.active) this.onPointerUp();
         if (!this.chatOpen) this.setInteractive(false);
       },
@@ -257,7 +275,9 @@ class PetSprite {
       () => {
         // 光标离开窗口：菜单若开着立刻收起（窗口内 DOM，离开即不可达），再恢复穿透。
         // 拖拽中与对话弹窗开着都不恢复：前者会绕过 busy 并丢失 pointerup，后者要留光标回来点输入框。
-        this.closeMenu();
+        // 开菜单瞬间的 leave 同理不算（改窗口尺寸会触发），见 menuJustOpened。
+        if (!this.menuJustOpened()) this.closeMenu();
+        this.setTip(false); // 窗口在光标底下被搬走时不会再收到 mousemove：提示必须在这里收，否则滞留
         if (!this.chatOpen && !this.dragState.active) this.setInteractive(false);
       },
       { signal: ac.signal },
@@ -301,6 +321,7 @@ class PetSprite {
     this.inputRegionMutation.disconnect();
     this.inputRegionResize.disconnect();
     this.inputRegionElements.clear();
+    if (this.shapeTimer !== null) window.clearInterval(this.shapeTimer);
     if (this.bubbleTimer !== null) window.clearTimeout(this.bubbleTimer);
     if (this.whisperTimer !== null) window.clearTimeout(this.whisperTimer);
     if (this.workTimer !== null) window.clearTimeout(this.workTimer);
@@ -363,27 +384,30 @@ class PetSprite {
   }
 
   sendBounds(px, py) {
+    // 摆位前先让余量跟上当前状态（气泡/菜单一出现就要外扩，否则会被窗口裁掉；都消失后收回贴边，
+    // 宠物才能贴着屏幕边站）。syncMargin 内部会回调 sendBounds，用标志位刹车。
+    if (!this._marginBusy) this.syncMargin();
     this.pos = { x: Math.round(px), y: Math.round(py) };
     window.__dshPetDebug.dragPos = { x: this.pos.x, y: this.pos.y };
     if (window.petBridge) {
       // 完整状态一次捎带：size/bottomPad 让静止宠物从首帧起就登记进碰撞站场；
       // vx/vy 带当前速度（飞行中实时值、静止/拖拽 = 0），避免落地后残留旧速度干扰碰撞动量。
       const fly = this.throwState;
+      const win = this.winRect();
       window.petBridge.setBounds(
-        toScreen(this.pos.x - this.margin.l + VIEW.x),
-        toScreen(this.pos.y - this.margin.t + VIEW.y),
-        toScreen(this.size + this.margin.l + this.margin.r),
-        toScreen(this.winH + this.margin.t + this.margin.b),
-        toScreen(this.pos.x), // 包围盒左上角（碰撞站场用：窗口坐标 ≠ 包围盒坐标）
-        toScreen(this.pos.y),
-        toScreen(this.size),
-        toScreen(this.bottomPad),
+        toScreen(win.x + VIEW.x),
+        toScreen(win.y + VIEW.y),
+        toScreen(win.w),
+        toScreen(win.h),
+        toScreen(this.pos.x + this.body.x), // 包围盒左上角（碰撞站场用：这里给**主体盒**）
+        toScreen(this.pos.y + this.body.y),
+        toScreen(this.body.w),
+        0,
         fly ? toScreen(fly.vx) : 0,
         fly ? toScreen(fly.vy) : 0,
-        // 窗口余量（DIP）：主进程据此算宠物身体命中区——余量不再四边相等（上边距按气泡加高），
-        // 不能再按「窗口宽/4」反推（见 pointer-target.js 的 spriteHitRect）。
-        toScreen(this.margin.l),
-        toScreen(this.margin.t),
+        // 上报给主进程的余量仍是**画布相对**（pointer-target 按整张画布折命中区，与旧口径一致）
+        toScreen(this.margin.l - this.body.x),
+        toScreen(this.margin.t - this.body.y),
       );
     }
     // 位置变了：提示跟的是光标，而光标存视口坐标，窗口一移就必须重摆，否则提示会跟着窗口漂走。
@@ -444,6 +468,7 @@ class PetSprite {
    */
   relayout(prevView) {
     this.space = null;
+    this._shapeKey = null; // 视口/几何变了：下次 syncShape 必须重发
     if (this.dragState.active || this.throwRef !== null) return;
     this.stopMove();
     if (!this.pos) {
@@ -1206,11 +1231,13 @@ class PetSprite {
     } catch {
       /* 忽略捕获失败 */
     }
-    // 记录按下时的指针屏幕坐标与宠物窗口位置：增量全部用 screenX/Y 算——屏幕坐标与窗口位置无关，
-    // 不受窗口逐帧移动影响（window.screenX 会滞后/缓存）；物理像素 ÷scale 进 CSS 系。
+    // client 坐标是相对窗口内容区的：窗口搬走多少它就反向变化多少，与宠物位移相加正好抵消。
+    // 位移见 onPointerMove；sx/sy 只留痕，不再参与计算。
     this.dragState = {
       active: true,
       dragging: false,
+      clientX: e.clientX,
+      clientY: e.clientY,
       sx: toLocal(e.screenX),
       sy: toLocal(e.screenY),
       petX: this.pos.x,
@@ -1230,9 +1257,12 @@ class PetSprite {
   onPointerMove(e) {
     const d = this.dragState;
     if (!d.active) return;
-    // 阈值判定用屏幕坐标增量（clientX 会随窗口移动变化，屏幕坐标稳定）；÷scale 进 CSS 系
-    const dx = toLocal(e.screenX) - d.sx;
-    const dy = toLocal(e.screenY) - d.sy;
+    // 指针位移（CSS 像素）与**单位无关**的算法：Δ指针 = 宠物/窗口自身位移 + client 增量。
+    // 不能用 e.screenX：它的口径不统一（物理像素 / DIP / 已被页面缩放除过一次），而本窗口同时开着
+    // force-device-scale-factor 与页面缩放（setZoomFactor(CONFIG.scale)）——旧写法 `Δ = toLocal(screenX)`
+    // 在 151% 缩放下多除了一次，指针走 100px 宠物只走 63px，拖到屏幕边宠物还留在中间。
+    const dx = this.pos.x - d.petX + (e.clientX - d.clientX);
+    const dy = this.pos.y - d.petY + (e.clientY - d.clientY);
     if (!d.dragging) {
       if (Math.hypot(dx, dy) < S.DRAG_THRESHOLD) return;
       d.dragging = true;
@@ -1243,9 +1273,9 @@ class PetSprite {
       }
       this.syncInputBusy(); // 拖拽成立：主进程兜底通道闭嘴（见 inputBusy）
     }
-    // 记录指针轨迹（screenX/Y 采样，速度一致；初速估算用；÷scale 进 CSS 系）
+    // 记录指针轨迹（与位移同一套 CSS 坐标，初速估算/甩抛力度才不会被缩放带偏）
     const now = performance.now();
-    this.dragTrail.push({ t: now, x: toLocal(e.screenX), y: toLocal(e.screenY) });
+    this.dragTrail.push({ t: now, x: d.petX + dx, y: d.petY + dy });
     this.dragTrail = S.trimTrail(this.dragTrail, now);
     // 弹簧目标 = 按下时的宠物位置 + 指针屏幕增量（窗口怎么动都不影响坐标），由 rAF 逐帧追赶
     this.dragTarget = { x: d.petX + dx, y: d.petY + dy };
@@ -1266,12 +1296,12 @@ class PetSprite {
     // 源码守卫只扫本函数开头 400 字符找上报调用，插到前面会把上报挤出窗口。
     if (e && Number.isFinite(e.clientX)) {
       const r = this.hitRect;
-      const px = e.clientX - this.margin.l;
-      const py = e.clientY - this.margin.t;
+      const px = e.clientX - (this.margin.l - this.body.x);
+      const py = e.clientY - (this.margin.t - this.body.y);
       // 先按松手位置更新光标再摆位/显示，否则会重现拖拽前的位置（与浏览器 placeTip 同一处理）
       this.tipCursor = {
-        x: this.pos.x - this.margin.l + e.clientX,
-        y: this.pos.y - this.margin.t + e.clientY,
+        x: this.pos.x + this.body.x - this.margin.l + e.clientX,
+        y: this.pos.y + this.body.y - this.margin.t + e.clientY,
       };
       this.setTip(px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h);
     }
@@ -1387,6 +1417,7 @@ class PetSprite {
    * 与 setInteractive 的分工：后者表达光标在不在身体上，本方法表达我有没有在用输入（优先级更高）。
    */
   syncInputBusy() {
+    this.syncMargin(); // 菜单/对话窗开关会改余量（它们要地方），与 busy 同源
     this.syncInputRegions();
     const busy = this.inputBusy();
     if (busy === this._inputBusy) return;
@@ -1395,7 +1426,159 @@ class PetSprite {
     if (window.petBridge) window.petBridge.setInputBusy(busy);
   }
 
+  /**
+   * 窗口在「视口坐标」里的矩形：原点 = pos + 主体盒偏移 − 余量，尺寸 = 主体盒 + 余量。
+   * @returns {{x:number,y:number,w:number,h:number}} 窗口矩形（CSS 像素，视口坐标）
+   */
+  winRect() {
+    return {
+      x: this.pos.x + this.body.x - this.margin.l,
+      y: this.pos.y + this.body.y - this.margin.t,
+      w: this.body.w + this.margin.l + this.margin.r,
+      h: this.body.h + this.margin.t + this.margin.b,
+    };
+  }
+
+  /**
+   * 把理想余量**夹到宠物周围真正可用的空间**里。
+   *
+   * 窗口矩形会被 WM 钳制在工作区内（实测请求 x=-300 得 x=0）。余量一变大，窗口原点就要往左/上挪；
+   * 贴着屏幕边时窗口挪不动、被钳回来，而画布在窗口内的偏移已经按新余量改了 —— 于是**宠物被永久
+   * 推离原位**（右键菜单一开就"跳走"）。先夹到「窗口仍完整落在工作区内」的范围，WM 就永远不用钳。
+   * @param mg 理想余量
+   * @returns 夹取后的余量
+   */
+  clampMarginToSpace(mg) {
+    const pad = IDLE_MARGIN_PX;
+    const b = this.body;
+    const bodyX0 = this.pos.x + b.x;
+    const bodyY0 = this.pos.y + b.y;
+    const bodyX1 = bodyX0 + b.w;
+    const bodyY1 = bodyY0 + b.h;
+    return {
+      l: Math.max(pad, Math.min(mg.l, Math.floor(bodyX0))),
+      t: Math.max(pad, Math.min(mg.t, Math.floor(bodyY0))),
+      r: Math.max(pad, Math.min(mg.r, Math.floor(VIEW.w - bodyX1))),
+      b: Math.max(pad, Math.min(mg.b, Math.floor(VIEW.h - bodyY1))),
+    };
+  }
+
+  /**
+   * 当前该用多大窗口余量。
+   *
+   * 空闲贴着主体盒（宠物才能贴到屏幕边），有覆盖层时才外扩：菜单/对话窗四边都要地方，
+   * 气泡只往上长（按气泡相对主体盒的真实溢出量补）。所有分支都过 clampMarginToSpace。
+   * @returns {{l:number,t:number,r:number,b:number}} 余量（CSS 像素）
+   */
+  desiredMargin() {
+    const pad = IDLE_MARGIN_PX;
+    const m = this.size * WINDOW_MARGIN_RATIO;
+    const fontConf = this.pet.font || config.font || S.DEFAULT_FONT;
+    // ① 菜单 / 对话窗：四边都要地方（它们是交互态，此刻宠物不必贴边）
+    if (this.needsRoom()) {
+      const r = Math.max(m, MENU_ROOM_PX);
+      return this.clampMarginToSpace({ t: Math.max(r, S.bubbleTopMarginPx(fontConf, this.size)), r, b: r, l: r });
+    }
+    // ② 只有气泡：按气泡**相对主体盒的溢出量**补余量（气泡靠上、可能比身体宽）
+    if (this.bubble && this.bubble.classList.contains('is-on') && this.el) {
+      const er = this.el.getBoundingClientRect();
+      const br = this.bubble.getBoundingClientRect();
+      if (er.width > 0 && br.width > 0) {
+        const bx0 = br.left - er.left;
+        const by0 = br.top - er.top;
+        const bx1 = bx0 + br.width;
+        const by1 = by0 + br.height;
+        const bodyX1 = this.body.x + this.body.w;
+        const bodyY1 = this.body.y + this.body.h;
+        return this.clampMarginToSpace({
+          l: Math.max(pad, Math.ceil(this.body.x - bx0) + pad),
+          t: Math.max(pad, Math.ceil(this.body.y - by0) + pad),
+          r: Math.max(pad, Math.ceil(bx1 - bodyX1) + pad),
+          b: Math.max(pad, Math.ceil(by1 - bodyY1) + pad),
+        });
+      }
+    }
+    // ③ 空闲：窗口≈主体盒
+    return { l: pad, t: pad, r: pad, b: pad };
+  }
+
+  /** 是否正有"长在余量里"的覆盖层需要空间（右键菜单 / 对话窗）。 */
+  needsRoom() {
+    return !!(this.menuOpen || this.chatOpen);
+  }
+
+  /** 菜单刚开（宽限期内）：此时 blur / mouseleave 多半是本进程改窗口尺寸/形状引起的，不该据此关菜单 */
+  menuJustOpened() {
+    return typeof this.menuOpenedAt === 'number' && performance.now() - this.menuOpenedAt < 500;
+  }
+
+  /**
+   * 余量变了：改 DOM 里 sprite 的位置，并把新窗口矩形上报一次（宽高/原点都由余量算出）。
+   * 宠物在屏幕上的位置天然不动（pos 不变，只有窗口原点与画布偏移一起变）。
+   */
+  syncMargin() {
+    if (!this.el) return;
+    const next = this.desiredMargin();
+    const cur = this.margin;
+    if (cur && next.l === cur.l && next.t === cur.t && next.r === cur.r && next.b === cur.b) return;
+    this.margin = next;
+    window.__dshPetDebug.winMargin = next;
+    this.el.style.left = next.l - this.body.x + 'px';
+    this.el.style.top = next.t - this.body.y + 'px';
+    this._shapeKey = null; // 余量变了：形状要按新坐标重算
+    this._marginBusy = true; // 防止 sendBounds → syncMargin → sendBounds 递归
+    try {
+      this.sendBounds(this.pos.x, this.pos.y);
+    } finally {
+      this._marginBusy = false;
+    }
+    this.syncShape();
+  }
+
+  /**
+   * 上报窗口形状（Linux `shape` 输入模型，见 main.js 的 INPUT_MODE）。
+   *
+   * 形状 = 宠物主体盒 ∪ 所有覆盖层（气泡 / 悬浮提示 / 级联菜单 / 对话窗 / 积分弹窗）；
+   * 拖拽中直接给整窗——拖拽时用户就是在操作这个窗口，别让形状把输入切掉。
+   * 坐标口径与其余跨进程交换一致：CSS × CONFIG.scale = 窗口物理像素（主进程侧 DIP 与之相等）。
+   */
+  syncShape() {
+    if (!window.petBridge || !window.petBridge.setShape) return;
+    const rects = [];
+    const push = (el) => {
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      if (r.width > 0 && r.height > 0) {
+        rects.push({ x: toScreen(r.x), y: toScreen(r.y), width: toScreen(r.width), height: toScreen(r.height) });
+      }
+    };
+    if (this.dragState.active) {
+      // 拖拽中：形状直接给整窗——宠物由弹簧追着光标跑、会滞后，光标可能短暂落在主体盒之外，
+      // 形状不能跟着缩（否则正在进行的拖拽有被切掉的风险）
+      rects.push({ x: 0, y: 0, width: toScreen(window.innerWidth), height: toScreen(window.innerHeight) });
+    } else {
+      // 宠物本体直接用主体盒（窗口坐标）：stage 现在会以负偏移溢出窗口，读它的 DOM 矩形没意义
+      rects.push({
+        x: toScreen(this.margin.l),
+        y: toScreen(this.margin.t),
+        width: toScreen(this.body.w),
+        height: toScreen(this.body.h),
+      });
+      if (this.bubble && this.bubble.classList.contains('is-on')) push(this.bubble);
+      if (this.tip && this.tip.classList.contains('is-on')) push(this.tip);
+      for (const el of document.querySelectorAll('.dsh-pet-menu-column, .dsh-pet-chat, .dsh-pet-score')) push(el);
+    }
+    const key = rects
+      .map((r) => [Math.round(r.x), Math.round(r.y), Math.round(r.width), Math.round(r.height)])
+      .join('|');
+    if (key === this._shapeKey) return;
+    this._shapeKey = key;
+    window.__dshPetDebug.shapeRects = rects;
+    window.petBridge.setShape({ rects });
+  }
+
   syncInputRegions() {
+    this.syncShape(); // 形状与控件矩形同源：覆盖层一出现就得一起更新（见 syncShape）
     if (!window.petBridge || !window.petBridge.setInputRegions) return;
     const rects = [];
     // 控件矩形 = 主进程允许接收点击的区域，矩形外继续穿透。可点的余额气泡悬在余量区，不登记就点不到。
@@ -1442,6 +1625,7 @@ class PetSprite {
     if (next === this.tipOn) return;
     this.tipOn = next;
     this.renderTip();
+    this.syncShape(); // 提示在窗口形状之外就看不见：显示/收起都要同步形状
   }
 
   /**
@@ -1455,10 +1639,11 @@ class PetSprite {
     if (this.tip.textContent !== this.pet.name) this.tip.textContent = this.pet.name;
     const cursor = this.tipCursor;
     if (cursor) {
-      const winX = this.pos.x - this.margin.l;
-      const winY = this.pos.y - this.margin.t;
-      const winW = this.size + this.margin.l + this.margin.r;
-      const winH = this.winH + this.margin.t + this.margin.b;
+      const wr = this.winRect();
+      const winX = wr.x;
+      const winY = wr.y;
+      const winW = wr.w;
+      const winH = wr.h;
       // 允许显示范围 = 窗口 ∩ 光标所在屏的工作区：只按窗口夹会画到屏幕外，只按工作区夹会落到
       // 窗口外（html/body 是 overflow:hidden，一样看不见）。
       const area = S.resolveRect(WORK_AREAS, cursor.x, cursor.y) ?? { x: winX, y: winY, width: winW, height: winH };
@@ -1501,14 +1686,22 @@ class PetSprite {
     const r = this.hitRect;
     // forwarded 事件坐标以窗口为原点；转换到 sprite 坐标要扣减窗口余量。异常时退回屏幕坐标推导：
     // ÷scale 后减去窗口屏幕原点即窗口内坐标（hitRect/pos 均为 CSS 系）。
-    const wx = Number.isFinite(e.clientX) ? e.clientX : toLocal(e.screenX) - (this.pos.x + VIEW.x - this.margin.l);
-    const wy = Number.isFinite(e.clientY) ? e.clientY : toLocal(e.screenY) - (this.pos.y + VIEW.y - this.margin.t);
-    const px = wx - this.margin.l;
-    const py = wy - this.margin.t;
+    const wx = Number.isFinite(e.clientX)
+      ? e.clientX
+      : toLocal(e.screenX) - (this.pos.x + this.body.x + VIEW.x - this.margin.l);
+    const wy = Number.isFinite(e.clientY)
+      ? e.clientY
+      : toLocal(e.screenY) - (this.pos.y + this.body.y + VIEW.y - this.margin.t);
+    const px = wx - (this.margin.l - this.body.x);
+    const py = wy - (this.margin.t - this.body.y);
     const inBody = px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h;
     // 光标存视口坐标（窗口原点 + 窗口内坐标）：窗口随宠物移动时贴光标不会漂。必须在 setTip 之前
     // 更新——setTip 变显隐时会立刻渲染一次，晚一步就会用上一次的光标摆位。
-    if (inBody) this.tipCursor = { x: this.pos.x - this.margin.l + wx, y: this.pos.y - this.margin.t + wy };
+    if (inBody)
+      this.tipCursor = {
+        x: this.pos.x + this.body.x - this.margin.l + wx,
+        y: this.pos.y + this.body.y - this.margin.t + wy,
+      };
     this.setInteractive(inBody);
     // 悬浮提示与可交互判定同源（同一个 inBody）：进身体出现，离开收起
     this.setTip(inBody);
@@ -1552,10 +1745,11 @@ class PetSprite {
     // 后者含空洞，按它夹菜单会伸进不属于任何显示器的区域。
     const area = S.resolveRect(WORK_AREAS, this.pos.x + this.halfW, this.pos.y + this.halfH);
     if (!area) return null;
-    const winX = this.pos.x + VIEW.x - this.margin.l;
-    const winY = this.pos.y + VIEW.y - this.margin.t;
-    const winW = this.size + this.margin.l + this.margin.r;
-    const winH = this.winH + this.margin.t + this.margin.b;
+    const wr = this.winRect();
+    const winX = wr.x + VIEW.x;
+    const winY = wr.y + VIEW.y;
+    const winW = wr.w;
+    const winH = wr.h;
     const ax = area.x + VIEW.x;
     const ay = area.y + VIEW.y;
     const vx0 = Math.max(ax, winX);
@@ -1601,14 +1795,20 @@ class PetSprite {
     const more = S.buildMoreBranch(this.menuItems);
     const tree = tools.concat(S.buildMenuTree(this.animations), more ? [more] : []);
     if (!tree.length) return;
+    this._marginBeforeMenu = { l: this.margin.l, t: this.margin.t };
     this.menuOpen = true;
+    this.menuOpenedAt = performance.now(); // 宽限期起点：改窗口尺寸引发的 blur/leave 不算数
     this.setInteractive(true); // 菜单是窗口内 DOM：悬停期间整窗保持可交互，关闭后恢复命中区穿透
     this.syncInputBusy();
+    // 开菜单会让余量变大，窗口原点随之左移/上移；e.clientX/Y 是**旧窗口**的坐标，
+    // 必须按余量差补偿，否则菜单整体错位、还会跳一下（见 syncMargin）。
+    const mDx = this.margin.l - this._marginBeforeMenu.l;
+    const mDy = this.margin.t - this._marginBeforeMenu.t;
     window.__dshPetDebug.menuOpen = true;
     const m = S.mountContextMenu({
       tree,
-      x: e.clientX,
-      y: e.clientY,
+      x: e.clientX + mDx,
+      y: e.clientY + mDy,
       // 只允许在「窗口 ∩ 工作区」内显示：宠物贴边时外扩余量伸出屏幕，菜单走进那里会被 OS 裁掉
       clamp: this.visibleClampRect(),
       onAction: (leaf) => this.onMenuAction(leaf),
