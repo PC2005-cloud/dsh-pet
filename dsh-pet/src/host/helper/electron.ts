@@ -234,11 +234,58 @@ export async function ensureElectronDownload(options: EnsureElectronOptions = {}
  * 默认启动方式：Electron 可执行文件 + Helper 入口脚本。
  * @throws Electron 解析不到时抛错（调用方据此降级到浏览器宠物）。
  */
+/** 覆盖 Linux 显示后端的环境变量（空/未设 = 按 DISPLAY 自动决定，见 {@link displayBackendArgs}）。 */
+export const OZONE_PLATFORM_ENV = 'DSH_PET_OZONE_PLATFORM';
+
+/**
+ * 当前该给 Electron 补哪些显示后端开关（win32/darwin 恒为空）。
+ *
+ * 桌面宠物在 Linux 上必须跑 X11（XWayland）：宠物的"移动"= 每帧让窗口跟着宠物走（渲染端上报
+ * bounds → 主进程 setContentBounds）。Wayland 协议里客户端**无权决定自己顶层窗口的位置**，
+ * Ozone/Wayland 后端会把 SetBounds 的 x/y 静默丢弃——而 getBounds 只回显请求值，自检看不出来。
+ * 实测（KDE Plasma 6，Electron 43.3.0）：同一只宠物在 Wayland 后端下被合成器摆在 (271,52) 且
+ * keepAbove=false；加 `--ozone-platform=x11` 后落在渲染端要求的位置、图层=置顶层。
+ *
+ * 开关只能走命令行：ozone 后端在 JS 主脚本跑起来之前就定了，主进程里 appendSwitch 无效。
+ *
+ * @param platform 目标平台（默认当前进程）。
+ * @param env 环境变量来源（默认 process.env）。
+ * @returns 要插在 argv 最前面的开关；不需要时为空数组。
+ */
+export function displayBackendArgs(
+  platform: NodeJS.Platform = process.platform,
+  env: NodeJS.ProcessEnv = process.env,
+): string[] {
+  if (platform !== 'linux') return [];
+  const override = String(env[OZONE_PLATFORM_ENV] ?? '').trim();
+  if (override) return [`--ozone-platform=${override}`];
+  // 没有 DISPLAY = 没有 XWayland/X11 可落：加了也只会起不来窗口，保持原行为
+  return env.DISPLAY ? ['--ozone-platform=x11'] : [];
+}
+
+/**
+ * 把显示后端开关补到 argv 最前面（必须在 app 路径之前；已显式指定则原样返回）。
+ *
+ * @param args 原始 argv。
+ * @param platform 目标平台。
+ * @param env 环境变量来源。
+ */
+export function withDisplayBackendArgs(
+  args: string[],
+  platform: NodeJS.Platform = process.platform,
+  env: NodeJS.ProcessEnv = process.env,
+): string[] {
+  if (args.some((arg) => arg === '--ozone-platform' || arg.startsWith('--ozone-platform='))) return args;
+  const extra = displayBackendArgs(platform, env);
+  return extra.length === 0 ? args : [...extra, ...args];
+}
+
 export function defaultLaunch(options: HelperOptions = {}): { command: string; args: string[] } {
   const electronPath = resolveElectronPath([options.electronPath]);
   if (!electronPath) {
     throw new Error('dsh-pet: cannot resolve Electron executable. Set DSH_PET_ELECTRON_PATH or install electron.');
   }
   const helperPath = options.helperPath || defaultHelperMain;
-  return { command: electronPath, args: [helperPath] };
+  // Linux 补 --ozone-platform=x11：Wayland 不允许客户端定位顶层窗口（见 displayBackendArgs）
+  return { command: electronPath, args: withDisplayBackendArgs([helperPath]) };
 }

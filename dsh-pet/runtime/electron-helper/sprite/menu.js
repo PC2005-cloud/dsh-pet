@@ -41,14 +41,20 @@ Object.assign(PetSprite.prototype, {
     const more = S.buildMoreBranch(this.menuItems);
     const tree = tools.concat(S.buildMenuTree(this.animations), more ? [more] : []);
     if (!tree.length) return;
+    this._marginBeforeMenu = { l: this.margin.l, t: this.margin.t };
     this.menuOpen = true;
+    this.menuOpenedAt = performance.now(); // 宽限期起点：改窗口尺寸引发的 blur/leave 不算数
     this.setInteractive(true); // 菜单是窗口内 DOM：悬停期间整窗保持可交互，关闭后恢复命中区穿透
     this.syncInputBusy();
+    // 开菜单会让余量变大，窗口原点随之左移/上移；e.clientX/Y 是**旧窗口**的坐标，
+    // 必须按余量差补偿，否则菜单整体错位、还会跳一下（见 syncMargin）。
+    const mDx = this.margin.l - this._marginBeforeMenu.l;
+    const mDy = this.margin.t - this._marginBeforeMenu.t;
     window.__dshPetDebug.menuOpen = true;
     const m = S.mountContextMenu({
       tree,
-      x: e.clientX,
-      y: e.clientY,
+      x: e.clientX + mDx,
+      y: e.clientY + mDy,
       // 只允许在「窗口 ∩ 工作区」内显示：宠物贴边时外扩余量伸出屏幕，菜单走进那里会被 OS 裁掉
       clamp: this.visibleClampRect(),
       onAction: (leaf) => this.onMenuAction(leaf),

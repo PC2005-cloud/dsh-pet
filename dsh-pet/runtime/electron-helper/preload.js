@@ -44,6 +44,13 @@ contextBridge.exposeInMainWorld('petBridge', {
   setInputRegions(input) {
     ipcRenderer.send('pet:input-regions', input);
   },
+  /**
+   * 上报窗口形状（Linux `shape` 输入模型）：矩形是**窗口内容区坐标**，形状之外不接收鼠标也不绘制。
+   * @param {{rects: Array<{x:number,y:number,width:number,height:number}>}} input 形状矩形
+   */
+  setShape(input) {
+    ipcRenderer.send('pet:shape', input);
+  },
   // 右键菜单「打开网站」：去向由主进程按宿主形态决定——桌面应用宿主唤起主窗口，否则用系统浏览器打开站点。
   openDshSite(url) {
     ipcRenderer.send('pet:open-site', { url });

@@ -86,11 +86,13 @@ Object.assign(PetSprite.prototype, {
     } catch {
       /* 忽略捕获失败 */
     }
-    // 记录按下时的指针屏幕坐标与宠物窗口位置：增量全部用 screenX/Y 算——屏幕坐标与窗口位置无关，
-    // 不受窗口逐帧移动影响（window.screenX 会滞后/缓存）；物理像素 ÷scale 进 CSS 系。
+    // client 坐标是相对窗口内容区的：窗口搬走多少它就反向变化多少，与宠物位移相加正好抵消。
+    // 位移见 onPointerMove；sx/sy 只留痕，不再参与计算。
     this.dragState = {
       active: true,
       dragging: false,
+      clientX: e.clientX,
+      clientY: e.clientY,
       sx: toLocal(e.screenX),
       sy: toLocal(e.screenY),
       petX: this.pos.x,
@@ -110,9 +112,12 @@ Object.assign(PetSprite.prototype, {
   onPointerMove(e) {
     const d = this.dragState;
     if (!d.active) return;
-    // 阈值判定用屏幕坐标增量（clientX 会随窗口移动变化，屏幕坐标稳定）；÷scale 进 CSS 系
-    const dx = toLocal(e.screenX) - d.sx;
-    const dy = toLocal(e.screenY) - d.sy;
+    // 指针位移（CSS 像素）与**单位无关**：Δ指针 = 宠物/窗口自身位移 + client 增量。
+    // 不能用 e.screenX：它的口径不统一（物理像素 / DIP / 已被页面缩放除过一次），而本窗口同时开着
+    // force-device-scale-factor 与页面缩放（setZoomFactor(CONFIG.scale)）——旧写法多除了一次，
+    // 指针走 100px 宠物只走 63px，拖到屏幕边宠物还留在中间。
+    const dx = this.pos.x - d.petX + (e.clientX - d.clientX);
+    const dy = this.pos.y - d.petY + (e.clientY - d.clientY);
     if (!d.dragging) {
       if (Math.hypot(dx, dy) < S.DRAG_THRESHOLD) return;
       d.dragging = true;
@@ -123,9 +128,9 @@ Object.assign(PetSprite.prototype, {
       }
       this.syncInputBusy(); // 拖拽成立：主进程兜底通道闭嘴（见 inputBusy）
     }
-    // 记录指针轨迹（screenX/Y 采样，速度一致；初速估算用；÷scale 进 CSS 系）
+    // 记录指针轨迹（与位移同一套 CSS 坐标，初速估算/甩抛力度才不会被缩放带偏）
     const now = performance.now();
-    this.dragTrail.push({ t: now, x: toLocal(e.screenX), y: toLocal(e.screenY) });
+    this.dragTrail.push({ t: now, x: d.petX + dx, y: d.petY + dy });
     this.dragTrail = S.trimTrail(this.dragTrail, now);
     // 弹簧目标 = 按下时的宠物位置 + 指针屏幕增量（窗口怎么动都不影响坐标），由 rAF 逐帧追赶
     this.dragTarget = { x: d.petX + dx, y: d.petY + dy };
@@ -146,12 +151,12 @@ Object.assign(PetSprite.prototype, {
     // 源码守卫只扫本函数开头 400 字符找上报调用，插到前面会把上报挤出窗口。
     if (e && Number.isFinite(e.clientX)) {
       const r = this.hitRect;
-      const px = e.clientX - this.margin.l;
-      const py = e.clientY - this.margin.t;
+      const px = e.clientX - (this.margin.l - this.body.x);
+      const py = e.clientY - (this.margin.t - this.body.y);
       // 先按松手位置更新光标再摆位/显示，否则会重现拖拽前的位置（与浏览器 placeTip 同一处理）
       this.tipCursor = {
-        x: this.pos.x - this.margin.l + e.clientX,
-        y: this.pos.y - this.margin.t + e.clientY,
+        x: this.pos.x + this.body.x - this.margin.l + e.clientX,
+        y: this.pos.y + this.body.y - this.margin.t + e.clientY,
       };
       this.setTip(px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h);
     }
@@ -267,6 +272,7 @@ Object.assign(PetSprite.prototype, {
    * 与 setInteractive 的分工：后者表达光标在不在身体上，本方法表达我有没有在用输入（优先级更高）。
    */
   syncInputBusy() {
+    this.syncMargin(); // 菜单/对话窗开关会改余量（它们要地方），与 busy 同源
     this.syncInputRegions();
     const busy = this.inputBusy();
     if (busy === this._inputBusy) return;
@@ -276,6 +282,7 @@ Object.assign(PetSprite.prototype, {
   },
 
   syncInputRegions() {
+    this.syncShape(); // 形状与控件矩形同源：覆盖层一出现就得一起更新（见 syncShape）
     if (!window.petBridge || !window.petBridge.setInputRegions) return;
     const rects = [];
     // 控件矩形 = 主进程允许接收点击的区域，矩形外继续穿透。可点的余额气泡悬在余量区，不登记就点不到。
@@ -339,16 +346,24 @@ Object.assign(PetSprite.prototype, {
     const r = this.hitRect;
     // forwarded 事件坐标以窗口为原点；转换到 sprite 坐标要扣减窗口余量。异常时退回屏幕坐标推导：
     // ÷scale 后减去窗口屏幕原点即窗口内坐标（hitRect/pos 均为 CSS 系）。
-    const wx = Number.isFinite(e.clientX) ? e.clientX : toLocal(e.screenX) - (this.pos.x + VIEW.x - this.margin.l);
-    const wy = Number.isFinite(e.clientY) ? e.clientY : toLocal(e.screenY) - (this.pos.y + VIEW.y - this.margin.t);
-    const px = wx - this.margin.l;
-    const py = wy - this.margin.t;
+    const wx = Number.isFinite(e.clientX)
+      ? e.clientX
+      : toLocal(e.screenX) - (this.pos.x + this.body.x + VIEW.x - this.margin.l);
+    const wy = Number.isFinite(e.clientY)
+      ? e.clientY
+      : toLocal(e.screenY) - (this.pos.y + this.body.y + VIEW.y - this.margin.t);
+    const px = wx - (this.margin.l - this.body.x);
+    const py = wy - (this.margin.t - this.body.y);
     const inBody = px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h;
     // 快捷键与拖拽都只在"光标在身体上"时生效，与提示/穿透同源，避免另一套判定
     this.hoverBody = inBody;
     // 光标存视口坐标（窗口原点 + 窗口内坐标）：窗口随宠物移动时贴光标不会漂。必须在 setTip 之前
     // 更新——setTip 变显隐时会立刻渲染一次，晚一步就会用上一次的光标摆位。
-    if (inBody) this.tipCursor = { x: this.pos.x - this.margin.l + wx, y: this.pos.y - this.margin.t + wy };
+    if (inBody)
+      this.tipCursor = {
+        x: this.pos.x + this.body.x - this.margin.l + wx,
+        y: this.pos.y + this.body.y - this.margin.t + wy,
+      };
     this.setInteractive(inBody);
     // 悬浮提示与可交互判定同源（同一个 inBody）：进身体出现，离开收起
     this.setTip(inBody);

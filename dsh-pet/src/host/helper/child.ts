@@ -9,7 +9,7 @@ import { mkdirSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 import { BRIDGE_PREFIX } from './bridge.ts';
 import type { BridgeHandler, BridgeRequest, BridgeResponse } from './bridge.ts';
-import { defaultHelperMain, defaultLaunch, dshHomeDir } from './electron.ts';
+import { defaultHelperMain, defaultLaunch, dshHomeDir, withDisplayBackendArgs } from './electron.ts';
 import {
   HELPER_STOP_TIMEOUT_MS,
   waitForChildExit,
@@ -91,7 +91,15 @@ export class HelperProcess {
       ? { command: this.options.command, args: this.options.args || [helperPath] }
       : defaultLaunch(this.options);
     const command = launch.command;
-    const args = this.options.args || launch.args;
+    const rawArgs = this.options.args || launch.args;
+    // 自定义 command 只在本进程确实是 Electron 时才补 Electron 的开关（丢给别的可执行文件是噪声）
+    const electronLike = !this.options.command || /electron/i.test(String(command).split(/[\\/]/).pop() || '');
+    const args = electronLike
+      ? withDisplayBackendArgs(rawArgs, process.platform, helperSpawnEnv(process.pid, this.options.env))
+      : rawArgs;
+    if (process.platform === 'linux' && !process.env.DISPLAY) {
+      this.logger.warn?.('dsh-pet: 没有 DISPLAY（纯 Wayland / 无 XWayland）：桌面宠物窗口无法被定位，宠物将无法移动。');
+    }
 
     // cwd 必须落在包目录之外：Windows 不允许重命名或删除活进程的当前目录，否则 pnpm 无法 rename
     // 覆盖 node_modules/dsh-pet。Helper 侧资源解析与 CWD 无关，故用 $DSH_HOME。

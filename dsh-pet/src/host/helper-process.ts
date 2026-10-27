@@ -9,12 +9,15 @@ export {
   defaultElectronExe,
   defaultHelperMain,
   defaultLaunch,
+  displayBackendArgs,
   dshHomeDir,
   electronLandingDir,
   ensureElectronDownload,
   hasGraphicalDisplay,
+  OZONE_PLATFORM_ENV,
   packageRoot,
   resolveElectronPath,
+  withDisplayBackendArgs,
 } from './helper/electron.ts';
 export type { ElectronDownloadLog, EnsureElectronOptions } from './helper/electron.ts';
 export { BRIDGE_PREFIX } from './helper/bridge.ts';

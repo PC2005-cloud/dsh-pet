@@ -13,6 +13,7 @@ Object.assign(PetSprite.prototype, {
     if (next === this.tipOn) return;
     this.tipOn = next;
     this.renderTip();
+    this.syncShape(); // 提示在窗口形状之外就看不见：显示/收起都要同步形状
   },
 
   /**
@@ -26,10 +27,11 @@ Object.assign(PetSprite.prototype, {
     if (this.tip.textContent !== this.pet.name) this.tip.textContent = this.pet.name;
     const cursor = this.tipCursor;
     if (cursor) {
-      const winX = this.pos.x - this.margin.l;
-      const winY = this.pos.y - this.margin.t;
-      const winW = this.size + this.margin.l + this.margin.r;
-      const winH = this.winH + this.margin.t + this.margin.b;
+      const wr = this.winRect();
+      const winX = wr.x;
+      const winY = wr.y;
+      const winW = wr.w;
+      const winH = wr.h;
       // 允许显示范围 = 窗口 ∩ 光标所在屏的工作区：只按窗口夹会画到屏幕外，只按工作区夹会落到
       // 窗口外（html/body 是 overflow:hidden，一样看不见）。
       const area = S.resolveRect(WORK_AREAS, cursor.x, cursor.y) ?? { x: winX, y: winY, width: winW, height: winH };

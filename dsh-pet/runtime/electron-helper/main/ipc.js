@@ -18,6 +18,14 @@ const { decideWindowIgnore } = require('../pointer-target.js');
  * @param deps.petRoute - 宠物路由前缀。
  */
 function registerIpc({ ipcMain, petWindows, shell, openTarget, petRoute }) {
+  // 窗口形状上报（Linux `shape` 模式）：渲染端把"宠物主体盒 + 气泡/提示/菜单/对话/积分弹窗"
+  // 算成一组矩形发上来，主进程只负责应用。形状之外不绘制也不接收鼠标 → 事件落到下层应用。
+  ipcMain.on('pet:shape', (event, input) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (!win || win.isDestroyed() || !input || !Array.isArray(input.rects)) return;
+    petWindows.applyWindowShape(win, input.rects);
+  });
+
   // 宠物窗口跟随：renderer 逐帧上报窗口内容区位置/尺寸
   ipcMain.on('pet:set-bounds', (event, bounds) => {
     const win = BrowserWindow.fromWebContents(event.sender);

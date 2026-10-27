@@ -103,6 +103,14 @@ Object.assign(PetSprite.prototype, {
     // 期间整窗保持可交互，否则光标移到输入框就会被 onMouseMove 翻回穿透、点击全被透传。
     this.chatClose = null;
     this.chatOpen = false;
+    // 窗口形状（Linux `shape` 输入模型）的安全网：覆盖层显隐路径很多（气泡/提示/菜单/对话/积分），
+    // 逐个挂回调容易漏，1.5s 兜底一次（主进程按矩形去重，重复值不产生系统调用）。
+    this._shapeKey = null;
+    this._marginBusy = false;
+    this.shapeTimer = window.setInterval(() => {
+      this.syncMargin();
+      this.syncShape();
+    }, 1500);
   },
 
   /** 建 DOM 并把首帧位置落到窗口；布局数值全部来自上面算好的 geometry。 */
@@ -110,8 +118,9 @@ Object.assign(PetSprite.prototype, {
     // DOM：sprite 钉在窗口内 (margin.l, margin.t)；宠物"位置"= sprite 位置，窗口随余量外扩
     this.el = document.createElement('div');
     this.el.className = 'pet-sprite';
-    this.el.style.left = this.margin.l + 'px';
-    this.el.style.top = this.margin.t + 'px';
+    // 画布原点 = 余量 − 主体盒偏移（余量相对主体盒，可能是负的外扩）
+    this.el.style.left = this.margin.l - this.body.x + 'px';
+    this.el.style.top = this.margin.t - this.body.y + 'px';
     this.el.style.setProperty('--pet-size', this.size + 'px');
     // 字号（配置 font）：按本宠物尺寸算好最终 px 注入，气泡与提示的 CSS 读这两个变量
     const fontPx = S.resolveFontPx(this.font, this.size);
@@ -191,7 +200,9 @@ Object.assign(PetSprite.prototype, {
       'blur',
       () => {
         // 切到其它应用后旧菜单不该继续占着透明窗口；丢失松手时也释放拖拽。
-        this.closeMenu();
+        // 但**开菜单瞬间**的 blur 往往是本进程改窗口尺寸/形状引起的，宽限期内忽略（见 menuJustOpened）。
+        if (!this.menuJustOpened()) this.closeMenu();
+        this.setTip(false);
         if (this.dragState.active) this.onPointerUp();
         if (!this.chatOpen) this.setInteractive(false);
       },
@@ -202,7 +213,9 @@ Object.assign(PetSprite.prototype, {
       () => {
         // 光标离开窗口：菜单若开着立刻收起（窗口内 DOM，离开即不可达），再恢复穿透。
         // 拖拽中与对话弹窗开着都不恢复：前者会绕过 busy 并丢失 pointerup，后者要留光标回来点输入框。
-        this.closeMenu();
+        // 开菜单瞬间的 leave 同理不算（改窗口尺寸会触发），见 menuJustOpened。
+        if (!this.menuJustOpened()) this.closeMenu();
+        this.setTip(false); // 窗口在光标底下被搬走时不会再收到 mousemove：提示必须在这里收，否则滞留
         if (!this.chatOpen && !this.dragState.active) this.setInteractive(false);
       },
       { signal: ac.signal },
