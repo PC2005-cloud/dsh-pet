@@ -9,6 +9,7 @@
  * @module dsh-pet/src/host/voice
  */
 import { spawn } from 'node:child_process';
+import { defaultLog } from './log-file.ts';
 
 /** 单次最多念多少字：回复本身不超过 256 token，再长也没人听完 */
 const MAX_CHARS = 200;
@@ -19,6 +20,8 @@ const MAX_PENDING = 2;
 
 let queue: Promise<void> = Promise.resolve();
 let pending = 0;
+/** 只告警一次：开启 voiceEnabled 却不支持的平台上，日志里必须留痕，而不是静默装死 */
+let warnedUnsupported = false;
 
 /**
  * 把要念的文本洗成纯口语：去代码块、行内代码、链接、配图标记，压缩空白后截断。
@@ -49,7 +52,13 @@ export function ttsCommand(platform: NodeJS.Platform = process.platform): string
 /** 念一句。失败/不支持/排队已满都静默返回，调用方不需要 await。 */
 export function speak(raw: unknown): void {
   const cmd = ttsCommand();
-  if (!cmd) return;
+  if (!cmd) {
+    if (!warnedUnsupported) {
+      warnedUnsupported = true;
+      defaultLog('warn', '[dsh-pet] voiceEnabled 已开启，但语音播报目前只支持 macOS（系统 say），本平台跳过');
+    }
+    return;
+  }
   const text = cleanSpeech(raw);
   if (!text) return;
   if (pending >= MAX_PENDING) return;
