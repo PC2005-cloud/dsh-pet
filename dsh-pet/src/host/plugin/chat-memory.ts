@@ -14,6 +14,7 @@ import type { PetImageRef } from '../image-attachment.ts';
 import { limitPool, pickMeme, readMemePool } from '../memes.ts';
 import { generateWhisper } from '../whisper.ts';
 import { configuredModel } from '../model-selection.ts';
+import { speak } from '../voice.ts';
 import type { HostSetup } from './setup.ts';
 import type { HostContext } from './context.ts';
 
@@ -137,6 +138,7 @@ export function createChatMemory(deps: ChatMemoryInput) {
       return result;
     }
     state.writePet(petId, 'say', result.image ? { text: result.text, image: result.image } : { text: result.text });
+    if (found.conf.voiceEnabled === true) speak(result.text);
     // 成功也留一行：否则 logs.txt 里「没触发」与「触发了并且成功」无法区分。
     log.info(
       `[dsh-pet] 碎碎念生成成功 pet=${petId}，${result.text.length} 字` +
@@ -215,6 +217,7 @@ export function createChatMemory(deps: ChatMemoryInput) {
         'say',
         generated.image ? { text: generated.text, image: generated.image } : { text: generated.text },
       );
+      if (found.conf.voiceEnabled === true) speak(generated.text);
       // 同一份文本随返回值带出（叶子照写，不是二选一）
       return { ok: true as const, text: generated.text, ...(generated.image ? { image: generated.image } : {}) };
     });

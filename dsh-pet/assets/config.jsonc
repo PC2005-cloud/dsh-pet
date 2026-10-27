@@ -7,7 +7,7 @@
 //     写了就取代所属条目顶层那一份，留空则跟随条目（设置页有输入框）
 //   · 全局默认（本文件是默认值；用户在 main-config.jsonc 里写一次就对**所有宠物**生效，
 //     含 pet/<名>-config.json 定义的种类；种类文件自己写了则覆盖自己那份）：
-//     physics / font / confineToScreen / whisperImageEnabled / chatImageEnabled /
+//     physics / font / confineToScreen / voiceEnabled / whisperImageEnabled / chatImageEnabled /
 //     chatMemoryRounds / whisperModel / chatModel / eventsRefreshSec
 //   · 条目级（每个条目一份：main 一份、每个种类各一份；种类文件顶层可覆盖）：
 //     whisperPrompt / memes / workStatusTexts / animations / animationWeights
@@ -31,6 +31,10 @@
   // 写了非法（负数/非数字）即配置错误。回落链同 whisperPrompt：种类文件顶层 → 全局 → 默认 5。
   // 设置页「AI 模型与对话上下文」区有数字输入框，改这里或那里等价（设置页写的是用户层）。
   "chatMemoryRounds": 5,
+  // ===================== 语音播报（全局默认；仅 macOS 生效） =====================
+  // 开启后，碎碎念与对话回复会用系统 TTS（say）念出来；默认关闭——不是所有人都希望桌宠出声。
+  // 只影响「说不说」，不影响气泡与记忆；播报失败静默，不影响对话本身。
+  "voiceEnabled": false,
   // ===================== 碎碎念模型（全局默认：用户层写了对所有宠物生效；种类文件 pet/<名>-config.json 顶层可覆盖） =====================
   // 碎碎念用哪个服务商 + 模型生成。provider 与 model **都留空 = 跟随当前对话的模型**（默认，与旧行为一致）；
   // 想给后台自动跑的碎碎念单独用便宜/快的模型就填上（设置页有下拉框，选项与 DSH 的模型选择器同源）。

@@ -51,6 +51,7 @@ export const GLOBAL_DEFAULT_KEYS = [
   'physics',
   'font',
   'confineToScreen',
+  'voiceEnabled',
   'whisperImageEnabled',
   'chatImageEnabled',
   'chatImageLimit',
