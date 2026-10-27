@@ -82,6 +82,27 @@ export function boxToRatio(box: BoxPoint, viewport: Viewport, half: HalfSize): C
   return { rx: (box.x + half.w) / viewport.width, ry: (box.y + half.h) / viewport.height };
 }
 
+/**
+ * 限制静止宠物的身体命中区在视口内；命中区大于视口的轴居中显示。
+ *
+ * @param box - 根节点左上角像素坐标。
+ * @param viewport - 视口尺寸。
+ * @param size - 宠物宽度 px。
+ * @returns 允许透明留白越界、身体仍可点击的根节点位置。
+ */
+export function clampPetBox(box: BoxPoint, viewport: Viewport, size: number): BoxPoint {
+  const scale = size / 640;
+  const { bottomPad } = derivePetMetrics(size);
+  const minX = -HIT_BOX.x0 * scale;
+  const maxX = viewport.width - HIT_BOX.x1 * scale;
+  const minY = -HIT_BOX.y0 * scale - bottomPad;
+  const maxY = viewport.height - HIT_BOX.y1 * scale - bottomPad;
+  return {
+    x: minX > maxX ? (minX + maxX) / 2 : Math.max(minX, Math.min(maxX, box.x)),
+    y: minY > maxY ? (minY + maxY) / 2 : Math.max(minY, Math.min(maxY, box.y)),
+  };
+}
+
 /** 舞台内联样式：拖拽中取消脚垫位移，让视频贴着指针走。 */
 export function petStageStyle(dragging: boolean, bottomPad: number): CSSProperties {
   return dragging ? { transform: 'none' } : { transform: 'translateY(' + bottomPad + 'px)' };
@@ -91,7 +112,7 @@ export function petStageStyle(dragging: boolean, bottomPad: number): CSSProperti
  * 根节点的定位内联样式。
  *
  * 有 customPos 时按归一化中心换算成 px 定位；没有时返回空对象，交给角落与边距的 CSS 变量定位。
- * 拖拽落点即松手位置，不做边界夹取；漫游与抛掷的目标自身已界内。
+ * 拖拽落点与视口重排的边界由运动装配约束，这里只换算定位样式。
  *
  * @param customPos - 用户拖拽后的归一化中心；null 表示仍按角落定位。
  * @param viewport - 视口尺寸。

@@ -152,7 +152,6 @@ export function createCardRuntime(rt: PetRuntime) {
       pendingSquash: pendingSquashRef,
       root: () => rootRef.current,
       setAnim: actions.setAnim,
-      setCustomPos: actions.setCustomPos,
       setDragging: actions.setDragging,
       setOnce: actions.setOnce,
       setTipOn: actions.setTipOn,

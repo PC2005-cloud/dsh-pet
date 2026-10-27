@@ -8,6 +8,7 @@ import { createFlight, type Flight, type FlightMetrics } from '../motion/flight.
 import { createPositionFollow, type PositionFollow } from '../motion/position-follow.ts';
 import { createSquashDriver, type SquashDriver } from '../motion/squash.ts';
 import { createWalk, type Walk } from '../motion/walk.ts';
+import { boxToRatio, centerToBox, clampPetBox, type BoxPoint } from '../motion/geometry.ts';
 import { landingSquash, throwVelocity } from '../../../shared/physics.ts';
 import type { CardLive } from './live.ts';
 import type { CardStateApi } from './state.ts';
@@ -60,6 +61,8 @@ export interface CardMotion {
   box: () => { x: number; y: number } | null;
   /** 写回包围盒位置。 */
   setBox: (box: { x: number; y: number }) => void;
+  /** 原地放下：约束身体命中区并同步实时位置与视图。 */
+  place: (box: BoxPoint) => void;
   /** 停走位与位置跟随。 */
   stopMove: () => void;
   /** 从给定左上角与初速起飞。 */
@@ -98,6 +101,30 @@ export function createCardMotion(rt: CardMotionRuntime) {
 
     /** 包围盒：与拖拽、飞行共享，谁动谁写回。 */
     const boxRef = useRef<{ x: number; y: number } | null>(null);
+    const layout = () => ({
+      viewport: { width: window.innerWidth, height: window.innerHeight },
+      half: { w: motionRef.current.halfW, h: motionRef.current.halfH },
+    });
+    const layoutRef = useRef(layout());
+
+    const place = (box: BoxPoint): void => {
+      const currentLayout = layout();
+      const { viewport, half } = currentLayout;
+      if (viewport.width <= 0 || viewport.height <= 0) return;
+      const placed = clampPetBox(box, viewport, motionRef.current.size);
+      const center = boxToRatio(placed, viewport, half);
+      layoutRef.current = currentLayout;
+      boxRef.current = placed;
+      card.customPosRef.current = center;
+      const rootEl = root();
+      if (rootEl) {
+        rootEl.style.left = placed.x + 'px';
+        rootEl.style.top = placed.y + 'px';
+        rootEl.style.right = 'auto';
+        rootEl.style.bottom = 'auto';
+      }
+      setCustomPos(center);
+    };
 
     // Q 弹挤压：rAF 句柄与世代号在驱动内部，镜像按当前朝向复原。
     const squashRef = useRef<SquashDriver | null>(null);
@@ -236,8 +263,33 @@ export function createCardMotion(rt: CardMotionRuntime) {
       startThrowLatestRef.current(sx, sy, vx, vy);
     };
 
-    // 碰撞站场注册：getVel 取最新抛掷状态，onHit 经 ref 转发，避免陈旧闭包。
     const { size, bottomPad } = metrics;
+    useEffect(() => {
+      const reflow = (): void => {
+        const currentLayout = layout();
+        if (currentLayout.viewport.width <= 0 || currentLayout.viewport.height <= 0) return;
+        const previousLayout = layoutRef.current;
+        layoutRef.current = currentLayout;
+        let center = card.customPosRef.current;
+        const box = boxRef.current;
+        // 走位与位置跟随只在收尾提交中心；途中从旧布局的实时盒恢复比例。
+        // 回到角落后 React 会清空内联 left，此时忽略上一次运动遗留的盒。
+        if (box && (center || root()?.style.left)) {
+          center = boxToRatio(box, previousLayout.viewport, previousLayout.half);
+        }
+        if (!center || live.current.drag.isActive()) return;
+        // 运动驱动持有起跑时的边界，先停旧帧，避免下一帧写回旧视口外。
+        stopMove();
+        flight.stop();
+        place(centerToBox(center, currentLayout.viewport, currentLayout.half));
+      };
+      reflow();
+      window.addEventListener('resize', reflow);
+      return () => window.removeEventListener('resize', reflow);
+      // eslint-disable-next-line react-hooks/exhaustive-deps -- 尺寸变化重排；其余输入经 refs 或稳定 setter 读取，resize 每次读取最新视口
+    }, [size]);
+
+    // 碰撞站场注册：getVel 取最新抛掷状态，onHit 经 ref 转发，避免陈旧闭包。
     useEffect(() => {
       const arenaSlots = arena.current.slots;
       arenaSlots[petId] = {
@@ -274,6 +326,7 @@ export function createCardMotion(rt: CardMotionRuntime) {
       metrics: () => motionRef.current,
       onPetHit,
       posFollow,
+      place,
       setBox: (box) => {
         boxRef.current = box;
       },

@@ -5,7 +5,6 @@
  * @module dsh-pet/src/client/pet/card/drag
  */
 import { createDrag, type Drag, type DragCard } from '../motion/drag.ts';
-import { boxToRatio } from '../motion/geometry.ts';
 import { playClickSound } from '../click-sound.ts';
 import type { CardLive } from './live.ts';
 import type { CardMotion } from './motion.ts';
@@ -35,8 +34,6 @@ export interface CardDragInput {
   stage: () => HTMLDivElement | null;
   /** 等新首帧就位后再压 Q 弹。 */
   pendingSquash: ReactNS.MutableRefObject<boolean>;
-  /** 归一化中心写入口。 */
-  setCustomPos: CardStateApi['actions']['setCustomPos'];
   /** 换源播一次。 */
   setOnce: (on: boolean) => void;
   /** 换成指定动画。 */
@@ -59,7 +56,7 @@ export function createCardDrag(rt: CardDragRuntime) {
   const { useRef } = rt;
 
   return function useCardDrag(input: CardDragInput): Drag {
-    const { bumpSeq, card, cfgRef, live, motion, pendingSquash, root, setAnim, setCustomPos, setDragging } = input;
+    const { bumpSeq, card, cfgRef, live, motion, pendingSquash, root, setAnim, setDragging } = input;
     const { setOnce, setTipOn, stage } = input;
 
     // 拖拽驱动每次事件取的当帧能力：逐渲染重建，驱动长期持有这个 getter。
@@ -98,12 +95,7 @@ export function createCardDrag(rt: CardDragRuntime) {
         root,
         box: () => motion.box(),
         setBox: (box) => motion.setBox(box),
-        commitPlace: (box) => {
-          const { halfW, halfH } = motion.metrics();
-          setCustomPos(
-            boxToRatio(box, { width: window.innerWidth, height: window.innerHeight }, { w: halfW, h: halfH }),
-          );
-        },
+        commitPlace: motion.place,
       };
     };
 

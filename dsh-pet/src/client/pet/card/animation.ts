@@ -97,9 +97,6 @@ export function createCardAnimation(rt: CardAnimationRuntime) {
     useEffect(() => {
       // 槽对象身份稳定（useRef 一次），字段每渲染就地更新；捕获一份给清理用，避免读 .current。
       const services = live.current;
-      // 视口变化要按新尺寸重算根节点位置，否则改窗口大小后宠物停在旧比例上。
-      const onResize = () => card.actions.setCustomPos((prev) => (prev ? { ...prev } : prev));
-      window.addEventListener('resize', onResize);
       // 把本页这只宠物的实时位置与朝向注册给只读服务 petApi7340（见 ../pose）；
       // 消费者按需读闭包，拖拽、抛掷中途也能拿到当前值，不是快照。
       const unregisterPose = registerPose(petId, () => {
@@ -131,7 +128,6 @@ export function createCardAnimation(rt: CardAnimationRuntime) {
         };
       });
       return () => {
-        window.removeEventListener('resize', onResize);
         unregisterPose(); // 卸载即摘除：静默失效比读到陈旧值安全。
         unregisterProgress();
         ownAnim.dispose(); // 中断在途素材请求并释放 blob，之后本实例不可复用。
