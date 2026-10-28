@@ -37,6 +37,8 @@ interface TurnEndEvent {
   type?: string;
   data?: {
     reason?: { kind?: string; error?: { message?: string } };
+    /** 宿主带过来的最后一条回复开头；没有就回落空正文。 */
+    text?: string;
   };
 }
 
@@ -47,7 +49,10 @@ export function frameToToast(frame: NotifyFrame): { title: string; body: string;
       const ev = (frame.event ?? {}) as TurnEndEvent;
       if (ev.type !== 'turn/end') return null;
       const kind = ev.data?.reason?.kind;
-      if (kind === 'completed') return { title: '对话完成', body: '', icon: NOTIFY_ICONS.done };
+      if (kind === 'completed') {
+        const text = typeof ev.data?.text === 'string' ? ev.data.text.trim() : '';
+        return { title: '对话完成', body: text ? truncate(text) : '', icon: NOTIFY_ICONS.done };
+      }
       if (kind === 'error')
         return { title: '生成失败', body: ev.data?.reason?.error?.message ?? '', icon: NOTIFY_ICONS.error };
       if (kind === 'max-tokens')

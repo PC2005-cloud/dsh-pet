@@ -86,6 +86,29 @@ export function hasBlockingActivity(activity: unknown): boolean {
   return false;
 }
 
+/** 回复开头在会话状态里的缓存上限：只用于一条 toast，留太长没有意义。 */
+export const MAX_REPLY_TEXT = 200;
+
+/**
+ * 从一条 `assistant/message` 事件里取最后一段文本，压平空白并截断。
+ *
+ * 只认 `data.message.content[]` 里最后一个 `{ type: 'text' }` 块：reasoning 块与工具块不是给用户看的，
+ * 混进来只会把内部过程推上锁屏。取不到、形状不对一律返回 null（放行而不是报错）。
+ */
+export function lastAssistantText(event: { type?: string; data?: Record<string, unknown> }): string | null {
+  if (event?.type !== 'assistant/message') return null;
+  const content = (event.data as { message?: { content?: unknown } } | undefined)?.message?.content;
+  if (!Array.isArray(content)) return null;
+  for (let i = content.length - 1; i >= 0; i -= 1) {
+    const block = content[i] as { type?: unknown; text?: unknown } | null;
+    if (block?.type !== 'text' || typeof block.text !== 'string') continue;
+    const text = block.text.replace(/\s+/g, ' ').trim();
+    if (text === '') continue;
+    return text.length > MAX_REPLY_TEXT ? text.slice(0, MAX_REPLY_TEXT) : text;
+  }
+  return null;
+}
+
 /** turn/end reason.kind → 通知类别；不弹的分支返回 null（与 shared/notify.ts 过滤一致）。 */
 export function turnEndNotifyKind(kind: string | undefined): 'completed' | 'error' | 'max-tokens' | null {
   if (kind === 'completed') return 'completed';
@@ -115,7 +138,10 @@ export function parseToolQuestions(args: unknown): Array<{ question?: string }> 
  * 帧形状与 shared/notify.ts 的 frameToToast 期望完全一致（浏览器侧映射零改动）。
  * data 按宽松 Record 接收（approval/asked 的 reason 是字符串、turn/end 的是对象），内部各自安全取值。
  */
-export function reduceNotifyFrame(event: { type?: string; data?: Record<string, unknown> }): HostNotifyFrame | null {
+export function reduceNotifyFrame(
+  event: { type?: string; data?: Record<string, unknown> },
+  replyText?: string | null,
+): HostNotifyFrame | null {
   if (!event?.type) return null;
   switch (event.type) {
     case 'turn/end': {
@@ -126,7 +152,8 @@ export function reduceNotifyFrame(event: { type?: string; data?: Record<string, 
         type: 'session/event',
         event: {
           type: 'turn/end',
-          data: { reason },
+          // 完成时把最后一条回复的开头一并带走：通知正文因此能显示内容而不是只有状态。
+          data: kind === 'completed' && replyText ? { reason, text: replyText } : { reason },
         },
       };
     }

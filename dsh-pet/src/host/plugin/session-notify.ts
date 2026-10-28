@@ -51,6 +51,12 @@ export function createSessionNotify(deps: SessionNotifyInput) {
   const lastTodoText = new Map<string, string | null>();
 
   /**
+   * 每会话最后一段回复文本：完成通知的正文靠它。只在宿主进程内存里活一个回合——turn/end 取用后
+   * 立刻删掉，不按会话长期留（会话清理由 session-watch 的收尾分支负责）。
+   */
+  const lastReplyText = new Map<string, string>();
+
+  /**
    * 每会话在途调用的详情：键为调用标识（缺标识时用临时 `Symbol`），值为气泡文案。
    * 结果事件只删自己那一条，并行调用因此不会互相顶掉，全部删完才回落 todo 文案。
    */
@@ -118,7 +124,10 @@ export function createSessionNotify(deps: SessionNotifyInput) {
         notifyActivityTimers.delete(sessionId);
         void (async () => {
           if (await sessionHasRunningWork(sessionId)) return; // 还有活：等真正的收尾轮再弹
-          const frame = reduceNotifyFrame(event as Parameters<typeof reduceNotifyFrame>[0]);
+          // 这一回合最后一条回复的开头：活动门把完成通知延后了 1.5s，期间它一直躺在缓存里。
+          const replyText = lastReplyText.get(sessionId) ?? null;
+          lastReplyText.delete(sessionId);
+          const frame = reduceNotifyFrame(event as Parameters<typeof reduceNotifyFrame>[0], replyText);
           // 这条延迟路径（活动门等 1.5s 确认没活了才推的「对话完成」）最常被点，同样要带会话 id
           if (frame) pushNotifyFrame(withSessionId(frame, sessionId));
         })();
@@ -130,6 +139,7 @@ export function createSessionNotify(deps: SessionNotifyInput) {
     turnFlags,
     terminalTimers,
     lastTodoText,
+    lastReplyText,
     toolsInFlight,
     cancelTerminalCleanup,
     scheduleTerminalCleanup,

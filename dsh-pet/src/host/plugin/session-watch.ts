@@ -8,6 +8,7 @@ import { GOAL_UPDATE_TOOL, currentTaskFromTodo, goalUpdateAction, reduceWorkStat
 import { toolDetailFromEvent } from '../tool-detail.ts';
 import {
   agentErrorFrame,
+  lastAssistantText,
   isCompletionTurnEnd,
   reduceNotifyFrame,
   sessionIdOf,
@@ -25,6 +26,7 @@ export type SessionWatchInput = {
   ctx: HostContext;
 } & Pick<SessionNotify, 'cancelTerminalCleanup'> &
   Pick<SessionNotify, 'lastTodoText'> &
+  Pick<SessionNotify, 'lastReplyText'> &
   Pick<SessionNotify, 'notifyActivityTimers'> &
   Pick<WorkStatusBridge, 'publishWorkStatus'> &
   Pick<SessionNotify, 'pushNotifyFrame'> &
@@ -135,6 +137,7 @@ export function registerSessionWatch(deps: SessionWatchInput): void {
     ctx,
     cancelTerminalCleanup,
     lastTodoText,
+    lastReplyText,
     notifyActivityTimers,
     publishWorkStatus,
     pushNotifyFrame,
@@ -157,6 +160,11 @@ export function registerSessionWatch(deps: SessionWatchInput): void {
           (session as { id?: unknown } | null)?.id ??
           'unknown',
       );
+      if (type === 'assistant/message') {
+        // 只记不判：这一段文本是完成通知正文的来源，取不到就不记（下游回落空正文）。
+        const text = lastAssistantText(event as { type?: string; data?: Record<string, unknown> });
+        if (text) lastReplyText.set(sessionId, text);
+      }
       if (type === 'todo/write') {
         // 任务详情文案只写该会话的条目（state/task 同源，不可能串会话）。会话没有活动条目
         // （已空闲/已清理）→ 不动：不会被展示，写进去只会成为一条幽灵文案。
@@ -268,6 +276,12 @@ export function registerSessionWatch(deps: SessionWatchInput): void {
         // 判据用 header.origin（不是 parentSession，那会把普通 fork 的主对话一起静音），
         // 判据不可用时放行，绝不把通知整体打哑。详见 notify-events.ts 的 shouldNotifySession。
         if (!shouldNotifySession(session)) return;
+        // 回复正文来源：只记最近一段 assistant 文本，供完成通知的正文使用。取不到就不记，
+        // 下游回落空正文（宁可少一行字，也不能让通知整体失效）。
+        if (event?.type === 'assistant/message') {
+          const text = lastAssistantText(event as { type?: string; data?: Record<string, unknown> });
+          if (text) lastReplyText.set(sessionIdOf(session), text);
+        }
         // 活动门（issue #114）：「对话完成」延迟确认这条会话确实没活了再弹——团队会话里 Lead 的
         // 这一轮结束 ≠ 团队收工，成员还在跑时弹「对话完成」是误报。生成失败/输出截断、权限申请、
         // 用户选择不过这道门，直接放行（理由见 notify-events.ts 的 isCompletionTurnEnd）。

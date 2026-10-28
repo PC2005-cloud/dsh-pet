@@ -14,6 +14,7 @@ import {
   agentErrorFrame,
   hasBlockingActivity,
   isCompletionTurnEnd,
+  lastAssistantText,
   parseToolQuestions,
   reduceNotifyFrame,
   sessionIdOf,
@@ -261,5 +262,64 @@ describe('hasBlockingActivity —— 活动门判据（issue #114）', () => {
 
   test('未知族 → 放行（宿主新增一族不能让通知整体失效）', () => {
     assert.equal(hasBlockingActivity([{ kind: 'something-new' }]), false);
+  });
+});
+
+describe('lastAssistantText —— 从 assistant/message 里取最后一段正文', () => {
+  test('取最后一个 text 块，压平空白', () => {
+    assert.equal(
+      lastAssistantText({
+        type: 'assistant/message',
+        data: { message: { content: [{ type: 'text', text: '  改了  三处\n并跑了测试  ' }] } },
+      }),
+      '改了 三处 并跑了测试',
+    );
+  });
+
+  test('跳过 reasoning 块，只认 text', () => {
+    assert.equal(
+      lastAssistantText({
+        type: 'assistant/message',
+        data: {
+          message: {
+            content: [
+              { type: 'reasoning', text: '这条不该出现' },
+              { type: 'text', text: '真正的回复' },
+            ],
+          },
+        },
+      }),
+      '真正的回复',
+    );
+  });
+
+  test('超长截断到 200 字，非 assistant/message 一律 null', () => {
+    const long = lastAssistantText({
+      type: 'assistant/message',
+      data: { message: { content: [{ type: 'text', text: 'x'.repeat(300) }] } },
+    });
+    assert.equal(long?.length, 200);
+    assert.equal(lastAssistantText({ type: 'turn/end', data: {} }), null);
+    assert.equal(lastAssistantText({ type: 'assistant/message', data: {} }), null);
+  });
+});
+
+describe('reduceNotifyFrame —— 完成帧带上回复开头', () => {
+  test('completed + 有正文 → 帧里带 text', () => {
+    const frame = reduceNotifyFrame({ type: 'turn/end', data: { reason: { kind: 'completed' } } }, '改完了');
+    assert.deepEqual((frame as { event: { data: { text?: string } } }).event.data.text, '改完了');
+  });
+
+  test('completed 但没有正文 → 不写 text 字段', () => {
+    const frame = reduceNotifyFrame({ type: 'turn/end', data: { reason: { kind: 'completed' } } }, null);
+    assert.equal('text' in ((frame as { event: { data: Record<string, unknown> } }).event.data), false);
+  });
+
+  test('error 不挂正文（失败原因走 reason.error）', () => {
+    const frame = reduceNotifyFrame(
+      { type: 'turn/end', data: { reason: { kind: 'error', error: { message: 'boom' } } } },
+      '这段不该出现',
+    );
+    assert.equal('text' in ((frame as { event: { data: Record<string, unknown> } }).event.data), false);
   });
 });
