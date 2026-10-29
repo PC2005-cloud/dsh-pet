@@ -87,7 +87,7 @@ export function hasBlockingActivity(activity: unknown): boolean {
 }
 
 /** 回复开头在会话状态里的缓存上限：只用于一条 toast，留太长没有意义。 */
-export const MAX_REPLY_TEXT = 200;
+const MAX_REPLY_TEXT = 200;
 
 /**
  * 从一条 `assistant/message` 事件里取最后一段文本，压平空白并截断。
@@ -137,10 +137,13 @@ export function parseToolQuestions(args: unknown): Array<{ question?: string }> 
  * 把一条 session/event 子事件压缩成通知帧；不关心或被过滤的事件返回 null。
  * 帧形状与 shared/notify.ts 的 frameToToast 期望完全一致（浏览器侧映射零改动）。
  * data 按宽松 Record 接收（approval/asked 的 reason 是字符串、turn/end 的是对象），内部各自安全取值。
+ *
+ * @param event - 会话子事件。
+ * @param replyText - 本回合最后一段回复的开头；只在 completed 时挂进帧，缺省则不写该字段。
  */
 export function reduceNotifyFrame(
   event: { type?: string; data?: Record<string, unknown> },
-  replyText?: string | null,
+  replyText?: string,
 ): HostNotifyFrame | null {
   if (!event?.type) return null;
   switch (event.type) {

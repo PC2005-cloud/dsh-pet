@@ -51,8 +51,8 @@ export function createSessionNotify(deps: SessionNotifyInput) {
   const lastTodoText = new Map<string, string | null>();
 
   /**
-   * 每会话最后一段回复文本：完成通知的正文靠它。只在宿主进程内存里活一个回合——turn/end 取用后
-   * 立刻删掉，不按会话长期留（会话清理由 session-watch 的收尾分支负责）。
+   * 每会话最后一段回复文本：完成通知的正文靠它。排活动门定时器时取用即出队——活动门会把它延后
+   * 1.5s，但待确认期间文本不会再变；留到定时器里再删，遇到「判定还有活」提前返回就成了长期残留。
    */
   const lastReplyText = new Map<string, string>();
 
@@ -116,6 +116,9 @@ export function createSessionNotify(deps: SessionNotifyInput) {
 
   /** 排一个活动门定时器：到点确认空闲才推这一帧 */
   const scheduleCompletionNotify = (sessionId: string, event: unknown): void => {
+    // 取用即出队：同一回合的 assistant/message 已经到齐，文本不会再变。
+    const replyText = lastReplyText.get(sessionId);
+    lastReplyText.delete(sessionId);
     const prev = notifyActivityTimers.get(sessionId);
     if (prev !== undefined) clearTimeout(prev);
     notifyActivityTimers.set(
@@ -124,9 +127,6 @@ export function createSessionNotify(deps: SessionNotifyInput) {
         notifyActivityTimers.delete(sessionId);
         void (async () => {
           if (await sessionHasRunningWork(sessionId)) return; // 还有活：等真正的收尾轮再弹
-          // 这一回合最后一条回复的开头：活动门把完成通知延后了 1.5s，期间它一直躺在缓存里。
-          const replyText = lastReplyText.get(sessionId) ?? null;
-          lastReplyText.delete(sessionId);
           const frame = reduceNotifyFrame(event as Parameters<typeof reduceNotifyFrame>[0], replyText);
           // 这条延迟路径（活动门等 1.5s 确认没活了才推的「对话完成」）最常被点，同样要带会话 id
           if (frame) pushNotifyFrame(withSessionId(frame, sessionId));

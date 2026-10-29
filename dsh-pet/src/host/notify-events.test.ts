@@ -13,6 +13,7 @@ import assert from 'node:assert/strict';
 import {
   agentErrorFrame,
   hasBlockingActivity,
+  type HostNotifyFrame,
   isCompletionTurnEnd,
   lastAssistantText,
   parseToolQuestions,
@@ -305,14 +306,18 @@ describe('lastAssistantText —— 从 assistant/message 里取最后一段正�
 });
 
 describe('reduceNotifyFrame —— 完成帧带上回复开头', () => {
+  /** 取帧里的 turn/end 数据；帧本身是宽松形状，只有 shared 侧知道 `event`，这里借 unknown 转一次。 */
+  const frameData = (frame: HostNotifyFrame | null): Record<string, unknown> =>
+    (frame as unknown as { event: { data: Record<string, unknown> } }).event.data;
+
   test('completed + 有正文 → 帧里带 text', () => {
     const frame = reduceNotifyFrame({ type: 'turn/end', data: { reason: { kind: 'completed' } } }, '改完了');
-    assert.deepEqual((frame as { event: { data: { text?: string } } }).event.data.text, '改完了');
+    assert.equal(frameData(frame).text, '改完了');
   });
 
   test('completed 但没有正文 → 不写 text 字段', () => {
-    const frame = reduceNotifyFrame({ type: 'turn/end', data: { reason: { kind: 'completed' } } }, null);
-    assert.equal('text' in ((frame as { event: { data: Record<string, unknown> } }).event.data), false);
+    const frame = reduceNotifyFrame({ type: 'turn/end', data: { reason: { kind: 'completed' } } });
+    assert.equal('text' in frameData(frame), false);
   });
 
   test('error 不挂正文（失败原因走 reason.error）', () => {
@@ -320,6 +325,6 @@ describe('reduceNotifyFrame —— 完成帧带上回复开头', () => {
       { type: 'turn/end', data: { reason: { kind: 'error', error: { message: 'boom' } } } },
       '这段不该出现',
     );
-    assert.equal('text' in ((frame as { event: { data: Record<string, unknown> } }).event.data), false);
+    assert.equal('text' in frameData(frame), false);
   });
 });

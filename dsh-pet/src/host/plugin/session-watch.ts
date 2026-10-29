@@ -160,11 +160,6 @@ export function registerSessionWatch(deps: SessionWatchInput): void {
           (session as { id?: unknown } | null)?.id ??
           'unknown',
       );
-      if (type === 'assistant/message') {
-        // 只记不判：这一段文本是完成通知正文的来源，取不到就不记（下游回落空正文）。
-        const text = lastAssistantText(event as { type?: string; data?: Record<string, unknown> });
-        if (text) lastReplyText.set(sessionId, text);
-      }
       if (type === 'todo/write') {
         // 任务详情文案只写该会话的条目（state/task 同源，不可能串会话）。会话没有活动条目
         // （已空闲/已清理）→ 不动：不会被展示，写进去只会成为一条幽灵文案。
@@ -289,6 +284,8 @@ export function registerSessionWatch(deps: SessionWatchInput): void {
           scheduleCompletionNotify(sessionIdOf(session), event);
           return;
         }
+        // 非完成收尾（出错 / 输出截断 / 中止）用不到这段正文，一并清掉，免得留到下一次完成。
+        if (event?.type === 'turn/end') lastReplyText.delete(sessionIdOf(session));
         const frame = reduceNotifyFrame(event as Parameters<typeof reduceNotifyFrame>[0]);
         // 帧带上「这条通知是哪条会话发出的」：点击时网页据此跳到那条会话（见 withSessionId）
         if (frame) pushNotifyFrame(withSessionId(frame, sessionIdOf(session)));
