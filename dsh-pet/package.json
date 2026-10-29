@@ -85,7 +85,7 @@
     "build": "node scripts/prepare.js",
     "prepack": "npm run build && npm run typecheck && npm run lint && npm run check:cycles && npm run check:runtime && npm run format:check && node scripts/prepack-check.js && npm run check:openapi",
     "check:openapi": "node scripts/check-openapi.mjs",
-    "test": "node --experimental-strip-types --import ./scripts/test-register.mjs --test src/**/*.test.ts",
+    "test": "node --experimental-strip-types --import ./scripts/test-register.mjs --test \"src/**/*.test.ts\"",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.test.json",
     "types": "node scripts/gen-types.mjs",
     "lint": "eslint .",
