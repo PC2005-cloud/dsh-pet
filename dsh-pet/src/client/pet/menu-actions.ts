@@ -34,6 +34,8 @@ export interface MenuActionDeps {
   resetPosition: () => void;
   /** 打开对话弹窗。 */
   openChat: () => void;
+  /** 打开待办面板。 */
+  openTodo: () => void;
   /** 上报点播回执。 */
   report: (playbackId: string, status: 'failed', reason: string) => void;
   /** 显示位置切换后，把宿主回的成品聚合交给容器重渲染。 */
@@ -120,6 +122,10 @@ export function createMenuActions(deps: MenuActionDeps): MenuActions {
     }
     if (leaf.action === 'chat') {
       deps.openChat();
+      return;
+    }
+    if (leaf.action === 'todo') {
+      deps.openTodo();
       return;
     }
     if (leaf.action === 'set-display') {

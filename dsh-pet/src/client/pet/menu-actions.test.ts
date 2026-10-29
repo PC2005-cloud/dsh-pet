@@ -36,6 +36,7 @@ function harness(overrides: Partial<MenuActionDeps> = {}) {
     playOnce: (anim, playbackId) => calls.push(`playOnce:${anim}:${playbackId ?? 'null'}`),
     resetPosition: () => calls.push('resetPosition'),
     openChat: () => calls.push('openChat'),
+    openTodo: () => calls.push('openTodo'),
     report: (id, status, reason) => calls.push(`report:${id}:${status}:${reason}`),
     applyMerged: () => calls.push('applyMerged'),
     warn: (message) => calls.push('warn:' + message.slice(0, 20)),
@@ -55,6 +56,12 @@ describe('createMenuActions —— 内置动作', () => {
     const { actions, calls } = harness();
     actions.run({ label: '对话', action: 'chat' } as MenuLeaf);
     assert.deepEqual(calls, ['openChat']);
+  });
+
+  test('待办：交给 openTodo', () => {
+    const { actions, calls } = harness();
+    actions.run({ label: '待办事项', action: 'todo' } as MenuLeaf);
+    assert.deepEqual(calls, ['openTodo']);
   });
 
   test('显示位置：没有 display 就什么都不做', () => {

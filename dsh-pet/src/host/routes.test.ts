@@ -854,3 +854,37 @@ describe('对外 Cordis 服务 —— 第三方注册余额查询', () => {
     assert.equal(api().list().external.includes('route-test-plugin'), false);
   });
 });
+
+describe('/todos —— 待办清单的完整往返', () => {
+  test('新建 → 列表 → 勾选 → 删除', async () => {
+    const create = await call('/dsh-pet-7340/todos', 'POST', JSON.stringify({ text: '交周报', dueAt: 1793000000000 }));
+    assert.equal(create.status, 200);
+    const created = JSON.parse(create.body) as { ok: boolean; todo: { id: string; text: string; dueAt: number } };
+    assert.equal(created.ok, true);
+    assert.equal(created.todo.text, '交周报');
+    assert.equal(created.todo.dueAt, 1793000000000);
+
+    const listed = JSON.parse((await call('/dsh-pet-7340/todos')).body) as { todos: Array<{ id: string }> };
+    assert.ok(
+      listed.todos.some((todo) => todo.id === created.todo.id),
+      '新建的待办必须出现在清单里',
+    );
+
+    const patched = JSON.parse(
+      (await call('/dsh-pet-7340/todos/' + created.todo.id, 'PATCH', JSON.stringify({ done: true }))).body,
+    ) as { ok: boolean; todo: { done: boolean } };
+    assert.equal(patched.ok, true);
+    assert.equal(patched.todo.done, true);
+
+    const removed = JSON.parse((await call('/dsh-pet-7340/todos/' + created.todo.id, 'DELETE')).body) as {
+      removed: number;
+    };
+    assert.equal(removed.removed, 1);
+    const after = JSON.parse((await call('/dsh-pet-7340/todos')).body) as { todos: Array<{ id: string }> };
+    assert.equal(
+      after.todos.some((todo) => todo.id === created.todo.id),
+      false,
+      '删除后不得再出现在清单里',
+    );
+  });
+});

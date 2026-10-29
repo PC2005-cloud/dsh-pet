@@ -16,6 +16,7 @@ import type { MenuRegistry } from '../menu.ts';
 import type { PlaybackStore } from '../playback.ts';
 import type { PoseStore } from '../pose.ts';
 import type { PollStateStore } from '../state.ts';
+import type { TodoStore } from '../todo/store.ts';
 import type { VoiceService } from '../voice/speak.ts';
 import type { WorkStatusStore } from '../work-status.ts';
 
@@ -65,6 +66,8 @@ export interface PetRouteDeps {
   readonly menuRegistry: MenuRegistry;
   /** 轮询快照（前端 1s 轮询的唯一数据源）。 */
   readonly state: PollStateStore;
+  /** 待办清单（单个 JSON 文件，读改写串行）。 */
+  readonly todos: TodoStore;
   /** 工作状态联动快照。 */
   readonly workStatus: WorkStatusStore;
   /** 外部写入用的固定会话 id。 */

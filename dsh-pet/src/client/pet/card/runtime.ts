@@ -186,6 +186,7 @@ export function createCardRuntime(rt: PetRuntime) {
       faceLeft: () => actions.setFacing('left'),
       isFacingRight: () => card.facingRef.current === 'right',
       openChat: () => entryRef.current?.openChat(),
+      openTodo: () => entryRef.current?.openTodo(),
       petId: cfg.id,
       playOnce: (anim, playbackId) => {
         actions.setOnce(true);
@@ -266,7 +267,10 @@ export function createCardRuntime(rt: PetRuntime) {
       marginX: margin.x,
       marginY: margin.y,
       name: cfg.name,
-      onClick: drag.onClick,
+      // 单击既是「摸摸」，也是待办面板的开关：只有真正的一次单击（不是拖拽尾巴）才弹。
+      onClick: () => {
+        if (drag.onClick()) entryRef.current?.toggleTodo();
+      },
       onContextMenu: entry.handleContextMenu,
       onPointerDown: drag.onPointerDown,
       onPointerEnter: entry.onPointerEnter,

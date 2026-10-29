@@ -112,8 +112,9 @@ export interface Drag {
   onPointerMove(e: ReactNS.PointerEvent<HTMLDivElement>): void;
   /** 松开与取消：结算拖拽或抛掷，并复位悬浮提示。 */
   onPointerUp(e: ReactNS.PointerEvent<HTMLDivElement>): void;
-  /** 点击：播放点击动画并触发 Q 弹。 */
-  onClick(): void;
+  /** 点击：播放点击动画并触发 Q 弹。
+   *  返回 true 表示这是一次有效单击（没拖动、也不是甩抛中的抓取）；调用方据此决定要不要弹待办面板。 */
+  onClick(): boolean;
   /** 停弹簧跟随，不碰指针捕获状态。 */
   stopFollow(): void;
   /** 指针是否按着（含未超过拖动阈值）。 */
@@ -396,22 +397,22 @@ export function createDrag(card: () => DragCard): Drag {
     restoreTip(c, e);
   };
 
-  const onClick = (): void => {
+  const onClick = (): boolean => {
     const c = card();
-    if (press.active || press.dragging || performance.now() < justDraggedUntil) return;
+    if (press.active || press.dragging || performance.now() < justDraggedUntil) return false;
     // 本次按下已触发过积分：只收手停住，不再播普通点击动画。
     if (pressScoreFired) {
       pressScoreFired = false;
       c.stopFlight();
       c.stopAutonomy();
-      return;
+      return false;
     }
     c.stopFlight(); // 点击飞行中的宠物即收手停住。
     c.stopAutonomy();
     // 点击音效放在所有「不播点击动画」的早退分支之后。
     c.playClickSound();
     c.setOnce(true);
-    if (!c.clickAnims.length) return;
+    if (!c.clickAnims.length) return true;
     const name = pick(c.clickAnims);
     log(c.petId, '-> [CLICK] ' + name);
     c.markSquash(); // 等新点击动画切到前台后再压新首帧。
@@ -419,6 +420,7 @@ export function createDrag(card: () => DragCard): Drag {
     // 防重分支负责消费 Q 弹标记。
     c.bumpSeq();
     c.playAnim(name);
+    return true;
   };
 
   return {

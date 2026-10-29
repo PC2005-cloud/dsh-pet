@@ -30,6 +30,7 @@ export type ResultReason =
   | 'pet-required'
   | 'pose-unavailable'
   | 'provider-missing'
+  | 'todo-not-found'
   | 'too-many-items'
   | 'too-many-owners'
   | 'unknown-animation'

@@ -18,7 +18,10 @@ import { createSessionNotify } from './plugin/session-notify.ts';
 import { createPetLookup } from './plugin/pet-lookup.ts';
 import { createDownloadReport } from './plugin/download-report.ts';
 import { createWorkStatusBridge } from './plugin/work-status-bridge.ts';
+import { registerTodoReminders } from './plugin/todo-reminders.ts';
 import { createVoiceService } from './voice/speak.ts';
+import { TodoStore } from './todo/store.ts';
+import { join } from 'node:path';
 import type { PetRouteDeps } from './routes/types.ts';
 
 /** 插件行 id（与 cordis.patch.yml 一致） */
@@ -73,6 +76,9 @@ export function apply(ctx: any): void {
   const { effectivePetList, balancePeriodSec, whisperPeriodSec, refreshBalance, resolveActivePetId, petDisplayName } =
     balancePoll;
 
+  // 待办清单：一份用户级数据（不分宠物），落盘在插件数据根；提醒循环与 /todos 路由共用同一个实例。
+  const todos = new TodoStore({ file: join(userRoot, 'todos.json'), log });
+
   const desktopHelper = createDesktopHelper({
     ctx,
     configPaths,
@@ -94,6 +100,7 @@ export function apply(ctx: any): void {
     ...desktopHelper,
     ...sessionNotify,
     ctx,
+    todos,
     // 语音合成：缓存落 userRoot，失败只留日志，不打断宿主
     voice: createVoiceService({ userRoot, log }),
   };
@@ -133,6 +140,9 @@ export function apply(ctx: any): void {
   registerPetCommand({ ctx, effectivePetList, petDisplayName, resolveActivePetId, setActivePetId });
 
   registerChatCommand({ ctx, chatWithPet, log, publishWhisper, resolveActivePetId });
+
+  // 待办提醒：随插件生命周期起停；锁被第三方持有时由 pickReminderSpeaker 跳过该宠物。
+  registerTodoReminders({ ctx, effectivePetList, lock, log, state, todos, waiterCount: () => state.waiterCount() });
 
   registerLifecycle({
     ctx,

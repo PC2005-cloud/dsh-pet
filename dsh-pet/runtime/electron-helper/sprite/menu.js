@@ -26,6 +26,8 @@ Object.assign(PetSprite.prototype, {
         hint: OPEN_SHORTCUT_HINT,
       },
     ];
+    // 「待办事项」：单击宠物也会开面板，这里是右键侧的同一入口。
+    tools.push({ label: '待办事项', action: 'todo' });
     // 「查看余额」无条件显示：关了 balanceEnabled 的宠物也能点，手动请求不受开关限制，点了一定给答复。
     tools.push({ label: '查看余额', action: 'show-balance' });
     tools.push(
@@ -95,6 +97,10 @@ Object.assign(PetSprite.prototype, {
     }
     if (leaf.action === 'chat') {
       this.showChatFromMenu(); // 打开对话弹窗（记忆经 host /chat 读写，浏览器/桌面同一实例共享）
+      return;
+    }
+    if (leaf.action === 'todo') {
+      this.toggleTodo(); // 打开待办面板（与单击宠物同一个入口）
       return;
     }
     if (leaf.action === 'home') {
@@ -221,6 +227,37 @@ Object.assign(PetSprite.prototype, {
     this.chatClose = m.close;
     this.chatOpen = true; // 穿透守卫：弹窗期间整窗保持可交互
     window.__dshPetDebug.chatOpen = true;
+    this.syncInputBusy();
+    this.setInteractive(true);
+  },
+
+  // 待办面板开关（与浏览器半侧共用 shared/todo/panel）：贴在身体命中区旁、跟着宠物移动；
+  // 面板是窗口内 DOM，期间整窗保持可交互，关闭后交还命中区穿透。
+  toggleTodo() {
+    if (this.todoClose) {
+      this.todoClose();
+      this.todoClose = null;
+      return;
+    }
+    const mount = S.mountTodoPanel({
+      anchor: () => {
+        const r = this.hit.getBoundingClientRect();
+        return { left: r.left, top: r.top, right: r.right, bottom: r.bottom };
+      },
+      anchorEl: this.hit,
+      // 桌面窗口是 file://，接口必须给绝对地址
+      baseUrl: BASE + '/todos',
+      onClose: () => {
+        this.todoClose = null;
+        this.todoOpen = false;
+        window.__dshPetDebug.todoOpen = false;
+        this.syncInputBusy();
+        if (!this.menuOpen && !this.chatOpen) this.setInteractive(false);
+      },
+    });
+    this.todoClose = mount.close;
+    this.todoOpen = true;
+    window.__dshPetDebug.todoOpen = true;
     this.syncInputBusy();
     this.setInteractive(true);
   },
