@@ -90,7 +90,8 @@ function createBridge({ isBridge, prefix, origin, token }) {
     const url = new URL(request.url); // dsh-pet-bridge://dsh-pet/dsh-pet-7340/...
     const method = request.method || 'GET';
     let body;
-    if (method === 'POST' || method === 'PUT') {
+    // PATCH 也带体（待办的部分更新）：漏读会让宿主收到空体，把一次正常修改当成坏 JSON。
+    if (method === 'POST' || method === 'PUT' || method === 'PATCH') {
       body = await request.text();
     }
     const resp = await bridgeRequest(method, url.pathname + url.search, body);

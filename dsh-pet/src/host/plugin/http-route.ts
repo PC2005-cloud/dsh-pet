@@ -82,7 +82,9 @@ export function registerHttpRoute(ctx: HostContext, handlePetRoute: HttpRouteHan
           const onClose = (): void => abort.abort();
           res.on('close', onClose);
           try {
-            const body = req.method === 'PUT' || req.method === 'POST' ? await readBody(req) : undefined;
+            // PATCH 也带体（待办的部分更新）；GET / DELETE 不读，避免无谓地等一个不会来的结束事件。
+            const readsBody = req.method === 'PUT' || req.method === 'POST' || req.method === 'PATCH';
+            const body = readsBody ? await readBody(req) : undefined;
             const result = await handlePetRoute(req.url ?? '/', req.method ?? 'GET', body, abort.signal);
             res.off('close', onClose);
             if (result.kind === 'json') sendJson(res, result.status, result.obj, result.headers);
