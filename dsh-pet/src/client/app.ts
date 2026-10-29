@@ -89,6 +89,13 @@ export function makeFactory(): (require: (mod: string) => any) => any {
             // 惰性取服务：它可能晚于本插件注册；缺失时退化为只把窗口叫回前台。
             // eslint-disable-next-line @typescript-eslint/no-explicit-any -- DSH 注入服务无静态类型
             openSession: (sessionId: string) => (ctx as any).get?.('uiWorkspace')?.openSession?.(sessionId),
+            // 通知标题用会话名：会话列表里那一行的 title；空白会话 / 未命名会话取到空串就返回 undefined。
+            sessionTitle: (sessionId: string) => {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any -- DSH 注入服务无静态类型
+              const row = (ctx as any).get?.('sessions')?.list?.getSnapshot?.()?.byId?.[sessionId];
+              const name = typeof row?.title === 'string' ? row.title.trim() : '';
+              return name || undefined;
+            },
           }),
         'dsh-pet: notifications',
       );

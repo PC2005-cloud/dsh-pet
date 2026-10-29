@@ -54,9 +54,11 @@ export const NOTIFY_ICONS = {
 /** 当前生效的总开关；运行中可被 reloadNotifications 更新，设置页保存后即时生效。 */
 let notifyEnabled = true;
 
-/** 会话跳转器：由 app.ts 注入，取不到服务时退化为不跳会话。 */
+/** 会话跳转与命名：由 app.ts 注入，取不到服务时退化为不跳会话、不认会话名。 */
 export interface SessionNavigator {
   openSession(sessionId: string): void;
+  /** 该会话的显示名（通知标题用）；没有名字、会话不在列表里或取不到时返回 undefined。 */
+  sessionTitle?(sessionId: string): string | undefined;
 }
 
 /** 当前生效的会话跳转器（app.ts 注入；旧版 DSH 没有 uiWorkspace 时为 undefined）。 */
@@ -107,11 +109,23 @@ function toast(title: string, body?: string, icon?: string, sessionId?: string):
   }
 }
 
-/** 帧 → toast 并发出；未知帧静默跳过，帧里的 sessionId 一并透传给点击行为。 */
+/**
+ * 帧 → toast 并发出；未知帧静默跳过，帧里的 sessionId 一并透传给点击行为。
+ * 标题优先用会话名：同一个宿主上可以并行跑多条会话，通知里必须能认出是哪一条回来了。
+ */
 function toastFrame(frame: NotifyFrame): void {
-  const t = frameToToast(frame);
+  const sessionId = typeof frame.sessionId === 'string' ? frame.sessionId : undefined;
+  let title: string | undefined;
+  if (sessionId !== undefined) {
+    try {
+      title = sessionNavigator?.sessionTitle?.(sessionId);
+    } catch {
+      /* 取不到名字而已，标题回落固定文案，弹窗照发。 */
+    }
+  }
+  const t = frameToToast(frame, title);
   if (!t) return;
-  toast(t.title, t.body, PIC(t.icon), typeof frame.sessionId === 'string' ? frame.sessionId : undefined);
+  toast(t.title, t.body, PIC(t.icon), sessionId);
 }
 
 /** 申请通知权限的结果；失败时带原因与可选文案，供设置页红字展示。 */

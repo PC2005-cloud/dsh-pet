@@ -18,9 +18,26 @@ export const NOTIFY_ICONS = {
 /** 文案截断长度上限（字符）。 */
 export const MAX_BODY = 80;
 
+/** 标题里会话名的截断长度上限（字符）：标题只有一行，太长会把正文挤掉。 */
+const MAX_TITLE = 30;
+
 /** 文案截断（与弹窗一致：超长只留前 80 字符）。 */
 export function truncate(text: string): string {
   return text.length > MAX_BODY ? text.slice(0, MAX_BODY) + '…' : text;
+}
+
+/** 会话名截断（与标题栏一致：超长只留前 30 字符）。 */
+export function truncateTitle(text: string): string {
+  return text.length > MAX_TITLE ? text.slice(0, MAX_TITLE) + '…' : text;
+}
+
+/**
+ * 「会话名 · 事件」形式的标题。
+ * 会话名缺失（没纳入会话列表、空白会话、旧版宿主）时只留事件类型，通知永远认得出发生了什么。
+ */
+export function composeTitle(sessionTitle: string | undefined, label: string): string {
+  const name = sessionTitle?.trim();
+  return name ? truncateTitle(name) + ' · ' + label : label;
 }
 
 /** 通知帧：宿主半侧转发过来的一条 DSH 事件。 */
@@ -42,8 +59,17 @@ interface TurnEndEvent {
   };
 }
 
-/** 帧 → toast 文案；不认识的类型或 turn/end 的非弹分支（aborted 等）返回 null。 */
-export function frameToToast(frame: NotifyFrame): { title: string; body: string; icon: string } | null {
+/**
+ * 帧 → toast 文案；不认识的类型或 turn/end 的非弹分支（aborted 等）返回 null。
+ *
+ * @param frame - 宿主半侧转发的通知帧。
+ * @param sessionTitle - 这条帧所属会话的显示名；有它时标题带上会话名，用户同时开着多个会话也能认出是哪一条。
+ *   取不到就传 undefined，标题回落固定文案，不影响弹窗。
+ */
+export function frameToToast(
+  frame: NotifyFrame,
+  sessionTitle?: string,
+): { title: string; body: string; icon: string } | null {
   switch (frame.type) {
     case 'session/event': {
       const ev = (frame.event ?? {}) as TurnEndEvent;
@@ -51,12 +77,27 @@ export function frameToToast(frame: NotifyFrame): { title: string; body: string;
       const kind = ev.data?.reason?.kind;
       if (kind === 'completed') {
         const text = typeof ev.data?.text === 'string' ? ev.data.text.trim() : '';
-        return { title: '对话完成', body: text ? truncate(text) : '', icon: NOTIFY_ICONS.done };
+        // 完成通知的标题就是会话名本身：正文已经在讲「这条回复讲了什么」，
+        // 再缀一个「对话完成」只是占位，多会话时反而挤掉了认人的信息。
+        const name = sessionTitle?.trim();
+        return {
+          title: name ? truncateTitle(name) : '对话完成',
+          body: text ? truncate(text) : '',
+          icon: NOTIFY_ICONS.done,
+        };
       }
       if (kind === 'error')
-        return { title: '生成失败', body: ev.data?.reason?.error?.message ?? '', icon: NOTIFY_ICONS.error };
+        return {
+          title: composeTitle(sessionTitle, '生成失败'),
+          body: ev.data?.reason?.error?.message ?? '',
+          icon: NOTIFY_ICONS.error,
+        };
       if (kind === 'max-tokens')
-        return { title: '输出被截断', body: '已达到输出 token 上限', icon: NOTIFY_ICONS.truncated };
+        return {
+          title: composeTitle(sessionTitle, '输出被截断'),
+          body: '已达到输出 token 上限',
+          icon: NOTIFY_ICONS.truncated,
+        };
       // aborted（用户/父代理取消）、interrupted（崩溃恢复）等：不弹
       return null;
     }
@@ -64,7 +105,7 @@ export function frameToToast(frame: NotifyFrame): { title: string; body: string;
       const toolName = typeof frame.toolName === 'string' ? frame.toolName : '';
       const reason = typeof frame.reason === 'string' && frame.reason ? frame.reason : '';
       return {
-        title: '正在申请权限',
+        title: composeTitle(sessionTitle, '正在申请权限'),
         body: (toolName ? '工具「' + toolName + '」' : '') + (reason ? '：' + reason : ''),
         icon: NOTIFY_ICONS.approval,
       };
@@ -72,7 +113,7 @@ export function frameToToast(frame: NotifyFrame): { title: string; body: string;
     case 'question/requested': {
       const q =
         (Array.isArray(frame.questions) && (frame.questions as Array<{ question?: string }>)[0]?.question) || '';
-      return { title: '模型在等你回答', body: q, icon: NOTIFY_ICONS.question };
+      return { title: composeTitle(sessionTitle, '模型在等你回答'), body: q, icon: NOTIFY_ICONS.question };
     }
     case 'host/agent-error': {
       return {
