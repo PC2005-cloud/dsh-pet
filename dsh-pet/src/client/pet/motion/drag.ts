@@ -189,6 +189,23 @@ export function createDrag(card: () => DragCard): Drag {
   /** 指针轨迹采样，供初速估算。 */
   let trail: DragSample[] = [];
   const follow = createDragFollow({ card });
+  // The real pointerup can target another element after pointer capture is lost.
+  // Fall back to a global mouseup for mouse pointers only.
+  let mouseDownTarget: HTMLDivElement | null = null;
+  const onWindowMouseUp = (e: MouseEvent): void => {
+    if (!press.active || !mouseDownTarget || e.button !== 0 || e.buttons !== 0) return;
+    mouseDownTarget.dispatchEvent(
+      new PointerEvent('pointerup', {
+        bubbles: true,
+        pointerId: 1,
+        pointerType: 'mouse',
+        button: 0,
+        buttons: 0,
+        clientX: e.clientX,
+        clientY: e.clientY,
+      }),
+    );
+  };
   /** 触屏长按：计时与容差在 motion/touch-press.ts，到点后把这次按压当右键。 */
   const touchPress = createTouchPress({
     onMenu: (target) => {
@@ -266,6 +283,9 @@ export function createDrag(card: () => DragCard): Drag {
     c.stopAutonomy();
     trail = [];
     press = beginPress(c, e);
+    window.removeEventListener('mouseup', onWindowMouseUp, true);
+    mouseDownTarget = e.currentTarget;
+    if (e.pointerType === 'mouse') window.addEventListener('mouseup', onWindowMouseUp, true);
     touchPress.arm({
       el: e.currentTarget,
       pointerId: e.pointerId,
@@ -372,6 +392,9 @@ export function createDrag(card: () => DragCard): Drag {
   };
 
   const onPointerUp = (e: ReactNS.PointerEvent<HTMLDivElement>): void => {
+    window.removeEventListener('mouseup', onWindowMouseUp, true);
+    mouseDownTarget = null;
+    if (!press.active) return;
     const c = card();
     // pointercancel 也走这个处理器，长按计时器在这里一并清掉。
     touchPress.cancel();
