@@ -116,6 +116,8 @@ export interface Drag {
   onClick(): void;
   /** 停弹簧跟随，不碰指针捕获状态。 */
   stopFollow(): void;
+  /** 清理组件卸载时可能残留的鼠标释放监听。 */
+  dispose(): void;
   /** 指针是否按着（含未超过拖动阈值）。 */
   isActive(): boolean;
   /** 是否刚拖完：松手后的短窗口内为真，右键菜单要忽略这段时间。 */
@@ -192,12 +194,17 @@ export function createDrag(card: () => DragCard): Drag {
   // The real pointerup can target another element after pointer capture is lost.
   // Fall back to a global mouseup for mouse pointers only.
   let mouseDownTarget: HTMLDivElement | null = null;
+  let mousePointerId = 0;
+  const clearMouseFallback = (): void => {
+    if (typeof window !== 'undefined') window.removeEventListener('mouseup', onWindowMouseUp, true);
+    mouseDownTarget = null;
+  };
   const onWindowMouseUp = (e: MouseEvent): void => {
     if (!press.active || !mouseDownTarget || e.button !== 0 || e.buttons !== 0) return;
     mouseDownTarget.dispatchEvent(
       new PointerEvent('pointerup', {
         bubbles: true,
-        pointerId: 1,
+        pointerId: mousePointerId,
         pointerType: 'mouse',
         button: 0,
         buttons: 0,
@@ -283,9 +290,12 @@ export function createDrag(card: () => DragCard): Drag {
     c.stopAutonomy();
     trail = [];
     press = beginPress(c, e);
-    window.removeEventListener('mouseup', onWindowMouseUp, true);
-    mouseDownTarget = e.currentTarget;
-    if (e.pointerType === 'mouse') window.addEventListener('mouseup', onWindowMouseUp, true);
+    clearMouseFallback();
+    if (e.pointerType === 'mouse' && typeof window !== 'undefined') {
+      mouseDownTarget = e.currentTarget;
+      mousePointerId = e.pointerId;
+      window.addEventListener('mouseup', onWindowMouseUp, true);
+    }
     touchPress.arm({
       el: e.currentTarget,
       pointerId: e.pointerId,
@@ -392,8 +402,7 @@ export function createDrag(card: () => DragCard): Drag {
   };
 
   const onPointerUp = (e: ReactNS.PointerEvent<HTMLDivElement>): void => {
-    window.removeEventListener('mouseup', onWindowMouseUp, true);
-    mouseDownTarget = null;
+    clearMouseFallback();
     if (!press.active) return;
     const c = card();
     // pointercancel 也走这个处理器，长按计时器在这里一并清掉。
@@ -452,5 +461,6 @@ export function createDrag(card: () => DragCard): Drag {
     onPointerMove,
     onPointerUp,
     stopFollow: follow.stop,
+    dispose: clearMouseFallback,
   };
 }

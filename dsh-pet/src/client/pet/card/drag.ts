@@ -17,6 +17,7 @@ import type * as ReactNS from 'react';
 export interface CardDragRuntime {
   /** 引用；拖拽驱动只造一次。 */
   useRef: <T>(initial: T) => ReactNS.MutableRefObject<T>;
+  useEffect: typeof ReactNS.useEffect;
 }
 
 /** 拖拽装配的输入。 */
@@ -56,7 +57,7 @@ export interface CardDragInput {
  * @returns 接收装配输入的 hook，返回本卡的拖拽驱动。
  */
 export function createCardDrag(rt: CardDragRuntime) {
-  const { useRef } = rt;
+  const { useRef, useEffect } = rt;
 
   return function useCardDrag(input: CardDragInput): Drag {
     const { bumpSeq, card, cfgRef, live, motion, pendingSquash, root, setAnim, setCustomPos, setDragging } = input;
@@ -122,6 +123,7 @@ export function createCardDrag(rt: CardDragRuntime) {
     const dragRef = useRef<Drag | null>(null);
     dragRef.current ??= createDrag(dragCard);
     const drag = dragRef.current;
+    useEffect(() => () => drag.dispose(), [drag]);
     live.current.drag = drag;
     return drag;
   };

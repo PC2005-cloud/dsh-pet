@@ -57,7 +57,7 @@ export function createCardRuntime(rt: PetRuntime) {
   const useAnimationFlow = createAnimationFlow({ useRef });
   const useCardAnimation = createCardAnimation({ useEffect, useRef });
   const useCardMotion = createCardMotion({ useEffect, useRef });
-  const useCardDrag = createCardDrag({ useRef });
+  const useCardDrag = createCardDrag({ useRef, useEffect });
   const useCardEntry = createCardEntry({ useEffect, useRef });
 
   return function useCardRuntime(props: PetCardProps): CardViewProps {
