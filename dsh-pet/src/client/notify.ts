@@ -3,7 +3,8 @@
  * 这是独立于宠物的能力，只随 DSH 网页端走——桌面模式不做宠物无关的功能。
  * 不负责产生帧：宿主监听 DSH 事件并写进 `/state`，容器统一轮询发现 counter 变化后调 `notifyFromFrame`；
  * 中断 / 活动门等过滤也已在宿主侧完成。
- * 依赖 shared/notify.ts 的帧到文案映射，以及成品配置的 `main.notificationsEnabled` 总开关。
+ * 依赖 shared/notify.ts 的帧到文案映射、成品配置的 `main.notificationsEnabled` 总开关，
+ * 以及 app.ts 注入的会话跳转与命名服务（取不到时只降级，不影响弹窗）。
  * @module dsh-pet/src/client/notify
  */
 
@@ -65,6 +66,26 @@ export interface SessionNavigator {
 let sessionNavigator: SessionNavigator | undefined;
 
 /**
+ * 取某条会话的显示名（通知标题用）。
+ *
+ * @param navigator - app.ts 注入的会话服务；旧版 DSH 可能整个缺失。
+ * @param sessionId - 帧携带的会话 id；缺失时连查询都不做。
+ * @returns 会话名；没有注入器、服务没有该能力或查询抛错时返回 undefined，调用方回落固定文案。
+ */
+export function sessionTitleFrom(
+  navigator: SessionNavigator | undefined,
+  sessionId: string | undefined,
+): string | undefined {
+  if (sessionId === undefined) return undefined;
+  try {
+    return navigator?.sessionTitle?.(sessionId);
+  } catch {
+    // 宿主 store 的 getSnapshot 在首屏列表仍 pending 时可能抛；取不到名字只回落标题，绝不能连累弹窗。
+    return undefined;
+  }
+}
+
+/**
  * 点通知：先页内切到那条会话，再聚焦页面，最后请桌面壳把主窗口叫回前台。
  * 先切会话再叫窗口，用户看到窗口的那一刻就是目标会话；`dsh://open` 只在 Electron 宿主里发，
  * 浏览器里导航该协议会弹拦截框。`sessionId` 缺失时只跳过切换，其余照旧。
@@ -115,15 +136,7 @@ function toast(title: string, body?: string, icon?: string, sessionId?: string):
  */
 function toastFrame(frame: NotifyFrame): void {
   const sessionId = typeof frame.sessionId === 'string' ? frame.sessionId : undefined;
-  let title: string | undefined;
-  if (sessionId !== undefined) {
-    try {
-      title = sessionNavigator?.sessionTitle?.(sessionId);
-    } catch {
-      /* 取不到名字而已，标题回落固定文案，弹窗照发。 */
-    }
-  }
-  const t = frameToToast(frame, title);
+  const t = frameToToast(frame, sessionTitleFrom(sessionNavigator, sessionId));
   if (!t) return;
   toast(t.title, t.body, PIC(t.icon), sessionId);
 }
@@ -175,7 +188,7 @@ export function notifyFromFrame(frame: unknown): void {
 
 /**
  * 初始化通知引擎：记住会话跳转器、读总开关、兜底申请权限并跟踪页面聚焦；不做轮询。
- * @param navigator - 会话跳转器；不传时点击只叫窗口、不跳会话。
+ * @param navigator - 会话跳转与命名服务；不传时点击只叫窗口、标题回落固定文案。
  * @returns 释放函数，摘掉聚焦监听。
  */
 export function initNotify(navigator?: SessionNavigator): () => void {

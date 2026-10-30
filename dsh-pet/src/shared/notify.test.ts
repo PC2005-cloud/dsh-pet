@@ -4,28 +4,27 @@
  *   error / max-tokens / 审批 / 提问 用「会话名 · 事件」，事件类型不被会话名吞掉；
  *   没有会话名（宿主没带 sessionId、会话不在列表、空白会话）一律回落固定文案；
  *   超长会话名按 30 字符截断，标题只占一行。
- *
- * 跑法：node --experimental-strip-types --test src/shared/notify.test.ts
  */
-import { test, describe } from 'node:test';
+import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { composeTitle, frameToToast, MAX_BODY, truncateTitle } from './notify.ts';
+import { frameToToast, MAX_BODY } from './notify.ts';
 
-describe('composeTitle', () => {
+/** 审批帧：标题固定是「正在申请权限」，用它观察会话名怎么拼进标题。 */
+const approvalFrame = { type: 'approval/requested', sessionId: 's1', toolName: 'bash', reason: '要写 /tmp' };
+
+describe('frameToToast：会话名进标题', () => {
   test('有会话名时是「会话名 · 事件」', () => {
-    assert.equal(composeTitle('修复通知标题', '生成失败'), '修复通知标题 · 生成失败');
+    assert.equal(frameToToast(approvalFrame, '修复通知标题')?.title, '修复通知标题 · 正在申请权限');
   });
 
-  test('没有会话名、空串、纯空白时只留事件', () => {
-    assert.equal(composeTitle(undefined, '生成失败'), '生成失败');
-    assert.equal(composeTitle('', '生成失败'), '生成失败');
-    assert.equal(composeTitle('   ', '生成失败'), '生成失败');
+  test('没有会话名、空串、纯空白时只留事件类型', () => {
+    assert.equal(frameToToast(approvalFrame)?.title, '正在申请权限');
+    assert.equal(frameToToast(approvalFrame, '')?.title, '正在申请权限');
+    assert.equal(frameToToast(approvalFrame, '   ')?.title, '正在申请权限');
   });
 
-  test('会话名超长按标题上限截断，事件类型保留', () => {
-    const title = composeTitle('会话'.repeat(30), '生成失败');
-    assert.equal(title, truncateTitle('会话'.repeat(30)) + ' · 生成失败');
-    assert.equal((title.split(' · ')[0] as string).length, 31); // 30 字符 + 省略号
+  test('会话名超长按 30 字符截断，事件类型不被截掉', () => {
+    assert.equal(frameToToast(approvalFrame, '会话'.repeat(30))?.title, '会话'.repeat(15) + '… · 正在申请权限');
   });
 });
 
@@ -71,9 +70,7 @@ describe('frameToToast：其他事件带上会话名', () => {
   test('max-tokens / 审批 / 提问同样前缀会话名', () => {
     const maxTokens = { type: 'session/event', event: { type: 'turn/end', data: { reason: { kind: 'max-tokens' } } } };
     assert.equal(frameToToast(maxTokens, '长文档')?.title, '长文档 · 输出被截断');
-
-    const approval = { type: 'approval/requested', sessionId: 's1', toolName: 'bash', reason: '要写 /tmp' };
-    assert.equal(frameToToast(approval, '部署')?.title, '部署 · 正在申请权限');
+    assert.equal(frameToToast(approvalFrame, '部署')?.title, '部署 · 正在申请权限');
 
     const question = { type: 'question/requested', sessionId: 's1', questions: [{ question: '选哪个？' }] };
     assert.equal(frameToToast(question, '选型')?.title, '选型 · 模型在等你回答');

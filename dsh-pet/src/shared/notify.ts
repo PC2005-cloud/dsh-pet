@@ -18,26 +18,25 @@ export const NOTIFY_ICONS = {
 /** 文案截断长度上限（字符）。 */
 export const MAX_BODY = 80;
 
-/** 标题里会话名的截断长度上限（字符）：标题只有一行，太长会把正文挤掉。 */
-const MAX_TITLE = 30;
+/** 会话名在标题里的截断上限（字符）：名字只是认人用，太长会把事件类型挤出标题那一行。 */
+const MAX_SESSION_NAME = 30;
 
 /** 文案截断（与弹窗一致：超长只留前 80 字符）。 */
 export function truncate(text: string): string {
   return text.length > MAX_BODY ? text.slice(0, MAX_BODY) + '…' : text;
 }
 
-/** 会话名截断（与标题栏一致：超长只留前 30 字符）。 */
-export function truncateTitle(text: string): string {
-  return text.length > MAX_TITLE ? text.slice(0, MAX_TITLE) + '…' : text;
+/** 会话名 → 能放进标题的名字：去掉首尾空白并截断；没有名字时返回 undefined。 */
+function sessionNameOf(sessionTitle: string | undefined): string | undefined {
+  const name = sessionTitle?.trim();
+  if (!name) return undefined;
+  return name.length > MAX_SESSION_NAME ? name.slice(0, MAX_SESSION_NAME) + '…' : name;
 }
 
-/**
- * 「会话名 · 事件」形式的标题。
- * 会话名缺失（没纳入会话列表、空白会话、旧版宿主）时只留事件类型，通知永远认得出发生了什么。
- */
-export function composeTitle(sessionTitle: string | undefined, label: string): string {
-  const name = sessionTitle?.trim();
-  return name ? truncateTitle(name) + ' · ' + label : label;
+/** 「会话名 · 事件」形式的标题；没有会话名时只留事件类型。 */
+function composeTitle(sessionTitle: string | undefined, label: string): string {
+  const name = sessionNameOf(sessionTitle);
+  return name ? name + ' · ' + label : label;
 }
 
 /** 通知帧：宿主半侧转发过来的一条 DSH 事件。 */
@@ -79,9 +78,8 @@ export function frameToToast(
         const text = typeof ev.data?.text === 'string' ? ev.data.text.trim() : '';
         // 完成通知的标题就是会话名本身：正文已经在讲「这条回复讲了什么」，
         // 再缀一个「对话完成」只是占位，多会话时反而挤掉了认人的信息。
-        const name = sessionTitle?.trim();
         return {
-          title: name ? truncateTitle(name) : '对话完成',
+          title: sessionNameOf(sessionTitle) ?? '对话完成',
           body: text ? truncate(text) : '',
           icon: NOTIFY_ICONS.done,
         };
