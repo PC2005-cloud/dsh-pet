@@ -75,8 +75,8 @@ function parseSpeakInput(raw: unknown): ParseResult {
 export function createVoiceService(options: {
   /** 用户数据根；缓存落在 `<userRoot>/voice-cache/`。 */
   userRoot: string;
-  /** 失败留痕用；不传则静默。 */
-  log?: { warn(message: string): void };
+  /** 留痕用；不传则静默。只记字数与结果，不记正文（用户内容不进日志）。 */
+  log?: { info?(message: string): void; warn?(message: string): void };
   /** 合成实现；测试注入替身，缺省走 edge 的真实实现。 */
   synthesize?: (input: SynthInput) => Promise<void>;
 }): VoiceService {
@@ -120,9 +120,14 @@ export function createVoiceService(options: {
     const source = provider ? provider.id : BUILTIN_VOICE_ID;
     // 第三方没有音色概念，缓存键里把 voice 置空；来源进键，换实现不会命中旧音频
     const target = cachePath(userRoot, cacheKey(source, provider ? '' : voice, rate, text));
+    const startedMs = Date.now();
     const cached = await findCached(target);
-    if (cached) return { ok: true, file: cached };
+    if (cached) {
+      log?.info?.(`[dsh-pet] voice speak: cache=hit chars=${text.length} voice=${source}`);
+      return { ok: true, file: cached };
+    }
     if (queueUsed >= MAX_QUEUE) {
+      log?.warn?.(`[dsh-pet] voice speak: queue full (max ${MAX_QUEUE}) chars=${text.length} voice=${source}`);
       return { ok: false, reason: 'voice-busy', message: 'voice queue is full, retry later' };
     }
     try {
@@ -135,11 +140,13 @@ export function createVoiceService(options: {
       });
     } catch (error) {
       // 上游细节（含 URL、状态码）不外泄，只留在日志里
-      log?.warn(
-        `[dsh-pet] voice synthesis failed: ${error instanceof VoiceSynthError ? error.message : String(error)}`,
+      log?.warn?.(
+        `[dsh-pet] voice speak: failed chars=${text.length} voice=${source} ` +
+          `ms=${Date.now() - startedMs} reason=${error instanceof VoiceSynthError ? error.message : String(error)}`,
       );
       return { ok: false, reason: 'generate-error', message: 'voice synthesis failed' };
     }
+    log?.info?.(`[dsh-pet] voice speak: cache=miss chars=${text.length} voice=${source} ms=${Date.now() - startedMs}`);
     return { ok: true, file: target };
   }
 

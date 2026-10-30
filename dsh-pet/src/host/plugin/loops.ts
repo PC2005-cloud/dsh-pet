@@ -5,6 +5,7 @@
  * @module dsh-pet/src/host/plugin/loops
  */
 import { findPetInstance, flattenPetList, readAllConfig } from '../config.ts';
+import { isDisplayed } from '../surface.ts';
 import { automaticWhisperSchedule } from '../whisper-policy.ts';
 import type { BalancePoll } from './balance-poll.ts';
 import type { ChatMemory } from './chat-memory.ts';
@@ -117,6 +118,14 @@ export function registerLoops(deps: LoopsInput): void {
             );
             continue;
           }
+          // 配置上不显示的宠物不生成：用户选「都不显示」就是不用了，后台继续调模型纯属白烧额度（#237）。
+          // 放在 min 之前：不可见的宠物也不该把整拍的周期拖住。不推进 lastWhisperAt——
+          // 与占用锁同一口径，重新可见后下一拍立刻补一句。
+          const display = String(pet.display ?? '');
+          if (!isDisplayed(display)) {
+            skipped.push(petId + ': display=none');
+            continue;
+          }
           const sec = schedule.periodSec;
           min = Math.min(min, sec);
           if (now - (lastWhisperAt.get(petId) ?? 0) < sec * 1000) {
@@ -134,8 +143,9 @@ export function registerLoops(deps: LoopsInput): void {
           due += 1;
           log.info(`[dsh-pet] 碎碎念到点 pet=${petId}（周期 ${sec}s），开始生成`);
           lastWhisperAt.set(petId, now);
-          // 不 await：生成要几秒，别把调度拍拖住（每只宠物独立生成，互不阻塞）
-          void publishWhisper(petId).catch(() => {});
+          // 不 await：生成要几秒，别把调度拍拖住（每只宠物独立生成，互不阻塞）。
+          // kind=whisper 让生成侧按 voiceWhisperEnabled 决定要不要带 voiceTo。
+          void publishWhisper(petId, undefined, undefined, 'whisper').catch(() => {});
         }
         if (Number.isFinite(min)) next = min;
         // 每拍一行汇总：调度是否还在跑、下一拍多久、为什么跳过，全在这一行里（300s 一条，量可忽略）

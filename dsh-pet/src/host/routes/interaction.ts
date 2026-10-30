@@ -6,6 +6,7 @@
  * @module dsh-pet/src/host/routes/interaction
  */
 import { readAllConfig } from '../config.ts';
+import { normalizeSurface, voiceTargetOfSurface } from '../surface.ts';
 import {
   decideBroadcast,
   decideBubbleClear,
@@ -77,7 +78,14 @@ export async function handleInteractionRoutes(deps: PetRouteDeps, input: RouteIn
       // `pets[""].say`，还回 ok:true（钱花了、话丢了、调用方以为成功）。
       const who = requirePet(url.searchParams, () => readAllConfig(configPaths), { surface: true });
       if (!who.ok) return who.res;
-      const r = await publishWhisper(who.petId, url.searchParams.get('image') ?? undefined);
+      // 谁点的谁念：请求面在 requirePet 里已被 displayCovers 校验过，具体到一端就用它；
+      // both / any 不足以指定一端，留空交给生成函数按 display 推导。
+      const want = normalizeSurface(url.searchParams.get('surface'));
+      const r = await publishWhisper(
+        who.petId,
+        url.searchParams.get('image') ?? undefined,
+        want === null ? undefined : voiceTargetOfSurface(want),
+      );
       if (r.ok) return okResult({ ok: true, text: r.text, ...(r.image ? { image: r.image } : {}) });
       // 真实 reason 原样透出（独立模式是 `provider-missing`，见 ./whisper 的联合体）——
       // 不再把一切失败糊成 generate-error，调用方据此能分清「没配模型」与「生成炸了」。
@@ -131,7 +139,17 @@ export async function handleInteractionRoutes(deps: PetRouteDeps, input: RouteIn
       // 实际生效的时长与联动开关，调用方不用自己猜缺省是多少。
       // 配图两种形态二选一（判定层保证）：url 形态写 url，名称形态写池内规范名，都没有则纯文本。
       const pic = d.url !== undefined ? { url: d.url } : d.image !== undefined ? { image: d.image } : {};
-      state.writePet(d.petId, 'say', { text: d.text, ...pic, duration: d.duration, anim: d.anim });
+      // 与手动碎碎念同一口径：调用方用 ?surface= 明说了「我希望这句显示在哪一端」，就由那一端念；
+      // both / any 不足以指定一端，留空不写（消费端据此不念）。
+      const want = normalizeSurface(url.searchParams.get('surface'));
+      const voiceTo = want === null ? undefined : voiceTargetOfSurface(want);
+      state.writePet(d.petId, 'say', {
+        text: d.text,
+        ...pic,
+        duration: d.duration,
+        anim: d.anim,
+        ...(voiceTo ? { voiceTo } : {}),
+      });
       return okResult({ ok: true });
     } catch (e) {
       // 配置读取失败等（安装损坏）→ 显式失败，不静默

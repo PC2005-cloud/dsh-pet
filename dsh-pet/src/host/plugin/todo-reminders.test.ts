@@ -35,12 +35,13 @@ function todo(overrides: Partial<TodoRecord> = {}): TodoRecord {
 /** 造一条宠物：只带本函数会读的字段。 */
 const pet = (id: string, display: string): Record<string, unknown> => ({ id, display });
 
-/** 一拍用的最小替身：记录写入口。 */
+/** 一拍用的最小替身：记录写入口。`voiceTodo` 缺省开（与成品配置默认不同，测试里按「要念」跑）。 */
 function harness(options: {
   todos: TodoRecord[];
   pets?: Record<string, unknown>[];
   locked?: string | null;
   hasListener?: boolean;
+  voiceTodo?: boolean;
 }) {
   const writes: Array<{ petId: string; leaf: string; data: unknown }> = [];
   const marked: Array<{ id: string; at: number }> = [];
@@ -52,6 +53,7 @@ function harness(options: {
       },
     },
     effectivePetList: () => options.pets ?? [pet('main', 'web')],
+    isVoiceTodoEnabled: () => options.voiceTodo ?? true,
     lock: { locked: (petId: string) => petId === options.locked },
     state: {
       writePet: (petId: string, leaf: string, data: unknown) => {
@@ -152,9 +154,36 @@ describe('tickTodoReminders —— 一拍', () => {
     assert.equal(marked.length, 0);
   });
 
+  test('播报开关关掉：照样弹气泡，但叶子不带 voiceTo（谁都不念）', async () => {
+    const { deps, writes } = harness({ todos: [todo()], voiceTodo: false });
+    await tickTodoReminders(deps);
+    assert.equal(writes.length, 1, '气泡照旧要弹');
+    assert.equal('voiceTo' in (writes[0]?.data as object), false, '关掉时不该写这个键');
+  });
+
+  test('播报开关打开：按 display 带 voiceTo', async () => {
+    const { deps, writes } = harness({ todos: [todo()], voiceTodo: true });
+    await tickTodoReminders(deps);
+    assert.equal((writes[0]?.data as { voiceTo?: string }).voiceTo, 'web', '默认宠物只在网页显示');
+  });
+
   test('只有桌面端宠物时也能提醒', async () => {
     const { deps, writes } = harness({ todos: [todo()], pets: [pet('d', 'desktop')] });
     await tickTodoReminders(deps);
     assert.equal(writes[0]?.petId, 'd');
+  });
+
+  test('写 say 时带上该由哪一端念：桌面优先，只在网页显示才写 web', async () => {
+    const webOnly = harness({ todos: [todo()], pets: [pet('w', 'web')] });
+    await tickTodoReminders(webOnly.deps);
+    assert.equal((webOnly.writes[0]?.data as { voiceTo?: string }).voiceTo, 'web');
+
+    const both = harness({ todos: [todo()], pets: [pet('b', 'both')] });
+    await tickTodoReminders(both.deps);
+    assert.equal(
+      (both.writes[0]?.data as { voiceTo?: string }).voiceTo,
+      'desktop',
+      '两端都显示时交给桌面端：桌面端必然有窗口，网页端随时可能关掉',
+    );
   });
 });

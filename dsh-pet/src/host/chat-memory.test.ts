@@ -54,14 +54,28 @@ function tempWorkspace(overlay: Record<string, unknown> = {}) {
   return { dir, configPaths, memeDir: join(dir, 'memes'), userRoot: join(dir, 'user') };
 }
 
-/** 造一份对话记忆；memeDir 缺省 = 没有表情包目录（池为空），writes 给了就记录每次写气泡叶子。 */
-function createMemory(reply: string, ws: ReturnType<typeof tempWorkspace>, memeDir?: string, writes?: string[]) {
+/** 造一份对话记忆；memeDir 缺省 = 没有表情包目录（池为空）。
+ *  `collect.writes` 记下每次写气泡叶子的「宠物.叶子」，`collect.records` 连同载荷一起留（断言字段用）。 */
+function createMemory(
+  reply: string,
+  ws: ReturnType<typeof tempWorkspace>,
+  memeDir?: string,
+  collect?: {
+    writes?: string[];
+    records?: Array<{ petId: string; leaf: string; data: Record<string, unknown> }>;
+  },
+) {
   return createChatMemory({
     ctx: fakeCtx(reply),
     configPaths: ws.configPaths,
     log: { info: () => {}, warn: () => {}, error: () => {} },
     memeDirsFor: () => (memeDir === undefined ? [] : [memeDir]),
-    state: { writePet: (petId: string, leaf: string) => writes?.push(petId + '.' + leaf) },
+    state: {
+      writePet: (petId: string, leaf: string, data: Record<string, unknown>) => {
+        collect?.writes?.push(petId + '.' + leaf);
+        collect?.records?.push({ petId, leaf, data });
+      },
+    },
     userRoot: ws.userRoot,
   } as unknown as ChatMemoryInput);
 }
@@ -141,7 +155,7 @@ describe('createChatMemory —— 指定配图的碎碎念', () => {
     const ws = poolWorkspace();
     const writes: string[] = [];
     try {
-      const r = await createMemory('随便一句', ws, ws.memeDir, writes).publishWhisper('main', '生气');
+      const r = await createMemory('随便一句', ws, ws.memeDir, { writes }).publishWhisper('main', '生气');
       assert.equal(r.ok, true);
       assert.equal(r.ok === true ? r.image : '', '生气', '必须用点名的那张，不能随机抽');
       assert.deepEqual(writes, ['main.say'], '成功时写一次气泡叶子');
@@ -154,7 +168,7 @@ describe('createChatMemory —— 指定配图的碎碎念', () => {
     const ws = poolWorkspace();
     const writes: string[] = [];
     try {
-      const r = await createMemory('不该生成', ws, ws.memeDir, writes).publishWhisper('main', '查无此图');
+      const r = await createMemory('不该生成', ws, ws.memeDir, { writes }).publishWhisper('main', '查无此图');
       assert.equal(r.ok, false);
       assert.equal(r.ok === false ? r.reason : '', 'unknown-image');
       assert.deepEqual(writes, [], '明确失败时不写叶子，否则等于静默换了一张');
@@ -180,6 +194,66 @@ describe('createChatMemory —— 指定配图的碎碎念', () => {
       const r = await createMemory('纯文本一句', ws, ws.memeDir).publishWhisper('main');
       assert.equal(r.ok, true);
       assert.equal(r.ok === true && 'image' in r, false, '自动配图关闭时不该带图');
+    } finally {
+      rmSync(ws.dir, { recursive: true, force: true });
+    }
+  });
+
+  test('voiceTo：传了就用传的，没传按 display 推导（默认宠物 display=both → desktop）', async () => {
+    const ws = poolWorkspace();
+    const records: Array<{ petId: string; leaf: string; data: Record<string, unknown> }> = [];
+    try {
+      await createMemory('随便一句', ws, ws.memeDir, { records }).publishWhisper('main', undefined, 'web');
+      assert.equal(records[0]?.data.voiceTo, 'web', '显式传入优先于 display');
+
+      await createMemory('纯文本一句', ws, ws.memeDir, { records }).publishWhisper('main');
+      assert.equal(records[1]?.data.voiceTo, 'desktop', '没传时按 display 推导：桌面优先');
+    } finally {
+      rmSync(ws.dir, { recursive: true, force: true });
+    }
+  });
+  test('kind=whisper 受 voiceWhisperEnabled 管；手动（缺省 kind）不受它管', async () => {
+    const off = poolWorkspace();
+    const offRecords: Array<{ petId: string; leaf: string; data: Record<string, unknown> }> = [];
+    try {
+      await createMemory('一句', off, off.memeDir, { records: offRecords }).publishWhisper(
+        'main',
+        undefined,
+        undefined,
+        'whisper',
+      );
+      assert.equal('voiceTo' in (offRecords[0]?.data ?? {}), false, '开关关着时周期碎碎念不该写 voiceTo');
+
+      await createMemory('一句', off, off.memeDir, { records: offRecords }).publishWhisper('main');
+      assert.equal(offRecords[1]?.data.voiceTo, 'desktop', '手动触发不看那个开关，照常按 display 推导');
+    } finally {
+      rmSync(off.dir, { recursive: true, force: true });
+    }
+
+    const on = tempWorkspace({ voiceWhisperEnabled: true });
+    const onRecords: Array<{ petId: string; leaf: string; data: Record<string, unknown> }> = [];
+    try {
+      await createMemory('一句', on, undefined, { records: onRecords }).publishWhisper(
+        'main',
+        undefined,
+        undefined,
+        'whisper',
+      );
+      assert.equal(onRecords[0]?.data.voiceTo, 'desktop', '开关打开后周期碎碎念照常带 voiceTo');
+    } finally {
+      rmSync(on.dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('createChatMemory —— 对话回复的 voiceTo', () => {
+  test('回复写叶子时带上该由哪一端念（对话请求没有具体端，按 display 推导）', async () => {
+    const ws = tempWorkspace();
+    const records: Array<{ petId: string; leaf: string; data: Record<string, unknown> }> = [];
+    try {
+      const r = await createMemory('在的', ws, undefined, { records }).chatWithPet('main', '在吗');
+      assert.equal(r.ok, true);
+      assert.equal(records[0]?.data.voiceTo, 'desktop', '默认宠物 display=both，桌面优先');
     } finally {
       rmSync(ws.dir, { recursive: true, force: true });
     }

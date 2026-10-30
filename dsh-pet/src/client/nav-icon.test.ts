@@ -7,7 +7,8 @@
  * 误伤标题同为空的其它行；标记打在 `data-*` 上，DSH 重渲染 / 切语言都不会摘掉（不换 DOM 节点）；
  * 样式只注入一次（盖住齿轮 + 画上 mask）；两段式观察：body 只盯直接子节点，命中后改盯面板子树；
  * 面板关掉再开、插件在面板已打开时装配都能补上标记；dispose 后观察者断开，不再打标记；
- * 图标渲不成 SVG / 缺 MutationObserver → 完全不装、只告警（齿轮照旧），绝不改 DOM。
+ * 字形推迟到认出面板时才解析（sprite 那会儿才在页面里），sprite 的 `<use>` 必须先展开成自包含 SVG；
+ * 取不到字形（渲不出 / 引用的 symbol 缺失）→ 不注入样式、只告警一次，齿轮留在原地而不是变成零图标。
  *
  * 假 DOM 只实现本模块用到的成员（不引 jsdom）：选择器只支持 `tag` / `[attr]` / `[attr="v"]` /
  * `[attr*="v"]` 四种形态。
@@ -17,7 +18,7 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { installSectionNavIcon, svgMaskUri } from './nav-icon.ts';
+import { expandUseRefs, installSectionNavIcon, svgMaskUri, symbolIn } from './nav-icon.ts';
 
 /** 标记属性名（与模块内 MARK 一致；这里独立写一份，避免测试跟着实现改名而失效）。 */
 const MARK = 'data-dsh-pet-nav';
@@ -249,6 +250,54 @@ describe('svgMaskUri —— 内联 SVG 转 CSS mask 用的 data URI', () => {
   });
 });
 
+describe('expandUseRefs —— 把 sprite 引用展开成自包含 SVG', () => {
+  test('sprite 引用：<use> 换成 symbol 的属性和内容', () => {
+    const svg = '<svg width="16" height="16" data-icon="i"><use href="#i"></use></svg>';
+    const expanded = expandUseRefs(svg, () => ({ attrs: { viewBox: '0 0 16 16' }, content: '<path d="M1 1h2"/>' }));
+    assert.equal(expanded, '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path d="M1 1h2"/></svg>');
+  });
+
+  test('xlink:href 也认（老 React 的写法）', () => {
+    const expanded = expandUseRefs('<svg><use xlink:href="#i"/></svg>', () => ({ attrs: {}, content: '<path/>' }));
+    assert.ok(expanded?.includes('<path/>'));
+  });
+
+  test('引用取不到 → undefined（调用方保留兜底齿轮，不注入一片空白的 mask）', () => {
+    assert.equal(
+      expandUseRefs('<svg><use href="#missing"></use></svg>', () => undefined),
+      undefined,
+    );
+  });
+
+  test('没有引用的内联 SVG 原样透传（0.2.1 及更早的图标形态）', () => {
+    const svg = '<svg viewBox="0 0 16 16"><path d="M1 1"/></svg>';
+    assert.equal(
+      expandUseRefs(svg, () => ({ attrs: {}, content: '不该用到' })),
+      svg,
+    );
+  });
+});
+
+describe('symbolIn —— 从宿主 <symbol> 取属性和内容', () => {
+  test('搬属性时跳过 id，内容原样带过来；查不到时返回 undefined', () => {
+    const rows = [
+      { name: 'id', value: 'i' },
+      { name: 'viewBox', value: '0 0 16 16' },
+      { name: 'stroke', value: 'currentColor' },
+    ];
+    const symbol = {
+      attributes: { length: rows.length, item: (index: number) => rows[index] ?? null },
+      innerHTML: '<path d="M1 1h2"/>',
+    } as unknown as Element;
+
+    assert.deepEqual(symbolIn(() => symbol)('i'), {
+      attrs: { viewBox: '0 0 16 16', stroke: 'currentColor' },
+      content: '<path d="M1 1h2"/>',
+    });
+    assert.equal(symbolIn(() => null)('i'), undefined);
+  });
+});
+
 describe('installSectionNavIcon —— 设置面板导航换图标', () => {
   test('只给标题匹配的那一行打标记，其余行原样不动', () => {
     const { doc, restore } = withFakeDom();
@@ -426,11 +475,11 @@ describe('installSectionNavIcon —— 设置面板导航换图标', () => {
     }
   });
 
-  test('图标渲不成 SVG → 完全不装、只告警，且一行 DOM 都没碰', () => {
+  test('图标渲染抛错 → 不注入样式、只告警一次（齿轮照旧，那一行不会变成零图标）', () => {
     const { doc, restore } = withFakeDom();
     const warn = captureWarn();
     try {
-      const { panel, cells } = panelWith(['桌宠配置']);
+      const { panel } = panelWith(['桌宠配置']);
       doc.body.append(panel);
 
       const dispose = installSectionNavIcon({
@@ -440,9 +489,7 @@ describe('installSectionNavIcon —— 设置面板导航换图标', () => {
         },
       });
 
-      assert.equal(cells[0].getAttribute(MARK), null);
       assert.equal(doc.head.querySelectorAll('style').length, 0);
-      assert.equal(FakeObserver.created.length, 0);
       assert.equal(warn.messages.length, 1);
       assert.ok(warn.messages[0].includes('react-dom 缺失'));
       dispose();
@@ -452,11 +499,16 @@ describe('installSectionNavIcon —— 设置面板导航换图标', () => {
     }
   });
 
-  test('渲成空 SVG → 不装、告警（不注入一条指向空图的 mask）', () => {
+  test('渲成空 SVG → 不注入样式、告警（不注入一条指向空图的 mask）', () => {
     const { doc, restore } = withFakeDom();
     const warn = captureWarn();
     try {
+      // 字形解析推迟到认出面板时，所以先装、后开面板。
       const dispose = installSectionNavIcon({ label: () => '桌宠配置', renderSvg: () => '  ' });
+      const { panel } = panelWith(['桌宠配置']);
+      doc.body.append(panel);
+      poke();
+
       assert.equal(doc.head.querySelectorAll('style').length, 0);
       assert.equal(warn.messages.length, 1);
       assert.ok(warn.messages[0].includes('空 SVG'));

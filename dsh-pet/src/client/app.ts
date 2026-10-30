@@ -10,7 +10,7 @@ import { readPose } from './pose.ts';
 import { readProgress } from './progress.ts';
 import { takeMenuEvents } from './menu-service.ts';
 import { getStateSnapshot } from './state-service.ts';
-import { makePetConfigSection, NS, zh, en, petBridge } from './settings.ts';
+import { dicts, makePetConfigSection, NS, petBridge } from './settings.ts';
 import { initNotify } from './notify.ts';
 import { installCommandFaces, type CommandFace, type CommandUiLike } from './command-faces.ts';
 import { installSectionNavIcon } from './nav-icon.ts';
@@ -68,7 +68,7 @@ export function makeFactory(): (require: (mod: string) => any) => any {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- DSH 注入的 ctx（locale/slots/webServer 等 service 无静态类型）
     function apply(ctx: any) {
       // 设置页文案字典。
-      ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'dsh-pet: dictionaries');
+      ctx.effect(() => ctx.locale.register(NS, dicts), 'dsh-pet: dictionaries');
       const t = ctx.locale.bind(NS);
 
       // 同页第三方插件可通过 Cordis 服务 petApi7340 读取本页宠物的实况、播放进度、最近一拍状态与菜单点击。

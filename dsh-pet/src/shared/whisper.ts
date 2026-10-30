@@ -60,6 +60,8 @@ export const MEME_BUBBLE_CSS = [
     'border:1.5px solid rgba(43,43,43,.22);border-top-color:rgba(43,43,43,.7);border-radius:50%;' +
     'animation:dsh-pet-voice-spin .8s linear infinite}',
   '@keyframes dsh-pet-voice-spin{to{transform:rotate(360deg)}}',
+  // 失败态：静音喇叭，压一点透明度——读得出「这句没念出来」，但不抢文字。
+  '.dsh-pet-voice-badge.is-failed{opacity:.5}',
 ].join('');
 
 /** 只注入一次（页面已有同一标记则跳过）。 */

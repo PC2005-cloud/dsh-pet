@@ -397,6 +397,11 @@ export const PANEL_CSS = `
   cursor: default;
 }
 
+/* 失败：压暗表示没成，但仍可点（重试），所以指针保持手型 */
+.pet-chat-speak.is-failed {
+  opacity: 0.5;
+}
+
 @keyframes pet-chat-spin {
   to {
     transform: rotate(360deg);

@@ -3727,6 +3727,16 @@ components:
             显式 `false` = 只弹气泡，不查动画池、不换源。
             同样只有 `POST /broadcast` 会写；碎碎念与对话回复不写。
           example: true
+        voiceTo:
+          type: string
+          enum: [web, desktop]
+          description: |
+            **这一句该由哪一端念**。两条取值规则：
+            路由上带 `?surface=` 的（`POST /whisper`、`POST /broadcast`）用请求面——`surface=web` / `desktop`
+            原样落地，`both` / `any` 不足以指定一端，退回第二条；其余来源（周期碎碎念、待办提醒、对话回复、
+            `/chat` 命令）按 `display` 推导：含 `desktop` 就写 `desktop`，只在网页显示才写 `web`——
+            桌面端只要 helper 在跑就一定有窗口，网页端随时可能被关掉。
+            缺省 = 谁都不念。消费端按自己所在的一端比对：不匹配就只弹气泡、不出声；同一端有多个页面时各自比对。
 
     SayClear:
       type: object

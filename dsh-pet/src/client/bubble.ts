@@ -320,7 +320,7 @@ export function makeWhisperBubble(rt: {
   url?: string;
   assetRoot?: string;
   on: boolean;
-  voiceState?: 'idle' | 'loading' | 'ready';
+  voiceState?: 'idle' | 'loading' | 'ready' | 'failed';
 }) => ReactNode {
   const { h } = rt;
   injectBubbleCss();
@@ -339,7 +339,7 @@ export function makeWhisperBubble(rt: {
     url?: string;
     assetRoot?: string;
     on: boolean;
-    voiceState?: 'idle' | 'loading' | 'ready';
+    voiceState?: 'idle' | 'loading' | 'ready' | 'failed';
   }) {
     const rows = whisperBubbleView({ ok: true, text, ts: 0 });
     const key = String(image ?? '').trim();
@@ -365,12 +365,14 @@ export function makeWhisperBubble(rt: {
   };
 }
 
-/** 语音状态角标：只在手动触发的播报上出现，右下角绝对定位，不参与文字排版。 */
-function voiceBadgeNode(h: typeof jsx, state: 'loading' | 'ready'): ReactNode {
+/** 语音状态角标：只在手动触发的播报上出现，右下角绝对定位，不参与文字排版。
+ *  `failed` 用静音喇叭——「本该有声却没响」，不是系统告警，所以不上警告符号。 */
+function voiceBadgeNode(h: typeof jsx, state: 'loading' | 'ready' | 'failed'): ReactNode {
   return h('span', {
     key: 'voice',
-    className: 'dsh-pet-voice-badge' + (state === 'loading' ? ' is-loading' : ''),
+    className:
+      'dsh-pet-voice-badge' + (state === 'loading' ? ' is-loading' : '') + (state === 'failed' ? ' is-failed' : ''),
     'aria-hidden': 'true',
-    children: state === 'loading' ? null : '🔊',
+    children: state === 'loading' ? null : state === 'failed' ? '🔇' : '🔊',
   });
 }

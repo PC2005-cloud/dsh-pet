@@ -291,6 +291,8 @@ function applySayLeaf(petId, leaf) {
     if (said.kind === 'clear') s.clearWhisper();
     else s.showWhisper(said.text, said.image, said.url, said.duration, said.anim);
   }
+  // 两端各判各的：叶子点名 desktop 才念，没点名或点了网页端就只弹气泡
+  if (said.kind === 'say') S.playSayVoice(said);
 }
 
 /** 工作状态叶子 → 各宠物切档位动画 + 气泡（含回到空闲：state=null 用于收起常驻气泡） */

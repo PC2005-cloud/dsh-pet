@@ -175,9 +175,22 @@ export function readBalance(leaf: StateLeaf): { state: BalanceState; manual: boo
  *  clear：收起当前气泡（POST /bubble/clear 的落点），必须是单独形态——空文本会被判成非法、整拍跳过。
  *  配图两种形态并列、由字段名区分：image = 表情包池内的名称（消费端拼图片路径），url = 第三方给的完整地址。
  *  不做「一个中性字段装两种值」：消费端必须知道该不该拼路径，靠 startsWith('http') 嗅探在名字像 URL 时会出错。
+ *  voiceTo：宿主指定这一句该由哪一端念（目前只有周期碎碎念与待办提醒写入）；缺省 = 谁都不念。
  */
 export type SayCue =
-  { kind: 'say'; text: string; image?: string; url?: string; duration?: number; anim?: boolean } | { kind: 'clear' };
+  | {
+      kind: 'say';
+      text: string;
+      image?: string;
+      url?: string;
+      duration?: number;
+      anim?: boolean;
+      voiceTo?: VoiceTarget;
+    }
+  | { kind: 'clear' };
+
+/** 一次说话该由哪一端念；与 src/host/surface 的同名联合体是两份（宿主不 import src/shared），改动时两边一起改。 */
+export type VoiceTarget = 'web' | 'desktop';
 
 /** 类型收窄：宠物说话叶子 → SayCue（形状非法或空文本 → null，消费端跳过这一拍）。
  *  碎碎念、命令气泡、对话回复共用这一个叶子——前端本来就是同一条展示链路。
@@ -190,6 +203,7 @@ export function readSay(leaf: StateLeaf): SayCue | null {
     url?: unknown;
     duration?: unknown;
     anim?: unknown;
+    voiceTo?: unknown;
     clear?: unknown;
   };
   // 清空指令优先：它不带 text，所以必须排在文本校验前面
@@ -205,6 +219,8 @@ export function readSay(leaf: StateLeaf): SayCue | null {
     // 只认 ≥0 的有限数：非法值当没给（写端已校验，这里只是防御，不让脏数据毁掉整拍）
     duration: typeof d.duration === 'number' && Number.isFinite(d.duration) && d.duration >= 0 ? d.duration : undefined,
     anim: typeof d.anim === 'boolean' ? d.anim : undefined,
+    // 只认两个合法字面量：写错的一端名等于「不指定」，消费端据此不念
+    voiceTo: d.voiceTo === 'web' || d.voiceTo === 'desktop' ? d.voiceTo : undefined,
   };
 }
 

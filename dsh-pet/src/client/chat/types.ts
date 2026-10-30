@@ -38,7 +38,7 @@ export interface PanelData {
   /** 「人设」卷帘是否展开：收起时内容留在 DOM 里、高度归零，展开过渡才播得起来。 */
   readonly personaOpen: boolean;
   /** 正在点播的那一轮与阶段；null = 没有在播。同一时刻只播一条。 */
-  readonly speaking: { readonly ts: number; readonly phase: 'loading' | 'playing' } | null;
+  readonly speaking: { readonly ts: number; readonly phase: 'loading' | 'playing' | 'failed' } | null;
 }
 
 /** 需要二次确认的破坏性操作：用面板内的确认条，不用浏览器原生 `confirm`。 */

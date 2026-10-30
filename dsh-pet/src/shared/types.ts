@@ -78,7 +78,7 @@ export interface Pet {
   balanceEnabled: boolean;
   /** 是否启用碎碎念：true = 按 eventsRefreshSec.whisper 周期生成一句话并播碎碎念动画，false = 禁用。
    *  缺失默认 true；碎碎念每次生成都会调用当前对话的模型，本地 LLM 单并发时会顶掉正在跑的任务的 KV cache，
-   *  不需要的宠物请显式写 false。 */
+   *  不需要的宠物请显式写 false。display 为 none 的宠物整体跳过：不生成、不调模型。 */
   whisperEnabled: boolean;
   /** 是否启用工作状态联动：true = 监听 DSH 会话事件，按 animations.events.workStatus 切档位动画与气泡。
    *  缺失默认 true。监听不调用模型，无 KV cache 风险。 */

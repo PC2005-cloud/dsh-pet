@@ -17,7 +17,7 @@ export const DESKTOP_APP_NAME = 'dsh-pet-electron-helper';
 /** Electron 下载缓存的应用名（@electron/get 写死 env-paths('electron')，与插件名无关）。 */
 const ELECTRON_PATHS_NAME = 'electron';
 
-/** 清单条目键：客户端按它取本地化文案（zh/en 的 'storage.<key>'）。 */
+/** 清单条目键：客户端按它取本地化文案（各语言字典的 'storage.<key>'）。 */
 export type StorageKey = 'userData' | 'electron' | 'desktopCache' | 'electronCache' | 'package';
 
 /** 一条存储位置。 */

@@ -8,7 +8,7 @@
  */
 
 import { pathToFileURL } from 'node:url';
-import { ROUTE_PATH } from '../shared/constants.ts';
+import { ROUTE_SEGMENT } from '../shared/constants.ts';
 
 /** 一次出站请求的最小形态：只声明注入凭证需要读的字段。 */
 interface RequestDetails {
@@ -32,7 +32,7 @@ export interface DesktopSession {
 /**
  * 为本机顶层 file 渲染端访问插件路由的请求附加访问令牌。
  *
- * 目标 origin、插件路径前缀、顶层 frame 与渲染页地址必须同时匹配，任一不满足都不加令牌；
+ * 目标 origin、插件路由段、顶层 frame 与渲染页地址必须同时匹配，任一不满足都不加令牌；
  * 先删同名请求头再按需写入，避免调用方自带的伪令牌被带到别的目标。
  *
  * @param session - 主进程默认 session（出站请求拦截）。
@@ -54,7 +54,7 @@ export function installDesktopAuth(session: DesktopSession, origin: string, rend
       const page = frame ? new URL(frame.url) : undefined;
       if (
         target.origin === origin &&
-        target.pathname.startsWith(ROUTE_PATH + '/') &&
+        target.pathname.startsWith(ROUTE_SEGMENT + '/') &&
         frame?.parent === null &&
         page?.protocol === 'file:' &&
         page.origin === 'null' &&

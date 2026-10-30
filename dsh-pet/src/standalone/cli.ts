@@ -22,7 +22,7 @@ import { createStandaloneContext, type RegisteredRoute, type StandaloneLogger } 
 import { createStandaloneLogger } from './logger.ts';
 import { configPathsFor, describePets, isDesktopVisible, parseArgs, USAGE } from './options.ts';
 import { listenStandaloneServer } from './server.ts';
-import { ROUTE_PATH } from '../shared/constants.ts';
+import { ROUTE_SEGMENT } from '../shared/constants.ts';
 
 /** 启动独立模式：先起服务拿到端口，再 apply。 */
 async function run(logger: StandaloneLogger, options: { port: number }): Promise<void> {
@@ -131,7 +131,7 @@ async function run(logger: StandaloneLogger, options: { port: number }): Promise
     '',
     '===== dsh-pet 独立模式（不需要 DSH）=====',
     `  插件        dsh-pet@${packageVersion(packageRoot)}  ${packageRoot}`,
-    `  路由        http://127.0.0.1:${server.port}${ROUTE_PATH}/`,
+    `  路由        http://127.0.0.1:${server.port}${ROUTE_SEGMENT}/`,
     `  配置        ${configSource}`,
     `  宠物        ${describePets(pets)}`,
     desktopVisible.length === 0

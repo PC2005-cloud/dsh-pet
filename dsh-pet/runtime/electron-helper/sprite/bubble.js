@@ -110,14 +110,16 @@ Object.assign(PetSprite.prototype, {
       line.className = 'pet-bub-row';
       line.textContent = this.whisperView[0]?.text ?? '';
       this.bubble.appendChild(line);
-      // 语音状态角标：只在手动触发的播报上出现（idle 时什么都不加）
+      // 语音状态角标：idle 时什么都不加；failed 用静音喇叭，表示这句没念出来
       const voice = S.getVoiceState();
       if (voice !== 'idle') {
         S.injectMemeBubbleCss(); // 角标样式与配图同一份 CSS，两端共用
         const badge = document.createElement('span');
-        badge.className = 'dsh-pet-voice-badge' + (voice === 'loading' ? ' is-loading' : '');
+        badge.className =
+          'dsh-pet-voice-badge' + (voice === 'loading' ? ' is-loading' : '') + (voice === 'failed' ? ' is-failed' : '');
         badge.setAttribute('aria-hidden', 'true');
         if (voice === 'ready') badge.textContent = '🔊';
+        else if (voice === 'failed') badge.textContent = '🔇';
         this.bubble.appendChild(badge);
       }
     } else if (this.balanceState && S.customViews(this.balanceState)) {

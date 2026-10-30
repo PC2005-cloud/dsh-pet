@@ -50,6 +50,9 @@ async function loadConfig() {
     clickSoundEnabled: (merged && merged.main && merged.main.clickSoundEnabled) === true,
     // 字体（全局一份，合并器已填内置默认）：字体族在此注入全局变量，字号由每只宠物按自己的尺寸算
     font: (merged && merged.main && merged.main.font) || S.DEFAULT_FONT,
+    // 语音：音色与总开关（缺省 = 不播，与网页端同一口径）
+    voiceName: (merged && merged.main && merged.main.voiceName) || '',
+    voiceEnabled: (merged && merged.main && merged.main.voiceEnabled) === true,
   };
 }
 
@@ -58,6 +61,11 @@ async function boot() {
   try {
     const cfg = await loadConfig();
     config = cfg;
+    // 语音：本窗口固定是桌面端；音色与总开关直接取成品配置，不走懒加载——
+    // 懒加载要等第一次播放才去拉 /config，撞上 bridge 起步竞态就永远读不到开关（读失败只试一次）。
+    S.setVoiceBase(BASE);
+    S.setSurface('desktop');
+    S.setVoiceConfig(cfg.voiceName, cfg.voiceEnabled);
     bootFailures = 0;
     hideError();
     // 字体族进 documentElement：对话窗/得分弹窗挂在 body 下、继承不到宠物根容器，只能走全局变量。

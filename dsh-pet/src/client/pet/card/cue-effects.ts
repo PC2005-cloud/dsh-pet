@@ -8,7 +8,7 @@
 import { balanceEventIndex, balancePercent } from '../../../shared/balance/index.ts';
 import { pickSlot, poolIncludes } from '../../../shared/pickers.ts';
 import { WORK_STATUS_INDEX } from '../../../shared/work-status.ts';
-import { playPendingVoice } from '../../../shared/voice.ts';
+import { playSayVoice } from '../../../shared/voice.ts';
 import type { CardHub } from './hub.ts';
 import type { PetCardProps } from './props.ts';
 import type * as ReactNS from 'react';
@@ -160,8 +160,8 @@ export function createCueEffects(rt: CueEffectsRuntime) {
         return;
       }
       hub.speak(say.text, say.image, say.url, say.duration, say.anim);
-      // 只有本端点过菜单/发过对话才播：标记在发起端，没发起的端读到空标记就不出声
-      playPendingVoice(say.text);
+      // 两端各判各的：叶子点名了本端才念，没点名或点了另一端就只弹气泡
+      playSayVoice(say);
     };
 
     /** 点播动画：url 插播一段，名称走菜单同一套动作。 */

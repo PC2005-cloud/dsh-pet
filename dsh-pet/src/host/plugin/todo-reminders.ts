@@ -6,6 +6,7 @@
  * 没有可见宠物或被第三方占用时跳过且不推进——条件满足后的下一拍立刻补上，这次提醒不会丢。
  * @module dsh-pet/src/host/plugin/todo-reminders
  */
+import { pickVoiceSurface } from '../surface.ts';
 import { pickReminder, reminderText } from '../todo/policy.ts';
 import type { TodoStore } from '../todo/store.ts';
 import type { LockStore } from '../lock.ts';
@@ -36,6 +37,8 @@ export interface TodoReminderTickDeps {
   now?: () => number;
   /** 是否有端在线（长轮询在挂）。没有就不提醒：写进 S 也没人看见，还白白推进了排期。 */
   hasListener?: () => boolean;
+  /** 待办播报开关（成品配置的 `main.voiceTodoEnabled`）：关着就不写 `voiceTo`，只弹气泡。 */
+  isVoiceTodoEnabled: () => boolean;
 }
 
 /** 提醒循环的输入。 */
@@ -45,7 +48,7 @@ export type TodoReminderInput = {
   /** 当前挂着长轮询的端数量：>0 表示有人能看到这次提醒。 */
   waiterCount: () => number;
 } & Pick<PetLookup, 'lock'> &
-  Pick<TodoReminderTickDeps, 'todos' | 'effectivePetList' | 'state' | 'log'>;
+  Pick<TodoReminderTickDeps, 'todos' | 'effectivePetList' | 'state' | 'log' | 'isVoiceTodoEnabled'>;
 
 /**
  * 挑一个承担这次提醒的宠物：优先网页端可见的，其次桌面端；被第三方占用的跳过。
@@ -83,9 +86,18 @@ export async function tickTodoReminders(deps: TodoReminderTickDeps): Promise<voi
   const now = deps.now?.() ?? Date.now();
   const due = pickReminder(await deps.todos.list(), now);
   if (due === null) return;
-  const speaker = pickReminderSpeaker(deps.effectivePetList(), (petId) => deps.lock.locked(petId));
+  const pets = deps.effectivePetList();
+  const speaker = pickReminderSpeaker(pets, (petId) => deps.lock.locked(petId));
   if (speaker === null) return;
-  deps.state.writePet(speaker, 'say', { text: reminderText(due.todo, now), duration: BUBBLE_DURATION_MS });
+  // 该由哪一端念：pickReminderSpeaker 已排除 display=none，所以这里不会是 null（防御性保留可选）；
+  // 播报开关关掉时干脆不写这个键（叶子不带 = 谁都不念），气泡照旧弹。
+  const display = String(pets.find((pet) => String(pet.id ?? '') === speaker)?.display ?? '');
+  const voiceTo = deps.isVoiceTodoEnabled() ? pickVoiceSurface(display) : null;
+  deps.state.writePet(speaker, 'say', {
+    text: reminderText(due.todo, now),
+    duration: BUBBLE_DURATION_MS,
+    ...(voiceTo ? { voiceTo } : {}),
+  });
   await deps.todos.markReminded(due.todo.id, now);
   // 只记 id 与剩余时长：待办正文是用户内容，不进日志。
   const remainingSec = due.todo.dueAt === null ? 0 : Math.round((due.todo.dueAt - now) / 1000);
@@ -98,7 +110,7 @@ export async function tickTodoReminders(deps: TodoReminderTickDeps): Promise<voi
  * @param deps - 宿主上下文与一拍所需的能力。
  */
 export function registerTodoReminders(deps: TodoReminderInput): void {
-  const { ctx, effectivePetList, lock, log, state, todos, waiterCount } = deps;
+  const { ctx, effectivePetList, isVoiceTodoEnabled, lock, log, state, todos, waiterCount } = deps;
 
   /** 一拍：失败只打日志，不让循环停摆。 */
   const tick = async (): Promise<void> => {
@@ -106,6 +118,7 @@ export function registerTodoReminders(deps: TodoReminderInput): void {
       await tickTodoReminders({
         effectivePetList,
         hasListener: () => waiterCount() > 0,
+        isVoiceTodoEnabled,
         lock,
         log,
         state,

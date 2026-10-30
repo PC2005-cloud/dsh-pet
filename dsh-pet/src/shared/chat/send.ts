@@ -3,7 +3,6 @@
  * 正文展示不走这里——回复统一从 `/state` 的 `pets.<id>.say` 读。
  * @module dsh-pet/src/shared/chat/send
  */
-import { clearVoicePending, markVoicePending } from '../voice.ts';
 
 /** 随消息发送的一张图片：`data` 是规范 base64（不带 data: 前缀）。 */
 export interface ChatAttachment {
@@ -30,29 +29,18 @@ const SEND_TIMEOUT_MS = 60_000;
  * @throws 响应不是 JSON 对象时。
  */
 export async function sendChat(baseUrl: string, text: string, attachment?: ChatAttachment): Promise<ChatSendState> {
-  // 乐观打标记：回复要等生成完才写 S，先打才能覆盖「轮询先看到 say、响应后到」的时序。
-  // 任何失败路径都必须撤掉，否则下一句无关内容会被误播。
-  markVoicePending();
-  let res: Response;
-  try {
-    res = await fetch(baseUrl, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(attachment ? { text, attachment } : { text }),
-      signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
-    });
-  } catch (error) {
-    clearVoicePending();
-    throw error;
-  }
+  const res = await fetch(baseUrl, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(attachment ? { text, attachment } : { text }),
+    signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
+  });
   const raw: unknown = await res.json().catch(() => null);
   if (!raw || typeof raw !== 'object') {
-    clearVoicePending();
     throw new Error('dsh-pet: 对话响应非法');
   }
   const o = raw as Record<string, unknown>;
   if (o.ok !== true) {
-    clearVoicePending();
     return {
       ok: false,
       reason:

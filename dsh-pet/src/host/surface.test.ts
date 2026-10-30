@@ -11,7 +11,15 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { SURFACES, SURFACE_TEXT, displayCovers, normalizeSurface } from './surface.ts';
+import {
+  SURFACES,
+  SURFACE_TEXT,
+  displayCovers,
+  isDisplayed,
+  normalizeSurface,
+  pickVoiceSurface,
+  voiceTargetOfSurface,
+} from './surface.ts';
 
 describe('normalizeSurface —— 取值收窄', () => {
   test('四个字面量原样通过', () => {
@@ -46,6 +54,46 @@ describe('displayCovers —— 4×4 匹配矩阵', () => {
     for (const bad of ['', 'nope', 'WEB', 'Both', 'undefined', ' web']) {
       for (const want of SURFACES) assert.equal(displayCovers(want, bad), false, `display=${bad} want=${want}`);
     }
+  });
+});
+
+describe('isDisplayed —— 任一端可见即算显示', () => {
+  test('web / desktop / both 可见，none 与非法值不可见', () => {
+    for (const display of ['web', 'desktop', 'both']) {
+      assert.equal(isDisplayed(display), true, `display=${display} 应在某端可见`);
+    }
+    for (const display of ['none', '', 'nope', 'Both']) {
+      assert.equal(isDisplayed(display), false, `display=${display} 不应算可见`);
+    }
+  });
+});
+
+describe('pickVoiceSurface —— 这一句该由哪一端念', () => {
+  test('桌面优先：both → desktop，desktop → desktop', () => {
+    assert.equal(pickVoiceSurface('both'), 'desktop', '两端都显示时交给桌面端');
+    assert.equal(pickVoiceSurface('desktop'), 'desktop');
+  });
+
+  test('只在网页显示 → web', () => {
+    assert.equal(pickVoiceSurface('web'), 'web');
+  });
+
+  test('两端都不显示 / 非法值 → null（不该有人念）', () => {
+    for (const display of ['none', '', 'nope']) {
+      assert.equal(pickVoiceSurface(display), null, `display=${display} 不应挑出一端`);
+    }
+  });
+});
+
+describe('voiceTargetOfSurface —— 请求面落成该由哪一端念', () => {
+  test('具体的一端原样落地', () => {
+    assert.equal(voiceTargetOfSurface('web'), 'web');
+    assert.equal(voiceTargetOfSurface('desktop'), 'desktop');
+  });
+
+  test('both / any 不足以指定一端 → undefined（交回 display 推导）', () => {
+    assert.equal(voiceTargetOfSurface('both'), undefined);
+    assert.equal(voiceTargetOfSurface('any'), undefined);
   });
 });
 

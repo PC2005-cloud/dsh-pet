@@ -10,10 +10,17 @@ import { formatStamp } from './stamp.ts';
 import { tipAttrs } from './tooltip.ts';
 import type { ChatPanelState } from './types.ts';
 
-/** 语音播报按钮：贴在时间右边，三种状态一眼可分——可播 / 生成中转圈 / 播放中高亮。 */
+/** 语音播报按钮：贴在时间右边，四种状态一眼可分——可播 / 生成中转圈 / 播放中高亮 / 失败可重试。 */
 function speakNode(h: ChatPanelRuntime['h'], text: string, ts: number, state: ChatPanelState): unknown {
   const phase = state.speaking?.ts === ts ? state.speaking.phase : 'idle';
-  const label = phase === 'loading' ? '正在生成语音…' : phase === 'playing' ? '正在播放' : '播放这句';
+  const label =
+    phase === 'loading'
+      ? '正在生成语音…'
+      : phase === 'playing'
+        ? '正在播放'
+        : phase === 'failed'
+          ? '播放失败，点击重试'
+          : '播放这句';
   return h('button', {
     type: 'button',
     className: 'pet-chat-speak is-' + phase,
@@ -22,10 +29,11 @@ function speakNode(h: ChatPanelRuntime['h'], text: string, ts: number, state: Ch
     onClick: (event: { stopPropagation: () => void }) => {
       // 多选模式下整轮可点：这里必须拦一下，否则点喇叭会顺手切换选中
       event.stopPropagation();
-      if (phase === 'idle') state.speakRound(ts, text);
+      // 失败也允许再点一次：合成偶发失败时不必刷新面板
+      if (phase === 'idle' || phase === 'failed') state.speakRound(ts, text);
     },
-    // 生成中由 CSS 的 ::before 画转圈，按钮本身不放字符
-    children: phase === 'loading' ? null : '🔊',
+    // 生成中由 CSS 的 ::before 画转圈，按钮本身不放字符；失败换成静音喇叭
+    children: phase === 'loading' ? null : phase === 'failed' ? '🔇' : '🔊',
   });
 }
 

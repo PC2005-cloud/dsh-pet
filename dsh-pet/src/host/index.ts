@@ -4,6 +4,7 @@
  * @module dsh-pet/src/host/index
  */
 import { createHostSetup } from './plugin/setup.ts';
+import { readAllConfig } from './config.ts';
 import { createHttpRoute, registerHttpRoute } from './plugin/http-route.ts';
 import { registerLifecycle } from './plugin/lifecycle.ts';
 import { registerChatCommand } from './plugin/command-chat.ts';
@@ -144,7 +145,17 @@ export function apply(ctx: any): void {
   registerChatCommand({ ctx, chatWithPet, log, publishWhisper, resolveActivePetId });
 
   // 待办提醒：随插件生命周期起停；锁被第三方持有时由 pickReminderSpeaker 跳过该宠物。
-  registerTodoReminders({ ctx, effectivePetList, lock, log, state, todos, waiterCount: () => state.waiterCount() });
+  // 播报开关现读现用：改配置后下一次提醒即生效，不必重启。
+  registerTodoReminders({
+    ctx,
+    effectivePetList,
+    isVoiceTodoEnabled: () => readAllConfig(configPaths).main?.voiceTodoEnabled === true,
+    lock,
+    log,
+    state,
+    todos,
+    waiterCount: () => state.waiterCount(),
+  });
 
   registerLifecycle({
     ctx,

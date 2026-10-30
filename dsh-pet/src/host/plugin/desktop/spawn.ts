@@ -6,7 +6,7 @@
  * @module dsh-pet/src/host/plugin/desktop/spawn
  */
 import { join } from 'node:path';
-import { ROUTE_PATH } from '../../../shared/constants.ts';
+import { ROUTE_SEGMENT } from '../../../shared/constants.ts';
 import { PACKAGE_ROOT } from '../../paths.ts';
 import type { DesktopHelperDeps } from './types.ts';
 import type { DesktopPets } from './pets.ts';
@@ -109,7 +109,7 @@ export function createDesktopSpawn(deps: DesktopSpawnInput) {
     const siteUrl = ctx.connection.authenticatedUrl(origin);
     // 桌面渲染端也从同一份 handlePetRoute 拿成品配置（每只宠物一个局部小窗口；经管道，不走 HTTP——
     // DSH Desktop 2.0.3+ 会拦插件自拉进程的裸 HTTP 请求，浏览器访问闸门只放行带令牌的请求）
-    const configUrl = `${origin}${ROUTE_PATH}/config`;
+    const configUrl = `${origin}${ROUTE_SEGMENT}/config`;
     helper = new HelperProcess(
       {
         electronPath,

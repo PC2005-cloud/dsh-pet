@@ -1,7 +1,7 @@
 /**
- * 画布与几何常量：与 640×360 播放变体强耦合，属运行时几何，不作为配置。
- * 浏览器半侧与桌面模式共用同一组值；命中、移动与抛掷都按这组值换算，改画布尺寸须同步素材。
- * 不依赖任何模块；这些值不来自配置，运行时的位移与命中由宠物大小和 moves 段决定。
+ * 共享常量叶子：画布几何、播放扩展名与插件 HTTP 挂载路径。
+ * 路径对两端语义不同——宿主只认服务端路由段，浏览器才带挂载前缀，因此拆成两个导出。
+ * 不 import 任何模块：宿主半侧直接引本文件，不经 shared/index 桶（桶里有 DOM 挂载代码）。
  * @module dsh-pet/src/shared/constants
  */
 /** thumb 画布高度。 */
@@ -20,11 +20,46 @@ export const SLINGSHOT_DOUBLE_MS = 200;
 export const PET_REF_WIDTH = 462;
 
 /**
- * 插件的 HTTP 挂载前缀：宿主路由、桌面 Helper 管道、浏览器请求与素材 URL 共用同一段。
- * 宿主半侧直接 import 本文件（零依赖叶子模块）而不经 shared/index 桶——桶里有 DOM 挂载代码，
- * 进宿主 bundle 会破坏单文件加载约束。
+ * 宿主注册的路由段：服务端路径，永远不带浏览器挂载前缀。
+ * 路由注册、匹配与桌面/独立模式拼地址都用它；带了前缀的地址在服务端是错的路由。
  */
-export const ROUTE_PATH = '/dsh-pet-7340';
+export const ROUTE_SEGMENT = '/dsh-pet-7340';
+
+/**
+ * 从文档基准地址取出挂载前缀（baseURI 的目录部分）。
+ *
+ * dsh 返回 index 时注入 `<base href="./">`，baseURI 因此正是「宿主提供 UI 的那个目录」，
+ * 也是浏览器解析相对请求的基准；反代/应用网关把 UI 挂在子路径下时，缺的就是这一段前缀。
+ *
+ * @param baseURI - 文档基准地址；宿主进程、桌面本地页与 Node 测试都没有它。
+ * @returns 去掉尾部斜杠的目录部分；空串、非 http(s)、非法地址一律 `''`，且不抛异常。
+ */
+export function mountPrefixOf(baseURI: string | undefined): string {
+  if (baseURI === undefined || baseURI === '') return '';
+  try {
+    const url = new URL(baseURI);
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return '';
+    return url.pathname.replace(/\/+$/, '');
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * 一处算出浏览器侧地址：挂载前缀 + 路由段，供模块加载与单测共用。
+ *
+ * @param baseURI - 文档基准地址；缺省时按无前缀处理。
+ * @returns 请求与素材的公共前缀，形如 `/app/x/dsh-pet-7340`。
+ */
+export function routePathOf(baseURI: string | undefined): string {
+  return mountPrefixOf(baseURI) + ROUTE_SEGMENT;
+}
+
+/**
+ * 浏览器侧地址：请求、素材与 CSS url() 都按文档基准解析，必须带挂载前缀。
+ * 无 `document` 的三处（宿主、桌面 Helper 的主进程侧、独立模式）取到的是纯路由段。
+ */
+export const ROUTE_PATH = routePathOf(typeof document === 'undefined' ? undefined : document.baseURI);
 
 /** 播放动画扩展名（集中开关）：默认 .webm（VP9-alpha）两端可直接透明播放；
  *  macOS 的 Safari/WKWebView 不认 webm alpha（渲染黑底），需改为 .mov（HEVC-with-Alpha）——

@@ -16,6 +16,6 @@ export interface SettingsRuntime {
   useEffect: (effect: ReactNS.EffectCallback, deps?: ReactNS.DependencyList) => void;
   useRef: <T>(initial: T) => ReactNS.MutableRefObject<T>;
   useCallback: typeof ReactNS.useCallback;
-  /** 文案翻译；键取自 `settings/locales.ts` 的 `zh`。 */
+  /** 文案翻译；键取自本页字典的 `zh`。 */
   t: (key: string) => string;
 }
