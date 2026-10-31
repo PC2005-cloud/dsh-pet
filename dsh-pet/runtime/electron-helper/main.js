@@ -76,6 +76,33 @@ if (process.platform === 'win32') {
 // 应用模式只改数据目录、不改应用名：共用同一个 userData 时两个 Chromium 进程会抢同一份 profile 互踢。
 if (APP_MODE) app.setPath('userData', path.join(app.getPath('appData'), 'dsh-pet'));
 
+// [fix] 受限令牌下 %APPDATA% 可能不可写：宿主用受限令牌拉起 helper 时实测如此。
+// 此时 Chromium 的 profile 初始化会卡住，app.whenReady() 永不 resolve，
+// 宿主只看到约 6 秒后的一次 0xC0000005（退出期访问违例），没有任何可读错误。
+// 这里探测 userData 是否真的可写；不可写就退回到 DSH 自己的目录。
+try {
+  const fsCheck = require('node:fs');
+  const userDataDir = app.getPath('userData');
+  fsCheck.mkdirSync(userDataDir, { recursive: true });
+  fsCheck.accessSync(userDataDir, fsCheck.constants.W_OK);
+} catch (error) {
+  try {
+    const fallbackDir = path.join(require('node:os').homedir(), '.dsh', 'dsh-pet', 'electron-profile');
+    require('node:fs').mkdirSync(fallbackDir, { recursive: true });
+    app.setPath('userData', fallbackDir);
+    console.error(
+      '[dsh-pet-desktop-helper] userData 不可写，回退到',
+      fallbackDir,
+      String(error && error.message ? error.message : error),
+    );
+  } catch (fallbackError) {
+    console.error(
+      '[dsh-pet-desktop-helper] userData 回退失败:',
+      String(fallbackError && fallbackError.message ? fallbackError.message : fallbackError),
+    );
+  }
+}
+
 /** DPI 探测子进程模式：不建窗口，只把主屏 scaleFactor 打到 stdout 就退出（见 probePrimaryScale） */
 const DPI_PROBE = process.env.DSH_PET_DPI_PROBE === '1';
 /** 探测进程的输出标记（父进程按它抓值） */
