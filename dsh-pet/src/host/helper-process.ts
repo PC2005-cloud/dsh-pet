@@ -29,5 +29,6 @@ export {
   helperRunIsStable,
   restartBackoffDelayMs,
   shouldCircuitBreak,
+  shouldFallbackToNoSandbox,
 } from './helper/restart.ts';
 export { HelperProcess, helperSpawnEnv } from './helper/child.ts';

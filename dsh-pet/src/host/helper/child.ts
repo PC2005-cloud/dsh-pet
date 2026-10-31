@@ -22,6 +22,7 @@ import {
   helperRunIsStable,
   restartBackoffDelayMs,
   shouldCircuitBreak,
+  shouldFallbackToNoSandbox,
 } from './restart.ts';
 
 /** 日志里的运行时身份：` · electron=<路径> (<版本>)`；版本读不到时只留路径。 */
@@ -81,6 +82,10 @@ export class HelperProcess {
   declare private stdoutBuffer: string;
   /** 最近一次拉起的运行时身份（可执行文件路径与版本）：崩溃与熔断日志都要带它 */
   declare private launchIdentity: string;
+  /** 是否已经因为「沙箱初始化失败」改用过 `--no-sandbox`（只退一次） */
+  declare private sandboxFallbackApplied: boolean;
+  /** 当前子进程有没有写过 stdout/stderr：有输出说明 JS 已经跑过，秒退就不能赖沙箱 */
+  declare private sawChildOutput: boolean;
 
   constructor(options: HelperOptions = {}, logger: Logger = console) {
     this.options = options;
@@ -92,6 +97,8 @@ export class HelperProcess {
     this.lastStartAt = 0;
     this.stdoutBuffer = '';
     this.launchIdentity = '';
+    this.sandboxFallbackApplied = false;
+    this.sawChildOutput = false;
   }
 
   /** 拉起子进程；已有子进程在跑或正在停止时直接返回现有句柄。 */
@@ -103,7 +110,11 @@ export class HelperProcess {
       ? { command: this.options.command, args: this.options.args || [helperPath] }
       : defaultLaunch(this.options);
     const command = launch.command;
-    const args = this.options.args || launch.args;
+    const baseArgs = this.options.args || launch.args;
+    // 沙箱起不来时（见 applySandboxFallback）后续每次拉起都把开关放在最前：Electron 只认命令行，
+    // 没有环境变量/配置文件能表达「禁用沙箱」。自定义 command 不走这条（那不是真正的 Electron）。
+    const args = this.sandboxFallbackApplied && !this.options.command ? ['--no-sandbox', ...baseArgs] : baseArgs;
+    this.sawChildOutput = false;
     // 版本只在这里读一次：崩溃时退出码能说明「怎么死的」，说明不了「死的哪个版本」，而那才是排障入口
     this.launchIdentity = electronIdentity(command);
 
@@ -146,6 +157,9 @@ export class HelperProcess {
       this.child = undefined;
       clearTimeout(stableTimer);
       if (!this.stopping) {
+        // 沙箱初始化失败的特殊形态：秒退、无输出、退出码 0x80000003 → 换 --no-sandbox 立刻重试一次。
+        // 必须排在「日志 + 退避」之前：这一轮不算崩溃，不该消耗退避与熔断额度。
+        if (this.applySandboxFallback(code)) return;
         this.logger.warn?.(
           `dsh-pet desktop helper exited (${describeExit(code, signal)})${this.launchIdentity}; restarting`,
         );
@@ -153,11 +167,15 @@ export class HelperProcess {
       }
     });
     child.stdout.on('data', (chunk) => {
+      this.sawChildOutput = true;
       this.onStdoutChunk(String(chunk));
     });
     child.stderr.on('data', (chunk) => {
       const line = String(chunk).trim();
-      if (line) this.logger.warn?.(`[dsh-pet desktop helper] ${line}`);
+      if (line) {
+        this.sawChildOutput = true;
+        this.logger.warn?.(`[dsh-pet desktop helper] ${line}`);
+      }
     });
     child.stdin?.on('error', () => {
       /* EPIPE 等：进程退出/重启期间回写失败静默（下一轮 start 重建管道） */
@@ -263,6 +281,33 @@ export class HelperProcess {
         /* 已经退出了 */
       }
     });
+  }
+
+  /**
+   * 沙箱初始化失败的特殊崩溃 → 改用 `--no-sandbox` 立刻重试一次（判定见 shouldFallbackToNoSandbox）。
+   *
+   * 为什么值得自动退：这台机器上「不加 --no-sandbox 就 0x80000003 秒退」是确定性行为，重试 12 次
+   * 只会把同一条日志刷 12 遍然后熔断，用户看不到宠物也读不到原因。退一次能让绝大多数这类机器
+   * 立刻可用；剩下真崩的（有输出 / 跑了一阵 / 换参数后还是崩）照旧走退避与熔断，不会被掩盖。
+   * @param code - 本次退出的退出码（null = 被信号终止）。
+   * @returns true 表示已经发起带 `--no-sandbox` 的重试，调用方不要再走退避路径。
+   */
+  private applySandboxFallback(code: number | null): boolean {
+    const applied = shouldFallbackToNoSandbox({
+      code,
+      sawOutput: this.sawChildOutput,
+      ranMs: Date.now() - this.lastStartAt,
+      alreadyApplied: this.sandboxFallbackApplied,
+      customCommand: Boolean(this.options.command),
+    });
+    if (!applied) return false;
+    this.sandboxFallbackApplied = true;
+    this.logger.warn?.(
+      `dsh-pet desktop helper 因 Chromium 沙箱初始化失败而秒退（${describeExit(code, null)}），` +
+        `改用 --no-sandbox 重试一次${this.launchIdentity}`,
+    );
+    this.start();
+    return true;
   }
 
   private scheduleRestart(): void {

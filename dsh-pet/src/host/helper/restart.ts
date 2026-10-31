@@ -100,6 +100,42 @@ export function crashLoopAdvice(platform: NodeJS.Platform): string {
   return `用 DSH_PET_ELECTRON_PATH 指向本机能开窗的 Electron；${raise}`;
 }
 
+/**
+ * 沙箱初始化失败时 Electron 浏览器进程的退出码：0x80000003（STATUS_BREAKPOINT）。
+ * Node 在 win32 上按无符号报 2147483651，在别的写法下也可能是 -2147483645，故判定一律先 `>>> 0`。
+ */
+export const SANDBOX_INIT_FAILED_CODE = 0x80000003;
+
+/** 只有在这个时间窗内秒退、且一行输出都没有时，才把退出当成「沙箱起不来」。 */
+export const SANDBOX_FALLBACK_WINDOW_MS = 5000;
+
+/**
+ * 是否值得改用 `--no-sandbox` 重试一次。
+ *
+ * 背景：Chromium 沙箱在部分 Windows 环境里初始化失败（受限令牌、宿主 job 对象、安全软件注入等），
+ * 浏览器进程在跑任何 JS 之前就以 STATUS_BREAKPOINT 退出：宿主侧只有一行「exited」、没有 stderr，
+ * 用户看到的现象是「桌宠永远不出现」。同一台机器上加 `--no-sandbox` 就能正常开窗，所以值得自动退一次。
+ *
+ * 判定必须收紧，否则会把真正的崩溃吞成「换参数」：
+ * ① 退出码是 0x80000003；② stdout/stderr 一行都没有（有输出说明 JS 已经跑过，病因不是沙箱）；
+ * ③ 拉起后 5s 内就退（跑了一阵才崩是别的问题）；④ 只试一次，失败后回到正常退避/熔断；
+ * ⑤ 调用方给了自定义 command 时不猜（那多半是测试或用户脚本，不是真正的 Electron）。
+ * @param input - 本次退出的现场：退出码、有无输出、存活时长、是否已经退过一次、是否自定义命令。
+ * @returns true 表示下一次 start() 应在参数最前面加 `--no-sandbox`。
+ */
+export function shouldFallbackToNoSandbox(input: {
+  code: number | null;
+  sawOutput: boolean;
+  ranMs: number;
+  alreadyApplied: boolean;
+  customCommand: boolean;
+}): boolean {
+  if (input.alreadyApplied || input.customCommand) return false;
+  if (input.code === null || (input.code >>> 0) !== SANDBOX_INIT_FAILED_CODE) return false;
+  if (input.sawOutput) return false;
+  return input.ranMs < SANDBOX_FALLBACK_WINDOW_MS;
+}
+
 /** 退避基值（ms）：默认 750 与旧版首延一致，DSH_PET_RESTART_BASE_MS 可调。 */
 export const RESTART_BASE_MS_DEFAULT = 750;
 
