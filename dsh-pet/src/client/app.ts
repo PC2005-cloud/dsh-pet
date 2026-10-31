@@ -14,7 +14,9 @@ import { dicts, makePetConfigSection, NS, petBridge } from './settings.ts';
 import { initNotify } from './notify.ts';
 import { installCommandFaces, type CommandFace, type CommandUiLike } from './command-faces.ts';
 import { installSectionNavIcon } from './nav-icon.ts';
-import { registerPetChatTab } from './chat/register.ts';
+import { registerPetChatTab, openPetChatTab } from './chat/register.ts';
+import { PET_CHAT_COMMAND_ID, registerPetChatShortcut } from './chat/shortcut.ts';
+import { registerPetCardShortcuts } from './pet/card/shortcut.ts';
 import type * as ReactNS from 'react';
 import type * as PrimitivesNS from '@deepseek-ai/dsh-client-ui-primitives';
 
@@ -181,26 +183,49 @@ export function makeFactory(): (require: (mod: string) => any) => any {
         );
       });
 
+      // 快捷键独立注册：不挂在侧栏注册里——侧栏服务缺失时侧栏没了，快捷键不该跟着没。
+      // 三条命令共用 app-shortcut 的注册壳，任何一条失败都只丢它自己。
+      let sidebarChatReady = false;
+      ctx.effect(() => {
+        const sidebarChat = registerPetChatShortcut(
+          ctx,
+          () => t('shortcut.open'),
+          () => openPetChatTab(ctx),
+        );
+        sidebarChatReady = sidebarChat.registered;
+        const card = registerPetCardShortcuts(ctx, (key) => t(key));
+        return () => {
+          sidebarChatReady = false;
+          sidebarChat.dispose();
+          card.dispose();
+        };
+      }, 'dsh-pet: shortcuts');
+
       // 右侧栏「桌宠对话」：可选能力，服务缺失时只告警，不影响其它部位。
       // 确认弹窗用平台原语（primitives 缺失时面板内部退化为内联确认条）。
       // 整体再兜一层：任何注册异常都不许拖垮插件激活（否则整个 Web 端进不去）。
       ctx.effect(() => {
         try {
-          return registerPetChatTab(ctx, {
-            h,
-            useEffect,
-            useRef,
-            useState,
-            ...(primitives === undefined
-              ? {}
-              : {
-                  ui: {
-                    Modal: primitives.Modal,
-                    Button: primitives.Button,
-                    ImageLightbox: primitives.ImageLightbox,
-                  },
-                }),
-          });
+          return registerPetChatTab(
+            ctx,
+            {
+              h,
+              useEffect,
+              useRef,
+              useState,
+              ...(primitives === undefined
+                ? {}
+                : {
+                    ui: {
+                      Modal: primitives.Modal,
+                      Button: primitives.Button,
+                      ImageLightbox: primitives.ImageLightbox,
+                    },
+                  }),
+            },
+            // 命令没登记成功就不带 commandId：指向不存在的命令会让侧栏注册抛错
+            sidebarChatReady ? { commandId: PET_CHAT_COMMAND_ID } : {},
+          );
         } catch (error) {
           console.error('[dsh-pet] 右侧栏对话面板注册失败（已忽略，不影响启动）：', error);
           return () => {};

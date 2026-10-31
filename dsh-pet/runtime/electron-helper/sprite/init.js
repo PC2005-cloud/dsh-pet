@@ -108,7 +108,7 @@ Object.assign(PetSprite.prototype, {
     // 弹窗是窗口内 DOM，期间整窗保持可交互，否则光标移到输入框就会被 onMouseMove 翻回穿透、点击全被透传。
     this.chatMount = null;
     this.chatOpen = false;
-    // 快捷键「按住 V 说话」：按下开录、松手收尾。状态机在 shared（自动重复与失焦都要拦），
+    // 快捷键「按住 M 说话」：按下开录、松手收尾。状态机在 shared（自动重复与失焦都要拦），
     // 本实例只负责把两个键盘事件原样送进去，动作落到 menu 的 startHearChat / stopHearChat。
     // 闸门两条：鼠标在宠物身上，或光标还在宠物自己的弹窗里——弹窗一开焦点就在输入框，
     // 那时恰恰是最想按住说话的时候（判定不看焦点，开录时由 chat/dom 把输入框 blur 掉）。
@@ -201,7 +201,7 @@ Object.assign(PetSprite.prototype, {
     // 拖一张图到宠物身上：直接开对话并挂成待发送图（浏览器端同一套判据）
     this.hit.addEventListener('dragover', (e) => this.onDragOverImage(e), { signal: ac.signal });
     this.hit.addEventListener('drop', (e) => this.onDropImage(e), { signal: ac.signal });
-    // 悬停时按键：T 开对话、按住 V 说话、D 开关待办、S 切换睡/醒。
+    // 悬停时按键：L 开对话、按住 M 说话、D 开关待办、S 切换睡/醒。
     // 窗口未被聚焦时收不到按键（透明窗用 showInactive 显示，不抢焦点）
     window.addEventListener('keydown', (e) => this.onHotkey(e), { signal: ac.signal });
     // 按住说话靠 keyup 收尾：这条必须在按住期间一直有效，与 keydown 同一生命周期

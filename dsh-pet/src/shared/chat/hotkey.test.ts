@@ -13,7 +13,7 @@ import { isChatHotkey, isTypingTarget, type HotkeyEvent } from './hotkey.ts';
 
 /** 只造判据用到的字段，不需要真的 KeyboardEvent。 */
 const ev = (over: Partial<HotkeyEvent> = {}): HotkeyEvent => ({
-  key: 't',
+  key: 'l',
   ctrlKey: false,
   metaKey: false,
   altKey: false,
@@ -26,18 +26,18 @@ const tag = (tagName: string, editable = false): EventTarget =>
   ({ tagName, isContentEditable: editable }) as unknown as EventTarget;
 
 describe('isChatHotkey', () => {
-  test('小写与大写 T 都算', () => {
-    assert.equal(isChatHotkey(ev({ key: 't' })), true);
-    assert.equal(isChatHotkey(ev({ key: 'T' })), true);
+  test('小写与大写 L 都算', () => {
+    assert.equal(isChatHotkey(ev({ key: 'l' })), true);
+    assert.equal(isChatHotkey(ev({ key: 'L' })), true);
   });
 
-  test('其它键不算', () => {
-    for (const key of ['a', 'r', 'Enter', ' ', 'Escape']) {
+  test('其它键不算（原来的 T 已经让位）', () => {
+    for (const key of ['t', 'a', 'r', 'Enter', ' ', 'Escape']) {
       assert.equal(isChatHotkey(ev({ key })), false, key);
     }
   });
 
-  test('带修饰键不算（Ctrl+T 等留给浏览器）', () => {
+  test('带修饰键不算（Ctrl+L 等留给浏览器）', () => {
     assert.equal(isChatHotkey(ev({ ctrlKey: true })), false);
     assert.equal(isChatHotkey(ev({ metaKey: true })), false);
     assert.equal(isChatHotkey(ev({ altKey: true })), false);

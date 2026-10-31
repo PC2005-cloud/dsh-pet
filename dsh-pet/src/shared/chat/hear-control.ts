@@ -44,12 +44,14 @@ export interface HearControlOptions {
   readonly hearUrl: string;
 }
 
-/** 控件对外只暴露三个动作。 */
+/** 控件对外只暴露四个动作。 */
 export interface HearControl {
   /** 开录；录不了时给一句原因，已在录时什么都不做。 */
   start: () => void;
   /** 收尾；没在录时什么都不做。 */
   stop: () => void;
+  /** 此刻是否真的在采集：快捷键要按它决定这一下是开还是关。 */
+  isHearing: () => boolean;
   /** 停掉正在进行的录音并清计时器；关闭弹窗时调用。 */
   dispose: () => void;
 }
@@ -219,6 +221,7 @@ export function createHearControl(opts: HearControlOptions): HearControl {
   return {
     start: () => void start(),
     stop: () => void stop(),
+    isHearing: () => hearState === 'recording',
     dispose: () => {
       window.clearInterval(hearTimer);
       // 关弹窗时麦克风必须立刻松手：录音中直接丢弃，不等识别

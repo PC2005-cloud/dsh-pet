@@ -30,6 +30,7 @@ import { makePetCard } from './settings/pet-card.ts';
 import { makePetTabs } from './settings/pet-tabs.ts';
 import { createWriteFlow } from './settings/config/index.ts';
 import { makePhysicsCard } from './settings/physics-card.ts';
+import { makeShortcutsCard } from './settings/shortcuts-card.ts';
 import { attachTipLayer } from './settings/tip-layer.ts';
 import type { SettingsRuntime } from './settings/runtime.ts';
 import { useConfigLoad } from './settings/config/index.ts';
@@ -70,6 +71,7 @@ export function makePetConfigSection(rt: SettingsRuntime): FunctionComponent<{ c
   const FontCard = makeFontCard(rt);
   const ModelCard = makeModelCard(rt, ModelPicker);
   const PhysicsCard = makePhysicsCard(rt);
+  const ShortcutsCard = makeShortcutsCard(rt);
   const MobileCard = makeMobileCard(rt);
   const Actions = makeActions(rt);
   const { ConfigMetaCard, StorageCard } = makePathsCards(rt);
@@ -367,6 +369,9 @@ export function makePetConfigSection(rt: SettingsRuntime): FunctionComponent<{ c
           onSync: write.requestSync,
           onTestNotification: testNotification,
         }),
+
+        // 保存按钮以下是参考类卡片：只读说明，改不改都不用点保存。
+        h(ShortcutsCard, {}),
 
         // 落盘位置两张卡都靠 meta，读不到就整块不出现。
         paths ? h(ConfigMetaCard, { paths }) : null,

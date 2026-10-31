@@ -21,6 +21,8 @@ export interface ChatDialogMount {
   startHear: () => void;
   /** 收尾：快捷键松开时用（没在录时无动作）。 */
   stopHear: () => void;
+  /** 此刻是否真的在采集。 */
+  isHearing: () => boolean;
 }
 
 /** 发送接线需要的元素与回调。 */
@@ -187,5 +189,5 @@ export function mountChatDialog(opts: ChatDialogOptions): ChatDialogMount {
   place();
   if (opts.initialImage) void dom.setImageFile(opts.initialImage);
   input.focus();
-  return { el: root, close, startHear: dom.startHear, stopHear: dom.stopHear };
+  return { el: root, close, startHear: dom.startHear, stopHear: dom.stopHear, isHearing: dom.isHearing };
 }

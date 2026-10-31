@@ -7,7 +7,6 @@
  * @module dsh-pet/src/client/settings/paths-cards
  */
 import type { FunctionComponent } from 'react';
-import type * as ReactNS from 'react';
 import type { ConfigMeta } from './config/index.ts';
 import type { SettingsRuntime } from './runtime.ts';
 import { MONO_STACK, makeUiKit } from './ui.ts';
@@ -40,69 +39,7 @@ const BODY_ID = {
  */
 export function makePathsCards(rt: SettingsRuntime): PathsCards {
   const { h, t, useState } = rt;
-  const { q } = makeUiKit({ h, t });
-
-  /**
-   * 折叠卡的骨架：标题行常驻，正文收进裁剪层。
-   * 高度过渡走 `grid-template-rows` 的 0fr→1fr，不猜 max-height——正文多长都能收干净、展开到实际高度。
-   * 这里不碰 hook：开合状态由调用方（组件体）持有，钩子顺序才稳定。
-   *
-   * @param id - 正文的 id，同时是按钮的目标。
-   * @param title - 标题行文字。
-   * @param hint - 问号里的说明。
-   * @param body - 展开后显示的若干行，`null` 表示该条不存在（整个跳过）。
-   * @param open - 当前是否展开。
-   * @param onToggle - 点标题行时切换。
-   */
-  function foldCard(
-    id: string,
-    title: string,
-    hint: string,
-    body: Array<ReturnType<typeof h> | null>,
-    open: boolean,
-    onToggle: () => void,
-  ): ReturnType<typeof h> {
-    return h('div', {
-      className: 'dsh-pet-cfg__card is-fold' + (open ? ' is-open' : ''),
-      children: [
-        // 整行可点：标题、问号与箭头都在按钮里。问号自己拦掉冒泡，点它只出气泡、不开合。
-        h('button', {
-          key: 'head',
-          type: 'button',
-          className: 'dsh-pet-cfg__foldToggle',
-          'aria-expanded': open,
-          'aria-controls': id,
-          onClick: onToggle,
-          children: [
-            h('span', { key: 't', className: 'dsh-pet-cfg__cardTitle', children: title }),
-            h('span', {
-              key: 'q',
-              className: 'dsh-pet-cfg__qWrap',
-              onClick: (e: ReactNS.MouseEvent<HTMLSpanElement>) => e.stopPropagation(),
-              children: q(hint),
-            }),
-            // 箭头：展开时转 180°，与模型选择器的展开指示一致。
-            h('i', {
-              key: 'c',
-              className: 'dsh-pet-cfg__chevron' + (open ? ' is-open' : ''),
-              'aria-hidden': 'true',
-            }),
-          ],
-        }),
-        // 裁剪层承担 overflow，正文内层出高度：收起时 0fr 把 padding 一起裁掉，卡片底不留空缝。
-        h('div', {
-          key: 'body',
-          id,
-          className: 'dsh-pet-cfg__fold',
-          'aria-hidden': open ? undefined : 'true',
-          children: h('div', {
-            className: 'dsh-pet-cfg__foldClip',
-            children: h('div', { className: 'dsh-pet-cfg__foldBody', children: body }),
-          }),
-        }),
-      ],
-    });
-  }
+  const { foldCard } = makeUiKit({ h, t });
 
   function ConfigMetaCard(props: PathsCardProps) {
     const { paths } = props;
@@ -121,7 +58,14 @@ export function makePathsCards(rt: SettingsRuntime): PathsCards {
       line('logFile', paths.logs),
       paths.logs ? h('div', { key: 'logNote', className: 'dsh-pet-cfg__note', children: t('logFileNote') }) : null,
     ];
-    return foldCard(BODY_ID.meta, t('configMeta'), t('configMetaHint'), body, open, () => setOpen(!open));
+    return foldCard({
+      id: BODY_ID.meta,
+      title: t('configMeta'),
+      hint: t('configMetaHint'),
+      body,
+      open,
+      onToggle: () => setOpen(!open),
+    });
   }
 
   function StorageCard(props: PathsCardProps) {
@@ -161,7 +105,14 @@ export function makePathsCards(rt: SettingsRuntime): PathsCards {
       }),
       h('div', { key: 'u3', className: 'dsh-pet-cfg__note', children: t('uninstallStep3') }),
     ];
-    return foldCard(BODY_ID.storage, t('storageTitle'), t('storageHint'), body, open, () => setOpen(!open));
+    return foldCard({
+      id: BODY_ID.storage,
+      title: t('storageTitle'),
+      hint: t('storageHint'),
+      body,
+      open,
+      onToggle: () => setOpen(!open),
+    });
   }
 
   return { ConfigMetaCard, StorageCard };

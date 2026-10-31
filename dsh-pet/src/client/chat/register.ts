@@ -8,7 +8,6 @@
 import { LOGO_URL } from './api.ts';
 import { makePetChatPanel, type ChatPanelRuntime } from './panel.ts';
 import { injectPanelCss } from './styles.ts';
-import { PET_CHAT_COMMAND_ID, registerPetChatShortcut } from './shortcut.ts';
 import { disposeTip } from './tooltip.ts';
 
 /** 标签实现身份；同时也是正文与标题插槽的 key。 */
@@ -57,13 +56,31 @@ export interface PetChatTabHost {
 }
 
 /**
+ * 打开右侧栏的对话标签。
+ *
+ * 侧栏导航面可能比注册表晚到，取不到就什么都不做。快捷键的触发动作走这里，
+ * 这样「标签类型」这个事实仍只在 registerPetChatTab 里出现一次。
+ *
+ * @param ctx - 客户端上下文（只用到软取）。
+ */
+export function openPetChatTab(ctx: PetChatTabHost): void {
+  const controller = ctx.get?.('sidebarRight') as { openTab?(kind: string): void } | undefined;
+  controller?.openTab?.(TAB_KIND);
+}
+
+/**
  * 注册对话标签（标签类型 + 正文插槽 + 样式）。
  *
  * @param ctx - 客户端上下文。
  * @param rt - 注入的 react 能力。
+ * @param options.commandId - 快捷键命令 id；只有命令真的登记成功才传，指向不存在的命令会让侧栏抛错。
  * @returns 注销标签类型并释放样式的函数；正文插槽交给 slots.inject 的作用域随插件卸载。
  */
-export function registerPetChatTab(ctx: PetChatTabHost, rt: ChatPanelRuntime): () => void {
+export function registerPetChatTab(
+  ctx: PetChatTabHost,
+  rt: ChatPanelRuntime,
+  options: { commandId?: string } = {},
+): () => void {
   const tabs = ctx.get?.('sidebarRightTabs') as SidebarTabRegistry | undefined;
   if (tabs === undefined || typeof tabs.register !== 'function') {
     console.warn('[dsh-pet] 右侧栏不可用：没有 sidebarRightTabs 服务，桌宠对话标签未注册');
@@ -74,9 +91,7 @@ export function registerPetChatTab(ctx: PetChatTabHost, rt: ChatPanelRuntime): (
   /** 指南页卡片的图标：插件 logo；框架给的位置只有 16px 左右，靠 CSS 铺满。 */
   const GuideIcon = () => rt.h('img', { className: 'pet-chat-guide-icon', src: LOGO_URL, alt: '', loading: 'lazy' });
 
-  // 快捷键要能打开标签：右侧栏导航面可能比注册表晚到，拿不到就只少了快捷键
-  const controller = ctx.get?.('sidebarRight') as { openTab?(kind: string): void } | undefined;
-  const shortcut = registerPetChatShortcut(ctx, () => controller?.openTab?.(TAB_KIND));
+  const commandId = options.commandId;
 
   const disposeType = tabs.register({
     id: TAB_ID,
@@ -91,8 +106,7 @@ export function registerPetChatTab(ctx: PetChatTabHost, rt: ChatPanelRuntime): (
         title: () => TAB_TITLE,
         description: () => '与所有桌宠对话，点标签切换',
         icon: GuideIcon,
-        // 只有命令真的登记成功才带 commandId：指向不存在的命令会让侧栏注册抛错
-        ...(shortcut.registered ? { commandId: PET_CHAT_COMMAND_ID } : {}),
+        ...(commandId === undefined ? {} : { commandId }),
       },
     ],
   });
@@ -101,7 +115,6 @@ export function registerPetChatTab(ctx: PetChatTabHost, rt: ChatPanelRuntime): (
     yield ctx.slots.register({ name: 'sidebar.right.pane.tab', key: TAB_ID, order: 100 }, () => rt.h(Panel, {}));
   });
   return () => {
-    shortcut.dispose();
     disposeType();
     disposeTip();
     disposeCss();

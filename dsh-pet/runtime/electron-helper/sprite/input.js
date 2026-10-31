@@ -425,7 +425,7 @@ Object.assign(PetSprite.prototype, {
     this.showChatFromMenu(file);
   },
 
-  /** 悬停快捷键：按住 V 说话、T 开对话、D 开关待办、S 切换睡/醒。 */
+  /** 悬停快捷键：按住 M 说话、L 开对话、D 开关待办、S 切换睡/醒。 */
   onHotkey(e) {
     // 按住说话先判：它要吃掉按住期间的自动重复，晚一步就会被输入框收走
     if (this.hearHold.onKeyDown(e)) {

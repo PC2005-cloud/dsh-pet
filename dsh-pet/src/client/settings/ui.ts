@@ -52,6 +52,20 @@ export function numberInputProps(
 /** 等宽字体栈（路径与命令展示用），走系统栈以免多拉一份资源。 */
 export const MONO_STACK = 'ui-monospace, SFMono-Regular, Menlo, Consolas, "Courier New", monospace';
 
+/** 折叠卡的输入：标题行常驻，正文收进裁剪层。 */
+export interface FoldCardOptions {
+  /** 正文 id，同时是标题按钮的 `aria-controls` 目标。 */
+  readonly id: string;
+  readonly title: string;
+  /** 问号气泡里的说明。 */
+  readonly hint: string;
+  /** 展开后的若干行；`null` 表示该条不存在，整项跳过。 */
+  readonly body: ReadonlyArray<ReturnType<typeof jsx> | null>;
+  /** 当前是否展开；开合状态由调用方用 `useState` 持有，钩子顺序才稳定。 */
+  readonly open: boolean;
+  readonly onToggle: () => void;
+}
+
 /** 设置页的共用小件；由 {@link makeUiKit} 一次造好，各卡片共享同一套翻译与节点工厂。 */
 export interface SettingsUiKit {
   /** 悬浮说明的展开属性：带 `data-tip` 即悬浮出气泡。 */
@@ -69,6 +83,12 @@ export interface SettingsUiKit {
     disabled: boolean,
     onToggle: (value: boolean) => void,
   ) => ReturnType<typeof jsx>;
+  /**
+   * 折叠卡骨架：标题行常驻且整行可点，正文收进裁剪层。
+   *
+   * 高度过渡走 `grid-template-rows` 的 0fr→1fr，不猜 max-height——正文多长都能收干净。
+   */
+  foldCard: (options: FoldCardOptions) => ReturnType<typeof jsx>;
 }
 
 /**
@@ -132,6 +152,47 @@ export function makeUiKit(rt: Pick<SettingsRuntime, 'h' | 't'>): SettingsUiKit {
             ],
           }),
           q(t(label + 'Hint')),
+        ],
+      }),
+    foldCard: (options) =>
+      h('div', {
+        className: 'dsh-pet-cfg__card is-fold' + (options.open ? ' is-open' : ''),
+        children: [
+          // 整行可点：标题、问号与箭头都在按钮里。问号自己拦掉冒泡，点它只出气泡、不开合。
+          h('button', {
+            key: 'head',
+            type: 'button',
+            className: 'dsh-pet-cfg__foldToggle',
+            'aria-expanded': options.open,
+            'aria-controls': options.id,
+            onClick: options.onToggle,
+            children: [
+              h('span', { key: 't', className: 'dsh-pet-cfg__cardTitle', children: options.title }),
+              h('span', {
+                key: 'q',
+                className: 'dsh-pet-cfg__qWrap',
+                onClick: (e: ReactNS.MouseEvent<HTMLSpanElement>) => e.stopPropagation(),
+                children: q(options.hint),
+              }),
+              // 箭头：展开时转 180°，与模型选择器的展开指示一致。
+              h('i', {
+                key: 'c',
+                className: 'dsh-pet-cfg__chevron' + (options.open ? ' is-open' : ''),
+                'aria-hidden': 'true',
+              }),
+            ],
+          }),
+          // 裁剪层承担 overflow，正文内层出高度：收起时 0fr 把 padding 一起裁掉，卡片底不留空缝。
+          h('div', {
+            key: 'body',
+            id: options.id,
+            className: 'dsh-pet-cfg__fold',
+            'aria-hidden': options.open ? undefined : 'true',
+            children: h('div', {
+              className: 'dsh-pet-cfg__foldClip',
+              children: h('div', { className: 'dsh-pet-cfg__foldBody', children: options.body }),
+            }),
+          }),
         ],
       }),
   };

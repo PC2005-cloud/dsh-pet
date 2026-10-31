@@ -37,6 +37,8 @@ export interface ChatDom {
   readonly startHear: () => void;
   /** 从外部收尾（快捷键松手用）；没在录时什么都不做。 */
   readonly stopHear: () => void;
+  /** 此刻是否真的在采集；全局快捷键据此把「开/关」合成一个动作。 */
+  readonly isHearing: () => boolean;
   /** 收起提示、停掉正在进行的录音并清计时器；关闭弹窗时调用。 */
   readonly dispose: () => void;
 }
@@ -232,6 +234,7 @@ export function createChatDom(opts: { capture?: () => Promise<EncodedImage>; hea
     flash,
     startHear: hear.start,
     stopHear: hear.stop,
+    isHearing: hear.isHearing,
     dispose: () => {
       window.clearTimeout(hintTimer);
       hear.dispose();

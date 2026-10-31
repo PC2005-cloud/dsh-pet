@@ -9,6 +9,7 @@ import { captureDisplayFrame } from '../../../shared/chat/capture.ts';
 import { SLEEP_HOTKEY_HINT, isSleepHotkey } from '../../../shared/sleep-hotkey.ts';
 import { TODO_HOTKEY_HINT, isTodoHotkey } from '../../../shared/todo/hotkey.ts';
 import { bindOpenChat } from './open-chat.ts';
+import { registerPetChatHandle } from './registry.ts';
 import {
   buildMemeBranch,
   buildMenuTree,
@@ -162,6 +163,15 @@ export function createCardEntry(rt: CardEntryRuntime) {
     const stopChatHear = (): void => {
       chatRef.current?.stopHear();
     };
+    /** 打开对话：已经开着就只把焦点交回输入框，重开会把打了一半的字丢掉。 */
+    const openChatOrFocus = (): void => {
+      const existing = chatRef.current;
+      if (existing === null) {
+        openChat();
+        return;
+      }
+      existing.el.querySelector<HTMLTextAreaElement>('.dsh-pet-chat-input')?.focus();
+    };
 
     // 悬停标记：快捷键与拖拽都只在"鼠标停在这只宠物上"时生效，避免和页面其它交互抢事件。
     const hoverRef = useRef(false);
@@ -185,7 +195,21 @@ export function createCardEntry(rt: CardEntryRuntime) {
     startChatHearRef.current = startChatHear;
     const stopChatHearRef = useRef<() => void>(stopChatHear);
     stopChatHearRef.current = stopChatHear;
-    // 四个快捷键共用一次挂载：T 开对话、按住 V 说话、D 开关待办、S 切换睡/醒。
+    const openChatOrFocusRef = useRef<() => void>(openChatOrFocus);
+    openChatOrFocusRef.current = openChatOrFocus;
+    // 全局快捷键要能遥控这一只：登记开窗与开关录音，卸载时摘掉。
+    // 句柄里全走 ref，卡片重渲染不会让登记表拿到过期闭包；cfgRef 本身也是稳定引用，列进依赖只为满足规则。
+    useEffect(
+      () =>
+        registerPetChatHandle(cfgRef.current.id, {
+          open: () => openChatOrFocusRef.current(),
+          startHear: () => startChatHearRef.current(),
+          stopHear: () => stopChatHearRef.current(),
+          isHearing: () => chatRef.current?.isHearing() ?? false,
+        }),
+      [cfgRef],
+    );
+    // 四个快捷键共用一次挂载：L 开对话、按住 M 说话、D 开关待办、S 切换睡/醒。
     // 前三个都只在鼠标停在这只宠物上时生效；按住说话多一条——光标还在宠物自己的弹窗里也算，
     // 否则弹窗一开焦点被输入框拿走，最想说话的时机反而按不动。
     useEffect(() => {
@@ -194,7 +218,7 @@ export function createCardEntry(rt: CardEntryRuntime) {
         isHovered: () => hoverRef.current,
         openChat: (image) => openChatRef.current(image),
       });
-      // 按住 V：按下开录、松手收尾。状态机自己管自动重复与松开，这里只管把事件送进去。
+      // 按住 M：按下开录、松手收尾。状态机自己管自动重复与松开，这里只管把事件送进去。
       const hearHold = createHearHold({
         isArmed: () => {
           if (hoverRef.current) return true;

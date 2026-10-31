@@ -14,7 +14,7 @@ import type { HotkeyEvent } from '../hotkey.ts';
 
 /** 只造判据用到的字段，不需要真的 KeyboardEvent。 */
 const ev = (over: Partial<HotkeyEvent & { repeat: boolean }> = {}): HotkeyEvent & { repeat?: boolean } => ({
-  key: 'v',
+  key: 'm',
   ctrlKey: false,
   metaKey: false,
   altKey: false,
@@ -48,18 +48,18 @@ function harness(): {
 }
 
 describe('isHearHotkey', () => {
-  test('小写与大写 V 都算', () => {
-    assert.equal(isHearHotkey(ev({ key: 'v' })), true);
-    assert.equal(isHearHotkey(ev({ key: 'V' })), true);
+  test('小写与大写 M 都算', () => {
+    assert.equal(isHearHotkey(ev({ key: 'm' })), true);
+    assert.equal(isHearHotkey(ev({ key: 'M' })), true);
   });
 
-  test('其它键不算', () => {
-    for (const key of ['t', 'd', 's', 'a', 'Enter', ' ', 'Escape']) {
+  test('其它键不算（原来的 V 已经让位）', () => {
+    for (const key of ['v', 't', 'd', 's', 'a', 'Enter', ' ', 'Escape']) {
       assert.equal(isHearHotkey(ev({ key })), false, key);
     }
   });
 
-  test('带修饰键不算（Ctrl+V 是粘贴）', () => {
+  test('带修饰键不算（Ctrl+M 等留给浏览器）', () => {
     assert.equal(isHearHotkey(ev({ ctrlKey: true })), false);
     assert.equal(isHearHotkey(ev({ metaKey: true })), false);
     assert.equal(isHearHotkey(ev({ altKey: true })), false);
@@ -123,9 +123,9 @@ describe('createHearHold', () => {
   test('松开同一个键才收尾，且只收一次', () => {
     const { hold, counts } = harness();
     hold.onKeyDown(ev());
-    hold.onKeyUp(ev({ key: 'V' }));
+    hold.onKeyUp(ev({ key: 'M' }));
     assert.equal(counts.release, 1);
-    hold.onKeyUp(ev({ key: 'v' }));
+    hold.onKeyUp(ev({ key: 'm' }));
     assert.equal(counts.release, 1, '多出来的 keyup 不该再收一次尾');
   });
 
