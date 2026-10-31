@@ -32,6 +32,7 @@ import {
   restartBackoffDelayMs,
   resolveElectronPath,
   shouldCircuitBreak,
+  shouldFallbackToNoSandbox,
 } from './helper-process.ts';
 
 test('Electron 安装目录无法创建时返回 undefined，不产生未处理拒绝', async (t) => {
@@ -293,6 +294,41 @@ describe('shouldCircuitBreak —— 连续崩溃 12 次（约 3 分钟）后熔�
     assert.equal(shouldCircuitBreak(11), false);
     assert.equal(shouldCircuitBreak(12), true);
     assert.equal(shouldCircuitBreak(50), true);
+  });
+});
+
+describe('shouldFallbackToNoSandbox —— 沙箱起不来时自动改用 --no-sandbox 重试一次', () => {
+  const base = { code: 0x80000003, sawOutput: false, ranMs: 300, alreadyApplied: false, customCommand: false };
+
+  test('秒退、无输出、0x80000003 → 应该退一次', () => {
+    assert.equal(shouldFallbackToNoSandbox(base), true);
+  });
+
+  test('Node 的两种报法都认：2147483651 与 -2147483645 指向同一个 0x80000003', () => {
+    assert.equal(shouldFallbackToNoSandbox({ ...base, code: 2147483651 }), true);
+    assert.equal(shouldFallbackToNoSandbox({ ...base, code: -2147483645 }), true);
+  });
+
+  test('有 stdout/stderr 说明 JS 已经跑过，病因不是沙箱 → 不退', () => {
+    assert.equal(shouldFallbackToNoSandbox({ ...base, sawOutput: true }), false);
+  });
+
+  test('跑了一阵才崩（≥5s）是别的问题 → 不退', () => {
+    assert.equal(shouldFallbackToNoSandbox({ ...base, ranMs: 6000 }), false);
+  });
+
+  test('只退一次：已经退过就回到正常退避/熔断', () => {
+    assert.equal(shouldFallbackToNoSandbox({ ...base, alreadyApplied: true }), false);
+  });
+
+  test('自定义 command（测试/用户脚本）不猜 → 不退', () => {
+    assert.equal(shouldFallbackToNoSandbox({ ...base, customCommand: true }), false);
+  });
+
+  test('别的退出码（含 0xC0000005 访问违例、普通 exit 1）→ 不退', () => {
+    assert.equal(shouldFallbackToNoSandbox({ ...base, code: 3221225477 }), false);
+    assert.equal(shouldFallbackToNoSandbox({ ...base, code: 1 }), false);
+    assert.equal(shouldFallbackToNoSandbox({ ...base, code: null }), false);
   });
 });
 

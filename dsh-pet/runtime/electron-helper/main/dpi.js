@@ -75,7 +75,11 @@ function createDpi({ app, screen, mainPath, linuxPointer, dpiProbe, dpiMark, for
     };
     let out = '';
     try {
-      out = execFileSync(process.execPath, [mainPath, '--dsh-pet-dpi-probe'], opts);
+      // 探测子进程必须和主进程用同一套开关：沙箱起不来的机器上宿主会自动改用 --no-sandbox
+      // （见 src/host/helper/restart.ts 的 shouldFallbackToNoSandbox），不带上的话探测子进程一启动
+      // 就 0x80000003，主进程活着、缓存却永远写不出来，每次开机都要白探一次。
+      const sandboxArgs = app.commandLine.hasSwitch('no-sandbox') ? ['--no-sandbox'] : [];
+      out = execFileSync(process.execPath, [...sandboxArgs, mainPath, '--dsh-pet-dpi-probe'], opts);
     } catch (e) {
       // 只认 stdout，不认退出码：不开窗口的 Electron 进程调 app.exit() 在 Windows 上偶发
       // 0xC0000005（退出期访问违例），但那时值早就写出来了，丢掉它纯属浪费一次冷启动。
