@@ -17,6 +17,10 @@ export interface ChatDialogMount {
   el: HTMLElement;
   /** 关闭并清理（幂等） */
   close: () => void;
+  /** 开录：快捷键「按住说话」按下时用（麦克风已在录、环境不支持时无动作）。 */
+  startHear: () => void;
+  /** 收尾：快捷键松开时用（没在录时无动作）。 */
+  stopHear: () => void;
 }
 
 /** 发送接线需要的元素与回调。 */
@@ -92,6 +96,16 @@ function bindSend(binding: SendBinding): void {
   });
 }
 
+/**
+ * 由对话地址推导识别地址：两端传进来的都是 `.../chat`，去掉尾段换成 `/voice/hear`。
+ *
+ * @param baseUrl - 已含挂载前缀的对话地址。
+ * @returns 同前缀下的识别地址。
+ */
+function hearUrlOf(baseUrl: string): string {
+  return baseUrl.replace(/\/chat$/, '') + '/voice/hear';
+}
+
 /** 挂载对话弹窗的入参。 */
 export interface ChatDialogOptions {
   petId: string;
@@ -110,6 +124,11 @@ export interface ChatDialogOptions {
   initialImage?: File;
   /** 截屏实现：浏览器传 getDisplayMedia 抓帧，桌面传 preload 的 IPC 调用；缺省 = 不支持。 */
   capture?: () => Promise<EncodedImage>;
+  /**
+   * 识别地址；缺省按 `baseUrl` 去掉尾部 `/chat` 推导（两端传进来的都是 `.../chat`）。
+   * 给了也用不上时（环境不能录音）按钮不出现，见 createChatDom。
+   */
+  hearUrl?: string;
 }
 
 /** 挂载一个对话输入弹窗（两端共用；位置为视口坐标，超出 clamp 矩形自动夹回）。
@@ -127,7 +146,7 @@ export function mountChatDialog(opts: ChatDialogOptions): ChatDialogMount {
       ? clamp
       : { x: 0, y: 0, w: window.innerWidth, h: window.innerHeight };
 
-  const dom = createChatDom({ capture: opts.capture });
+  const dom = createChatDom({ capture: opts.capture, hearUrl: opts.hearUrl ?? hearUrlOf(baseUrl) });
   const { root, input, err } = dom;
 
   /** 以 (x,y) 落点，超出 clamp 矩形夹回。 */
@@ -168,5 +187,5 @@ export function mountChatDialog(opts: ChatDialogOptions): ChatDialogMount {
   place();
   if (opts.initialImage) void dom.setImageFile(opts.initialImage);
   input.focus();
-  return { el: root, close };
+  return { el: root, close, startHear: dom.startHear, stopHear: dom.stopHear };
 }

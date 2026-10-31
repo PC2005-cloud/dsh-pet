@@ -425,8 +425,13 @@ Object.assign(PetSprite.prototype, {
     this.showChatFromMenu(file);
   },
 
-  /** 悬停快捷键：光标在身体上时按 T 开对话、按 D 开关待办、按 S 切换睡/醒。 */
+  /** 悬停快捷键：按住 V 说话、T 开对话、D 开关待办、S 切换睡/醒。 */
   onHotkey(e) {
+    // 按住说话先判：它要吃掉按住期间的自动重复，晚一步就会被输入框收走
+    if (this.hearHold.onKeyDown(e)) {
+      e.preventDefault();
+      return;
+    }
     if (!this.hoverBody) return;
     if (S.isChatHotkey(e)) {
       e.preventDefault();
@@ -443,5 +448,10 @@ Object.assign(PetSprite.prototype, {
       e.preventDefault();
       this.postSleepAction(this.sleeping ? 'wake' : 'sleep');
     }
+  },
+
+  /** 松手：结束「按住说话」的那次录音（没在按住时什么都不做）。 */
+  onHotkeyUp(e) {
+    this.hearHold.onKeyUp(e);
   },
 });

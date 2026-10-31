@@ -5,7 +5,7 @@
  */
 
 /** 弹窗样式。
- *  一条自适应输入框（无标题）+ 一行图标按钮（上传 / 截屏）+ 可选的图片预览；
+ *  一条自适应输入框（无标题）+ 一行图标按钮（上传 / 截屏 / 按住说话）+ 可选的图片预览；
  *  初始 160px，随输入增宽、封顶 340px 后折行增高；回车发送，Esc 或点外关闭。
  *  宽度由 JS 按文本测量覆盖根元素宽度。 */
 export const CHAT_CSS = [
@@ -23,7 +23,7 @@ export const CHAT_CSS = [
   'resize:none;overflow:hidden;white-space:pre-wrap;overflow-wrap:anywhere}',
   '.dsh-pet-chat-input::placeholder{color:rgba(43,43,43,.45)}',
   '.dsh-pet-chat-input:disabled{opacity:.55}',
-  // 操作行：上传 / 截屏两枚图标按钮（无边框、悬停才显底）
+  // 操作行：上传 / 截屏 / 按住说话三枚图标按钮（无边框、悬停才显底）
   '.dsh-pet-chat-actions{display:flex;align-items:center;gap:6px;padding:0 8px 7px}',
   '.dsh-pet-chat-btn{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;',
   'border:none;border-radius:6px;background:transparent;color:rgba(43,43,43,.62);font-size:14px;line-height:1;',
@@ -31,6 +31,11 @@ export const CHAT_CSS = [
   '.dsh-pet-chat-btn:hover{background:rgba(0,0,0,.06);color:rgba(43,43,43,.9)}',
   '.dsh-pet-chat-btn:disabled{opacity:.45;cursor:default}',
   '.dsh-pet-chat-btn svg{display:block}',
+  // 话筒：录音中常亮红底 + 呼吸，告诉用户「正在听」。状态由 dom 写在 data-hear 上。
+  '.dsh-pet-chat-btn[data-hear="recording"]{color:#e5484d;background:rgba(229,72,77,.14)}',
+  '.dsh-pet-chat-btn[data-hear="recording"]:hover{background:rgba(229,72,77,.2);color:#e5484d}',
+  '.dsh-pet-chat-btn[data-hear="recording"] svg{animation:dsh-pet-hear-pulse 1s ease-in-out infinite}',
+  '@keyframes dsh-pet-hear-pulse{0%,100%{opacity:1}50%{opacity:.4}}',
   // 已选图片：跟在两枚按钮右侧的一枚小图，不占额外一行
   '.dsh-pet-chat-attach{display:none;align-items:center;gap:4px;margin-left:2px}',
   '.dsh-pet-chat-attach[data-on="1"]{display:inline-flex}',

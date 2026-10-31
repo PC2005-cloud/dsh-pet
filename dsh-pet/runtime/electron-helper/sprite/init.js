@@ -104,10 +104,20 @@ Object.assign(PetSprite.prototype, {
     this.sleeping = false;
     this.sleepSet = null;
     this.sleepPhase = null;
-    // 对话弹窗：当前挂载的 close() 句柄 + 开启标记。chatOpen 是穿透守卫——弹窗是窗口内 DOM，
-    // 期间整窗保持可交互，否则光标移到输入框就会被 onMouseMove 翻回穿透、点击全被透传。
-    this.chatClose = null;
+    // 对话弹窗：当前挂载句柄（close / startHear / stopHear）+ 开启标记。chatOpen 是穿透守卫——
+    // 弹窗是窗口内 DOM，期间整窗保持可交互，否则光标移到输入框就会被 onMouseMove 翻回穿透、点击全被透传。
+    this.chatMount = null;
     this.chatOpen = false;
+    // 快捷键「按住 V 说话」：按下开录、松手收尾。状态机在 shared（自动重复与失焦都要拦），
+    // 本实例只负责把两个键盘事件原样送进去，动作落到 menu 的 startHearChat / stopHearChat。
+    // 闸门两条：鼠标在宠物身上，或光标还在宠物自己的弹窗里——弹窗一开焦点就在输入框，
+    // 那时恰恰是最想按住说话的时候（判定不看焦点，开录时由 chat/dom 把输入框 blur 掉）。
+    this.hearHold = S.createHearHold({
+      isArmed: () =>
+        Boolean(this.hoverBody) || Boolean(this.chatMount && this.chatMount.el.contains(document.activeElement)),
+      onPress: () => this.startHearChat(),
+      onRelease: () => this.stopHearChat(),
+    });
     // 待办面板：与对话弹窗同一套穿透守卫（面板同样是窗口内 DOM，而且比对话窗更大）。
     // todoPanel 是面板句柄（占气泡槽，节点塞在 this.bubble 里），todoOpen 是穿透守卫标记。
     this.todoPanel = null;
@@ -191,8 +201,11 @@ Object.assign(PetSprite.prototype, {
     // 拖一张图到宠物身上：直接开对话并挂成待发送图（浏览器端同一套判据）
     this.hit.addEventListener('dragover', (e) => this.onDragOverImage(e), { signal: ac.signal });
     this.hit.addEventListener('drop', (e) => this.onDropImage(e), { signal: ac.signal });
-    // 悬停时按 T 开对话；窗口未被聚焦时收不到按键（透明窗用 showInactive 显示，不抢焦点）
+    // 悬停时按键：T 开对话、按住 V 说话、D 开关待办、S 切换睡/醒。
+    // 窗口未被聚焦时收不到按键（透明窗用 showInactive 显示，不抢焦点）
     window.addEventListener('keydown', (e) => this.onHotkey(e), { signal: ac.signal });
+    // 按住说话靠 keyup 收尾：这条必须在按住期间一直有效，与 keydown 同一生命周期
+    window.addEventListener('keyup', (e) => this.onHotkeyUp(e), { signal: ac.signal });
     // 文本输入拿到焦点时补一次系统键盘焦点：X11/KWin 不会因为 DOM 聚焦就把键盘焦点给窗口，
     // 不补的话光标在闪、按键却落到上一个窗口。判据复用 shared 的 isTypingTarget，
     // 对话弹窗与待办面板都是窗口内 DOM，一处委托全覆盖。
@@ -213,6 +226,8 @@ Object.assign(PetSprite.prototype, {
       () => {
         // 切到其它应用后旧菜单不该继续占着透明窗口；丢失松手时也释放拖拽。
         this.closeMenu();
+        // 切走时松手收不到 keyup：不在这里收尾，录音会一直开到 24 秒上限
+        this.hearHold.release();
         if (this.dragState.active) this.onPointerUp();
         if (!this.chatOpen && !this.todoOpen) this.setInteractive(false);
       },

@@ -1,11 +1,12 @@
 /**
- * 对话弹窗的 DOM 装配：输入框、上传/截屏按钮、待发送图片缩略图、提示行与错误行。
- * 只建元素并绑定"选中图片后怎么显示"，不发送、不定位、不管关闭。
+ * 对话弹窗的 DOM 装配：输入框、上传/截屏/按住说话三枚按钮、待发送图片缩略图、提示行与错误行。
+ * 只建元素并把能力接上，不发送、不定位、不管关闭；录音的状态机在 chat/hear-control。
  * @module dsh-pet/src/shared/chat/dom
  */
 import { type EncodedImage, encodeImageFile } from './encode.ts';
+import { createHearControl } from './hear-control.ts';
 import { IMAGE_ACCEPT, firstImageFromClipboard, isImageFile } from './image-pick.ts';
-import { cameraIcon, pictureIcon } from './icons.ts';
+import { cameraIcon, micIcon, pictureIcon } from './icons.ts';
 import type { ChatAttachment } from './send.ts';
 import { CHAT_H_PAD, CHAT_MAX_W, CHAT_MIN_W } from './styles.ts';
 
@@ -32,7 +33,11 @@ export interface ChatDom {
   readonly isEncoding: () => boolean;
   /** 临时提示（不是错误），超时自动收起。 */
   readonly flash: (text: string) => void;
-  /** 收起提示并清计时器；关闭弹窗时调用。 */
+  /** 从外部开录（快捷键「按住说话」用）；录不了时给一句原因，已在录时什么都不做。 */
+  readonly startHear: () => void;
+  /** 从外部收尾（快捷键松手用）；没在录时什么都不做。 */
+  readonly stopHear: () => void;
+  /** 收起提示、停掉正在进行的录音并清计时器；关闭弹窗时调用。 */
   readonly dispose: () => void;
 }
 
@@ -67,10 +72,11 @@ function enableAutoResize(input: HTMLTextAreaElement, root: HTMLElement): () => 
 /**
  * 建好弹窗的全部元素并挂到 `document.body` 下。
  *
- * @param opts - 可选的截屏实现；不传时按钮只给"当前环境不支持"的提示。
+ * @param opts - 可选的截屏实现（不传时按钮只给"当前环境不支持"的提示）与识别地址
+ *   （录不了时按住说话的按钮照样在，点它给一句原因）。
  * @returns 元素引用与行为（清理附件、临时提示、自适应、释放计时器）。
  */
-export function createChatDom(opts: { capture?: () => Promise<EncodedImage> } = {}): ChatDom {
+export function createChatDom(opts: { capture?: () => Promise<EncodedImage>; hearUrl?: string } = {}): ChatDom {
   const root = document.createElement('div');
   root.className = 'dsh-pet-chat';
 
@@ -87,17 +93,25 @@ export function createChatDom(opts: { capture?: () => Promise<EncodedImage> } = 
   const hint = document.createElement('div');
   hint.className = 'dsh-pet-chat-hint';
   let hintTimer = 0;
-  const flash = (text: string): void => {
+  /** 常驻提示：录音与识别期间一直显示，由调用点自己收。 */
+  const showHint = (text: string): void => {
+    window.clearTimeout(hintTimer);
     hint.textContent = text;
     hint.style.display = 'block';
+  };
+  const hideHint = (): void => {
     window.clearTimeout(hintTimer);
-    hintTimer = window.setTimeout(() => {
-      hint.style.display = 'none';
-    }, HINT_MS);
+    hint.style.display = 'none';
+  };
+  const flash = (text: string): void => {
+    showHint(text);
+    hintTimer = window.setTimeout(hideHint, HINT_MS);
   };
 
   const pickBtn = iconButton('上传图片', pictureIcon());
   const shotBtn = iconButton('截取当前屏幕', cameraIcon());
+  const hearUrl = typeof opts.hearUrl === 'string' ? opts.hearUrl : '';
+  const micBtn = iconButton('按住说话', micIcon());
   const fileInput = document.createElement('input');
   fileInput.type = 'file';
   fileInput.accept = IMAGE_ACCEPT;
@@ -118,7 +132,7 @@ export function createChatDom(opts: { capture?: () => Promise<EncodedImage> } = 
 
   const actions = document.createElement('div');
   actions.className = 'dsh-pet-chat-actions';
-  actions.append(pickBtn, shotBtn, fileInput, attach);
+  actions.append(pickBtn, shotBtn, micBtn, fileInput, attach);
 
   root.append(input, actions, hint, err);
   document.body.appendChild(root);
@@ -192,6 +206,16 @@ export function createChatDom(opts: { capture?: () => Promise<EncodedImage> } = 
   } else {
     shotBtn.addEventListener('click', () => flash('当前环境不支持截屏，先用上传试试'));
   }
+
+  // 按住说话：状态机、录音与结果落点都在 chat/hear-control，这里只把元素与提示行交过去。
+  const hear = createHearControl({
+    micBtn,
+    input,
+    hint: { show: showHint, hide: hideHint, flash },
+    resizeInput,
+    hearUrl,
+  });
+
   resizeInput(); // 以占位符为初始宽度
 
   return {
@@ -206,6 +230,11 @@ export function createChatDom(opts: { capture?: () => Promise<EncodedImage> } = 
     getAttachment: () => attachment,
     isEncoding: () => encoding || capturing,
     flash,
-    dispose: () => window.clearTimeout(hintTimer),
+    startHear: hear.start,
+    stopHear: hear.stop,
+    dispose: () => {
+      window.clearTimeout(hintTimer);
+      hear.dispose();
+    },
   };
 }
