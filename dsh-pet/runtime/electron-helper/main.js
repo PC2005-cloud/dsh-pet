@@ -51,6 +51,7 @@ const { createTray } = require('./main/tray.js');
 const { createWindows } = require('./main/windows.js');
 const { registerIpc } = require('./main/ipc.js');
 const { createDisplaySync } = require('./main/displays.js');
+const { dshHomeDir, resolveUserDataDir } = require('./main/user-data.js');
 
 /** Linux 指针提供者：仅在 Linux 创建；查询失败时 get() 返回 null（调用方回退 Electron 原生 API） */
 const linuxPointer = process.platform === 'linux' ? createLinuxPointer() : null;
@@ -76,33 +77,6 @@ if (process.platform === 'win32') {
 // 应用模式只改数据目录、不改应用名：共用同一个 userData 时两个 Chromium 进程会抢同一份 profile 互踢。
 if (APP_MODE) app.setPath('userData', path.join(app.getPath('appData'), 'dsh-pet'));
 
-// [fix] 受限令牌下 %APPDATA% 可能不可写：宿主用受限令牌拉起 helper 时实测如此。
-// 此时 Chromium 的 profile 初始化会卡住，app.whenReady() 永不 resolve，
-// 宿主只看到约 6 秒后的一次 0xC0000005（退出期访问违例），没有任何可读错误。
-// 这里探测 userData 是否真的可写；不可写就退回到 DSH 自己的目录。
-try {
-  const fsCheck = require('node:fs');
-  const userDataDir = app.getPath('userData');
-  fsCheck.mkdirSync(userDataDir, { recursive: true });
-  fsCheck.accessSync(userDataDir, fsCheck.constants.W_OK);
-} catch (error) {
-  try {
-    const fallbackDir = path.join(require('node:os').homedir(), '.dsh', 'dsh-pet', 'electron-profile');
-    require('node:fs').mkdirSync(fallbackDir, { recursive: true });
-    app.setPath('userData', fallbackDir);
-    console.error(
-      '[dsh-pet-desktop-helper] userData 不可写，回退到',
-      fallbackDir,
-      String(error && error.message ? error.message : error),
-    );
-  } catch (fallbackError) {
-    console.error(
-      '[dsh-pet-desktop-helper] userData 回退失败:',
-      String(fallbackError && fallbackError.message ? fallbackError.message : fallbackError),
-    );
-  }
-}
-
 /** DPI 探测子进程模式：不建窗口，只把主屏 scaleFactor 打到 stdout 就退出（见 probePrimaryScale） */
 const DPI_PROBE = process.env.DSH_PET_DPI_PROBE === '1';
 /** 探测进程的输出标记（父进程按它抓值） */
@@ -126,6 +100,24 @@ for (const stream of [process.stdout, process.stderr]) {
     if (isBrokenPipeError(error)) exitForDeadHost();
     // 其余流错误同样吞掉：Electron 的默认处理是弹模态框，不值得拿桌宠去换一个框
   });
+}
+
+// 受限令牌下原 userData 可能不可写：Chromium 的 profile 初始化会卡住，whenReady 永不 resolve，
+// 宿主只看到约 6 秒后的一次 0xC0000005，没有任何可读错误。探测放在管道守卫之后，
+// 保证这里的日志写入不会踩上宿主已死时的 EPIPE。
+const userDataDecision = resolveUserDataDir({
+  currentDir: app.getPath('userData'),
+  dshHome: dshHomeDir(),
+  appMode: APP_MODE,
+});
+if (userDataDecision.fallback) {
+  app.setPath('userData', userDataDecision.dir);
+  console.error('[dsh-pet-desktop-helper] userData 不可写，回退到', userDataDecision.dir);
+} else if (userDataDecision.error) {
+  console.error(
+    '[dsh-pet-desktop-helper] userData 回退失败:',
+    String(userDataDecision.error.message || userDataDecision.error),
+  );
 }
 
 // ② 宿主探测：DSH_PET_HOST_PID 由宿主 spawn 时注入；未注入或非法 → 0 → 不探测（不误退）。

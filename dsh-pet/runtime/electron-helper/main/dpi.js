@@ -105,9 +105,8 @@ function createDpi({ app, screen, mainPath, linuxPointer, dpiProbe, dpiMark, for
   /** 实际生效的强制缩放（0 = 未启用，坐标系维持修复前的逐屏 DIP） */
   let FORCED_SCALE = 0;
   if (shouldLinearize({ platform: process.platform, dpiProbe, forceDsf })) {
-    // [fix] 探测失败只能退化为"不补偿"，绝不能把整个 helper 带走：
-    // 宿主在受限令牌下运行时，getPath('userData') 与探测子进程都可能直接失败，
-    // 原先这条赋值一旦抛错就会以 0xFFFF7003 结束进程（ready 之前，无任何日志）。
+    // 探测失败只能退化为"不补偿"，不能把整个 helper 带走：受限令牌下
+    // getPath('userData') 与探测子进程都可能失败，进程会在 ready 之前直接结束且无日志。
     try {
       PRIMARY_SCALE = readCachedPrimaryScale() || probePrimaryScale();
       const forced = resolveForcedScale({ forceDsf, primaryScale: PRIMARY_SCALE });
