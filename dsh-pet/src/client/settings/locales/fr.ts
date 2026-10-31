@@ -153,8 +153,9 @@ export const fr: Record<Key, string> = {
   'physics.restitution': 'Rebond',
   'physics.restitutionHint':
     '0 à 1, proportion de vitesse conservée lors du rebond contre un mur ou le sol (1 = parfaitement élastique, 0 = arrêt net)',
-  'physics.groundFriction': 'Frottement au sol',
-  'physics.groundFrictionHint': 'par seconde, atténuation de la vitesse horizontale au sol ; 0 = sol verglacé',
+  'physics.groundFriction': 'Frottement de contact',
+  'physics.groundFrictionHint':
+    'par seconde, atténuation de la vitesse le long de toute surface touchée (mur, sol, plafond) ; 0 = verglas partout',
   'physics.throwPower': 'Force de lancer',
   'physics.throwPowerHint':
     '> 0, multiplicateur global du suivi ressort et de la vitesse de lancer (1 = valeur par défaut ; plus haut = suivi plus ferme et lancers plus violents)',

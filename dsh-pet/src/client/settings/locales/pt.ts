@@ -151,8 +151,9 @@ export const pt: Record<Key, string> = {
   'physics.restitution': 'Restituição',
   'physics.restitutionHint':
     '0–1, velocidade mantida ao quicar na parede ou no chão (1 = totalmente elástico, 0 = para na hora)',
-  'physics.groundFriction': 'Atrito com o chão',
-  'physics.groundFrictionHint': 'por segundo, perda de velocidade horizontal após encostar no chão; 0 = piso de gelo',
+  'physics.groundFriction': 'Atrito de contato',
+  'physics.groundFrictionHint':
+    'por segundo, perda de velocidade ao longo de qualquer superfície (parede, chão, teto); 0 = gelo em todas',
   'physics.throwPower': 'Força de arremesso',
   'physics.throwPowerHint':
     '> 0, multiplicador geral da mola que segue o cursor e da velocidade de saída (1 = padrão; maior = mais colado ao cursor e arremessos mais fortes)',

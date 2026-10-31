@@ -154,9 +154,9 @@ export const es: Record<Key, string> = {
   'physics.restitution': 'Rebote',
   'physics.restitutionHint':
     '0–1, velocidad que se conserva al rebotar en una pared o el suelo (1 = completamente elástico, 0 = se detiene en seco)',
-  'physics.groundFriction': 'Fricción con el suelo',
+  'physics.groundFriction': 'Fricción de contacto',
   'physics.groundFrictionHint':
-    'por segundo, amortiguación horizontal mientras está en el suelo; 0 = hielo sin fricción',
+    'por segundo, amortiguación a lo largo de cualquier superficie (pared, suelo, techo); 0 = hielo en todas',
   'physics.throwPower': 'Fuerza de lanzamiento',
   'physics.throwPowerHint':
     '> 0, multiplicador general del seguimiento con resorte y de la velocidad de salida (1 = predeterminado; más alto = sigue más pegado y lanza más fuerte)',

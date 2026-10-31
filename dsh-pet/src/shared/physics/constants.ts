@@ -50,7 +50,7 @@ export const GRAVITY = 1400;
 /** 碰边恢复系数：每次反弹保留约 78% 速度。 */
 export const RESTITUTION = 0.78;
 
-/** 地面水平摩擦（/s）。 */
+/** 接触面切向摩擦（/s）：撞墙、落地、撞顶后沿接触面方向的速度衰减率；0 = 四面都像冰面。 */
 export const GROUND_FRICTION = 2.5;
 
 /** 抛掷物理的默认参数（与内置配置一致；仅作配置缺失时的兜底）。 */
@@ -69,11 +69,14 @@ export const DEFAULT_PHYSICS: PhysicsParams = {
 /** 总力度默认量（throwPower=1 即现状）。 */
 export const DEFAULT_THROW_POWER = 1;
 
-/** 落地时 |vy| 小于它直接停竖直。 */
-export const REST_VY = 40;
+/** 接触面法向速度低于它就贴住（px/s）：否则重力持续压向同一面时每帧都被反弹，表现为贴面抖动。 */
+export const REST_NORMAL = 40;
 
-/** 地面上 |vx| 小于它认为已静止。 */
-export const REST_VX = 15;
+/** 接触面切向速度低于它认为已静止（px/s）。 */
+export const REST_TANGENT = 15;
+
+/** 判静止时法向速度的容差（px/s）：比 {@link REST_NORMAL} 严得多，只用于确认「已经贴住」。 */
+export const REST_NORMAL_EPS = 1;
 
 /** 单步最大 dt（s）：防后台标签页卡顿恢复后的巨帧跳变。 */
 export const MAX_STEP_DT = 0.05;

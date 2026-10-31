@@ -151,8 +151,9 @@ export const de: Record<Key, string> = {
   'physics.restitution': 'Elastizität',
   'physics.restitutionHint':
     '0–1, Geschwindigkeitsanteil beim Abprallen von Wand/Boden (1 = voll elastisch, 0 = bleibt sofort stehen)',
-  'physics.groundFriction': 'Bodenreibung',
-  'physics.groundFrictionHint': '/s, Abklingen der horizontalen Geschwindigkeit am Boden; 0 = eisglatt, keine Bremse',
+  'physics.groundFriction': 'Kontaktreibung',
+  'physics.groundFrictionHint':
+    '/s, Abklingen der Geschwindigkeit entlang jeder Kontaktfläche (Wand, Boden, Decke); 0 = überall eisglatt',
   'physics.throwPower': 'Wurfkraft',
   'physics.throwPowerHint':
     '> 0, Gesamtfaktor für Federfolge und Abwurfgeschwindigkeit (1 = Standard; höher = folgt enger, wirft härter)',

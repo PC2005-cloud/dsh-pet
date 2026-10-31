@@ -150,8 +150,9 @@ export const en: Record<Key, string> = {
   'physics.restitution': 'Bounciness',
   'physics.restitutionHint':
     '0–1, speed kept when bouncing off a wall or the floor (1 = perfectly elastic, 0 = stops dead)',
-  'physics.groundFriction': 'Ground friction',
-  'physics.groundFrictionHint': 'per second, horizontal damping while on the ground; 0 = frictionless ice',
+  'physics.groundFriction': 'Contact friction',
+  'physics.groundFrictionHint':
+    'per second, damping along any surface hit (wall, floor, ceiling); 0 = frictionless ice everywhere',
   'physics.throwPower': 'Throw power',
   'physics.throwPowerHint':
     '> 0, overall multiplier for spring tracking and release speed (1 = default; higher = tighter tracking, harder throws)',

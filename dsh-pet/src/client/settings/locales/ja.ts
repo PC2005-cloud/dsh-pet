@@ -148,8 +148,8 @@ export const ja: Record<Key, string> = {
   'physics.gravityHint': 'px/s²。大きいほど速く落下します。0 = 無重力（投げると等速直線運動で飛び続けます）',
   'physics.restitution': '弾性',
   'physics.restitutionHint': '0～1。壁や床に当たったときに残る速度の割合（1 = 完全弾性、0 = 当たった瞬間に停止）',
-  'physics.groundFriction': '地面摩擦',
-  'physics.groundFrictionHint': '/s。着地後の水平速度の減衰率。0 = 氷の上のように減速しない',
+  'physics.groundFriction': '接触摩擦',
+  'physics.groundFrictionHint': '/s。壁・床・天井に当たった後の接線方向の速度の減衰率。0 = どの面も氷のよう',
   'physics.throwPower': '投げる力',
   'physics.throwPowerHint':
     '> 0。バネの追従性と投げ出しの初速の全体倍率（1 = デフォルト。大きいほどよく追従し、勢いよく飛びます）',

@@ -163,7 +163,7 @@ export interface PhysicsParams {
   gravity: number;
   /** 碰壁反弹恢复系数 0~1（1 = 完全弹性，0 = 撞上即停；墙与地共用） */
   restitution: number;
-  /** 地面水平摩擦（/s）：落地时水平速度的衰减率，0 = 无摩擦 */
+  /** 接触面切向摩擦（/s）：撞墙、落地、撞顶后沿接触面方向的速度衰减率，0 = 四面都像冰面 */
   groundFriction: number;
   /** 顶部是否反弹：false = 顶部无边界，抛掷可飞出屏幕顶部（重力仍会拉回落） */
   ceilingBounce: boolean;
