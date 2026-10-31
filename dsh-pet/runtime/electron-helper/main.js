@@ -51,6 +51,7 @@ const { createTray } = require('./main/tray.js');
 const { createWindows } = require('./main/windows.js');
 const { registerIpc } = require('./main/ipc.js');
 const { createDisplaySync } = require('./main/displays.js');
+const { dshHomeDir, resolveUserDataDir } = require('./main/user-data.js');
 
 /** Linux 指针提供者：仅在 Linux 创建；查询失败时 get() 返回 null（调用方回退 Electron 原生 API） */
 const linuxPointer = process.platform === 'linux' ? createLinuxPointer() : null;
@@ -99,6 +100,24 @@ for (const stream of [process.stdout, process.stderr]) {
     if (isBrokenPipeError(error)) exitForDeadHost();
     // 其余流错误同样吞掉：Electron 的默认处理是弹模态框，不值得拿桌宠去换一个框
   });
+}
+
+// 受限令牌下原 userData 可能不可写：Chromium 的 profile 初始化会卡住，whenReady 永不 resolve，
+// 宿主只看到约 6 秒后的一次 0xC0000005，没有任何可读错误。探测放在管道守卫之后，
+// 保证这里的日志写入不会踩上宿主已死时的 EPIPE。
+const userDataDecision = resolveUserDataDir({
+  currentDir: app.getPath('userData'),
+  dshHome: dshHomeDir(),
+  appMode: APP_MODE,
+});
+if (userDataDecision.fallback) {
+  app.setPath('userData', userDataDecision.dir);
+  console.error('[dsh-pet-desktop-helper] userData 不可写，回退到', userDataDecision.dir);
+} else if (userDataDecision.error) {
+  console.error(
+    '[dsh-pet-desktop-helper] userData 回退失败:',
+    String(userDataDecision.error.message || userDataDecision.error),
+  );
 }
 
 // ② 宿主探测：DSH_PET_HOST_PID 由宿主 spawn 时注入；未注入或非法 → 0 → 不探测（不误退）。

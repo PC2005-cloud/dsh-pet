@@ -105,11 +105,22 @@ function createDpi({ app, screen, mainPath, linuxPointer, dpiProbe, dpiMark, for
   /** 实际生效的强制缩放（0 = 未启用，坐标系维持修复前的逐屏 DIP） */
   let FORCED_SCALE = 0;
   if (shouldLinearize({ platform: process.platform, dpiProbe, forceDsf })) {
-    PRIMARY_SCALE = readCachedPrimaryScale() || probePrimaryScale();
-    const forced = resolveForcedScale({ forceDsf, primaryScale: PRIMARY_SCALE });
-    if (forced > 0) {
-      app.commandLine.appendSwitch('force-device-scale-factor', String(forced));
-      FORCED_SCALE = forced;
+    // 探测失败只能退化为"不补偿"，不能把整个 helper 带走：受限令牌下
+    // getPath('userData') 与探测子进程都可能失败，进程会在 ready 之前直接结束且无日志。
+    try {
+      PRIMARY_SCALE = readCachedPrimaryScale() || probePrimaryScale();
+      const forced = resolveForcedScale({ forceDsf, primaryScale: PRIMARY_SCALE });
+      if (forced > 0) {
+        app.commandLine.appendSwitch('force-device-scale-factor', String(forced));
+        FORCED_SCALE = forced;
+      }
+    } catch (error) {
+      console.error(
+        '[dsh-pet-desktop-helper] dpi 探测失败，按不补偿继续:',
+        String(error && error.message ? error.message : error),
+      );
+      PRIMARY_SCALE = 0;
+      FORCED_SCALE = 0;
     }
   }
 
