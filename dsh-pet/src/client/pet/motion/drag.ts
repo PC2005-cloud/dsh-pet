@@ -3,6 +3,7 @@
  * 不负责飞行与走位；弹簧跟随在 ./drag-follow，松手结算在 ./drag-release。
  * 依赖 PetCard 每帧给出的当帧能力 getter：尺寸、动画池、状态设置器与停/起运动。
  * 不变量：按下后所有位置写入都经包围盒读写；松手必须先停弹簧跟随再结算落点。
+ * 鼠标松开兜底也在这里：指针捕获被浏览器提前丢掉时，window 上的 mouseup 走同一套收尾。
  * @module dsh-pet/src/client/pet/motion/drag
  */
 import { trimTrail, type DragSample } from '../../../shared/physics.ts';
@@ -36,6 +37,16 @@ interface PressState {
   anchorX: number;
   /** 按下时的宠物中心 Y（px）。 */
   anchorY: number;
+}
+
+/** 一次松手的现场：React 事件在入口处折算成它，收尾逻辑只认这里。 */
+interface ReleasePoint {
+  /** 指针横坐标（px）。 */
+  x: number;
+  /** 指针纵坐标（px）。 */
+  y: number;
+  /** 命中区节点：摘拖拽类与判定提示落点都用它。 */
+  hit: HTMLDivElement;
 }
 
 /** 拖拽驱动每次处理事件时取的当帧能力。 */
@@ -116,7 +127,7 @@ export interface Drag {
   onClick(): void;
   /** 停弹簧跟随，不碰指针捕获状态。 */
   stopFollow(): void;
-  /** 清理组件卸载时可能残留的鼠标释放监听。 */
+  /** 摘掉鼠标松开兜底监听；卸载时调用，之后这个驱动不可再用。 */
   dispose(): void;
   /** 指针是否按着（含未超过拖动阈值）。 */
   isActive(): boolean;
@@ -191,27 +202,24 @@ export function createDrag(card: () => DragCard): Drag {
   /** 指针轨迹采样，供初速估算。 */
   let trail: DragSample[] = [];
   const follow = createDragFollow({ card });
-  // The real pointerup can target another element after pointer capture is lost.
-  // Fall back to a global mouseup for mouse pointers only.
-  let mouseDownTarget: HTMLDivElement | null = null;
-  let mousePointerId = 0;
-  const clearMouseFallback = (): void => {
-    if (typeof window !== 'undefined') window.removeEventListener('mouseup', onWindowMouseUp, true);
-    mouseDownTarget = null;
+  // 指针捕获可能先于鼠标松开被浏览器丢掉，那时真正的 pointerup 落在别的元素上，拖拽会卡在按下态。
+  // 只在鼠标按下期间挂一个 window 级 mouseup 兜底，按当前坐标走同一套收尾，不伪造 pointerup 事件。
+  let mousePressHit: HTMLDivElement | null = null;
+  /** 捕获丢失后的松手：坐标来自 mouseup，落点判定与正常松开完全一致。 */
+  function onWindowMouseUp(e: MouseEvent): void {
+    const hit = mousePressHit;
+    // 右键或还有别的键按着时不算松手，只认左键完全松开的那一次。
+    if (!hit || e.button !== 0 || e.buttons !== 0) return;
+    endPress(card(), { x: e.clientX, y: e.clientY, hit });
+  }
+  /** 鼠标按下时登记命中区并挂兜底；node 里的测试没有 window，替身自己提供。 */
+  const armMouseFallback = (hit: HTMLDivElement): void => {
+    mousePressHit = hit;
+    if (typeof window !== 'undefined') window.addEventListener('mouseup', onWindowMouseUp, true);
   };
-  const onWindowMouseUp = (e: MouseEvent): void => {
-    if (!press.active || !mouseDownTarget || e.button !== 0 || e.buttons !== 0) return;
-    mouseDownTarget.dispatchEvent(
-      new PointerEvent('pointerup', {
-        bubbles: true,
-        pointerId: mousePointerId,
-        pointerType: 'mouse',
-        button: 0,
-        buttons: 0,
-        clientX: e.clientX,
-        clientY: e.clientY,
-      }),
-    );
+  const clearMouseFallback = (): void => {
+    mousePressHit = null;
+    if (typeof window !== 'undefined') window.removeEventListener('mouseup', onWindowMouseUp, true);
   };
   /** 触屏长按：计时与容差在 motion/touch-press.ts，到点后把这次按压当右键。 */
   const touchPress = createTouchPress({
@@ -291,11 +299,8 @@ export function createDrag(card: () => DragCard): Drag {
     trail = [];
     press = beginPress(c, e);
     clearMouseFallback();
-    if (e.pointerType === 'mouse' && typeof window !== 'undefined') {
-      mouseDownTarget = e.currentTarget;
-      mousePointerId = e.pointerId;
-      window.addEventListener('mouseup', onWindowMouseUp, true);
-    }
+    // 笔与触屏的 pointerup 会正常送达命中区；只有鼠标需要这条兜底。
+    if (e.pointerType === 'mouse') armMouseFallback(e.currentTarget);
     touchPress.arm({
       el: e.currentTarget,
       pointerId: e.pointerId,
@@ -340,12 +345,12 @@ export function createDrag(card: () => DragCard): Drag {
    * 松手结算：原地放下、甩抛或弹弓。
    *
    * @param c - 当帧能力。
-   * @param e - 松开事件；指针没跟上时用它兜底算落点。
+   * @param point - 松手现场；指针没跟上时用它的坐标兜底算落点。
    */
-  const settleRelease = (c: DragCard, e: ReactNS.PointerEvent<HTMLDivElement>): void => {
+  const settleRelease = (c: DragCard, point: ReleasePoint): void => {
     // 释放位置取弹簧跟随的实时包围盒，而不是指针目标。
     const current = c.box();
-    const box = current ?? { x: e.clientX - press.offX - c.halfW, y: e.clientY - press.offY - c.halfH };
+    const box = current ?? { x: point.x - press.offX - c.halfW, y: point.y - press.offY - c.halfH };
     const decision = decideRelease({
       anchor: { x: press.anchorX, y: press.anchorY },
       box,
@@ -387,30 +392,31 @@ export function createDrag(card: () => DragCard): Drag {
    * 松手后把提示摆回光标处并点亮；指针已移出命中区时保持收起。
    *
    * @param c - 当帧能力。
-   * @param e - 松开事件。
+   * @param point - 松手现场。
    */
-  const restoreTip = (c: DragCard, e: ReactNS.PointerEvent<HTMLDivElement>): void => {
-    const hitRect = e.currentTarget.getBoundingClientRect();
+  const restoreTip = (c: DragCard, point: ReleasePoint): void => {
+    const hitRect = point.hit.getBoundingClientRect();
     const inside =
-      e.clientX >= hitRect.left &&
-      e.clientX <= hitRect.right &&
-      e.clientY >= hitRect.top &&
-      e.clientY <= hitRect.bottom;
+      point.x >= hitRect.left && point.x <= hitRect.right && point.y >= hitRect.top && point.y <= hitRect.bottom;
     if (!inside) return;
-    c.placeTip(e.clientX, e.clientY);
+    c.placeTip(point.x, point.y);
     c.setTipOn(true);
   };
 
-  const onPointerUp = (e: ReactNS.PointerEvent<HTMLDivElement>): void => {
+  /**
+   * 松手收尾的唯一路径：复位按下态、摘拖拽类、结算去向并把提示摆回去。
+   *
+   * @param c - 当帧能力。
+   * @param point - 松手现场；正常 pointerup 与捕获丢失后的 window mouseup 都折算成它。
+   */
+  const endPress = (c: DragCard, point: ReleasePoint): void => {
     clearMouseFallback();
-    if (!press.active) return;
-    const c = card();
-    // pointercancel 也走这个处理器，长按计时器在这里一并清掉。
+    // pointercancel 也走这条路径，长按计时器在这里一并清掉。
     touchPress.cancel();
     const wasDragging = press.dragging;
     press.active = false;
     press.dragging = false;
-    e.currentTarget.classList.remove('dragging');
+    point.hit.classList.remove('dragging');
     follow.stop();
     if (wasDragging) {
       justDraggedUntil = performance.now() + JUST_DRAGGED_MS;
@@ -423,9 +429,13 @@ export function createDrag(card: () => DragCard): Drag {
         if (c.idleAnims.length) c.playAnim(pick(c.idleAnims, c.currentAnim));
         c.setOnce(true);
       }
-      settleRelease(c, e);
+      settleRelease(c, point);
     }
-    restoreTip(c, e);
+    restoreTip(c, point);
+  };
+
+  const onPointerUp = (e: ReactNS.PointerEvent<HTMLDivElement>): void => {
+    endPress(card(), { x: e.clientX, y: e.clientY, hit: e.currentTarget });
   };
 
   const onClick = (): void => {

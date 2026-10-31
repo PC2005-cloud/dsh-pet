@@ -15,9 +15,10 @@ import type * as ReactNS from 'react';
 
 /** 注入的 react 能力。 */
 export interface CardDragRuntime {
+  /** 副作用；卸载时摘掉驱动的鼠标松开兜底监听。 */
+  useEffect: (effect: ReactNS.EffectCallback, deps?: ReactNS.DependencyList) => void;
   /** 引用；拖拽驱动只造一次。 */
   useRef: <T>(initial: T) => ReactNS.MutableRefObject<T>;
-  useEffect: typeof ReactNS.useEffect;
 }
 
 /** 拖拽装配的输入。 */
@@ -123,6 +124,7 @@ export function createCardDrag(rt: CardDragRuntime) {
     const dragRef = useRef<Drag | null>(null);
     dragRef.current ??= createDrag(dragCard);
     const drag = dragRef.current;
+    // 卸载即摘掉 window 上的鼠标松开兜底：驱动活得比卡片久，不摘会打到已卸掉的节点。
     useEffect(() => () => drag.dispose(), [drag]);
     live.current.drag = drag;
     return drag;

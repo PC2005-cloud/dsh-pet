@@ -29,15 +29,61 @@ function fakeEl() {
 }
 
 /** 造一个指针事件；只需要处理器读到的字段。 */
-function pointer(el: ReturnType<typeof fakeEl>, x: number, y: number, button = 0) {
+function pointer(el: ReturnType<typeof fakeEl>, x: number, y: number, button = 0, pointerType = 'mouse') {
   return {
     button,
     pointerId: 1,
-    pointerType: 'mouse',
+    pointerType,
     clientX: x,
     clientY: y,
     currentTarget: el as unknown as HTMLDivElement,
   } as unknown as React.PointerEvent<HTMLDivElement>;
+}
+
+/** 假 window：只收 mouseup 监听，用来模拟指针捕获丢失后唯一到达的那次松开。 */
+function withFakeWindow() {
+  const scope = globalThis as { window?: unknown };
+  const previous = scope.window;
+  const listeners = new Set<(e: MouseEvent) => void>();
+  scope.window = {
+    addEventListener: (type: string, fn: (e: MouseEvent) => void) => {
+      if (type === 'mouseup') listeners.add(fn);
+    },
+    removeEventListener: (type: string, fn: (e: MouseEvent) => void) => {
+      if (type === 'mouseup') listeners.delete(fn);
+    },
+  };
+  return {
+    /** 还挂着的 mouseup 监听数。 */
+    get count(): number {
+      return listeners.size;
+    },
+    /** 派发一次 mouseup；默认是左键完全松开。 */
+    mouseUp(x: number, y: number, init: { button?: number; buttons?: number } = {}): void {
+      const event = { button: init.button ?? 0, buttons: init.buttons ?? 0, clientX: x, clientY: y } as MouseEvent;
+      for (const fn of [...listeners]) fn(event);
+    },
+    restore(): void {
+      scope.window = previous;
+    },
+  };
+}
+
+/** node 里没有 MouseEvent：长按菜单会构造一个 contextmenu，这里用最小替身顶住。 */
+function withFakeMouseEvent() {
+  const scope = globalThis as { MouseEvent?: unknown };
+  const previous = scope.MouseEvent;
+  scope.MouseEvent = class {
+    type: string;
+    constructor(type: string) {
+      this.type = type;
+    }
+  };
+  return {
+    restore: (): void => {
+      scope.MouseEvent = previous;
+    },
+  };
 }
 
 /** 假时钟 + 假 rAF。 */
@@ -288,6 +334,108 @@ describe('createDrag —— 松手去向', () => {
       assert.ok(flight.vx > 0 && flight.vy > 0, `拉向左上应往右下飞：vx=${flight.vx} vy=${flight.vy}`);
     } finally {
       frames.restore();
+    }
+  });
+});
+
+describe('createDrag —— 鼠标松开兜底', () => {
+  test('指针捕获丢失、只来 mouseup：照样完成松手结算并复位拖拽态', () => {
+    const frames = withFakeFrames();
+    const win = withFakeWindow();
+    try {
+      const { drag, el, calls } = harness();
+      drag.onPointerDown(pointer(el, 500, 350));
+      frames.advance(50);
+      drag.onPointerMove(pointer(el, 540, 350));
+      frames.advance(400); // 停顿够久，结算是「原地放下」
+      win.mouseUp(560, 350);
+      assert.equal(calls.places.length, 1, '捕获丢失后 mouseup 应该完成松手结算');
+      assert.deepEqual(calls.setDragging, [true, false], '拖拽态应该被复位');
+      assert.equal(el.hasClass('dragging'), false, '拖拽类应该被摘掉');
+      assert.deepEqual(calls.tipOn, [false, true], '提示应该复位');
+    } finally {
+      frames.restore();
+      win.restore();
+    }
+  });
+
+  test('正常 pointerup 之后再来的 mouseup：不结算第二次', () => {
+    const frames = withFakeFrames();
+    const win = withFakeWindow();
+    try {
+      const { drag, el, calls } = harness();
+      drag.onPointerDown(pointer(el, 500, 350));
+      frames.advance(50);
+      drag.onPointerMove(pointer(el, 540, 350));
+      frames.advance(400);
+      drag.onPointerUp(pointer(el, 560, 350));
+      assert.equal(win.count, 0, 'pointerup 之后不该还挂着兜底监听');
+      win.mouseUp(560, 350);
+      assert.equal(calls.places.length, 1, '同一次松手只能结算一次');
+    } finally {
+      frames.restore();
+      win.restore();
+    }
+  });
+
+  test('dispose：摘掉兜底监听，之后的 mouseup 不再结算', () => {
+    const frames = withFakeFrames();
+    const win = withFakeWindow();
+    try {
+      const { drag, el, calls } = harness();
+      drag.onPointerDown(pointer(el, 500, 350));
+      drag.onPointerMove(pointer(el, 540, 350));
+      frames.advance(400);
+      drag.dispose();
+      assert.equal(win.count, 0, 'dispose 后不该留监听');
+      win.mouseUp(560, 350);
+      assert.equal(calls.places.length, 0, '卸载后不该再结算');
+    } finally {
+      frames.restore();
+      win.restore();
+    }
+  });
+
+  test('右键松开或还有别的键按着：不算松手', () => {
+    const frames = withFakeFrames();
+    const win = withFakeWindow();
+    try {
+      const { drag, el, calls } = harness();
+      drag.onPointerDown(pointer(el, 500, 350));
+      drag.onPointerMove(pointer(el, 540, 350));
+      frames.advance(400);
+      win.mouseUp(560, 350, { button: 2 });
+      win.mouseUp(560, 350, { buttons: 2 });
+      assert.equal(calls.places.length, 0, '非左键松开不该结算');
+      win.mouseUp(560, 350);
+      assert.equal(calls.places.length, 1, '左键松开仍然要结算');
+    } finally {
+      frames.restore();
+      win.restore();
+    }
+  });
+});
+
+describe('createDrag —— 按压已结束时松手', () => {
+  test('长按菜单结束了这次按压：松手照样摘类与复位提示，但不抛掷', (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const frames = withFakeFrames();
+    const win = withFakeWindow();
+    const mouseEvent = withFakeMouseEvent();
+    try {
+      const { drag, el, calls } = harness();
+      drag.onPointerDown(pointer(el, 500, 350, 0, 'touch'));
+      assert.equal(el.hasClass('dragging'), true, '按下时应该带上拖拽类');
+      t.mock.timers.tick(500); // 长按到点：菜单接管，本次按压结束
+      drag.onPointerUp(pointer(el, 500, 350, 0, 'touch'));
+      assert.equal(el.hasClass('dragging'), false, '松手应该摘掉拖拽类');
+      assert.deepEqual(calls.places, [], '按压已被菜单结束，不该原地放下');
+      assert.deepEqual(calls.flights, [], '按压已被菜单结束，不该抛掷');
+      assert.deepEqual(calls.tipOn, [false, true], '提示应该复位');
+    } finally {
+      frames.restore();
+      win.restore();
+      mouseEvent.restore();
     }
   });
 });
