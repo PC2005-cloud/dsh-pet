@@ -351,18 +351,27 @@ export function createCardEntry(rt: CardEntryRuntime) {
       const sleepItem: MenuNode = asleep
         ? { label: '起来', action: 'wake', hint: SLEEP_HOTKEY_HINT }
         : { label: '睡觉', action: 'sleep', hint: SLEEP_HOTKEY_HINT };
+      // 顺序与桌面端同一排法：余额 / 待办 / 碎碎念 / 对话 / 配图 / 睡觉 → 动作树 → 显示位置 / 回到初始位置。
+      // 桌面专属的两项（打开软件、重载配置）在网页端没有对应动作，不出现。
       const tools: MenuNode[] = [
         { label: '查看余额', action: 'show-balance' },
         { label: '待办事项', action: 'todo', hint: TODO_HOTKEY_HINT },
-        ...(canSleep ? [sleepItem] : []),
         { label: '碎碎念', action: 'whisper' },
-        ...(memes ? [memes] : []),
         { label: '对话', action: 'chat', hint: CHAT_HOTKEY_HINT },
-        { label: '回到初始位置', action: 'home' },
+        ...(memes ? [memes] : []),
+        ...(canSleep ? [sleepItem] : []),
+      ];
+      const tail: MenuNode[] = [
         // 显示位置子菜单与桌面端同一份；改成不含 web 的值后本宠物会从页面消失。
         displayMenuBranch(),
+        { label: '回到初始位置', action: 'home' },
       ];
-      const tree: MenuNode[] = [...tools, ...buildMenuTree(cfgRef.current.animations), ...(more ? [more] : [])];
+      const tree: MenuNode[] = [
+        ...tools,
+        ...buildMenuTree(cfgRef.current.animations),
+        ...tail,
+        ...(more ? [more] : []),
+      ];
       if (!tree.length) return;
       e.preventDefault();
       e.stopPropagation(); // 不触碰 DSH 页面的菜单与右键处理。
