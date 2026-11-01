@@ -101,11 +101,18 @@ export function createDesktopSpawn(deps: DesktopSpawnInput) {
       return;
     }
     portWaitAttempts = 0;
-    const origin = `http://127.0.0.1:${port}`;
-    // 右键「打开网站」交出去的是裸 origin：DSH 只在 `GET /` 接受本进程的启动令牌，换发绑定 authority
-    // 的签名 Cookie，其余请求一律 401（默认浏览器没有该 authority 的 Cookie 时必然打不开）。
-    // 令牌等价登录态：只经子进程环境变量递到 helper 内存，不落盘、不进日志；authority 必须保持
-    // 127.0.0.1（与 localhost 算两套 Cookie），故传 origin 而不是另拼地址。
+    // 用宿主自报的监听地址，不写死 loopback：DSH 拒绝通配地址，host 永远是某块具体网卡——只绑 LAN IP
+    // 时 127.0.0.1 并不监听，写死会让右键「打开网站」打开一个连不上的页面。getOrigin() 在绑定地址
+    // 无法表达成 URL（带 zone 的 IPv6）时抛，此时退回 loopback：菜单打不开，但不拖垮 Helper 拉起。
+    let origin = `http://127.0.0.1:${port}`;
+    try {
+      origin = ctx.webServer.getOrigin();
+    } catch {
+      /* 见上：保留 loopback 兜底 */
+    }
+    // 右键「打开网站」交出去的是裸 origin：DSH 只在 `GET /` 接受本进程的启动令牌，换发绑定该 authority
+    // 的签名 Cookie，其余请求一律 401，故传 origin 而不是另拼地址。令牌等价登录态：只经子进程环境变量
+    // 递到 helper 内存，不落盘、不进日志。
     const siteUrl = ctx.connection.authenticatedUrl(origin);
     // 桌面渲染端也从同一份 handlePetRoute 拿成品配置（每只宠物一个局部小窗口；经管道，不走 HTTP——
     // DSH Desktop 2.0.3+ 会拦插件自拉进程的裸 HTTP 请求，浏览器访问闸门只放行带令牌的请求）
