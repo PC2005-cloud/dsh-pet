@@ -67,6 +67,22 @@ export function helperSpawnEnv(hostPid: number, extra?: Record<string, string | 
   return env;
 }
 
+/**
+ * 组装 helper 的 argv；`--no-sandbox` 必须排在 app 路径之前，否则 Electron 会把它当应用参数。
+ *
+ * Electron 只认命令行，没有环境变量或配置文件能表达「禁用沙箱」；自定义 command 一律不注入，
+ * 那不是真正的 Electron（测试替身与用户脚本靠这条排除）。
+ * @param baseArgs - 默认启动参数，首项是 main.js 路径。
+ * @param opts - `sandboxFallback` 为已退化到 `--no-sandbox`；`customCommand` 为调用方自带了可执行文件。
+ * @returns 可直接交给 spawn 的新数组；未回退时与 `baseArgs` 等值。
+ */
+export function helperLaunchArgs(
+  baseArgs: readonly string[],
+  opts: { sandboxFallback: boolean; customCommand: boolean },
+): string[] {
+  return opts.sandboxFallback && !opts.customCommand ? ['--no-sandbox', ...baseArgs] : [...baseArgs];
+}
+
 /** 一个 Helper 子进程的生命周期：启动、协议读写、停止、崩溃重启。 */
 export class HelperProcess {
   declare readonly options: HelperOptions;
@@ -83,9 +99,9 @@ export class HelperProcess {
   /** 最近一次拉起的运行时身份（可执行文件路径与版本）：崩溃与熔断日志都要带它 */
   declare private launchIdentity: string;
   /** 是否已经因为「沙箱初始化失败」改用过 `--no-sandbox`（只退一次） */
-  declare private sandboxFallbackApplied: boolean;
+  declare private hasSandboxFallbackApplied: boolean;
   /** 当前子进程有没有写过 stdout/stderr：有输出说明 JS 已经跑过，秒退就不能赖沙箱 */
-  declare private sawChildOutput: boolean;
+  declare private hasChildOutput: boolean;
 
   constructor(options: HelperOptions = {}, logger: Logger = console) {
     this.options = options;
@@ -97,8 +113,8 @@ export class HelperProcess {
     this.lastStartAt = 0;
     this.stdoutBuffer = '';
     this.launchIdentity = '';
-    this.sandboxFallbackApplied = false;
-    this.sawChildOutput = false;
+    this.hasSandboxFallbackApplied = false;
+    this.hasChildOutput = false;
   }
 
   /** 拉起子进程；已有子进程在跑或正在停止时直接返回现有句柄。 */
@@ -110,11 +126,11 @@ export class HelperProcess {
       ? { command: this.options.command, args: this.options.args || [helperPath] }
       : defaultLaunch(this.options);
     const command = launch.command;
-    const baseArgs = this.options.args || launch.args;
-    // 沙箱起不来时（见 applySandboxFallback）后续每次拉起都把开关放在最前：Electron 只认命令行，
-    // 没有环境变量/配置文件能表达「禁用沙箱」。自定义 command 不走这条（那不是真正的 Electron）。
-    const args = this.sandboxFallbackApplied && !this.options.command ? ['--no-sandbox', ...baseArgs] : baseArgs;
-    this.sawChildOutput = false;
+    const args = helperLaunchArgs(this.options.args || launch.args, {
+      sandboxFallback: this.hasSandboxFallbackApplied,
+      customCommand: Boolean(this.options.command),
+    });
+    this.hasChildOutput = false;
     // 版本只在这里读一次：崩溃时退出码能说明「怎么死的」，说明不了「死的哪个版本」，而那才是排障入口
     this.launchIdentity = electronIdentity(command);
 
@@ -167,13 +183,13 @@ export class HelperProcess {
       }
     });
     child.stdout.on('data', (chunk) => {
-      this.sawChildOutput = true;
+      this.hasChildOutput = true;
       this.onStdoutChunk(String(chunk));
     });
     child.stderr.on('data', (chunk) => {
       const line = String(chunk).trim();
       if (line) {
-        this.sawChildOutput = true;
+        this.hasChildOutput = true;
         this.logger.warn?.(`[dsh-pet desktop helper] ${line}`);
       }
     });
@@ -283,25 +299,19 @@ export class HelperProcess {
     });
   }
 
-  /**
-   * 沙箱初始化失败的特殊崩溃 → 改用 `--no-sandbox` 立刻重试一次（判定见 shouldFallbackToNoSandbox）。
-   *
-   * 为什么值得自动退：这台机器上「不加 --no-sandbox 就 0x80000003 秒退」是确定性行为，重试 12 次
-   * 只会把同一条日志刷 12 遍然后熔断，用户看不到宠物也读不到原因。退一次能让绝大多数这类机器
-   * 立刻可用；剩下真崩的（有输出 / 跑了一阵 / 换参数后还是崩）照旧走退避与熔断，不会被掩盖。
-   * @param code - 本次退出的退出码（null = 被信号终止）。
-   * @returns true 表示已经发起带 `--no-sandbox` 的重试，调用方不要再走退避路径。
-   */
+  /** 沙箱初始化失败的特殊崩溃 → 改用 `--no-sandbox` 立刻重试一次，不计入退避与熔断额度。 */
   private applySandboxFallback(code: number | null): boolean {
     const applied = shouldFallbackToNoSandbox({
       code,
-      sawOutput: this.sawChildOutput,
+      sawOutput: this.hasChildOutput,
       ranMs: Date.now() - this.lastStartAt,
-      alreadyApplied: this.sandboxFallbackApplied,
+      alreadyApplied: this.hasSandboxFallbackApplied,
       customCommand: Boolean(this.options.command),
+      // 用户在 GPU 沙箱那层设的「保留沙箱」开关：自动降级不得越过显式设定。
+      sandboxOptOut: process.env.DSH_PET_GPU_SANDBOX === '1',
     });
     if (!applied) return false;
-    this.sandboxFallbackApplied = true;
+    this.hasSandboxFallbackApplied = true;
     this.logger.warn?.(
       `dsh-pet desktop helper 因 Chromium 沙箱初始化失败而秒退（${describeExit(code, null)}），` +
         `改用 --no-sandbox 重试一次${this.launchIdentity}`,

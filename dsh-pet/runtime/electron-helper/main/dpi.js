@@ -75,9 +75,8 @@ function createDpi({ app, screen, mainPath, linuxPointer, dpiProbe, dpiMark, for
     };
     let out = '';
     try {
-      // 探测子进程必须和主进程用同一套开关：沙箱起不来的机器上宿主会自动改用 --no-sandbox
-      // （见 src/host/helper/restart.ts 的 shouldFallbackToNoSandbox），不带上的话探测子进程一启动
-      // 就 0x80000003，主进程活着、缓存却永远写不出来，每次开机都要白探一次。
+      // 探测子进程必须和主进程用同一套开关：沙箱起不来的机器上宿主的自动回退会改用 --no-sandbox，
+      // 不带上的话探测子进程一启动就 0x80000003，主进程活着、缓存却永远写不出来，每次开机都要白探一次。
       const sandboxArgs = app.commandLine.hasSwitch('no-sandbox') ? ['--no-sandbox'] : [];
       out = execFileSync(process.execPath, [...sandboxArgs, mainPath, '--dsh-pet-dpi-probe'], opts);
     } catch (e) {

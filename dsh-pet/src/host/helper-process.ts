@@ -31,4 +31,4 @@ export {
   shouldCircuitBreak,
   shouldFallbackToNoSandbox,
 } from './helper/restart.ts';
-export { HelperProcess, helperSpawnEnv } from './helper/child.ts';
+export { HelperProcess, helperLaunchArgs, helperSpawnEnv } from './helper/child.ts';

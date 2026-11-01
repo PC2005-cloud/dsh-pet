@@ -15,6 +15,12 @@ export const HELPER_STOP_GRACE_MS = 1000;
 /** 稳定运行判定阈值：Helper 连续无崩溃运行 ≥ 3 分钟后，重启失败计数清零。 */
 export const HELPER_STABLE_MS = 3 * 60 * 1000;
 
+/** Electron 沙箱初始化失败时的退出码 0x80000003（STATUS_BREAKPOINT）；Node 的两种报法靠 `>>> 0` 归一。 */
+const SANDBOX_INIT_FAILED_CODE = 0x80000003;
+
+/** 只有在这个时间窗内秒退、且一行输出都没有时，才把退出当成「沙箱起不来」。 */
+const SANDBOX_FALLBACK_WINDOW_MS = 5000;
+
 /**
  * 指数退避：第 n 次（0 起）失败后等待 base × 2ⁿ，封顶 30s。
  * 默认 base 750ms，序列 750 → 1500 → 3000 → … → 30000。
@@ -38,7 +44,7 @@ export function helperRunIsStable(elapsedMs: number): boolean {
 /** Windows NTSTATUS 退出码 → 中文短语；只收「进程被系统当场终止」这一类，其余不收录。 */
 const WINDOWS_EXIT_MEANINGS: Readonly<Record<number, string>> = {
   0xc0000005: '访问违例',
-  0x80000003: '断点（沙箱初始化失败）',
+  [SANDBOX_INIT_FAILED_CODE]: '断点（沙箱初始化失败）',
   0xc0000135: '缺少 DLL',
   0xc0000142: 'DLL 初始化失败',
 };
@@ -101,26 +107,13 @@ export function crashLoopAdvice(platform: NodeJS.Platform): string {
 }
 
 /**
- * 沙箱初始化失败时 Electron 浏览器进程的退出码：0x80000003（STATUS_BREAKPOINT）。
- * Node 在 win32 上按无符号报 2147483651，在别的写法下也可能是 -2147483645，故判定一律先 `>>> 0`。
- */
-export const SANDBOX_INIT_FAILED_CODE = 0x80000003;
-
-/** 只有在这个时间窗内秒退、且一行输出都没有时，才把退出当成「沙箱起不来」。 */
-export const SANDBOX_FALLBACK_WINDOW_MS = 5000;
-
-/**
  * 是否值得改用 `--no-sandbox` 重试一次。
  *
- * 背景：Chromium 沙箱在部分 Windows 环境里初始化失败（受限令牌、宿主 job 对象、安全软件注入等），
- * 浏览器进程在跑任何 JS 之前就以 STATUS_BREAKPOINT 退出：宿主侧只有一行「exited」、没有 stderr，
- * 用户看到的现象是「桌宠永远不出现」。同一台机器上加 `--no-sandbox` 就能正常开窗，所以值得自动退一次。
- *
- * 判定必须收紧，否则会把真正的崩溃吞成「换参数」：
- * ① 退出码是 0x80000003；② stdout/stderr 一行都没有（有输出说明 JS 已经跑过，病因不是沙箱）；
- * ③ 拉起后 5s 内就退（跑了一阵才崩是别的问题）；④ 只试一次，失败后回到正常退避/熔断；
- * ⑤ 调用方给了自定义 command 时不猜（那多半是测试或用户脚本，不是真正的 Electron）。
- * @param input - 本次退出的现场：退出码、有无输出、存活时长、是否已经退过一次、是否自定义命令。
+ * 判定必须收紧，否则会把真正的崩溃吞成「换参数」：退出码 0x80000003、stdout/stderr 一行没有、
+ * 5s 内就退、只试一次、自定义 command 不猜。沙箱建不起来的机器是确定性失败，重试 12 次只会把同一行
+ * 日志刷 12 遍再熔断；真崩的（有输出 / 跑了一阵）照旧走退避与熔断，不会被掩盖。
+ * 宿主侧已对 GPU 进程沙箱做过一层窄开关，本条处理的是更早、连 JS 都没跑起来的那个阶段。
+ * @param input - 本次退出现场；`sandboxOptOut` 由调用方按环境给出，纯函数不读全局。
  * @returns true 表示下一次 start() 应在参数最前面加 `--no-sandbox`。
  */
 export function shouldFallbackToNoSandbox(input: {
@@ -129,9 +122,10 @@ export function shouldFallbackToNoSandbox(input: {
   ranMs: number;
   alreadyApplied: boolean;
   customCommand: boolean;
+  sandboxOptOut: boolean;
 }): boolean {
-  if (input.alreadyApplied || input.customCommand) return false;
-  if (input.code === null || (input.code >>> 0) !== SANDBOX_INIT_FAILED_CODE) return false;
+  if (input.alreadyApplied || input.customCommand || input.sandboxOptOut) return false;
+  if (input.code === null || input.code >>> 0 !== SANDBOX_INIT_FAILED_CODE) return false;
   if (input.sawOutput) return false;
   return input.ranMs < SANDBOX_FALLBACK_WINDOW_MS;
 }

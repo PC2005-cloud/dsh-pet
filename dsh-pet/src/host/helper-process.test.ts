@@ -26,6 +26,7 @@ import {
   defaultElectronExe,
   ensureElectronDownload,
   hasGraphicalDisplay,
+  helperLaunchArgs,
   helperRunIsStable,
   helperSpawnEnv,
   readElectronVersion,
@@ -298,7 +299,14 @@ describe('shouldCircuitBreak —— 连续崩溃 12 次（约 3 分钟）后熔�
 });
 
 describe('shouldFallbackToNoSandbox —— 沙箱起不来时自动改用 --no-sandbox 重试一次', () => {
-  const base = { code: 0x80000003, sawOutput: false, ranMs: 300, alreadyApplied: false, customCommand: false };
+  const base = {
+    code: 0x80000003,
+    sawOutput: false,
+    ranMs: 300,
+    alreadyApplied: false,
+    customCommand: false,
+    sandboxOptOut: false,
+  };
 
   test('秒退、无输出、0x80000003 → 应该退一次', () => {
     assert.equal(shouldFallbackToNoSandbox(base), true);
@@ -321,6 +329,10 @@ describe('shouldFallbackToNoSandbox —— 沙箱起不来时自动改用 --no-s
     assert.equal(shouldFallbackToNoSandbox({ ...base, alreadyApplied: true }), false);
   });
 
+  test('用户显式要求保留沙箱（DSH_PET_GPU_SANDBOX=1）→ 不退', () => {
+    assert.equal(shouldFallbackToNoSandbox({ ...base, sandboxOptOut: true }), false);
+  });
+
   test('自定义 command（测试/用户脚本）不猜 → 不退', () => {
     assert.equal(shouldFallbackToNoSandbox({ ...base, customCommand: true }), false);
   });
@@ -329,6 +341,23 @@ describe('shouldFallbackToNoSandbox —— 沙箱起不来时自动改用 --no-s
     assert.equal(shouldFallbackToNoSandbox({ ...base, code: 3221225477 }), false);
     assert.equal(shouldFallbackToNoSandbox({ ...base, code: 1 }), false);
     assert.equal(shouldFallbackToNoSandbox({ ...base, code: null }), false);
+  });
+});
+
+describe('helperLaunchArgs —— 回退开关必须排在 app 路径之前', () => {
+  test('已回退：--no-sandbox 落在首项', () => {
+    assert.deepEqual(helperLaunchArgs(['main.js'], { sandboxFallback: true, customCommand: false }), [
+      '--no-sandbox',
+      'main.js',
+    ]);
+  });
+
+  test('未回退：参数原样，不注入', () => {
+    assert.deepEqual(helperLaunchArgs(['main.js'], { sandboxFallback: false, customCommand: false }), ['main.js']);
+  });
+
+  test('自定义 command：即使已回退也不注入（那不是真正的 Electron）', () => {
+    assert.deepEqual(helperLaunchArgs(['main.js'], { sandboxFallback: true, customCommand: true }), ['main.js']);
   });
 });
 
