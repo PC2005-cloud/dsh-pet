@@ -160,10 +160,10 @@ export function makePetConfigSection(
     // AI 模型（条目级）：碎碎念 / 对话各自的服务商与模型，两者都留空 = 跟随当前对话；随「保存」整包写入。
     const [whisperModel, setWhisperModel] = useState<ModelSelection>({ provider: '', model: '' });
     const [chatModel, setChatModel] = useState<ModelSelection>({ provider: '', model: '' });
-    // 对话历史条数（全局默认）：初值 5 是内置默认，加载效应会用成品 main.chatMemoryRounds 覆盖。
-    const [chatMemory, setChatMemory] = useState(5);
-    // 对话配图张数上限（全局默认）：初值 10 是内置默认（砍掉整张清单约 2/3 开销），加载后由成品值覆盖。
-    const [chatImageLimit, setChatImageLimit] = useState(10);
+    // 对话历史条数（全局默认）：初值 10 是内置默认，加载效应会用成品 main.chatMemoryRounds 覆盖。
+    const [chatMemory, setChatMemory] = useState(10);
+    // 对话配图张数上限（全局默认）：初值 20 是内置默认，加载后由成品值覆盖。
+    const [chatImageLimit, setChatImageLimit] = useState(20);
 
     // 首次读取与恢复默认必须更新同一组控件，避免下一次保存回写过期值。
     const applyConfig = useCallback(
