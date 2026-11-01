@@ -15,6 +15,12 @@ export const HELPER_STOP_GRACE_MS = 1000;
 /** 稳定运行判定阈值：Helper 连续无崩溃运行 ≥ 3 分钟后，重启失败计数清零。 */
 export const HELPER_STABLE_MS = 3 * 60 * 1000;
 
+/** Electron 沙箱初始化失败时的退出码 0x80000003（STATUS_BREAKPOINT）；Node 的两种报法靠 `>>> 0` 归一。 */
+const SANDBOX_INIT_FAILED_CODE = 0x80000003;
+
+/** 只有在这个时间窗内秒退、且一行输出都没有时，才把退出当成「沙箱起不来」。 */
+const SANDBOX_FALLBACK_WINDOW_MS = 5000;
+
 /**
  * 指数退避：第 n 次（0 起）失败后等待 base × 2ⁿ，封顶 30s。
  * 默认 base 750ms，序列 750 → 1500 → 3000 → … → 30000。
@@ -38,7 +44,7 @@ export function helperRunIsStable(elapsedMs: number): boolean {
 /** Windows NTSTATUS 退出码 → 中文短语；只收「进程被系统当场终止」这一类，其余不收录。 */
 const WINDOWS_EXIT_MEANINGS: Readonly<Record<number, string>> = {
   0xc0000005: '访问违例',
-  0x80000003: '断点（沙箱初始化失败）',
+  [SANDBOX_INIT_FAILED_CODE]: '断点（沙箱初始化失败）',
   0xc0000135: '缺少 DLL',
   0xc0000142: 'DLL 初始化失败',
 };
@@ -98,6 +104,30 @@ export function crashLoopAdvice(platform: NodeJS.Platform): string {
     return `确认有可用显示环境（DISPLAY / WAYLAND_DISPLAY，无显示时用 Xvfb 并设 DSH_PET_DESKTOP_FORCE=1）；${raise}`;
   }
   return `用 DSH_PET_ELECTRON_PATH 指向本机能开窗的 Electron；${raise}`;
+}
+
+/**
+ * 是否值得改用 `--no-sandbox` 重试一次。
+ *
+ * 判定必须收紧，否则会把真正的崩溃吞成「换参数」：退出码 0x80000003、stdout/stderr 一行没有、
+ * 5s 内就退、只试一次、自定义 command 不猜。沙箱建不起来的机器是确定性失败，重试 12 次只会把同一行
+ * 日志刷 12 遍再熔断；真崩的（有输出 / 跑了一阵）照旧走退避与熔断，不会被掩盖。
+ * 宿主侧已对 GPU 进程沙箱做过一层窄开关，本条处理的是更早、连 JS 都没跑起来的那个阶段。
+ * @param input - 本次退出现场；`sandboxOptOut` 由调用方按环境给出，纯函数不读全局。
+ * @returns true 表示下一次 start() 应在参数最前面加 `--no-sandbox`。
+ */
+export function shouldFallbackToNoSandbox(input: {
+  code: number | null;
+  sawOutput: boolean;
+  ranMs: number;
+  alreadyApplied: boolean;
+  customCommand: boolean;
+  sandboxOptOut: boolean;
+}): boolean {
+  if (input.alreadyApplied || input.customCommand || input.sandboxOptOut) return false;
+  if (input.code === null || input.code >>> 0 !== SANDBOX_INIT_FAILED_CODE) return false;
+  if (input.sawOutput) return false;
+  return input.ranMs < SANDBOX_FALLBACK_WINDOW_MS;
 }
 
 /** 退避基值（ms）：默认 750 与旧版首延一致，DSH_PET_RESTART_BASE_MS 可调。 */
