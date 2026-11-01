@@ -20,12 +20,15 @@ extraMetadata:
 files:
   - lib/**
   - runtime/**
-  # 素材只带运行时要用的四类：动画（webm）、字体、表情包、头像；
+  # 素材只带运行时要用的五类：动画（webm）、字体、表情包、头像、点击音效；
   # `assets/preview` 是 README 的 GIF（64 MB），插件自己的 files 白名单也不发它，这里同样排除。
+  # 这份清单与 package.json 的 files 是两处独立真相：新增素材目录时必须两边都加，
+  # 否则插件模式（读真实文件）正常、打包应用（读 asar）里那个功能静默失效。
   - assets/webm/**
   - assets/fonts/**
   - assets/pic/**
   - assets/memes/**
+  - assets/sound/**
   - assets/config.jsonc
   - assets/logo.png
   - package.json

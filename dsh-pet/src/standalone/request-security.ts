@@ -63,7 +63,11 @@ export function createRequestSecurity(): RequestSecurity {
       }
       // 文件页渲染器也要带令牌：沙箱网页同样会发来 null 来源。
       // 同一渲染器加载媒体时可能完全不带 Origin，只有这种情况才放行。
-      const fileOrigin = allowFileOrigin && (req.headers.origin === 'null' || req.headers.origin === undefined);
+      // 字体这类强制 CORS 的子资源，Chromium 从 file:// 页面发出的是 `file://` 本身——
+      // 既不是 null 也不是省略，漏掉它会让打包应用的字体一律 403。
+      const fileOrigin =
+        allowFileOrigin &&
+        (req.headers.origin === 'null' || req.headers.origin === undefined || req.headers.origin === 'file://');
       if (
         !fileOrigin &&
         ((req.headers.origin !== undefined && req.headers.origin !== `http://${host}`) ||
