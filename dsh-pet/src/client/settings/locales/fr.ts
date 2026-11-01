@@ -140,7 +140,10 @@ export const fr: Record<Key, string> = {
     "Notifications du système d'exploitation (en bas à droite du bureau) pour la fin d'une conversation, les échecs, les demandes de permission et les questions — uniquement lorsque cette fenêtre n'a pas le focus.",
   clickSoundToggle: 'Son au clic',
   clickSoundToggleHint:
-    "Joue le son intégré (assets/sound/click-duck.wav, volume 0,5) quand on clique sur un compagnon ; les clics répétés en moins de 100 ms ne sonnent qu'une fois, donc plusieurs compagnons ne se superposent jamais. Désactivez-le pour un silence total. Écrit dans la configuration utilisateur avec « Enregistrer ».",
+    "Joue le son intégré (assets/sound/click-duck.wav, volume 0,5) quand on clique sur un compagnon ; les clics répétés en moins de 100 ms ne sonnent qu'une fois, donc plusieurs compagnons ne se superposent jamais. Le désactiver ne coupe que le clic (les sons d'action ont leur propre interrupteur). Écrit dans la configuration utilisateur avec « Enregistrer ».",
+  actionSoundsToggle: "Sons d'action",
+  actionSoundsToggleHint:
+    "Joue un son quand une action comme une réaction au clic ou un glisser démarre à l'écran (correspondance dans le champ de configuration `actionSounds` ; déposez vos fichiers dans le dossier utilisateur sound/ pour les remplacer). Désactivé par défaut ; avec le son au clic aussi actif, un clic joue deux sons. Écrit dans la configuration utilisateur avec « Enregistrer ».",
   whisperImageToggle: 'Images des murmures',
   whisperImageToggleHint:
     "Joindre un mème tiré au hasard dans le pool à chaque murmure (la correspondance des images se trouve dans le champ memes, au niveau supérieur de la configuration). Tokens : un murmure appelle déjà le modèle à chaque cycle ; l'image ajoute seulement le nom + la description de ce mème (environ 100 caractères / ~60 tokens) à la même requête — négligeable.",

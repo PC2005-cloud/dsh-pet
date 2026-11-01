@@ -46,6 +46,8 @@ export function flattenConfigPets(merged: Record<string, Record<string, unknown>
         chatImageEnabled: conf.chatImageEnabled as boolean | undefined,
         chatAnimationEnabled: conf.chatAnimationEnabled as boolean | undefined,
         chatImageLimit: conf.chatImageLimit as number | undefined,
+        // 动作音效：播放发生在渲染端（新动画翻到前台那一刻），所以与 memes 一样在拍平时带出。
+        actionSounds: conf.actionSounds as Record<string, string> | undefined,
         assetRoot: entry,
         extra: entry !== 'main',
       });

@@ -6,6 +6,8 @@
  */
 import { createOwnAnimation, type OwnAnimation, type OwnAnimationDeps } from '../animation/animation.ts';
 import { registerPose } from '../../pose.ts';
+import { playActionSound } from '../../../shared/action-sound.ts';
+import { ROUTE_PATH } from '../../../shared/constants.ts';
 import { registerProgress } from '../../progress.ts';
 import { boxToRatio, centerToBox, clampReachableBox, derivePetMetrics } from '../motion/geometry.ts';
 import type { CardLive } from './live.ts';
@@ -80,6 +82,7 @@ export function createCardAnimation(rt: CardAnimationRuntime) {
         }
         if (live.current.walk.hasPending()) live.current.walk.start(el);
       },
+      onStarted: (anim) => playActionSound(ROUTE_PATH, cfgRef.current.actionSounds, anim),
       onEnded: (cue) => live.current.flow?.applyEndedCue(cue),
       isDragging: () => live.current.drag.isActive(),
       initiallyFrozen: input.lock?.locked === true && input.lock.expiresAt > Date.now(),

@@ -153,7 +153,7 @@ const WINDOW_MARGIN_RATIO = 0.5;
 
 const rootEl = document.getElementById('root');
 const errorEl = document.getElementById('pet-error');
-let config = null; // { pets: 拍平后的成品实例列表, physics, confineToScreen, clickSoundEnabled }（loadConfig 填充）
+let config = null; // { pets: 拍平后的成品实例列表, physics, confineToScreen, clickSoundEnabled, actionSoundsEnabled, ... }（loadConfig 填充）
 let sprites = []; // PetSprite[]（本窗口只装一只宠物）
 let balance = null; // BalanceState（本窗口单宠共用）
 let balanceTick = 0;

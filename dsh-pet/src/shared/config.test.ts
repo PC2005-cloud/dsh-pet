@@ -3,7 +3,7 @@
  *
  * 背景：animations / animationWeights / eventsRefreshSec / physics / confineToScreen /
  * workStatusTexts / whisperModel / chatModel / memes / chatImageEnabled / chatAnimationEnabled /
- * chatImageLimit 这十二个
+ * chatImageLimit / actionSounds 这十三个
  * 条目级字段必须由 flattenConfigPets 从
  * 「条目」写进每只实例；客户端不得再有第二份填充（第二份会漏字段，例如 physics 缺失时
  * 拖拽第一帧读 cfg.physics.throwPower 直接抛错）。设置页现在用 host 写接口返回的成品聚合
@@ -39,6 +39,7 @@ const ENTRY_FIELDS: Array<keyof Pet> = [
   'chatImageEnabled',
   'chatAnimationEnabled',
   'chatImageLimit',
+  'actionSounds',
 ];
 
 /** 包内文件源码（守卫用；相对 src/shared/ 解析） */

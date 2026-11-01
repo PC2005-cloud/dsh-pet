@@ -32,7 +32,7 @@ export const MAX_PET_ID_LENGTH = 64;
 /**
  * 标识符能不能当路径片段用：非空、≤{@link MAX_PET_ID_LENGTH} 字符、不含分隔符与保留字符。
  *
- * 宠物 id、表情包素材根、thumb 的 petId 共用这一条——三者最后都拼进文件路径，
+ * 宠物 id、表情包素材根、thumb 的 petId、动作音效文件名共用这一条——四者最后都拼进文件路径，
  * 分开各写一份就会出现「一处拦、另一处放行」。合法名含中文照常（用非法字符类而非 ASCII 白名单）。
  */
 export function isValidPetId(value: string): boolean {

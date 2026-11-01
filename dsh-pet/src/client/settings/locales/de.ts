@@ -139,7 +139,10 @@ export const de: Record<Key, string> = {
     'System-Toasts (unten rechts auf dem Desktop) bei Abschluss einer Konversation, Fehlern, Berechtigungsanfragen und Rückfragen – nur wenn das Fenster nicht fokussiert ist.',
   clickSoundToggle: 'Klick-Sound',
   clickSoundToggleHint:
-    'Beim Klick auf ein Pet ertönt der integrierte Klick-Sound (assets/sound/click-duck.wav, Lautstärke 0.5); Klicks innerhalb von 100 ms werden nur einmal abgespielt, auch bei mehreren Pets überlagert sich nichts. Aus = völlig stumm. Wird beim „Speichern" in die Benutzerkonfiguration geschrieben.',
+    'Beim Klick auf ein Pet ertönt der integrierte Klick-Sound (assets/sound/click-duck.wav, Lautstärke 0.5); Klicks innerhalb von 100 ms werden nur einmal abgespielt, auch bei mehreren Pets überlagert sich nichts. Aus = nur der Klick ist stumm (Aktions-Sounds haben einen eigenen Schalter). Wird beim „Speichern" in die Benutzerkonfiguration geschrieben.',
+  actionSoundsToggle: 'Aktions-Sounds',
+  actionSoundsToggleHint:
+    'Spielt einen Sound, wenn eine Aktion wie eine Klick-Reaktion oder das Ziehen startet (Zuordnung im Konfigurationsfeld `actionSounds`; eigene Dateien im Benutzerordner sound/ ersetzen die integrierten). Standardmäßig aus; ist auch der Klick-Sound an, ertönen pro Klick zwei Sounds. Wird beim „Speichern" in die Benutzerkonfiguration geschrieben.',
   whisperImageToggle: 'Flüstern-Bilder',
   whisperImageToggleHint:
     'Hängt an jede Flüstern-Zeile ein zufälliges Meme aus dem Pool (Bildzuordnung im Top-Level-Feld `memes` der Konfiguration). Token: Flüstern ruft ohnehin pro Zyklus das Modell auf, das Bild fügt nur Name + Beschreibung des gezogenen Memes (ca. 100 Zeichen / ≈60 Token) an dieselbe Anfrage an – vernachlässigbar.',

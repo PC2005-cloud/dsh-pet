@@ -138,7 +138,10 @@ export const en: Record<Key, string> = {
     'OS-level toasts (bottom-right of the desktop) for conversation completion, failures, permission requests, and questions — only while this window is unfocused.',
   clickSoundToggle: 'Click sound',
   clickSoundToggleHint:
-    'Plays the built-in click sound (assets/sound/click-duck.wav, volume 0.5) when a pet is clicked; repeated clicks within 100ms play only once, so multiple pets never stack up. Turn it off for silence. Written to the user config together with Save.',
+    'Plays the built-in click sound (assets/sound/click-duck.wav, volume 0.5) when a pet is clicked; repeated clicks within 100ms play only once, so multiple pets never stack up. Turning it off silences the click only (action sounds have their own switch). Written to the user config together with Save.',
+  actionSoundsToggle: 'Action sounds',
+  actionSoundsToggleHint:
+    'Plays a sound when an action such as a click reaction or being dragged starts on screen (mapping lives in the `actionSounds` config field; drop files into the user sound/ folder to replace them). Off by default; with the click sound also on, one click plays two sounds. Written to the user config together with Save.',
   whisperImageToggle: 'Whisper images',
   whisperImageToggleHint:
     'Attach one random meme from the pool to each whisper line (image mapping lives in the top-level `memes` config field). Tokens: a whisper already calls the model every cycle, so the image only appends the name + description of that one meme (~100 chars / ~60 tokens) to the same request — negligible.',

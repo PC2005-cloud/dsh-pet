@@ -48,6 +48,8 @@ async function loadConfig() {
     confineToScreen: (merged && merged.main && merged.main.confineToScreen) === true,
     // 点击音效开关（全局一份，只读 main 条目；合并器已填内置默认 false = 静音）
     clickSoundEnabled: (merged && merged.main && merged.main.clickSoundEnabled) === true,
+    // 动作音效总开关（全局一份，只读 main 条目；合并器已填内置默认 false = 不响）
+    actionSoundsEnabled: (merged && merged.main && merged.main.actionSoundsEnabled) === true,
     // 字体（全局一份，合并器已填内置默认）：字体族在此注入全局变量，字号由每只宠物按自己的尺寸算
     font: (merged && merged.main && merged.main.font) || S.DEFAULT_FONT,
     // 语音：音色、总开关与音量（缺省 = 不播，与网页端同一口径）
@@ -68,6 +70,8 @@ async function boot() {
     S.setVoiceBase(BASE);
     S.setSurface('desktop');
     S.setVoiceConfig(cfg.voiceName, cfg.voiceEnabled, cfg.voiceVolume);
+    // 动作音效总开关：shared-core 模块级状态，与语音同样在建 sprite 前写好，首个动画就能按开关出声。
+    S.setActionSoundsEnabled(cfg.actionSoundsEnabled);
     bootFailures = 0;
     hideError();
     // 字体族进 documentElement：对话窗/得分弹窗挂在 body 下、继承不到宠物根容器，只能走全局变量。

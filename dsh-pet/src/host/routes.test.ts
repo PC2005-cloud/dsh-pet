@@ -30,6 +30,8 @@ const MAIN = 'MAIN-POOL-ASSET';
 const SHARED_PIC = 'SHARED-MEME-BYTES';
 /** pet pack 独占表情包目录里的图 */
 const OWN_PIC = 'PETPACK-OWN-MEME';
+/** 用户 sound/ 目录里的动作音效 */
+const USER_SOUND = 'USER-SOUND-BYTES';
 /** 中文名 pet pack（仓库明确支持中文名，标识符校验不得用 ASCII 白名单） */
 const CN_PET = '测试宠';
 
@@ -78,6 +80,9 @@ before(() => {
   writeFileSync(join(userRoot, 'memes', '共用图.png'), SHARED_PIC);
   mkdirSync(join(userRoot, 'pet', `${CN_PET}-memes`), { recursive: true });
   writeFileSync(join(userRoot, 'pet', `${CN_PET}-memes`, '自家图.png'), OWN_PIC);
+  // 动作音效：用户 sound/ 目录（优先于包内 assets/sound，文件名含中文与空格照常）
+  mkdirSync(join(userRoot, 'sound'), { recursive: true });
+  writeFileSync(join(userRoot, 'sound', '开心 跳.mp3'), USER_SOUND);
   // 用户根之外的诱饵：目录名以 -animation / -memes 结尾，正是旧漏洞能读到的东西
   mkdirSync(join(dir, 'outside-animation'), { recursive: true });
   writeFileSync(join(dir, 'outside-animation', 'leak.webm'), SECRET);
@@ -563,6 +568,26 @@ describe('pic/memes 路由 —— 表情包素材归属（与 thumb 同一套语
   test('通知图标（/pic/<名>.png）不受影响：仍只从包内 assets/pic 取', async () => {
     // 源码形态下包内 assets 不可达 → 404（关键是不被 memes 分支吞掉）
     assert.equal((await call('/dsh-pet-7340/pic/logo.png')).status, 404);
+  });
+});
+
+describe('/sound —— 音效：用户 sound/ 目录 → 包内 assets/sound', () => {
+  test('用户目录里的音效可取到（中文与空格文件名照常）', async () => {
+    const r = await call(`/dsh-pet-7340/sound/${encodeURIComponent('开心 跳.mp3')}`);
+    assert.equal(r.status, 200);
+    assert.equal(r.body, USER_SOUND);
+  });
+
+  test('两边都没有 → 404', async () => {
+    assert.equal((await call('/dsh-pet-7340/sound/nope.wav')).status, 404);
+  });
+
+  test('穿越出用户目录一律读不到', async () => {
+    for (const path of ['..%2F..%2Foutside-memes%2Fleak.png', '..%5C..%5Coutside-memes%5Cleak.png']) {
+      const r = await call('/dsh-pet-7340/sound/' + path);
+      assert.equal(r.status, 404, path);
+      assert.equal(r.body.includes(SECRET), false);
+    }
   });
 });
 

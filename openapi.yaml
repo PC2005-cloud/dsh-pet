@@ -1866,7 +1866,7 @@ paths:
 
         - **只白名单字段会被保留**：`pets[]` 的 `id`/`name`/`size`/`sizePercent`/`balanceEnabled`/
           `whisperEnabled`/`workStatusEnabled`/`fixedEnabled`/`display`/`position`，以及顶层
-          `notificationsEnabled`/`clickSoundEnabled`/`whisperImageEnabled`/`chatImageEnabled`/
+          `notificationsEnabled`/`clickSoundEnabled`/`actionSoundsEnabled`/`whisperImageEnabled`/`chatImageEnabled`/
           `chatAnimationEnabled`/`confineToScreen`/`trayEnabled`/`voiceEnabled`/`voiceName`/`voiceWhisperEnabled`/
           `voiceTodoEnabled`/`physics`/`font`/`whisperModel`/`chatModel`/`chatMemoryRounds`/
           `chatImageLimit`。
@@ -2647,8 +2647,8 @@ paths:
     get:
       tags: [Assets]
       operationId: getSound
-      summary: 获取点击音效文件
-      description: 从包内 `assets/sound/` 读取（扁平结构，**没有** petId 段）；当前只有 `click-duck.wav`。
+      summary: 获取音效文件（点击音效 + 动作音效）
+      description: 依次从用户 `$DSH_HOME/dsh-pet/sound/`、包内 `assets/sound/` 查找（扁平结构，**没有** petId 段）；同名时用户目录优先。
       parameters:
         - $ref: "#/components/parameters/AssetFile"
       responses:
@@ -4309,6 +4309,11 @@ components:
             $ref: "#/components/schemas/PetEntry"
         notificationsEnabled:
           type: boolean
+        actionSoundsEnabled:
+          type: boolean
+          description: |
+            动作音效总开关（只读 main 条目）：开启后按条目的 `actionSounds` 映射，在动画开始出画时播对应音效。
+            设置页「全局开关」卡里的「动作音效」写的就是它。缺失默认 `false`。
         whisperImageEnabled:
           type: boolean
         chatImageEnabled:
@@ -4399,6 +4404,13 @@ components:
         memes:
           type: object
           description: 表情包池——键为图片名，值为该图的语境描述（供模型选择）
+          additionalProperties:
+            type: string
+        actionSounds:
+          type: object
+          description: |
+            动作音效表——键为动画名，值为音效文件名（.wav/.mp3/.ogg，不带路径）；文件经 `GET /sound/{file}` 取。
+            只在 main 条目的 `actionSoundsEnabled` 为 `true` 时生效；没写的动画不出声。
           additionalProperties:
             type: string
         workStatusTexts:

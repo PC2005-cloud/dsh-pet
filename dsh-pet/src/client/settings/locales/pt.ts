@@ -139,7 +139,10 @@ export const pt: Record<Key, string> = {
     'Avisos do sistema (canto inferior direito do desktop) para fim de conversa, falhas, pedidos de permissão e perguntas — só enquanto esta janela está sem foco.',
   clickSoundToggle: 'Som de clique',
   clickSoundToggleHint:
-    'Toca o som de clique embutido (assets/sound/click-duck.wav, volume 0.5) quando o pet é clicado; cliques repetidos em até 100ms tocam uma vez só, então vários pets não empilham som. Desligue para silêncio total. Gravado na configuração do usuário junto com o "Salvar".',
+    'Toca o som de clique embutido (assets/sound/click-duck.wav, volume 0.5) quando o pet é clicado; cliques repetidos em até 100ms tocam uma vez só, então vários pets não empilham som. Desligar silencia só o clique (os sons de ação têm um interruptor próprio). Gravado na configuração do usuário junto com o "Salvar".',
+  actionSoundsToggle: 'Sons de ação',
+  actionSoundsToggleHint:
+    'Toca um som quando uma ação como a reação ao clique ou ser arrastado começa na tela (o mapeamento fica no campo de configuração `actionSounds`; coloque arquivos na pasta sound/ do usuário para substituí-los). Desligado por padrão; com o som de clique também ligado, um clique toca dois sons. Gravado na configuração do usuário junto com o "Salvar".',
   whisperImageToggle: 'Imagens no sussurro',
   whisperImageToggleHint:
     'Anexa um meme aleatório do pool a cada sussurro (o mapeamento de imagens fica no campo de topo memes). Tokens: o sussurro já chama o modelo a cada ciclo, então a imagem só acrescenta o nome + a descrição daquele meme (~100 caracteres / ~60 tokens) ao mesmo pedido — desprezível.',

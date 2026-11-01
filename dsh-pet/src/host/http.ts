@@ -20,6 +20,8 @@ export const MIME: Record<string, string> = {
   '.webp': 'image/webp',
   '.gif': 'image/gif',
   '.wav': 'audio/wav',
+  '.mp3': 'audio/mpeg',
+  '.ogg': 'audio/ogg',
   '.json': 'application/json; charset=utf-8',
   '.jsonc': 'application/json; charset=utf-8',
   '.ttf': 'font/ttf',

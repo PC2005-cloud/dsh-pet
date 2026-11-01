@@ -49,6 +49,8 @@ DSH 设置 → 「桌宠配置」：
 | `sleepEndTexts`        | **醒来台词**（条目级，随机挑一句；播「起来」时弹气泡）                                                         | 非空字符串数组             |
 | `sleepRefuseTexts`     | **睡着被打扰时的拒绝台词**（条目级，随机挑一句）                                                               | 非空字符串数组             |
 | `notificationsEnabled` | 系统通知总开关（布尔）                                                                                         | 同 `notificationsEnabled`  |
+| `actionSoundsEnabled` | **动作音效总开关**（布尔，默认 false；只读主配置，对所有宠物生效）：开启后按 `actionSounds` 在动画开始出画时播音效；设置页「全局开关」里的「动作音效」写的就是它 | 布尔，默认即可 |
+| `actionSounds` | **动作音效映射**（条目级）：动画名 → 音效文件名，没写的动画不出声，`{}` = 本条目不配；只管主配置这一条目，种类文件要在自己顶层写。文件放 `$DSH_HOME/dsh-pet/sound/`（优先，同名覆盖包内）或包内 `assets/sound/`，只认 `.wav`/`.mp3`/`.ogg` | 对象，如 `{"被鼠标拖拽悬空反馈": "drag-lift.wav"}` |
 | `chatAnimationEnabled` | **对话动作联动**：开启后对话时把 `animations.categories` 下的动作清单交给模型，由它按语境挑一个当场表演（布尔，默认 true） | 布尔，默认即可             |
 
 > 覆盖语义：用户层给出即**整体替换**该字段（如写了 `animations` 就用你的整份动画池，替代默认），没写的字段回落包内默认。校验在插件加载时执行——格式错误会在 DSH 控制台显式报错，不会静默运行残缺配置。

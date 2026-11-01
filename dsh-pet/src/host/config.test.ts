@@ -10,8 +10,9 @@
  */
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 
 import {
@@ -71,6 +72,7 @@ const BASE = {
   notificationsEnabled: true,
   eventsRefreshSec: { balance: 1800, whisper: 300 },
   workStatusTexts: [['在干活']],
+  actionSounds: { 点击: 'click.wav' },
 };
 
 /** 与 BASE.animations 同构、仅替换 events 的用户层 animations（顶层字段整段替换，故必须完整） */
@@ -1469,5 +1471,91 @@ describe('removeRoundsByTs —— 按轮删除（一轮两条共享 ts，成对�
     const r = removeRoundsByTs(msgs, [1000, 2000]);
     assert.deepEqual(r.messages, []);
     assert.equal(r.removed, 4);
+  });
+});
+
+describe('readAllConfig —— actionSounds 动作音效表（动画名 → 音效文件名）', () => {
+  /** 用户层只写 actionSounds，返回合并后 main 条目的那一份 */
+  function mergedActionSounds(actionSounds: unknown): unknown {
+    const { paths, dir } = pathsWithUser(JSON.stringify({ actionSounds }));
+    try {
+      return readAllConfig(paths).main.actionSounds;
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }
+
+  test('合法映射整段取用户层；空对象 = 本条目不配', () => {
+    const own = { 点击: 'happy.mp3', 拖拽: '拎起 音效.ogg', 睡觉: 'snore.WAV' };
+    assert.deepEqual(mergedActionSounds(own), own);
+    assert.deepEqual(mergedActionSounds({}), {});
+  });
+
+  test('非法形态整段回退内置默认（数组 / 非字符串值 / 空文件名）', () => {
+    for (const bad of [['click.wav'], { 点击: 1 }, { 点击: '' }, 'click.wav', null]) {
+      assert.deepEqual(mergedActionSounds(bad), BASE.actionSounds, JSON.stringify(bad));
+    }
+  });
+
+  test('文件名不得当路径用：含分隔符或「..」一律整段回退', () => {
+    for (const file of ['../config.jsonc', 'sub/a.wav', 'sub\\a.wav', '..', 'C:a.wav']) {
+      assert.deepEqual(mergedActionSounds({ 点击: file }), BASE.actionSounds, file);
+    }
+  });
+
+  test('只认浏览器能直接播的音频扩展名', () => {
+    for (const file of ['click', 'click.webm', 'click.jsonc', 'click.wav.exe']) {
+      assert.deepEqual(mergedActionSounds({ 点击: file }), BASE.actionSounds, file);
+    }
+  });
+
+  test('设置页保存不抹掉手写的 actionSounds（透传保留）', () => {
+    const own = { 点击: 'happy.mp3' };
+    assert.deepEqual(saveOnce({ pets: PETS }, { pets: PETS, actionSounds: own })?.actionSounds, own);
+  });
+});
+
+describe('动作音效总开关 actionSoundsEnabled（合并 + 白名单 + 透传保留）', () => {
+  test('内置默认 false；用户层写 true → 读 true；非法值回退内置默认', () => {
+    const base = { actionSoundsEnabled: false };
+    assert.equal(readAllConfig(withBase(base)).main.actionSoundsEnabled, false);
+    assert.equal(readAllConfig(withBase(base, { actionSoundsEnabled: true })).main.actionSoundsEnabled, true);
+    assert.equal(readAllConfig(withBase(base, { actionSoundsEnabled: 'yes' })).main.actionSoundsEnabled, false);
+  });
+
+  test('保存随请求体写入，缺省不凭空造字段，传非布尔整体拒绝', () => {
+    assert.equal(saveOnce({ pets: PETS, actionSoundsEnabled: true })?.actionSoundsEnabled, true);
+    assert.equal('actionSoundsEnabled' in (saveOnce({ pets: PETS }) ?? {}), false);
+    assert.equal(saveOnce({ pets: PETS, actionSoundsEnabled: 'yes' }), null);
+  });
+
+  test('请求体没传时保住磁盘旧值', () => {
+    assert.equal(saveOnce({ pets: PETS }, { pets: PETS, actionSoundsEnabled: true })?.actionSoundsEnabled, true);
+  });
+});
+
+describe('内置默认配置 —— actionSounds 与包内素材对齐', () => {
+  const assets = fileURLToPath(new URL('../../assets/', import.meta.url));
+
+  test('默认总开关关闭；映射里的动画都有 webm、音效文件都在 assets/sound', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'dsh-pet-default-sounds-'));
+    try {
+      const main = readAllConfig({
+        defaultFile: join(assets, 'config.jsonc'),
+        userFile: join(dir, 'main-config.jsonc'),
+        petDir: join(dir, 'pet'),
+      }).main;
+      assert.equal(main.actionSoundsEnabled, false);
+      const sounds = Object.entries(main.actionSounds as Record<string, string>);
+      assert.ok(sounds.length > 0, '内置默认应配好动作音效');
+      const webm = new Set(readdirSync(join(assets, 'webm')));
+      const soundFiles = new Set(readdirSync(join(assets, 'sound')));
+      for (const [anim, file] of sounds) {
+        assert.ok(webm.has(anim + '.webm'), '动画不存在：' + anim);
+        assert.ok(soundFiles.has(file), '音效文件不存在：' + file);
+      }
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

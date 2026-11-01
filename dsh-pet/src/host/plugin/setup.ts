@@ -15,7 +15,7 @@ import { listSpeechProviders, registerSpeechProvider } from '../voice/speech-reg
 import { migrateUserConfig, type ConfigPaths } from '../config.ts';
 import { createFileLogger, isFileLogger, setDefaultLogger, type FileLogger, type LoggerLike } from '../log-file.ts';
 import { MenuRegistry } from '../menu.ts';
-import { PACKAGE_MEMES_DIR, PACKAGE_ROOT } from '../paths.ts';
+import { PACKAGE_MEMES_DIR, PACKAGE_ROOT, PACKAGE_SOUND_DIR } from '../paths.ts';
 import { PlaybackStore } from '../playback.ts';
 import { resolveAsset } from '../http.ts';
 import { PollStateStore } from '../state.ts';
@@ -58,6 +58,8 @@ export interface HostSetup {
   readonly memesUserRoot: string;
   /** 表情包目录链 */
   readonly memeDirsFor: (assetRoot: string) => string[];
+  /** 音效目录链 */
+  readonly soundDirs: readonly string[];
   /** 软取宿主可选服务 */
   readonly optionalService: (name: string) => unknown;
   /** 独立模式的碎碎念授权策略 */
@@ -179,6 +181,10 @@ export function createHostSetup(ctx: HostSetupContext): HostSetup {
     return [memesUserRoot, PACKAGE_MEMES_DIR];
   };
 
+  // 音效目录链（/sound）：用户 sound/ 优先、包内 assets/sound 兜底——换声音或给新动作配声音
+  // 只要把文件放进用户目录，不必改包，升级也不会被覆盖。
+  const soundDirs = [join(userRoot, 'sound'), PACKAGE_SOUND_DIR];
+
   // 轮询状态（/state）：前端 1s 轮询的唯一数据源（余额 / 工作状态 / 通知 / 宠物说话）。
   // 所有写入走 state.writeSection / writePet（统一更新 counter）。
   const state = new PollStateStore();
@@ -236,6 +242,7 @@ export function createHostSetup(ctx: HostSetupContext): HostSetup {
     thumbUserRoot,
     memesUserRoot,
     memeDirsFor,
+    soundDirs,
     optionalService,
     standaloneAiPolicy,
     standaloneAiBalance,

@@ -1,5 +1,5 @@
 /**
- * 静态素材：/font、/pic（含表情包链）、/sound、/thumb 的取文件与路径守卫。
+ * 静态素材：/font、/pic（含表情包链）、/sound（音效链）、/thumb 的取文件与路径守卫。
  *
  * 不决定素材归属，只按给定目录链查找。
  * 依赖（PetRouteDeps）显式传入，模块内不读全局、不建状态。
@@ -16,7 +16,7 @@ import type { RouteResult } from '../http.ts';
 
 /** 静态素材领域：未命中返回 undefined，命中返回应答。 */
 export async function handleAssetsRoutes(deps: PetRouteDeps, input: RouteInput): Promise<RouteResult | undefined> {
-  const { assetRootFor, memeDirsFor, petConfigDir, userRootFor } = deps;
+  const { assetRootFor, memeDirsFor, petConfigDir, soundDirs, userRootFor } = deps;
   const { rest, url } = input;
 
   // 动画素材：/thumb/<素材根>/<file>，扩展名 webm（默认）/ mov（macOS 定制）。
@@ -86,11 +86,16 @@ export async function handleAssetsRoutes(deps: PetRouteDeps, input: RouteInput):
     return { kind: 'file', file: picFile, contentType: MIME[ext] ?? 'application/octet-stream' };
   }
 
-  // 点击音效：/dsh-pet-7340/sound/<file> → 包内 assets/sound（当前只有 click-duck.wav）。
-  // 与 font 同一种扁平形式（<scope>/<file>）：只有包内一份，不做用户目录覆盖。
+  // 音效（点击音效 + 动作音效）：/dsh-pet-7340/sound/<file> → 按 soundDirs 依次查找
+  // （用户 sound/ 优先，包内 assets/sound 兜底）。与 font 同一种扁平形式（<scope>/<file>），
+  // 每一层都过 resolveExisting 的根内校验，穿越出目录即视为没有。
   if (scope === 'sound') {
-    const soundRoot = join(PACKAGE_ROOT, 'assets', 'sound');
-    const soundFile = resolveExisting(soundRoot, restParts.join('/'));
+    const rel = restParts.join('/');
+    let soundFile: string | undefined;
+    for (const dir of soundDirs) {
+      soundFile = resolveExisting(dir, rel);
+      if (soundFile !== undefined) break;
+    }
     if (soundFile === undefined) return { kind: 'text', status: 404, body: 'dsh-pet: sound not found' };
     const ext = soundFile.slice(soundFile.lastIndexOf('.')).toLowerCase();
     return { kind: 'file', file: soundFile, contentType: MIME[ext] ?? 'application/octet-stream' };

@@ -145,6 +145,10 @@ export interface Pet {
   chatAnimationEnabled?: boolean;
   /** 条目级：对话配图张数上限（非负整数，0 = 不限制）。只截「交给模型的清单」，不截碎碎念抽图。 */
   chatImageLimit?: number;
+  /** 条目级：动作音效表（动画名 → 音效文件名）。某段动画翻到前台开始出画时播一声；
+   *  没写的动画不出声，空对象 = 本条目不配；总开关 main.actionSoundsEnabled 关闭时一律不响。
+   *  文件按 用户 sound/ 目录 → 包内 assets/sound 依次查找。 */
+  actionSounds?: Record<string, string>;
 }
 
 /** 一处「服务商 + 模型」选择（config.jsonc 的 whisperModel / chatModel 段）。
@@ -207,6 +211,11 @@ export interface ClientConfig {
   /** 点击音效开关：true = 点击宠物时播放内置 click-duck.wav（音量 0.5、100ms 内去重），false = 静音。
    *  内置默认 false（默认静音，不突袭既有用户）。只读 main 条目这一份，pet pack 不单独覆盖。 */
   clickSoundEnabled: boolean;
+  /** 动作音效总开关：true = 按 actionSounds 在动画开始出画时播音效，false = 全部不响。
+   *  内置默认 false（不改既有用户升级后的听感）。只读 main 条目这一份，pet pack 不单独覆盖。 */
+  actionSoundsEnabled: boolean;
+  /** 动作音效表：动画名 → 音效文件名（条目级，种类文件可覆盖；空对象 = 本条目不配）。见 Pet.actionSounds。 */
+  actionSounds: Record<string, string>;
   /** 桌面模式系统托盘开关：true = 桌面端启动后在通知区域（macOS 为菜单栏）建托盘，列出配置里全部宠物
    *  （含 display 为 web/none 的），勾选即可切回桌面；false = 不建。
    *  缺失默认 true。关掉后「把不在桌面的宠物叫回桌面」在桌面侧没有入口，只能走设置页或网页端右键菜单。 */

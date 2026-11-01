@@ -94,6 +94,8 @@ Object.assign(PetSprite.prototype, {
         this.startSquash(el);
       }
       if (this.pendingMove) this.startMoveDrive(el);
+      // 动作音效：与浏览器同一时机（翻到前台那一刻、每次换源一次），同一份 shared-core 实现
+      S.playActionSound(BASE, this.pet.actionSounds, next);
     };
     el.addEventListener('loadeddata', onReady);
     if (el.readyState >= 2) onReady();

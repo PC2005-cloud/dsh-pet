@@ -57,6 +57,8 @@ export interface OwnAnimationDeps {
   clearCuePlayback: () => void;
   /** 新动画已就位：组件在这里补 Q 弹与走位驱动。 */
   onFrontReady: (el: HTMLVideoElement) => void;
+  /** 某段动画翻到前台开始出画（每次换源一次，循环不重复）：动作音效挂在这里。 */
+  onStarted: (anim: string) => void;
   /** 前台播完的判定结果；组件据此改 React 状态。 */
   onEnded: (cue: EndedCue) => void;
   /** 用户是否正按着宠物（拖拽期间不推进动画链）。 */
@@ -225,6 +227,7 @@ export function createOwnAnimation(deps: OwnAnimationDeps): OwnAnimation {
           if (cuePlaybackId !== null) reportOnce(cuePlaybackId, 'failed', REASON_PLAY_REJECTED);
         });
       deps.onFrontReady(el);
+      deps.onStarted(next);
     };
     el.addEventListener('loadeddata', onReady);
   };

@@ -56,7 +56,8 @@ const keep = [
   // 表情包：宿主半侧只从包内 assets/memes 读图，并与配置的 memes 键配对，漏掉即配图功能整体失效。
   // 本数组每次发布都覆盖 package.json 的 files，所以必须加在这里，只在 package.json 里加一行无效。
   'assets/memes',
-  // 点击音效：宿主半侧的 /sound 路由只读包内这一份，漏掉则点击静音；同 memes，必须加在本数组。
+  // 音效（点击音效 + 动作音效）：/sound 路由在用户 sound/ 目录没找到时回落包内这一份，漏掉则内置音效全部静音；
+  // 同 memes，必须加在本数组。
   'assets/sound',
   'assets/config.jsonc',
   // 插件图标：package.json 顶层 icon 指向这张图；缺图时读取方 dsh-app-boot 的 iconOf 会抛错、退回默认插画。

@@ -119,6 +119,8 @@ export interface PetRouteDeps {
   readonly nextExternalWorkSeq: () => number;
   /** 表情包目录链（与 /thumb 同一套归属语义）。 */
   readonly memeDirsFor: (assetRoot: string) => string[];
+  /** 音效目录链：用户 sound/ 优先，包内 assets/sound 兜底。 */
+  readonly soundDirs: readonly string[];
   /** 姿态上报存储。 */
   readonly pose: PoseStore;
   /** 软取宿主可选服务（缺失返回 undefined）。 */

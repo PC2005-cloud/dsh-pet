@@ -7,7 +7,10 @@
  */
 import { FONT_SIZE_MAX, FONT_SIZE_MIN } from '../../shared/fonts.ts';
 import { isKnownVoice } from '../voice/voices.ts';
-import { FONT_FAMILY_SET } from './constants.ts';
+import { FONT_FAMILY_SET, isValidPetId } from './constants.ts';
+
+/** 动作音效允许的扩展名：浏览器与 Electron 都能直接播、且 /sound 路由给得出 Content-Type 的几种。 */
+const ACTION_SOUND_EXTS: ReadonlySet<string> = new Set(['.wav', '.mp3', '.ogg']);
 
 /** animations 段完整性校验（与旧 assertAnimationsHost 同一套规则；不 throw，非法返回 false） */
 function animationsValid(a: unknown): boolean {
@@ -166,6 +169,9 @@ export function topFieldValid(key: string, value: unknown): boolean {
     case 'clickSoundEnabled':
       // 点击音效开关（全局布尔，只读 main 条目）：与 notificationsEnabled 同一套校验
       return typeof value === 'boolean';
+    case 'actionSoundsEnabled':
+      // 动作音效总开关（全局布尔，只读 main 条目）：与 clickSoundEnabled 同一套校验
+      return typeof value === 'boolean';
     case 'whisperImageEnabled':
       return typeof value === 'boolean';
     case 'voiceEnabled':
@@ -198,6 +204,8 @@ export function topFieldValid(key: string, value: unknown): boolean {
       return weightsValid(value);
     case 'eventsRefreshSec':
       return eventsRefreshSecValid(value);
+    case 'actionSounds':
+      return actionSoundsValid(value);
     case 'physics':
       return physicsValid(value);
     case 'font':
@@ -217,6 +225,21 @@ export function topFieldValid(key: string, value: unknown): boolean {
     default:
       return true;
   }
+}
+
+/**
+ * actionSounds 段校验：动画名 → 音效文件名（整段替换字段，空对象合法 = 不配音效）。
+ * 文件名会拼进 /sound/<file> 去读盘，所以与宠物 id 同一条路径片段规则（不含分隔符、不是 . / ..），
+ * 再加音频扩展名白名单；动画名不校验是否存在——写了没有的动画只是永远不响。
+ */
+function actionSoundsValid(value: unknown): boolean {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  return Object.values(value as Record<string, unknown>).every(
+    (file) =>
+      typeof file === 'string' &&
+      isValidPetId(file) &&
+      ACTION_SOUND_EXTS.has(file.slice(file.lastIndexOf('.')).toLowerCase()),
+  );
 }
 
 /**

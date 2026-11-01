@@ -138,6 +138,8 @@ export function makePetConfigSection(
     const [notifyEnabled, setNotifyEnabled] = useState(true);
     // 点击音效开关：同通知开关，随「保存」整包写入；初值 true 是内置默认，加载效应会用成品值覆盖。
     const [clickSound, setClickSound] = useState(true);
+    // 动作音效总开关：同上；初值 false 是内置默认，加载效应会用成品值覆盖。
+    const [actionSounds, setActionSounds] = useState(false);
     // 表情包配图开关（全局）：切换只改本地状态，随「保存」一起提交。
     const [whisperImage, setWhisperImage] = useState(false);
     const [chatImage, setChatImage] = useState(false);
@@ -183,6 +185,7 @@ export function makePetConfigSection(
         replace(entries);
         if (patch.notificationsEnabled !== undefined) setNotifyEnabled(patch.notificationsEnabled);
         if (patch.clickSoundEnabled !== undefined) setClickSound(patch.clickSoundEnabled);
+        if (patch.actionSoundsEnabled !== undefined) setActionSounds(patch.actionSoundsEnabled);
         if (patch.whisperImageEnabled !== undefined) setWhisperImage(patch.whisperImageEnabled);
         if (patch.chatImageEnabled !== undefined) setChatImage(patch.chatImageEnabled);
         if (patch.chatAnimationEnabled !== undefined) setChatAnimation(patch.chatAnimationEnabled);
@@ -249,10 +252,11 @@ export function makePetConfigSection(
     // 文件宠物条目数：只用于标题提示「另 n 只来自 pet/ 目录」。
     const packCount = kinds.filter((item) => item.kind === 'pack').length;
 
-    // 七个顶层开关的当前值：卡片各认自己那几项，键名与成品配置字段同名。
+    // 八个顶层开关的当前值：卡片各认自己那几项，键名与成品配置字段同名。
     const globalFlags: GlobalFlags = {
       notificationsEnabled: notifyEnabled,
       clickSoundEnabled: clickSound,
+      actionSoundsEnabled: actionSounds,
       confineToScreen: confineScreen,
       trayEnabled,
     };
@@ -262,11 +266,12 @@ export function makePetConfigSection(
       chatAnimationEnabled: chatAnimation,
     };
 
-    // 通知开关要借用户手势申请权限，其余六个是纯 setState；统一成「键名 → setter」的查表，避免长 switch。
+    // 通知开关要借用户手势申请权限，其余七个是纯 setState；统一成「键名 → setter」的查表，避免长 switch。
     // 两束开关共用这张表：键名到 setter 的映射只写一遍，卡片只管回传键名。
     const flagSetters: Record<GlobalFlagKey | ChatFlagKey, (value: boolean) => void> = {
       notificationsEnabled: (value) => void toggleNotify(value),
       clickSoundEnabled: setClickSound,
+      actionSoundsEnabled: setActionSounds,
       confineToScreen: setConfineScreen,
       trayEnabled: setTrayEnabled,
       whisperImageEnabled: setWhisperImage,
@@ -294,6 +299,7 @@ export function makePetConfigSection(
         pets: mainPets,
         notificationsEnabled: notifyEnabled,
         clickSoundEnabled: clickSound,
+        actionSoundsEnabled: actionSounds,
         whisperImageEnabled: whisperImage,
         chatImageEnabled: chatImage,
         chatAnimationEnabled: chatAnimation,

@@ -16,3 +16,6 @@ export const PACKAGE_ROOT_ASSETS = join(PACKAGE_ROOT, 'assets');
 
 /** 包内表情包目录（表情包池的最后一环：assets/memes/<名称>.png） */
 export const PACKAGE_MEMES_DIR = join(PACKAGE_ROOT_ASSETS, 'memes');
+
+/** 包内音效目录（/sound 目录链的最后一环：assets/sound/<文件>） */
+export const PACKAGE_SOUND_DIR = join(PACKAGE_ROOT_ASSETS, 'sound');

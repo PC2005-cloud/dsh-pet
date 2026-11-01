@@ -31,6 +31,8 @@ export interface SaveFields {
   pets: readonly Pet[];
   notificationsEnabled: boolean;
   clickSoundEnabled: boolean;
+  /** 动作音效总开关。 */
+  actionSoundsEnabled: boolean;
   whisperImageEnabled: boolean;
   chatImageEnabled: boolean;
   /** 对话动作联动开关。 */
@@ -73,6 +75,7 @@ export function buildSaveBody(fields: SaveFields): Record<string, unknown> {
     pets: fields.pets,
     notificationsEnabled: fields.notificationsEnabled,
     clickSoundEnabled: fields.clickSoundEnabled,
+    actionSoundsEnabled: fields.actionSoundsEnabled,
     whisperImageEnabled: fields.whisperImageEnabled,
     chatImageEnabled: fields.chatImageEnabled,
     chatAnimationEnabled: fields.chatAnimationEnabled,

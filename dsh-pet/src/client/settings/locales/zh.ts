@@ -129,7 +129,10 @@ export const zh = {
   notifyToggleHint: '对话完成 / 生成失败 / 权限申请 / 用户选择，在窗口失焦时弹出系统级通知（桌面右下角）。',
   clickSoundToggle: '点击音效',
   clickSoundToggleHint:
-    '点一下宠物播一声内置音效（assets/sound/click-duck.wav，音量 0.5；100ms 内的连续点击只响一次，多开也不会叠音）。关掉即完全静音。随「保存」写入用户配置。',
+    '点一下宠物播一声内置音效（assets/sound/click-duck.wav，音量 0.5；100ms 内的连续点击只响一次，多开也不会叠音）。关掉后点击不再出声（动作音效另有开关）。随「保存」写入用户配置。',
+  actionSoundsToggle: '动作音效',
+  actionSoundsToggleHint:
+    '点击回应、被拖拽等动作开始出画时播放对应音效（映射见配置的 actionSounds，音效文件可放进用户 sound/ 目录替换）。默认关；与点击音效同时打开时，一次点击会响两声。随「保存」写入用户配置。',
   whisperImageToggle: '碎碎念配图',
   whisperImageToggleHint:
     '碎碎念时从表情包池随机抽一张，连同那句话一起显示（图片映射在配置文件顶层 memes）。token：碎碎念本来就每次生成都要调一次模型，配图只是把抽中那张的名称+描述（约 100 字符 / ≈60 token）加进同一次请求，增量可忽略。',

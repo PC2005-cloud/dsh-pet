@@ -108,6 +108,7 @@ function harness(overrides: Partial<OwnAnimationDeps> = {}) {
   const reports: Array<{ id: string; status: ReportableStatus; reason?: string }> = [];
   const ended: EndedCue[] = [];
   const ready: HTMLVideoElement[] = [];
+  const started: string[] = [];
   let currentAnim = 'idle1';
   let workState: string | null = null;
   let dragging = false;
@@ -124,6 +125,7 @@ function harness(overrides: Partial<OwnAnimationDeps> = {}) {
       cleared += 1;
     },
     onFrontReady: (el) => ready.push(el),
+    onStarted: (name) => started.push(name),
     onEnded: (cue) => ended.push(cue),
     isDragging: () => dragging,
     initiallyFrozen: false,
@@ -138,6 +140,7 @@ function harness(overrides: Partial<OwnAnimationDeps> = {}) {
     reports,
     ended,
     ready,
+    started,
     get cleared() {
       return cleared;
     },
@@ -283,5 +286,36 @@ describe('createOwnAnimation —— 播完与冻结', () => {
     h.anim.dispose();
     assert.equal(h.loader.aborts, 1);
     assert.deepEqual(h.loader.released, ['blob:1']);
+  });
+});
+
+describe('createOwnAnimation —— 开始出画回调（动作音效挂在这里）', () => {
+  test('首帧就位才回调一次，带上动画名', () => {
+    const h = harness();
+    h.anim.switchTo('click1', true, null);
+    h.loader.requests[0].handlers.onObjectUrl('blob:1');
+    assert.deepEqual(h.started, []);
+    h.videoB.fire('loadeddata');
+    assert.deepEqual(h.started, ['click1']);
+  });
+
+  test('被新切换覆盖的那一段不回调：只响真正出画的动画', () => {
+    const h = harness();
+    h.anim.switchTo('click1', true, null);
+    h.loader.requests[0].handlers.onObjectUrl('blob:1');
+    // 两次换源落在同一后台槽位：首帧到达时只有后发的那一段真正翻到前台。
+    h.anim.switchTo('drag1', false, null);
+    h.loader.requests[1].handlers.onObjectUrl('blob:2');
+    h.videoB.fire('loadeddata');
+    assert.deepEqual(h.started, ['drag1']);
+  });
+
+  test('循环动画只在开始时回调，不随循环重复', () => {
+    const h = harness();
+    h.anim.switchTo('drag1', false, null);
+    h.loader.requests[0].handlers.onObjectUrl('blob:1');
+    h.videoB.fire('loadeddata');
+    h.videoB.fire('ended');
+    assert.deepEqual(h.started, ['drag1']);
   });
 });
