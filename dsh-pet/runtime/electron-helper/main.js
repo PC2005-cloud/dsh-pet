@@ -238,6 +238,19 @@ const tray = createTray({
   helperDir: __dirname,
 });
 
+/**
+ * 应用模式的重建钩子：同进程里没有「重启 helper 进程」这条路，宿主改完显示位置会调它——
+ * 关窗 → 按新的 DSH_PET_PETS 重建 → 刷新托盘勾选。
+ * 双进程模式不注册：那边重启进程本身就是重建，注册了反而多一条没人走的路径。
+ */
+if (process.env.DSH_PET_IN_PROCESS === '1') {
+  globalThis.__dshPetRebuildUi = async () => {
+    petWindows.closeAll();
+    petWindows.create();
+    await tray.refresh();
+  };
+}
+
 app.whenReady().then(() => {
   // 探测子进程：此时没有 force-device-scale-factor，读到的是 Windows 的真实主屏缩放。
   // 退出推迟一拍——在 ready 回调里直接 app.exit() 会赶在 stdout 落盘前拆掉进程
@@ -318,5 +331,7 @@ app.on('before-quit', () => {
 app.on('window-all-closed', () => {
   // 托盘常驻：桌面上没有宠物也要留着，否则「全关掉」就再也切不回来
   if (tray.exists()) return;
+  // 应用模式：窗口是被重建钩子关掉的，不是用户要退出——留着进程等下一次重建
+  if (process.env.DSH_PET_IN_PROCESS === '1') return;
   app.quit();
 });

@@ -289,9 +289,28 @@ function createWindows({
     startTaskbarWatchdog();
   }
 
+  /**
+   * 关掉当前全部宠物窗口。
+   *
+   * 只给应用模式的重建用：同进程里没有「重启 helper 进程」这条路，改显示位置只能关窗再建；
+   * 不先关掉的话旧窗口会留在桌面上（Map 里被覆盖的只是引用）。
+   * 双进程模式靠重启进程达成同一目的，不调它。
+   */
+  function closeAllPetWindows() {
+    for (const win of windows.values()) {
+      try {
+        win.destroy();
+      } catch (e) {
+        console.error('[dsh-pet-desktop-helper] window destroy failed:', String(e && e.message ? e.message : e));
+      }
+    }
+    windows.clear();
+  }
+
   return {
     state: { windows, lastRequestedBounds, winMargins, windowIgnore, inputBusy, inputRegions, offBodyMs, petStates },
     create: createPetWindows,
+    closeAll: closeAllPetWindows,
     geometry: deskGeometry,
     setWindowIgnore,
     updatePetState,

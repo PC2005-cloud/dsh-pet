@@ -194,24 +194,10 @@ describe('POST /quit —— 把退出交给宿主停机', () => {
 });
 
 describe('桌面端与独立模式的接线（源码守卫：两半各自构建，无法互相 import）', () => {
-  // 托盘已拆到 main/tray.js：退出项与 quitApp 都在那份里
-  const tray = readSource('../../runtime/electron-helper/main/tray.js');
+  // 托盘的退出项与点击行为改成行为测试了（见 desktop-tray.test.ts）：源码守卫一改缩进就红，
+  // 守不住真正的契约。这里只留独立模式那条无法用行为覆盖的接线。
   const cli = readSource('../standalone/cli.ts');
   const context = readSource('../standalone/context.ts');
-
-  test('退出项不再只给独立应用：canQuit = appMode || !isBridge || hostCanQuit', () => {
-    assert.match(tray, /const canQuit = appMode \|\| !isBridge \|\| hostCanQuit/);
-    assert.match(tray, /label: '退出', click: quitApp/);
-  });
-
-  test('bridge 下不得自己 app.quit()：点击必须 POST 回宿主', () => {
-    const block = /const quitApp = \(\) => \{([\s\S]*?)\n {6}\};/.exec(tray);
-    assert.ok(block, 'main/tray.js 必须有 quitApp');
-    assert.ok(
-      /hostRequest\('POST', petRoute \+ '\/quit'\)/.test(block[1]),
-      'bridge 分支必须把退出交给宿主（自己退会被当成崩溃重启）',
-    );
-  });
 
   test('独立模式：停机能力挂到伪 ctx，并复用 /shutdown 的 forwardShutdown', () => {
     assert.match(context, /options\.shutdown \? \{ shutdownApp: options\.shutdown \} : \{\}/);

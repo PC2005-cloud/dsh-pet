@@ -67,6 +67,68 @@ function createTray({
   }
 
   /**
+   * 托盘「退出」是否该出现。
+   *
+   * 独立应用与手动 start-desktop 流可以自己 app.quit()；isBridge 下本进程由宿主拉起，
+   * 自己退会被当成崩溃按退避重启，必须先问宿主（GET /quit 的 canQuit）。
+   * @returns 可以自己退出时为 true；探测失败按不支持处理，菜单项因此不出现。
+   */
+  async function canQuitSelf() {
+    if (appMode || !isBridge) return true;
+    try {
+      return JSON.parse((await hostRequest('GET', petRoute + '/quit')).body || '{}').canQuit === true;
+    } catch (e) {
+      console.error('[dsh-pet-desktop-helper] quit capability probe failed:', String(e && e.message ? e.message : e));
+      return false;
+    }
+  }
+
+  /**
+   * 按当前配置拼托盘菜单；返回 null 表示此时不该有托盘（开关关掉 / 配置里没有宠物）。
+   *
+   * 独立成函数是为了应用模式的重建：那边改 display 只重建窗口、不重启进程，
+   * 勾选状态得靠这里重读一次刷新，否则菜单和配置对不上。
+   */
+  async function buildMenu() {
+    const resp = await hostRequest('GET', petRoute + '/config');
+    const merged = JSON.parse(resp.body || '{}');
+    // 托盘开关（main 条目的 trayEnabled）：只有显式 false 才不建，缺失或写坏时保持建，
+    // 免得一份老配置或一个错值让托盘无声消失。与下面的 pets 取自同一份成品配置。
+    if (merged && merged.main && merged.main.trayEnabled === false) return null;
+    // 成品聚合的形状是 { <条目>: <整份配置文档> }：顶层键不是宠物，宠物在各条目的 pets 数组里
+    // （与渲染端同一契约）。托盘只要 id/name/display，所以不吹条目级字段。
+    const pets = Object.values(merged)
+      .flatMap((conf) => (conf && Array.isArray(conf.pets) ? conf.pets : []))
+      .map((pet) => ({
+        id: String((pet && pet.id) || ''),
+        name: String((pet && pet.name) || '').trim(), // host 已保证 name 缺失时回落 id
+        display: String((pet && pet.display) || ''),
+      }))
+      .filter((pet) => pet.id);
+    if (!pets.length) return null; // 配置里没有任何宠物：没有可切换的对象，不建托盘
+    const canQuit = await canQuitSelf();
+    const quitApp = () => {
+      if (!isBridge || appMode) {
+        app.quit();
+        return;
+      }
+      // 交给宿主停机：它会先停本进程再退，所以这条请求不用等结果
+      hostRequest('POST', petRoute + '/quit').catch((e) => {
+        console.error('[dsh-pet-desktop-helper] tray quit failed:', String(e && e.message ? e.message : e));
+      });
+    };
+    return Menu.buildFromTemplate([
+      ...pets.map((pet) => ({
+        label: pet.name || pet.id,
+        type: 'checkbox',
+        checked: isDesktopDisplay(pet.display),
+        click: () => traySetPetDisplay(pet.id, toggleDisplay(pet.display)),
+      })),
+      ...(canQuit ? [{ type: 'separator' }, { label: '退出', click: quitApp }] : []),
+    ]);
+  }
+
+  /**
    * 建托盘：列出配置里全部宠物（含 display 为 web/none 的——它们当前勾是空的，点一下就能送回来，
    * 这是托盘相对宠物右键菜单的增量）。勾 = 当前 display 含 desktop/both。
    */
@@ -76,60 +138,11 @@ function createTray({
       for (let i = 0; isBridge && !callbackUrl() && i < 100; i += 1) {
         await new Promise((r) => setTimeout(r, 20));
       }
-      const resp = await hostRequest('GET', petRoute + '/config');
-      const merged = JSON.parse(resp.body || '{}');
-      // 托盘开关（main 条目的 trayEnabled）：只有显式 false 才不建，缺失或写坏时保持建，
-      // 免得一份老配置或一个错值让托盘无声消失。与下面的 pets 取自同一份成品配置。
-      if (merged && merged.main && merged.main.trayEnabled === false) return;
-      // 成品聚合的形状是 { <条目>: <整份配置文档> }：顶层键不是宠物，宠物在各条目的 pets 数组里
-      // （与渲染端同一契约）。托盘只要 id/name/display，所以不吹条目级字段。
-      const pets = Object.values(merged)
-        .flatMap((conf) => (conf && Array.isArray(conf.pets) ? conf.pets : []))
-        .map((pet) => ({
-          id: String((pet && pet.id) || ''),
-          name: String((pet && pet.name) || '').trim(), // host 已保证 name 缺失时回落 id
-          display: String((pet && pet.display) || ''),
-        }))
-        .filter((pet) => pet.id);
-      if (!pets.length) return; // 配置里没有任何宠物：没有可切换的对象，不建托盘
-      // 托盘「退出」是否可用：独立应用与手动 start-desktop 流都可以自己 app.quit()；
-      // isBridge 下本进程由宿主拉起，自己退会被当成崩溃按退避重启，必须先问宿主（GET /quit 的 canQuit）。
-      // 探测失败一律按不支持处理，菜单项因此不出现。
-      let hostCanQuit = false;
-      if (isBridge && !appMode) {
-        try {
-          hostCanQuit = JSON.parse((await hostRequest('GET', petRoute + '/quit')).body || '{}').canQuit === true;
-        } catch (e) {
-          console.error(
-            '[dsh-pet-desktop-helper] quit capability probe failed:',
-            String(e && e.message ? e.message : e),
-          );
-        }
-      }
-      const canQuit = appMode || !isBridge || hostCanQuit;
-      const quitApp = () => {
-        if (!isBridge || appMode) {
-          app.quit();
-          return;
-        }
-        // 交给宿主停机：它会先停本进程再退，所以这条请求不用等结果
-        hostRequest('POST', petRoute + '/quit').catch((e) => {
-          console.error('[dsh-pet-desktop-helper] tray quit failed:', String(e && e.message ? e.message : e));
-        });
-      };
+      const menu = await buildMenu();
+      if (menu === null) return;
       tray = new Tray(trayIcon());
       tray.setToolTip('dsh-pet 桌面宠物');
-      tray.setContextMenu(
-        Menu.buildFromTemplate([
-          ...pets.map((pet) => ({
-            label: pet.name || pet.id,
-            type: 'checkbox',
-            checked: isDesktopDisplay(pet.display),
-            click: () => traySetPetDisplay(pet.id, toggleDisplay(pet.display)),
-          })),
-          ...(canQuit ? [{ type: 'separator' }, { label: '退出', click: quitApp }] : []),
-        ]),
-      );
+      tray.setContextMenu(menu);
       // Windows 上 setContextMenu 只接管右键，左键默认什么都不做（macOS 相反：左键即弹菜单）
       if (platform.leftClickPopsMenu) tray.on('click', () => tray.popUpContextMenu());
     } catch (e) {
@@ -137,8 +150,20 @@ function createTray({
     }
   }
 
+  /** 重读配置并刷新菜单勾选；没建托盘时什么都不做（应用模式重建窗口后调用）。 */
+  async function refreshTray() {
+    if (!tray) return;
+    try {
+      const menu = await buildMenu();
+      if (menu !== null) tray.setContextMenu(menu);
+    } catch (e) {
+      console.error('[dsh-pet-desktop-helper] tray refresh failed:', String(e && e.message ? e.message : e));
+    }
+  }
+
   return {
     start: startTray,
+    refresh: refreshTray,
     exists: () => tray !== null,
     destroy() {
       if (!tray) return;
