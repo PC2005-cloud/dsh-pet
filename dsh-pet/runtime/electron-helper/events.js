@@ -134,16 +134,32 @@ PetSprite.prototype.showBalanceNotice = function showBalanceNotice(state, manual
 // 碎碎念 / 命令气泡 / 对话回复 / 清空走同一条通道：都写进 S 的 pets.<id>.say，
 // 由 /state 统一轮询分发到对应宠物（见 applySayLeaf）——本窗口只装一只宠物，按 id 命中即可。
 
+// 推进说话气泡的收起计划并重排计时器：语音合成期间挂起，播完再留一小段尾巴。
+// 计划与常量在 shared/bubble-hold，与浏览器端共用同一份（两端行为不能各自漂移）。
+PetSprite.prototype.applyWhisperHold = function applyWhisperHold(event) {
+  const next = S.reduceBubbleHold(this.whisperHold, event);
+  if (next === this.whisperHold) return; // 同引用 = 无事发生，不白重排计时器
+  this.whisperHold = next;
+  this.whisperOn = next.on;
+  if (this.whisperTimer !== null) window.clearTimeout(this.whisperTimer);
+  this.whisperTimer = null;
+  if (next.delayMs !== null) {
+    this.whisperTimer = window.setTimeout(() => {
+      this.whisperTimer = null;
+      this.applyWhisperHold({ kind: 'hide' });
+    }, next.delayMs);
+  }
+  this.renderBubble();
+};
+
 // 收起说话气泡（POST /bubble/clear 的落点）。只动气泡：正在播的动画、余额气泡、
 // 工作状态气泡都不碰——气泡与动作是两把锁、分别释放。与浏览器端 clearWhisperBubble 同一语义。
 PetSprite.prototype.clearWhisper = function clearWhisper() {
-  if (this.whisperTimer !== null) window.clearTimeout(this.whisperTimer);
-  this.whisperTimer = null;
-  this.whisperOn = false;
+  this.whisperText = '';
   this.whisperView = null;
   this.whisperImage = '';
   this.whisperUrl = '';
-  this.renderBubble();
+  this.applyWhisperHold({ kind: 'clear' });
 };
 
 // 碎碎念展示（本宠物）：随机抽 events.whisper 动画 + 弹文本气泡（与余额同一套定时语义）。
@@ -180,17 +196,12 @@ PetSprite.prototype.showWhisper = function showWhisper(text, image, url, duratio
     this.playOnce(name);
   }
   if (duration === 0) return;
-  this.whisperOn = true;
   this.whisperView = S.whisperBubbleView({ ok: true, text, ts: 0 });
+  this.whisperText = text;
   this.whisperImage = typeof image === 'string' ? image : '';
   this.whisperUrl = typeof url === 'string' ? url : '';
-  this.renderBubble();
-  // 气泡定时消失（与动画解耦，与余额同一语义；重复触发先清旧定时器）
-  if (this.whisperTimer !== null) window.clearTimeout(this.whisperTimer);
-  this.whisperTimer = window.setTimeout(() => {
-    this.whisperOn = false;
-    this.renderBubble();
-  }, duration ?? BUBBLE_DURATION_MS);
+  // 收起时机交给收起计划：这句要念时，随后的语音开始事件会把它挂起（见 applyWhisperHold）。
+  this.applyWhisperHold({ durationMs: duration ?? BUBBLE_DURATION_MS, kind: 'show' });
 };
 
 // 余额展示（气泡 + 档位动画）：周期轮询与菜单点播共用同一展示路径，视觉与行为严格一致。
@@ -455,6 +466,12 @@ function startLoops() {
   // 不能等到下一条消息把气泡重画。桌面端没有 react，只能靠订阅手动重绘。
   S.subscribeVoiceState(() => {
     for (const s of sprites) s.renderBubble();
+  });
+
+  // 语音每句的开始/结束推进气泡的收起计划：合成慢时气泡挂住，播完再收。
+  // 按文本认句：本窗口只装一只宠物，但同一份状态是模块单例，认句才不会算到别人头上。
+  S.subscribeVoiceUtterance((event) => {
+    for (const s of sprites) if (s.whisperText === event.text) s.applyWhisperHold(event);
   });
 
   // 统一轮询是自调度的长轮询（请求 → 处理 → 立刻再请求）：宿主在版本没变时挂起，空闲时

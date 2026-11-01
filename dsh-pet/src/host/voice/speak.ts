@@ -25,6 +25,10 @@ const RATE_MIN_PERCENT = -50;
 const RATE_MAX_PERCENT = 100;
 /** 第三方实现的单次合成上限（ms）：与内置同口径，避免一句卡住串行队列。 */
 const PROVIDER_TIMEOUT_MS = 15_000;
+/** 内置 edge 合成的总时限（ms）：依赖自带的 15s 只是「静默」超时，每来一帧就重置，不能当总时限用。 */
+const BUILTIN_TIMEOUT_MS = 28_000;
+/** 排队超过这么久还没轮到就丢弃（ms）：等得比一次合成还久，客户端早已放弃，再合成只是白烧上游。 */
+const STALE_WAIT_MS = BUILTIN_TIMEOUT_MS;
 
 /** 一次合成的输入（已校验）。 */
 interface SpeakInput {
@@ -71,6 +75,27 @@ function parseSpeakInput(raw: unknown): ParseResult {
   return { ok: true, value: { text, voice, rate } };
 }
 
+/** 断言用：`SpeakResult` 的构造点都经过这里，避免各处手写同一句文案。 */
+function dropped(): SpeakResult {
+  return { ok: false, reason: 'voice-busy', message: 'queued too long, dropped' };
+}
+
+/**
+ * 这一条排队等得太久了吗。
+ *
+ * 等得比一次合成允许的时长还久，客户端那边早已超时放弃：再合成只是白烧上游，
+ * 而且声音出来时说的已经是上一件事。
+ *
+ * @param queuedMs - 入队时刻。
+ * @param nowMs - 轮到自己时的时刻。
+ * @param waitMs - 容许的最长排队时间；缺省用 {@link STALE_WAIT_MS}，测试注入更短的值。
+ * @returns 应该丢弃时为 true。
+ * @internal
+ */
+export function isQueueStale(queuedMs: number, nowMs: number, waitMs: number = STALE_WAIT_MS): boolean {
+  return nowMs - queuedMs > waitMs;
+}
+
 /** 造语音服务。 */
 export function createVoiceService(options: {
   /** 用户数据根；缓存落在 `<userRoot>/voice-cache/`。 */
@@ -79,9 +104,12 @@ export function createVoiceService(options: {
   log?: { info?(message: string): void; warn?(message: string): void };
   /** 合成实现；测试注入替身，缺省走 edge 的真实实现。 */
   synthesize?: (input: SynthInput) => Promise<void>;
+  /** 容许的最长排队时间（ms）；缺省 {@link STALE_WAIT_MS}，测试用它把丢弃分支逼出来。 */
+  staleWaitMs?: number;
 }): VoiceService {
   const { userRoot, log } = options;
   const synthesizeImpl = options.synthesize ?? synthesize;
+  const staleWaitMs = options.staleWaitMs ?? STALE_WAIT_MS;
   /** 已占用的队列名额（含正在跑的那个）。 */
   let queueUsed = 0;
   /** 串行链：上一件事收尾（成功或失败）后才轮到下一件。 */
@@ -130,11 +158,17 @@ export function createVoiceService(options: {
       log?.warn?.(`[dsh-pet] voice speak: queue full (max ${MAX_QUEUE}) chars=${text.length} voice=${source}`);
       return { ok: false, reason: 'voice-busy', message: 'voice queue is full, retry later' };
     }
+    const queue = { dropped: false };
+    const queuedMs = Date.now();
     try {
       await enqueue(async () => {
+        if (isQueueStale(queuedMs, Date.now(), staleWaitMs)) {
+          queue.dropped = true;
+          return;
+        }
         const dir = await ensureCacheDir(userRoot);
         if (provider) await synthesizeWithProvider(provider, { text, voice, rate, target });
-        else await synthesizeImpl({ text, voice, rate, target });
+        else await synthesizeImpl({ signal: AbortSignal.timeout(BUILTIN_TIMEOUT_MS), target, text, voice, rate });
         // 淘汰放在成功之后：失败时不该为腾地方而删掉还能用的缓存
         await pruneCache(dir);
       });
@@ -145,6 +179,12 @@ export function createVoiceService(options: {
           `ms=${Date.now() - startedMs} reason=${error instanceof VoiceSynthError ? error.message : String(error)}`,
       );
       return { ok: false, reason: 'generate-error', message: 'voice synthesis failed' };
+    }
+    if (queue.dropped) {
+      log?.warn?.(
+        `[dsh-pet] voice speak: dropped chars=${text.length} voice=${source} queued=${Date.now() - queuedMs}ms`,
+      );
+      return dropped();
     }
     log?.info?.(`[dsh-pet] voice speak: cache=miss chars=${text.length} voice=${source} ms=${Date.now() - startedMs}`);
     return { ok: true, file: target };

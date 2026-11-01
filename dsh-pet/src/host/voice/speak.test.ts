@@ -9,7 +9,7 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import { VoiceSynthError, type SynthInput } from './edge.ts';
 import { registerVoiceProvider } from './registry.ts';
-import { MAX_TEXT_CHARS, createVoiceService, type VoiceService } from './speak.ts';
+import { MAX_TEXT_CHARS, createVoiceService, isQueueStale, type VoiceService } from './speak.ts';
 
 /** 造一个隔离的语音服务；`synthesize` 缺省写一个假 mp3。 */
 async function withService(
@@ -130,6 +130,45 @@ test('队列已满：后续请求判 voice-busy，而不是无限排队', () => 
     },
     () => gate,
   );
+});
+
+test('isQueueStale —— 排队久了就丢弃', () => {
+  assert.equal(isQueueStale(1_000, 1_000), false, '刚轮到自己不算久');
+  assert.equal(isQueueStale(1_000, 1_000 + 28_000), false, '正好到上限仍在容许范围内');
+  assert.equal(isQueueStale(1_000, 1_000 + 28_001), true, '超过上限就该丢');
+});
+
+test('排队等到客户端早已放弃：直接丢弃，不再白合成一次', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'dsh-pet-voice-stale-'));
+  let release: () => void = () => undefined;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let calls = 0;
+  const voice = createVoiceService({
+    userRoot: root,
+    staleWaitMs: 0,
+    synthesize: async (input) => {
+      calls += 1;
+      if (calls === 1) await gate; // 第一句占住串行链，第二句才排得上队
+      await writeFile(input.target, Buffer.from('mp3'));
+    },
+  });
+  try {
+    const first = voice.speak({ text: '第一句' }); // 拿着队列不放
+    await waitFor(() => calls === 1);
+    const second = voice.speak({ text: '第二句' }); // 排在它后面
+    await new Promise((resolve) => setTimeout(resolve, 10)); // 让排队时间真的过去一点
+    release();
+    const [kept, dropped] = await Promise.all([first, second]);
+    assert.equal(kept.ok, true, '排在第一的照常合成');
+    assert.equal(dropped.ok === false ? dropped.reason : '', 'voice-busy');
+    assert.match(dropped.ok === false ? dropped.message : '', /queued too long/);
+    assert.equal(calls, 1, '被丢弃的那句不能再调合成');
+  } finally {
+    release();
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
 test('注册了第三方实现：合成走它，内置一次都不调', async () => {

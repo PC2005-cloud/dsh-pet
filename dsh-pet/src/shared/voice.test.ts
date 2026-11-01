@@ -1,18 +1,29 @@
 /**
  * 端侧语音播报（src/shared/voice.ts）的判定行为测试：这一句到底该不该念。
  *
- * 四条契约：
+ * 六条契约：
  *   1. 只有叶子点名本端才念——`voiceTo` 缺省或是另一端，都只弹气泡；
  *   2. 点名了还要总开关开着，否则一样静音；
  *   3. 网页端页面不可见时不念（没人在看就不出声）；
- *   4. 合成失败落到 `failed`，界面留一个静音喇叭而不是什么都没有。
+ *   4. 合成失败落到 `failed`，界面留一个静音喇叭而不是什么都没有；
+ *   5. 超长正文只念开头一段（气泡仍显示全文）；
+ *   6. 每句都报一次 `start` 与一次 `end`，气泡靠它决定何时收起。
  *
  * 播放本身（Audio / blob）在浏览器里才有意义，这里只钉住「有没有发合成请求」与状态。
  */
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { getVoiceState, playSayVoice, setSurface, setVoiceConfig } from './voice.ts';
+import {
+  VOICE_SPEECH_MAX_CHARS,
+  getVoiceState,
+  playSayVoice,
+  setSurface,
+  setVoiceConfig,
+  speechSlice,
+  subscribeVoiceUtterance,
+  type VoiceUtteranceEvent,
+} from './voice.ts';
 
 /** 假的合成端点：记录每次请求，响应默认是一个假音频；`ok: false` 模拟宿主返回失败。 */
 function stubFetch(options: { ok?: boolean } = {}): { calls: Array<{ text: string }>; restore: () => void } {
@@ -162,6 +173,112 @@ describe('playSayVoice —— 这一句该不该念', () => {
       await flush();
       assert.equal(fetchStub.calls.length, 1, '该请求的合成请求照发');
       assert.equal(getVoiceState(), 'failed', '失败要看得见，不能静默回 idle');
+    } finally {
+      restoreBrowser();
+      fetchStub.restore();
+    }
+  });
+});
+
+describe('speechSlice —— 念的部分只取开头一段', () => {
+  test('够短就原样返回', () => {
+    assert.equal(speechSlice('该喝水了'), '该喝水了');
+  });
+
+  test('超长且没有句读：硬切到上限', () => {
+    const text = '啊'.repeat(VOICE_SPEECH_MAX_CHARS + 40);
+    assert.equal(speechSlice(text).length, VOICE_SPEECH_MAX_CHARS);
+  });
+
+  test('超长但有句读：截在最后一个句读上，不念半句话', () => {
+    const text = '第一句话在这里。'.repeat(10);
+    const sliced = speechSlice(text);
+    assert.ok(sliced.length <= VOICE_SPEECH_MAX_CHARS, `截断后不能超上限，实得 ${sliced.length}`);
+    assert.ok(sliced.endsWith('。'), '截在句号上才不像被掐断');
+  });
+
+  test('句读太靠前：宁可直接硬切，也不只念出半句', () => {
+    const text = '。' + '啊'.repeat(VOICE_SPEECH_MAX_CHARS + 40);
+    assert.equal(speechSlice(text).length, VOICE_SPEECH_MAX_CHARS);
+  });
+});
+
+describe('播放事件 —— 气泡靠它决定何时收起', () => {
+  test('念一句：报一次 start、一次 end，正文是气泡原文而不是截断文本', async () => {
+    const events: VoiceUtteranceEvent[] = [];
+    const fetchStub = stubFetch();
+    const restoreBrowser = stubBrowser();
+    const off = subscribeVoiceUtterance((event) => events.push(event));
+    try {
+      const text = '很长的一句话。'.repeat(20);
+      setSurface('desktop');
+      setVoiceConfig('', true);
+      playSayVoice({ text, voiceTo: 'desktop' });
+      await flush();
+      assert.deepEqual(
+        events.map((event) => event.kind),
+        ['start', 'end'],
+      );
+      assert.equal(events[0].text, text, '事件带原文：气泡要按它认句');
+      assert.equal(events[0].seq, events[1].seq, '成对的同一句必须同序号');
+    } finally {
+      off();
+      restoreBrowser();
+      fetchStub.restore();
+    }
+  });
+
+  test('合成失败也报 end：气泡不能因为失败就永远挂着', async () => {
+    const events: VoiceUtteranceEvent[] = [];
+    const fetchStub = stubFetch({ ok: false });
+    const restoreBrowser = stubBrowser();
+    const off = subscribeVoiceUtterance((event) => events.push(event));
+    try {
+      setSurface('desktop');
+      setVoiceConfig('', true);
+      playSayVoice({ text: '这句合成不出来', voiceTo: 'desktop' });
+      await flush();
+      assert.deepEqual(
+        events.map((event) => event.kind),
+        ['start', 'end'],
+      );
+    } finally {
+      off();
+      restoreBrowser();
+      fetchStub.restore();
+    }
+  });
+
+  test('不该念的句子不报任何事件：没语音就别拖长气泡', async () => {
+    const events: VoiceUtteranceEvent[] = [];
+    const fetchStub = stubFetch();
+    const restoreBrowser = stubBrowser();
+    const off = subscribeVoiceUtterance((event) => events.push(event));
+    try {
+      setSurface('web');
+      setVoiceConfig('', false);
+      playSayVoice({ text: '关了就别念', voiceTo: 'web' });
+      await flush();
+      assert.equal(events.length, 0);
+    } finally {
+      off();
+      restoreBrowser();
+      fetchStub.restore();
+    }
+  });
+
+  test('退订之后不再收到事件', async () => {
+    const events: VoiceUtteranceEvent[] = [];
+    const fetchStub = stubFetch();
+    const restoreBrowser = stubBrowser();
+    const off = subscribeVoiceUtterance((event) => events.push(event));
+    off();
+    try {
+      setSurface('desktop');
+      setVoiceConfig('', true);
+      playSayVoice({ text: '没人听了', voiceTo: 'desktop' });
+      await flush();
+      assert.equal(events.length, 0);
     } finally {
       restoreBrowser();
       fetchStub.restore();

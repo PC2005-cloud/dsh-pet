@@ -43,6 +43,8 @@ export interface SynthInput {
   readonly rate: string;
   /** 目标 mp3 的最终路径；父目录必须已存在。 */
   readonly target: string;
+  /** 总时限：依赖自带的 timeout 只是「静默」超时（每帧重置），真正的总上限要靠这个信号。 */
+  readonly signal?: AbortSignal;
 }
 
 /**
@@ -54,13 +56,13 @@ export interface SynthInput {
  * @param input - 文本、音色、语速与目标路径。
  * @throws {VoiceSynthError} 上游失败、超时或写盘失败时。
  */
-export async function synthesize({ text, voice, rate, target }: SynthInput): Promise<void> {
+export async function synthesize({ signal, text, voice, rate, target }: SynthInput): Promise<void> {
   const staging = `${target}.part`;
   try {
     // 按需加载：包缺失时这里抛 MODULE_NOT_FOUND，由下面统一归成 VoiceSynthError。
     const { EdgeTTS } = requireOptional('@andresaya/edge-tts') as EdgeTtsModule;
     const tts = new EdgeTTS();
-    const result = await tts.generate(text, voice, { rate, timeout: SYNTHESIS_TIMEOUT_MS });
+    const result = await tts.generate(text, voice, { rate, signal, timeout: SYNTHESIS_TIMEOUT_MS });
     await writeFile(staging, result.audio);
     await rename(staging, target);
   } catch (error) {

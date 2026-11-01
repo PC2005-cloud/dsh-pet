@@ -4,6 +4,7 @@
  * 两端各判各的：叶子里的 `voiceTo` 指向哪一端，就只有那一端出声；缺省 = 谁都不念。
  * 网页端另加一道「页面可见」——被切到后台的页面没人看，出声只是打扰。
  * 音色、总开关与音量经 `setVoiceConfig` 从成品配置注入；手动点播（对话面板的喇叭）不受这些门控。
+ * 每句的开始与结束经 {@link subscribeVoiceUtterance} 广播出去：说话气泡靠它决定何时收起。
  * 不负责合成与缓存：那些在宿主侧（`/voice/speak`）。
  * @module dsh-pet/src/shared/voice
  */
@@ -26,17 +27,39 @@ let configLoaded = false;
 let voiceState: VoiceState = 'idle';
 /** 状态订阅者：两端的说话气泡据此渲染图标。 */
 const stateListeners = new Set<(state: VoiceState) => void>();
+/** 播报开始/结束的订阅者：说话气泡据此挂起与收尾。 */
+const utteranceListeners = new Set<(event: VoiceUtteranceEvent) => void>();
+/** 播报序号；每次决定要念一句就自增，用来让气泡丢掉迟到的「上一句播完了」。 */
+let utteranceSeq = 0;
 
 /** 语音播报对外的四种状态；只用于展示，不接受外部驱动。`failed` = 这次合成没成功。 */
 export type VoiceState = 'idle' | 'loading' | 'ready' | 'failed';
 
 /**
+ * 一句播报的开始与结束事件。
+ *
+ * `text` 是气泡上的原文，不是送合成的截断文本——气泡要按它认句：同一页面上的多只宠物
+ * 共用这份模块单例状态，不认句就会把别人那一句算到自己头上。
+ */
+export type VoiceUtteranceEvent =
+  | { readonly kind: 'start'; readonly seq: number; readonly text: string }
+  | { readonly kind: 'end'; readonly seq: number; readonly text: string };
+
+/**
+ * 自动播报最多念多少字。
+ *
+ * 气泡照旧显示全文，只有念的部分截断：一句 500 字能合成几分钟，那段时间气泡无事可做，
+ * 用户还会被拖着听半分钟。60 字约 15 秒语音，与气泡的挂起上限配套。
+ */
+export const VOICE_SPEECH_MAX_CHARS = 60;
+
+/**
  * 客户端等合成结果的上限（ms）。
  *
- * 比宿主侧第三方合成的超时（15s）再宽一点：让宿主先超时并回结构化失败，
+ * 比宿主侧的总超时（28s）再宽一点：让宿主先超时并回结构化失败，
  * 客户端这道只是兜底，避免上游挂住时气泡上的转圈永远停不下来。
  */
-const SPEAK_TIMEOUT_MS = 20_000;
+const SPEAK_TIMEOUT_MS = 30_000;
 
 /** 合成请求的超时信号；自动播报与手动点播共用同一份口径。 */
 function speakSignal(): AbortSignal {
@@ -69,6 +92,41 @@ export function subscribeVoiceState(listener: (state: VoiceState) => void): () =
   return () => {
     stateListeners.delete(listener);
   };
+}
+
+/**
+ * 订阅每句播报的开始与结束；不补发历史状态，只报后续事件。
+ *
+ * @param listener - 事件回调：`start` 表示已经决定要念这一句（合成开始），
+ *   `end` 表示播完、合成失败或超时——三种结局都会报一次，气泡不必自己判超时。
+ * @returns 取消订阅；卡片卸载或气泡关闭时必须调用。
+ */
+export function subscribeVoiceUtterance(listener: (event: VoiceUtteranceEvent) => void): () => void {
+  utteranceListeners.add(listener);
+  return () => {
+    utteranceListeners.delete(listener);
+  };
+}
+
+/** 广播一次播报事件；单个订阅者抛错不能挡住其余订阅者。 */
+function emitUtterance(event: VoiceUtteranceEvent): void {
+  for (const listener of utteranceListeners) listener(event);
+}
+
+/**
+ * 取真正送合成的那一段：超长时在句读处截断，不把一句话切在半截。
+ *
+ * @param text - 气泡上的原文。
+ * @returns 不超过 {@link VOICE_SPEECH_MAX_CHARS} 的正文；原文够短时原样返回。
+ */
+export function speechSlice(text: string): string {
+  if (text.length <= VOICE_SPEECH_MAX_CHARS) return text;
+  const head = text.slice(0, VOICE_SPEECH_MAX_CHARS);
+  const cut = Math.max(
+    ...['。', '！', '？', '；', '，', '.', '!', '?', ';', ','].map((mark) => head.lastIndexOf(mark)),
+  );
+  // 句读太靠前就不值得截在那里：宁可硬切，也别只念出半句话。
+  return cut >= VOICE_SPEECH_MAX_CHARS / 2 ? head.slice(0, cut + 1) : head;
 }
 
 /**
@@ -154,8 +212,16 @@ async function speakIfEnabled(text: string): Promise<void> {
     setVoiceState('idle');
     return;
   }
+  const seq = ++utteranceSeq;
+  // 先报开始再置 loading：气泡要靠这条事件挂起收起计时，晚一步它就可能已经收了。
+  emitUtterance({ kind: 'start', seq, text });
   setVoiceState('loading');
-  await speak(text);
+  try {
+    await speak(speechSlice(text));
+  } finally {
+    // 成功、失败、超时都走这里：气泡在等这个收尾，漏一次就永远挂着。
+    emitUtterance({ kind: 'end', seq, text });
+  }
 }
 
 /** 请求合成并播放；任何一步失败都落到 `failed`（气泡上留一个静音喇叭，而不是干脆没图标）。 */

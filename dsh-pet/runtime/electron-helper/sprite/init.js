@@ -83,6 +83,8 @@ Object.assign(PetSprite.prototype, {
     this.whisperTimer = null;
     this.whisperView = null;
     this.whisperText = '';
+    // 收起计划：合成期间挂起计时，播完再留尾巴（状态机在 shared/bubble-hold，与浏览器端同一份）
+    this.whisperHold = S.BUBBLE_HOLD_IDLE;
     // 配图名称（配置 memes 的键；whisperImageEnabled 开启时由 host 随机抽定，随文本一起来）
     this.whisperImage = '';
     // 配图地址（与 whisperImage 二选一）：两种形态由字段名区分，不靠嗅探。
