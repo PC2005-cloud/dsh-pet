@@ -1,15 +1,15 @@
 /**
- * 悬停快捷键判据的单测。
+ * 悬停快捷键判据的单测：`L` 开对话、`S` 截图。
  *
- * 为什么值得钉：快捷键挂在 document 上，判据写松了会在输入框里抢走 `T`，
- * 表现为"打不出字母 t"；写紧了又一切无效。这里把几种边界钉死。
+ * 为什么值得钉：快捷键挂在 document 上，判据写松了会在输入框里抢走字母，
+ * 表现为"打不出那个字母"；写紧了又一切无效。这里把几种边界钉死。
  *
  * 用 Node 内置 test runner（node:test），不引入任何 npm 依赖。
  */
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { isChatHotkey, isTypingTarget, type HotkeyEvent } from './hotkey.ts';
+import { CAPTURE_HOTKEY_HINT, isCaptureHotkey, isChatHotkey, isTypingTarget, type HotkeyEvent } from './hotkey.ts';
 
 /** 只造判据用到的字段，不需要真的 KeyboardEvent。 */
 const ev = (over: Partial<HotkeyEvent> = {}): HotkeyEvent => ({
@@ -52,6 +52,33 @@ describe('isChatHotkey', () => {
   test('焦点在普通元素或没有焦点时算', () => {
     assert.equal(isChatHotkey(ev({ target: tag('DIV') })), true);
     assert.equal(isChatHotkey(ev()), true);
+  });
+});
+
+describe('isCaptureHotkey', () => {
+  test('小写与大写 S 都算', () => {
+    assert.equal(isCaptureHotkey(ev({ key: 's' })), true);
+    assert.equal(isCaptureHotkey(ev({ key: 'S' })), true);
+  });
+
+  test('对话键与睡觉键都不算它', () => {
+    for (const key of ['l', 'z', 'd', 'm', 'Enter']) {
+      assert.equal(isCaptureHotkey(ev({ key })), false, key);
+    }
+  });
+
+  test('带修饰键不算（Ctrl+Shift+S 那条是全局命令，不是悬停键）', () => {
+    assert.equal(isCaptureHotkey(ev({ key: 's', ctrlKey: true })), false);
+    assert.equal(isCaptureHotkey(ev({ key: 's', metaKey: true })), false);
+    assert.equal(isCaptureHotkey(ev({ key: 's', altKey: true })), false);
+  });
+
+  test('焦点在可编辑元素上不算', () => {
+    assert.equal(isCaptureHotkey(ev({ key: 's', target: tag('TEXTAREA') })), false);
+  });
+
+  test('文案与按键同一份事实', () => {
+    assert.equal(CAPTURE_HOTKEY_HINT, 'S 键');
   });
 });
 

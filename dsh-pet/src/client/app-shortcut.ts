@@ -4,6 +4,7 @@
  * DSH 的快捷键服务在旧宿主上可能不存在，注册也可能被拒（键位不合 Web 白名单、id 或键位冲突），
  * 两种情况都只让这一条命令消失，绝不拖垮插件加载。
  * 键位一律「一条命令一个键」：不按桌面/网页给不同默认值，要换去设置里换。
+ * 同一个服务还提供「当前生效键帽」的读面：用户改绑后，展示必须跟着变，不能再念默认值。
  * @module dsh-pet/src/client/app-shortcut
  */
 
@@ -38,8 +39,23 @@ export function keycapOf(binding: ShortcutBinding): string {
   return [...modifiers, binding.code.replace(/^Key/, '')].join('+');
 }
 
+/** 目录里的一行：只取展示要用的两个字段。 */
+interface ShortcutCatalogRow {
+  readonly id: string;
+  /** 已按平台展开的键帽片段，如 `['Ctrl', '+', 'Shift', '+', 'L']`；macOS 是符号，不带 `+`。 */
+  readonly keys: readonly string[];
+}
+
+/** 目录的只读面；用户改绑后快照会变。 */
+interface ShortcutCatalog {
+  getSnapshot(): readonly ShortcutCatalogRow[];
+  subscribe(listener: () => void): () => void;
+}
+
 /** 快捷键服务的最小形状（按用到的成员声明，不引整包类型）。 */
 interface ShortcutsService {
+  /** 目录是展示用的附加面，旧宿主可能没有。 */
+  readonly catalog?: ShortcutCatalog;
   register(command: {
     readonly id: string;
     readonly label: () => string;
@@ -108,8 +124,9 @@ export function registerAppShortcut(
       label: shortcut.label,
       aliases: [],
       defaults,
-      // 页面级命令：输入框里打字时不抢键
-      regions: ['page'],
+      // 必须含 editable：浮动对话一开就把焦点放进它自己的输入框，之后的按键会被判成 editable。
+      // 只写 page 的话第二次按既关不掉弹窗，也不会 preventDefault——浏览器原生动作照跑。
+      regions: ['page', 'editable'],
       modals: [],
       resolve: () => ({ status: 'handled', run: shortcut.run }),
     });
@@ -119,4 +136,33 @@ export function registerAppShortcut(
     console.warn('[dsh-pet] 快捷键注册失败：' + (error instanceof Error ? error.message : String(error)));
     return { registered: false, dispose: () => {} };
   }
+}
+
+/**
+ * 读一条命令当前生效的键帽。
+ *
+ * 用户在「设置 → 快捷键」里改绑后，默认组合就不再是事实，展示必须问服务要。
+ *
+ * @param ctx - 客户端上下文。
+ * @param id - 命令 id。
+ * @returns 键帽（如 `Ctrl+Shift+L`）；没登记、被改到冲突、清空或宿主没有目录时 undefined。
+ */
+export function readShortcutKeycap(ctx: ShortcutHost, id: string): string | undefined {
+  const catalog = (ctx.get?.('shortcuts') as ShortcutsService | undefined)?.catalog;
+  if (catalog === undefined) return undefined;
+  const row = catalog.getSnapshot().find((item) => item.id === id);
+  return row === undefined || row.keys.length === 0 ? undefined : row.keys.join('');
+}
+
+/**
+ * 订阅键位变化：改绑、恢复默认、清空都会触发。
+ *
+ * @param ctx - 客户端上下文。
+ * @param listener - 变化回调；只关心「重新读一遍」，不接收快照。
+ * @returns 注销函数；宿主没有目录时是空函数。
+ */
+export function subscribeShortcutKeycaps(ctx: ShortcutHost, listener: () => void): () => void {
+  const catalog = (ctx.get?.('shortcuts') as ShortcutsService | undefined)?.catalog;
+  if (catalog === undefined) return () => {};
+  return catalog.subscribe(listener);
 }

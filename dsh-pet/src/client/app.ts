@@ -175,7 +175,7 @@ export function makeFactory(): (require: (mod: string) => any) => any {
 
       // 设置页「桌宠配置」：大小、位置、模型，保存即时生效。
       // useRef 供「AI 模型」下拉的浮层定位与外部点击判定使用。
-      const PetConfigSection = makePetConfigSection({ h, useState, useEffect, useRef, useCallback, t });
+      const PetConfigSection = makePetConfigSection({ h, useState, useEffect, useRef, useCallback, t }, ctx);
       ctx.slots.inject('settings.section', function* () {
         yield ctx.slots.register(
           { name: 'settings.section', id: 'pet-config', order: 30, label: () => t('nav'), inject: () => ({ t }) },

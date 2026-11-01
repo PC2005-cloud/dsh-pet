@@ -23,6 +23,12 @@ export interface ChatDialogMount {
   stopHear: () => void;
   /** 此刻是否真的在采集。 */
   isHearing: () => boolean;
+  /** 放进一张已编码的图（截图快捷键在弹窗已开时走这条）；返回是否收下。 */
+  setEncoded: (encoded: EncodedImage) => boolean;
+  /** 放进一张图片文件（粘贴、拖拽在弹窗已开时走这条）；类型不接受或编码失败时返回 false。 */
+  setImageFile: (file: File) => Promise<boolean>;
+  /** 在弹窗里显示一条临时提示（截图失败这类原因，超时自动收起）。 */
+  flash: (text: string) => void;
 }
 
 /** 发送接线需要的元素与回调。 */
@@ -124,6 +130,8 @@ export interface ChatDialogOptions {
   clamp?: { x: number; y: number; w: number; h: number };
   /** 打开时就带着的图片（拖拽落到宠物身上走的这条）；缺省 = 空弹窗。 */
   initialImage?: File;
+  /** 打开时就带着的已编码图片（截图快捷键走的这条：截屏没有 File，只有 base64）。 */
+  initialEncoded?: EncodedImage;
   /** 截屏实现：浏览器传 getDisplayMedia 抓帧，桌面传 preload 的 IPC 调用；缺省 = 不支持。 */
   capture?: () => Promise<EncodedImage>;
   /**
@@ -188,6 +196,16 @@ export function mountChatDialog(opts: ChatDialogOptions): ChatDialogMount {
   dom.resizeInput(); // append 后再量一次（此时样式已生效）
   place();
   if (opts.initialImage) void dom.setImageFile(opts.initialImage);
+  if (opts.initialEncoded) dom.setEncoded(opts.initialEncoded);
   input.focus();
-  return { el: root, close, startHear: dom.startHear, stopHear: dom.stopHear, isHearing: dom.isHearing };
+  return {
+    el: root,
+    close,
+    startHear: dom.startHear,
+    stopHear: dom.stopHear,
+    isHearing: dom.isHearing,
+    setEncoded: dom.setEncoded,
+    setImageFile: dom.setImageFile,
+    flash: dom.flash,
+  };
 }

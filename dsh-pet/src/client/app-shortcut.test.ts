@@ -2,14 +2,21 @@
  * 注册壳的契约：默认键位铺哪几个环境、web:linux 为什么缺席、触发后跑不跑、服务缺失怎么降级。
  *
  * 这一层是三条命令共用的，错了会一起错：铺错档案会让某端悄悄没有默认键，
- * 漏掉 resolve 会让快捷键按下去毫无反应。
+ * 漏掉 resolve 会让快捷键按下去毫无反应，只说 page 则让第二次按被输入框吞掉。
  *
  * 跑法：node --experimental-strip-types --test src/client/app-shortcut.test.ts
  */
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { keycapOf, registerAppShortcut, SHORTCUT_PROFILES, type ShortcutHost } from './app-shortcut.ts';
+import {
+  keycapOf,
+  readShortcutKeycap,
+  registerAppShortcut,
+  SHORTCUT_PROFILES,
+  subscribeShortcutKeycaps,
+  type ShortcutHost,
+} from './app-shortcut.ts';
 
 /** 一次注册的完整命令（断言用）。 */
 interface Registered {
@@ -81,10 +88,12 @@ describe('registerAppShortcut —— 快捷键注册壳', () => {
     assert.equal(state.command?.defaults['web:linux'], undefined, 'web:linux 进白名单会整条被拒');
   });
 
-  test('是页面级命令，不在输入框里抢键', () => {
+  test('同时认 page 与 editable：弹窗开了焦点在输入框里也必须收得到', () => {
     const { host, state } = makeHost('ok');
     registerAppShortcut(host, { id: 'x.y', label: () => 'L', binding: BINDING, run: () => {} });
-    assert.deepEqual(state.command?.regions, ['page']);
+    // 少写 editable：第一次按能开窗，第二次按会被 DSH 当成「在输入框里打字」直接放过，
+    // 于是既不关窗也不 preventDefault，浏览器原生快捷键照跑。
+    assert.deepEqual(state.command?.regions, ['page', 'editable']);
     assert.deepEqual(state.command?.modals, []);
   });
 
@@ -124,5 +133,68 @@ describe('registerAppShortcut —— 快捷键注册壳', () => {
     const result = registerAppShortcut(host, { id: 'x.y', label: () => 'L', binding: BINDING, run: () => {} });
     assert.equal(result.registered, false);
     assert.doesNotThrow(() => result.dispose());
+  });
+});
+
+/** 目录行：`keys` 是服务按平台展开好的片段，macOS 用符号且不带 `+`。 */
+type Row = { id: string; keys: string[] };
+
+/** 假目录：记录订阅者，`emit()` 模拟用户改绑。 */
+function makeCatalogHost(rows: Row[]) {
+  const listeners: Array<() => void> = [];
+  const host: ShortcutHost = {
+    get: () => ({
+      register: () => () => {},
+      catalog: {
+        getSnapshot: () => rows,
+        subscribe: (listener: () => void) => {
+          listeners.push(listener);
+          return () => {};
+        },
+      },
+    }),
+  };
+  return { host, listeners };
+}
+
+describe('readShortcutKeycap —— 读用户改绑后的键帽', () => {
+  test('目录里有这行 → 拼成键帽', () => {
+    const { host } = makeCatalogHost([{ id: 'pet-chat.float', keys: ['Ctrl', '+', 'Alt', '+', 'K'] }]);
+    assert.equal(readShortcutKeycap(host, 'pet-chat.float'), 'Ctrl+Alt+K');
+  });
+
+  test('macOS 的符号键帽原样拼接，不插入分隔符', () => {
+    const { host } = makeCatalogHost([{ id: 'pet-chat.float', keys: ['⌃', '⇧', 'L'] }]);
+    assert.equal(readShortcutKeycap(host, 'pet-chat.float'), '⌃⇧L');
+  });
+
+  test('命令没在目录里 / 键位被清空 → undefined，由调用方退回默认组合', () => {
+    const { host } = makeCatalogHost([{ id: 'other.command', keys: ['Ctrl', '+', 'L'] }]);
+    assert.equal(readShortcutKeycap(host, 'pet-chat.float'), undefined);
+    const cleared = makeCatalogHost([{ id: 'pet-chat.float', keys: [] }]);
+    assert.equal(readShortcutKeycap(cleared.host, 'pet-chat.float'), undefined);
+  });
+
+  test('宿主没有目录（旧版本 / 服务缺失）→ undefined，不抛', () => {
+    assert.equal(readShortcutKeycap({ get: () => ({ register: () => () => {} }) }, 'pet-chat.float'), undefined);
+    assert.equal(readShortcutKeycap({ get: () => undefined }, 'pet-chat.float'), undefined);
+  });
+});
+
+describe('subscribeShortcutKeycaps —— 改绑后通知重读', () => {
+  test('改绑触发订阅者', () => {
+    const { host, listeners } = makeCatalogHost([]);
+    let hits = 0;
+    const off = subscribeShortcutKeycaps(host, () => {
+      hits += 1;
+    });
+    for (const listener of listeners) listener();
+    assert.equal(hits, 1);
+    assert.doesNotThrow(() => off());
+  });
+
+  test('宿主没有目录 → 返回空注销函数，不抛', () => {
+    const off = subscribeShortcutKeycaps({ get: () => undefined }, () => {});
+    assert.doesNotThrow(() => off());
   });
 });

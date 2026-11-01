@@ -32,6 +32,7 @@ import { createWriteFlow } from './settings/config/index.ts';
 import { makePhysicsCard } from './settings/physics-card.ts';
 import { makeShortcutsCard } from './settings/shortcuts-card.ts';
 import { attachTipLayer } from './settings/tip-layer.ts';
+import type { ShortcutHost } from './app-shortcut.ts';
 import type { SettingsRuntime } from './settings/runtime.ts';
 import { useConfigLoad } from './settings/config/index.ts';
 import { usePetList } from './settings/use-pet-list.ts';
@@ -49,9 +50,13 @@ export { petBridge };
  * 浏览器半侧是 `__ModuleLoader__` 单文件形态，react 能力只能由宿主在运行时注入，
  * 因此以工厂接收依赖，造出组件后再注册进设置页插槽。
  * @param rt - 运行时注入的依赖：`h`、hooks 与翻译函数 `t`。
+ * @param ctx - 客户端上下文：只用于读用户改绑后的快捷键键位。
  * @returns 设置页组件；`close` 由设置页外壳提供，本页未使用。
  */
-export function makePetConfigSection(rt: SettingsRuntime): FunctionComponent<{ close?: () => void }> {
+export function makePetConfigSection(
+  rt: SettingsRuntime,
+  ctx: ShortcutHost,
+): FunctionComponent<{ close?: () => void }> {
   const { h, useState, useEffect, useRef, useCallback, t } = rt;
 
   // 样式注入幂等，重复渲染不会重复插入。
@@ -71,7 +76,7 @@ export function makePetConfigSection(rt: SettingsRuntime): FunctionComponent<{ c
   const FontCard = makeFontCard(rt);
   const ModelCard = makeModelCard(rt, ModelPicker);
   const PhysicsCard = makePhysicsCard(rt);
-  const ShortcutsCard = makeShortcutsCard(rt);
+  const ShortcutsCard = makeShortcutsCard(rt, ctx);
   const MobileCard = makeMobileCard(rt);
   const Actions = makeActions(rt);
   const { ConfigMetaCard, StorageCard } = makePathsCards(rt);

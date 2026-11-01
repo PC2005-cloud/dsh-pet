@@ -1,5 +1,5 @@
 /**
- * 睡觉快捷键（S）的判据测试：钉住「裸按才切换、输入框里不抢」与「文案与按键同一份事实」。
+ * 睡觉快捷键（Z）的判据测试：钉住「裸按才切换、输入框里不抢」与「文案与按键同一份事实」。
  * 跑法：node --experimental-strip-types --test src/shared/sleep-hotkey.test.ts
  */
 import { test, describe } from 'node:test';
@@ -10,7 +10,7 @@ import type { HotkeyEvent } from './hotkey.ts';
 
 /** 只造判据用到的字段，不需要真的 KeyboardEvent。 */
 const ev = (over: Partial<HotkeyEvent> = {}): HotkeyEvent => ({
-  key: 's',
+  key: 'z',
   ctrlKey: false,
   metaKey: false,
   altKey: false,
@@ -22,10 +22,10 @@ const ev = (over: Partial<HotkeyEvent> = {}): HotkeyEvent => ({
 const input = (isContentEditable = false): EventTarget =>
   ({ tagName: 'INPUT', isContentEditable }) as unknown as EventTarget;
 
-describe('isSleepHotkey —— 裸按 S 才切换', () => {
+describe('isSleepHotkey —— 裸按 Z 才切换', () => {
   test('小写与大写都认（Caps Lock 不该让快捷键失效）', () => {
-    assert.equal(isSleepHotkey(ev({ key: 's' })), true);
-    assert.equal(isSleepHotkey(ev({ key: 'S' })), true);
+    assert.equal(isSleepHotkey(ev({ key: 'z' })), true);
+    assert.equal(isSleepHotkey(ev({ key: 'Z' })), true);
   });
 
   test('带 Ctrl / Meta / Alt 的组合键不抢', () => {
@@ -39,12 +39,12 @@ describe('isSleepHotkey —— 裸按 S 才切换', () => {
     assert.equal(isSleepHotkey(ev({ target: input(true) })), false);
   });
 
-  test('其它键不命中', () => {
+  test('其它键不命中，S 已经让给截图', () => {
     assert.equal(isSleepHotkey(ev({ key: 'd' })), false);
-    assert.equal(isSleepHotkey(ev({ key: 't' })), false);
+    assert.equal(isSleepHotkey(ev({ key: 's' })), false);
   });
 
   test('菜单文案与按键同一份事实', () => {
-    assert.equal(SLEEP_HOTKEY_HINT, 'S 键');
+    assert.equal(SLEEP_HOTKEY_HINT, 'Z 键');
   });
 });

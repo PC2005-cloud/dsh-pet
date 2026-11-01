@@ -201,9 +201,11 @@ Object.assign(PetSprite.prototype, {
     // 拖一张图到宠物身上：直接开对话并挂成待发送图（浏览器端同一套判据）
     this.hit.addEventListener('dragover', (e) => this.onDragOverImage(e), { signal: ac.signal });
     this.hit.addEventListener('drop', (e) => this.onDropImage(e), { signal: ac.signal });
-    // 悬停时按键：L 开对话、按住 M 说话、D 开关待办、S 切换睡/醒。
+    // 悬停时按键：L 开对话、按住 M 说话、D 开关待办、S 截图、Z 切换睡/醒。
     // 窗口未被聚焦时收不到按键（透明窗用 showInactive 显示，不抢焦点）
     window.addEventListener('keydown', (e) => this.onHotkey(e), { signal: ac.signal });
+    // 悬停时粘贴：剪贴板里有图就直接开对话（或塞进已经开着的对话）
+    window.addEventListener('paste', (e) => this.onPasteImage(e), { signal: ac.signal });
     // 按住说话靠 keyup 收尾：这条必须在按住期间一直有效，与 keydown 同一生命周期
     window.addEventListener('keyup', (e) => this.onHotkeyUp(e), { signal: ac.signal });
     // 文本输入拿到焦点时补一次系统键盘焦点：X11/KWin 不会因为 DOM 聚焦就把键盘焦点给窗口，

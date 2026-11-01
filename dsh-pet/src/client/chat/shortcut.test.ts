@@ -8,7 +8,8 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { PET_CHAT_COMMAND_ID, registerPetChatShortcut } from './shortcut.ts';
+import { keycapOf } from '../app-shortcut.ts';
+import { PET_CHAT_COMMAND_ID, petChatShortcutKeycap, registerPetChatShortcut } from './shortcut.ts';
 
 /** 标题的假翻译；测试只关心它是不是惰性调用。 */
 const LABEL = '打开桌宠对话';
@@ -121,5 +122,25 @@ describe('registerPetChatShortcut —— 打开对话的快捷键', () => {
     );
     assert.equal(result.registered, false);
     assert.doesNotThrow(() => result.dispose());
+  });
+});
+
+describe('petChatShortcutKeycap —— 侧栏对话的键帽', () => {
+  test('用户改绑后跟着变', () => {
+    const ctx = {
+      get: () => ({
+        catalog: {
+          getSnapshot: () => [{ id: PET_CHAT_COMMAND_ID, keys: ['Ctrl', '+', 'Alt', '+', 'J'] }],
+          subscribe: () => () => {},
+        },
+      }),
+    };
+    assert.equal(petChatShortcutKeycap(ctx), 'Ctrl+Alt+J');
+  });
+
+  test('目录里没有这一条 / 服务缺失 → 退回默认组合', () => {
+    const expected = keycapOf({ code: 'KeyP', modifiers: ['primary', 'shift'] });
+    assert.equal(petChatShortcutKeycap({ get: () => ({ catalog: { getSnapshot: () => [] } }) }), expected);
+    assert.equal(petChatShortcutKeycap({ get: () => undefined }), expected);
   });
 });

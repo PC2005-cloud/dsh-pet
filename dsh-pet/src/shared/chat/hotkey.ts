@@ -1,5 +1,5 @@
 /**
- * 悬停快捷键的判据：鼠标停在某只宠物上时，按 `L` 打开对话。
+ * 悬停快捷键的判据：鼠标停在某只宠物上时，按 `L` 打开对话、按 `S` 截图。
  * 按键规则归 shared/hotkey，本模块只绑定「哪个键 + 菜单文案」。
  * @module dsh-pet/src/shared/chat/hotkey
  */
@@ -12,6 +12,9 @@ export type { HotkeyEvent } from '../hotkey.ts';
 /** 快捷键的显示文案（菜单项右侧灰字）。与 {@link isChatHotkey} 的按键保持同一份事实。 */
 export const CHAT_HOTKEY_HINT = 'L 键';
 
+/** 截图的显示文案；没有菜单项，只给设置页那张卡用。 */
+export const CAPTURE_HOTKEY_HINT = 'S 键';
+
 /**
  * 这次按键该不该打开对话。
  *
@@ -20,4 +23,14 @@ export const CHAT_HOTKEY_HINT = 'L 键';
  */
 export function isChatHotkey(e: HotkeyEvent): boolean {
   return isBareKey(e, 'l');
+}
+
+/**
+ * 这次按键该不该截图。
+ *
+ * @param e - 键盘事件。
+ * @returns 裸按 `S`（含大写）时为 true，输入框里打字则为 false。
+ */
+export function isCaptureHotkey(e: HotkeyEvent): boolean {
+  return isBareKey(e, 's');
 }

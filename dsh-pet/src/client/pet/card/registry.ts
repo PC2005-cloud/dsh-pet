@@ -8,16 +8,22 @@
  */
 import { petBridge } from '../../settings/bridge.ts';
 
-/** 一张卡对外能做的四件事。 */
+/** 一张卡对外能做的七个动作：开、关、问开没开、开录、收尾、问在不在录、截图。 */
 export interface PetChatHandle {
   /** 打开（或聚焦）这只宠物的浮动对话弹窗。 */
   readonly open: () => void;
+  /** 关掉弹窗；没开时是空操作。 */
+  readonly close: () => void;
+  /** 弹窗此刻是否开着；快捷键据此决定这次是开还是关。 */
+  readonly isOpen: () => boolean;
   /** 开录；没有弹窗时先开一个。 */
   readonly startHear: () => void;
   /** 收尾。 */
   readonly stopHear: () => void;
   /** 此刻是否在采集。 */
   readonly isHearing: () => boolean;
+  /** 截一帧：弹窗开着就塞进当前弹窗，没开就带着图打开；截不到时什么都不做。 */
+  readonly screenshot: () => void;
 }
 
 /** 按宠物 id 登记；Map 的插入序就是渲染序，「第一只」的兜底直接靠它。 */
@@ -62,4 +68,17 @@ export function togglePetChatHear(handle: PetChatHandle | undefined): void {
   if (handle === undefined) return;
   if (handle.isHearing()) handle.stopHear();
   else handle.startHear();
+}
+
+/**
+ * 开关浮动对话：开着就关，没开就开。
+ *
+ * 同一个键按第二次必须是关——用户把它当开关用，不是当「重新打开」用。
+ *
+ * @param handle - 目标宠物；undefined 时什么都不做。
+ */
+export function togglePetChat(handle: PetChatHandle | undefined): void {
+  if (handle === undefined) return;
+  if (handle.isOpen()) handle.close();
+  else handle.open();
 }

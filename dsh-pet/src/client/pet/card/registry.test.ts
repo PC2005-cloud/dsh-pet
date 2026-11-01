@@ -10,16 +10,32 @@ import { afterEach, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { petBridge } from '../../settings/bridge.ts';
-import { pickPetChatHandle, registerPetChatHandle, togglePetChatHear, type PetChatHandle } from './registry.ts';
+import {
+  pickPetChatHandle,
+  registerPetChatHandle,
+  togglePetChat,
+  togglePetChatHear,
+  type PetChatHandle,
+} from './registry.ts';
 
-/** 造一个只记调用顺序的句柄；`hearing` 可中途改，模拟正在录音。 */
-function makeHandle(calls: string[]): PetChatHandle & { hearing: boolean } {
+/** 造一个只记调用顺序的句柄；`hearing` / `opened` 可中途改，模拟录音中与弹窗开着。 */
+function makeHandle(calls: string[]): PetChatHandle & { hearing: boolean; opened: boolean } {
   const handle = {
     hearing: false,
-    open: () => calls.push('open'),
+    opened: false,
+    open: () => {
+      handle.opened = true;
+      calls.push('open');
+    },
+    close: () => {
+      handle.opened = false;
+      calls.push('close');
+    },
+    isOpen: () => handle.opened,
     startHear: () => calls.push('start'),
     stopHear: () => calls.push('stop'),
     isHearing: () => handle.hearing,
+    screenshot: () => calls.push('screenshot'),
   };
   return handle;
 }
@@ -97,5 +113,35 @@ describe('togglePetChatHear —— 开关录音', () => {
 
   test('没有目标宠物 → 什么都不做，也不抛', () => {
     assert.doesNotThrow(() => togglePetChatHear(undefined));
+  });
+});
+
+describe('togglePetChat —— 开关浮动对话', () => {
+  test('没开 → 打开', () => {
+    const calls: string[] = [];
+    const handle = makeHandle(calls);
+    togglePetChat(handle);
+    assert.deepEqual(calls, ['open']);
+  });
+
+  test('已经开着 → 关掉（同一个键第二次按必须是关）', () => {
+    const calls: string[] = [];
+    const handle = makeHandle(calls);
+    handle.opened = true;
+    togglePetChat(handle);
+    assert.deepEqual(calls, ['close']);
+  });
+
+  test('开一次再按一次 → 回到关闭状态', () => {
+    const calls: string[] = [];
+    const handle = makeHandle(calls);
+    togglePetChat(handle);
+    togglePetChat(handle);
+    assert.deepEqual(calls, ['open', 'close']);
+    assert.equal(handle.isOpen(), false);
+  });
+
+  test('没有目标宠物 → 什么都不做，也不抛', () => {
+    assert.doesNotThrow(() => togglePetChat(undefined));
   });
 });
