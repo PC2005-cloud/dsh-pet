@@ -31,6 +31,8 @@ Object.assign(PetSprite.prototype, {
       },
       // 「查看余额」无条件显示：关了 balanceEnabled 的宠物也能点，手动请求不受开关限制，点了一定给答复。
       { label: '查看余额', action: 'show-balance' },
+      // 「Cookie 检查」：读一次 cookie 库，占用情况由宿主写进气泡（与网页端同一项、同一个端点）。
+      { label: 'Cookie 检查', action: 'show-cookie' },
       // 「待办事项」是待办面板的唯一入口（单击宠物不再弹面板），排在余额之后。
       { label: '待办事项', action: 'todo', hint: S.TODO_HOTKEY_HINT },
       { label: '碎碎念', action: 'whisper' },
@@ -115,6 +117,17 @@ Object.assign(PetSprite.prototype, {
     }
     if (leaf.action === 'show-balance') {
       this.showBalanceFromMenu(); // 立即拉余额并展示（无需等 1s 触发轮询，展示路径与周期触发一致）
+      return;
+    }
+    if (leaf.action === 'show-cookie') {
+      // 探测与换算是宿主的事：这里只发动作，气泡由宿主写 say 叶子送回来（与网页端同一个端点）。
+      S.postAction(COOKIE_URL + '?pet=' + encodeURIComponent(this.pet.id))
+        .then((ok) => {
+          if (!ok) console.warn('[dsh-pet] 菜单检查 cookie：动作未成功 pet=' + this.pet.id);
+        })
+        .catch((e) => {
+          console.warn('[dsh-pet] 菜单检查 cookie 异常', e);
+        });
       return;
     }
     if (leaf.action === 'sleep' || leaf.action === 'wake') {

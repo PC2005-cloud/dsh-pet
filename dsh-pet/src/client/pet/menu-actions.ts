@@ -145,6 +145,12 @@ export function createMenuActions(deps: MenuActionDeps): MenuActions {
       fireAction(ROUTE_PATH + '/balance', '余额刷新动作');
       return;
     }
+    if (leaf.action === 'show-cookie') {
+      // 探测与换算都在宿主侧，结果由宿主直接写 say 叶子：页面不发第二条请求、也不用等返回值。
+      console.info('[dsh-pet] 菜单检查 cookie pet=' + petId);
+      fireAction(ROUTE_PATH + '/cookie?pet=' + encodeURIComponent(petId), 'cookie 检查');
+      return;
+    }
     if (leaf.action === 'whisper') {
       // 手动碎碎念：文本随长轮询送达，不受 whisperEnabled 限制；surface 必填，本页面就是网页端。
       console.info('[dsh-pet] 菜单触发碎碎念 pet=' + petId + (leaf.image ? ' image=' + leaf.image : ''));

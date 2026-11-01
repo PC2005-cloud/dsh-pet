@@ -15,6 +15,7 @@ import { registerSessionWatch } from './plugin/session-watch.ts';
 import { createDesktopHelper } from './plugin/desktop-helper.ts';
 import { createBalancePoll } from './plugin/balance-poll.ts';
 import { createChatMemory } from './plugin/chat-memory.ts';
+import { createCookieGuard } from './cookie/store.ts';
 import { createSessionNotify } from './plugin/session-notify.ts';
 import { createPetLookup } from './plugin/pet-lookup.ts';
 import { createDownloadReport } from './plugin/download-report.ts';
@@ -79,6 +80,9 @@ export function apply(ctx: any): void {
   const { effectivePetList, balancePeriodSec, whisperPeriodSec, refreshBalance, resolveActivePetId, petDisplayName } =
     balancePoll;
 
+  // cookie 体检取数口：60 秒缓存 + 5 秒最小间隔，只有用户点了菜单才会真的去扫句柄表。
+  const cookieGuard = createCookieGuard();
+
   // 待办清单：一份用户级数据（不分宠物），落盘在插件数据根；提醒循环与 /todos 路由共用同一个实例。
   const todos = new TodoStore({ file: join(userRoot, TODO_FILE_NAME), log });
 
@@ -103,6 +107,7 @@ export function apply(ctx: any): void {
     ...desktopHelper,
     ...sessionNotify,
     ctx,
+    cookieGuard,
     todos,
     // 语音合成：缓存落 userRoot，失败只留日志，不打断宿主
     voice: createVoiceService({ userRoot, log }),

@@ -8,6 +8,7 @@
  */
 import type { ChatMemoryMessage } from '../chat.ts';
 import type { ConfigPaths } from '../config.ts';
+import type { CookieGuardStore } from '../cookie/store.ts';
 import type { RouteResult } from '../http.ts';
 import type { PetImageRef } from '../image-attachment.ts';
 import type { LockStore } from '../lock.ts';
@@ -77,6 +78,8 @@ export interface PetRouteDeps {
   readonly todos: TodoStore;
   /** 工作状态联动快照。 */
   readonly workStatus: WorkStatusStore;
+  /** cookie 体检取数口（带缓存与 5 秒最小间隔）。 */
+  readonly cookieGuard: CookieGuardStore;
   /** 外部写入用的固定会话 id。 */
   readonly EXTERNAL_WORK_SESSION: string;
   /** 占用锁拦截：被别的会话占着时直接给出应答。 */

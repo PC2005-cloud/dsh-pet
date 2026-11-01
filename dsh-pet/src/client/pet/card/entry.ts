@@ -355,6 +355,7 @@ export function createCardEntry(rt: CardEntryRuntime) {
       // 桌面专属的两项（打开软件、重载配置）在网页端没有对应动作，不出现。
       const tools: MenuNode[] = [
         { label: '查看余额', action: 'show-balance' },
+        { label: 'Cookie 检查', action: 'show-cookie' },
         { label: '待办事项', action: 'todo', hint: TODO_HOTKEY_HINT },
         { label: '碎碎念', action: 'whisper' },
         { label: '对话', action: 'chat', hint: CHAT_HOTKEY_HINT },

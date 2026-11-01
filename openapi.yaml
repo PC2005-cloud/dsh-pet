@@ -317,6 +317,44 @@ paths:
         "405":
           $ref: "#/components/responses/MethodNotAllowed"
 
+  /dsh-pet-7340/cookie:
+    post:
+      tags: [Action]
+      operationId: checkCookieHealth
+      summary: 检查登录 cookie 的请求头占用
+      description: |
+        读一次桌面版的 Chromium cookie 库，数出 `dsh-auth-*` 的条数，换算成请求头占用，
+        并把一句话写进 `pets.<id>.say`（气泡）。这是动作端点：页面不需要读返回值，
+        1 秒内气泡自己会出现——与 `POST /balance` 同一套分工。
+
+        - **只读**：不解析 cookie 值、不上网、不清理任何东西。
+        - 换算式固定：每条 228 字节，Node 默认 `maxHeaderSize` 为 16384 字节，
+          第 72 条就会让 Host 根请求回 431（桌面表现为启动时自检失败）。
+        - 60 秒内复用上次结果；`force=1` 可穿透缓存，但两次真实探测至少隔 5 秒
+          （借句柄要扫全机句柄表，约 240ms 且同步阻塞）。
+        - 只在 Windows + DSH 桌面版有数。读不到时返回 `ok: false` + `reason: unsupported`，
+          **不会伪造条数**，气泡里显示的就是失败原因。
+      parameters:
+        - $ref: "#/components/parameters/PetIdQuery"
+        - name: force
+          in: query
+          required: false
+          description: 用户主动要求重探：穿透 60 秒缓存，但仍受 5 秒最小间隔约束。
+          schema:
+            type: string
+            enum: ["1"]
+      responses:
+        "200":
+          description: |
+            动作已完成。`ok: false` 表示读不到 cookie 库（`message` 是给人看的原因，
+            与写进气泡的那句同源）。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CookieCheckResponse"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+
   /dsh-pet-7340/whisper:
     post:
       tags: [Action]
@@ -3051,6 +3089,51 @@ components:
           type: boolean
           const: true
       description: 动作已完成。数据请从 `GET /state` 读取。
+
+    CookieCheckResponse:
+      type: object
+      required: [ok]
+      properties:
+        ok:
+          type: boolean
+          description: |
+            `true` = 读到了 cookie 库并把占用写进气泡；`false` = 读不到（此时另有 `reason`
+            与 `message`，形状与 `FailureResponse` 一致）。
+        gauge:
+          $ref: "#/components/schemas/CookieGauge"
+        source:
+          type: string
+          enum: [file, borrowed-handle]
+          description: 字节是直接读文件，还是借 DSH 外壳已打开的句柄读到的。
+        fileSize:
+          type: integer
+          description: cookie 库文件大小（字节）。
+        elapsedMs:
+          type: integer
+          description: 本次探测耗时（毫秒）；命中缓存时不会出现这个字段。
+      description: |
+        动作已完成。数字不参与页面渲染：气泡内容由宿主写进 `pets.<id>.say`。
+
+    CookieGauge:
+      type: object
+      required: [count, bytes, percent, remainingLaunches, level]
+      properties:
+        count:
+          type: integer
+          description: cookie 库里的 `dsh-auth-*` 条数（同名多版本只算一条）。
+        bytes:
+          type: integer
+          description: 这些 cookie 在请求头里占的字节数（每条 228）。
+        percent:
+          type: integer
+          description: 占 Node 默认 16384 字节上限的百分比，四舍五入后夹在 0–100。
+        remainingLaunches:
+          type: integer
+          description: 还能再启动几次；到临界（71 条）后为 0。
+        level:
+          type: string
+          enum: [ok, warn, danger]
+          description: 提醒档位（≥36 条 warn，≥71 条 danger）。
 
     SayResponse:
       type: object
