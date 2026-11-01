@@ -34,6 +34,7 @@ export const ru: Record<Key, string> = {
   shortcutRowPaste: 'Вставить изображение',
   shortcutRowTodo: 'Задачи',
   shortcutRowSleep: 'Спать / проснуться',
+  shortcutRowDisplay: 'Позиция показа',
   shortcutRowSidebar: 'Открыть чат в панели',
   shortcutGroupPet: 'Клавиши питомца',
   shortcutGroupPetHint:

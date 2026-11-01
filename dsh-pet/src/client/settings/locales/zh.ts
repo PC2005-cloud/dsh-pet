@@ -33,6 +33,7 @@ export const zh = {
   shortcutRowPaste: '粘贴图片',
   shortcutRowTodo: '待办事项',
   shortcutRowSleep: '睡觉 / 起来',
+  shortcutRowDisplay: '显示位置',
   shortcutRowSidebar: '打开侧栏对话',
   shortcutGroupPet: '桌宠快捷键',
   shortcutGroupPetHint: '网页端鼠标停在宠物上即可；桌面宠物窗口要先点一下宠物，拿到键盘焦点后才生效。',

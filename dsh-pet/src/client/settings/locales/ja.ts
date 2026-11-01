@@ -33,6 +33,7 @@ export const ja: Record<Key, string> = {
   shortcutRowPaste: '画像を貼り付け',
   shortcutRowTodo: 'ToDo',
   shortcutRowSleep: '寝る / 起きる',
+  shortcutRowDisplay: '表示位置',
   shortcutRowSidebar: 'サイドバーの会話を開く',
   shortcutGroupPet: 'ペットのショートカット',
   shortcutGroupPetHint:

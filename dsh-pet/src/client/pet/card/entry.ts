@@ -13,8 +13,10 @@ import {
   type EncodedImage,
 } from '../../../shared/chat/index.ts';
 import { captureDisplayFrame } from '../../../shared/chat/capture.ts';
+import { displayOfHotkey } from '../../../shared/display-hotkey.ts';
 import { SLEEP_HOTKEY_HINT, isSleepHotkey } from '../../../shared/sleep-hotkey.ts';
 import { TODO_HOTKEY_HINT, isTodoHotkey } from '../../../shared/todo/hotkey.ts';
+import type { PetDisplay } from '../../../shared/types.ts';
 import { bindOpenChat } from './open-chat.ts';
 import { registerPetChatHandle } from './registry.ts';
 import {
@@ -240,6 +242,11 @@ export function createCardEntry(rt: CardEntryRuntime) {
       const asleep = live.current.flow?.sleeping() ?? false;
       runMenuAction(asleep ? { label: '起来', action: 'wake' } : { label: '睡觉', action: 'sleep' });
     };
+    // 数字键切显示位置：与右键「显示位置」子菜单同一条动作派发（写 display 配置，宿主重启生效）。
+    const switchDisplayRef = useRef<(display: PetDisplay) => void>(() => {});
+    switchDisplayRef.current = (display) => {
+      runMenuAction({ label: '显示位置', action: 'set-display', display });
+    };
     // 按住说话的按下/松开同样每次渲染都新建闭包；状态机只建一次，只能经 ref 取最新的那两个。
     const startChatHearRef = useRef<() => void>(startChatHear);
     startChatHearRef.current = startChatHear;
@@ -267,7 +274,7 @@ export function createCardEntry(rt: CardEntryRuntime) {
         }),
       [cfgRef],
     );
-    // 五个快捷键共用一次挂载：L 开对话、按住 M 说话、S 截图、Z 切换睡/醒、D 开关待办。
+    // 悬停键共用一次挂载：L 开对话、按住 M 说话、S 截图、Z 切换睡/醒、D 开关待办、1-4 切显示位置。
     // 除按住说话外都只在鼠标停在这只宠物上时生效；按住说话多一条——光标还在宠物自己的弹窗里也算，
     // 否则弹窗一开焦点被输入框拿走，最想说话的时机反而按不动。
     useEffect(() => {
@@ -294,6 +301,12 @@ export function createCardEntry(rt: CardEntryRuntime) {
           return;
         }
         if (!hoverRef.current) return;
+        const display = displayOfHotkey(e);
+        if (display !== undefined) {
+          e.preventDefault();
+          switchDisplayRef.current(display);
+          return;
+        }
         if (isCaptureHotkey(e)) {
           e.preventDefault();
           screenshotRef.current();

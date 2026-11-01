@@ -11,6 +11,7 @@
 import type { FunctionComponent } from 'react';
 import { HEAR_HOTKEY_HINT } from '../../shared/chat/hear-hold.ts';
 import { CAPTURE_HOTKEY_HINT, CHAT_HOTKEY_HINT } from '../../shared/chat/hotkey.ts';
+import { DISPLAY_HOTKEY_HINTS } from '../../shared/display-hotkey.ts';
 import { SLEEP_HOTKEY_HINT } from '../../shared/sleep-hotkey.ts';
 import { TODO_HOTKEY_HINT } from '../../shared/todo/hotkey.ts';
 import { keycapOf, subscribeShortcutKeycaps, type ShortcutHost } from '../app-shortcut.ts';
@@ -91,6 +92,7 @@ export function makeShortcutsCard(rt: SettingsRuntime, ctx: ShortcutHost): Funct
             row('shortcutRowPaste', PASTE_KEYCAP),
             row('shortcutRowTodo', TODO_HOTKEY_HINT),
             row('shortcutRowSleep', SLEEP_HOTKEY_HINT),
+            row('shortcutRowDisplay', DISPLAY_HOTKEY_HINTS.join(' · ')),
           ],
         }),
         h('p', { key: 'globalTitle', className: 'dsh-pet-cfg__cardTitle', children: t('shortcutGroupGlobal') }),
