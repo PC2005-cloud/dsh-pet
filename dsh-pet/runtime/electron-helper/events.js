@@ -112,9 +112,11 @@ PetSprite.prototype.onBalanceTick = function onBalanceTick(state, tick, manual) 
 // 余额不可用（服务商未登记 / 缺凭证 / 抓取失败）：只弹文字说明气泡，不播档位动画。
 // 显隐与定时和成功路径同一套；不 stopMove——本次没有动画要抢前台。
 // 门控：自动轮询要求 balanceEnabled，手动请求无条件弹（包括「服务商不支持」这件事）。
+// 睡觉一票否决：与档位动画同一口径，手动请求也不打断睡姿。
 PetSprite.prototype.showBalanceNotice = function showBalanceNotice(state, manual) {
   if (!this.pet.balanceEnabled && !manual) return; // 自动轮询受开关门控；手动无条件通过
   if (this.frozen && !manual) return; // 占用锁：自动来源不看；手动照常（用户问了就得有答复）
+  if (this.sleeping) return; // 睡着不弹：睡姿优先于余额说明
   if (!state || state.ok) return;
   this.bubbleOn = true;
   this.balanceWrap = true; // 文字说明可能多行：renderBubble 据此套用紧凑变体（字号缩到 0.75、宽度下限更窄）
@@ -281,7 +283,7 @@ function applyBalanceLeaf(leaf) {
   window.__dshPetDebug.lastBalanceOk = hit.state && hit.state.ok === true;
   if (hit.state.ok) {
     balanceTick++;
-    // 睡着不看不听：余额是自动来源，档位动画与气泡都不更新（手动请求已被宿主拦在门外）
+    // 睡着一律不播：档位动画与气泡都不更新，手动请求也不例外（睡姿优先）
     for (const s of sprites) if (!s.sleeping) s.onBalanceTick(hit.state, balanceTick, hit.manual);
   } else {
     // 不可用：manual（用户主动要的）一律弹，周期刷新只在原因变化时弹一次

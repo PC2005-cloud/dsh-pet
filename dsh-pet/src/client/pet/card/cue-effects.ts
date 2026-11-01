@@ -62,8 +62,8 @@ export function createCueEffects(rt: CueEffectsRuntime) {
       prevBalanceRef.current = balanceTick;
       // 占用锁：自动余额不看，手动请求照常；tick 消费之后再判，占用期间这一拍就当过去。
       if (hub.ownAnim.isFrozen() && !balanceManual) return;
-      // 睡觉：与工作状态、文字说明同一口径——不换动画也不弹气泡。手动请求到不了这里（路由层按睡拒）。
-      if (hub.sleeping() && !balanceManual) return;
+      // 睡觉一票否决：睡着一律不播，手动请求也不打断睡姿（与桌面端同一口径）。
+      if (hub.sleeping()) return;
       if (!balance || !balance.ok) return;
       if (!cfg.balanceEnabled && !balanceManual) return; // 自动轮询受开关门控，手动请求无条件通过。
       const percent = balancePercent(balance);
@@ -96,8 +96,9 @@ export function createCueEffects(rt: CueEffectsRuntime) {
       if (!cfg.balanceEnabled && !balanceManual) return; // 自动轮询受开关门控，手动请求无条件通过。
       if (balanceNoticeTick === 0 || balanceNoticeTick === prevNoticeRef.current) return;
       prevNoticeRef.current = balanceNoticeTick;
-      // 占用锁：自动来源不看，手动请求照常。
-      if ((hub.ownAnim.isFrozen() || hub.sleeping()) && !balanceManual) return;
+      // 占用锁：自动来源不看，手动请求照常；睡觉一票否决，手动也不弹。
+      if (hub.ownAnim.isFrozen() && !balanceManual) return;
+      if (hub.sleeping()) return;
       if (!balance || balance.ok) return;
       hub.bubbles.showBalance();
     };
