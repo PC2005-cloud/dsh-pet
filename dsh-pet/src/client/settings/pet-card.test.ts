@@ -100,7 +100,7 @@ describe('PetCard —— 宠物配置卡', () => {
     const patches: PetPatch[] = [];
     const tree = render((patch) => patches.push(patch));
     const percent = control(tree, 'input', (props) => props.min === '1' && props.step === '1');
-    assert.equal(percent.props.defaultValue, '100', '没配时按默认 100 显示');
+    assert.equal(percent.props.defaultValue, '20', '没配时按默认 20 显示');
     const fire = percent.props.onBlur as (e: { target: { value: string } }) => void;
     fire({ target: { value: '  ' } });
     assert.deepEqual(patches, [], '空框失焦 = 放弃这次编辑');

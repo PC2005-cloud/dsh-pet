@@ -6,7 +6,7 @@
  * @module dsh-pet/src/host/config/merge
  */
 import { CORNER_SET, GLOBAL_DEFAULT_KEYS, isValidPetId, PET_DISPLAY_SET, warnOnce } from './constants.ts';
-import { isValidSizePercent, SIZE_PERCENT_MIN } from '../../shared/pet-size.ts';
+import { isValidSizePercent, SIZE_PERCENT_DEFAULT, SIZE_PERCENT_MIN } from '../../shared/pet-size.ts';
 import { topFieldValid } from './validate.ts';
 
 /**
@@ -95,15 +95,15 @@ function petNumber(own: unknown, def: unknown, min: number, label: string, field
   return Number(def);
 }
 
-/** 实例级 sizePercent：写了合法值才落键；缺省与越界都不落键，渲染侧按默认 100 处理。
- *  不补默认值——补了会让「没动过」在保存时变成显式 100，配置文件凭空长大，且没有用户层时形状不一致。 */
+/** 实例级 sizePercent：写了合法值才落键；缺省与越界都不落键，渲染侧按默认值处理。
+ *  不补默认值——补了会让「没动过」在保存时变成显式值，配置文件凭空长大，且没有用户层时形状不一致。 */
 function petSizePercentField(own: unknown, def: unknown, label: string, id: string): { sizePercent?: number } {
   const value = own ?? def;
   if (value === undefined || value === null) return {};
   if (isValidSizePercent(value)) return { sizePercent: value };
   warnOnce(
     `${label}:sizePercent:${id}`,
-    `宠物「${id}」的 sizePercent 非法（应为不小于 ${SIZE_PERCENT_MIN} 的数字），已忽略（按默认 100 处理）`,
+    `宠物「${id}」的 sizePercent 非法（应为不小于 ${SIZE_PERCENT_MIN} 的数字），已忽略（按默认 ${SIZE_PERCENT_DEFAULT} 处理）`,
   );
   return {};
 }

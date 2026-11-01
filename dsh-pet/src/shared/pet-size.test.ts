@@ -23,9 +23,9 @@ describe('isValidSizePercent —— 不小于 1 的有限数（不设上限）',
 });
 
 describe('resolvePetSizePx —— 百分比按人物本体换算成画框宽度', () => {
-  test('没配百分比 → 按默认 100：宽窗口等于 px，窄窗口仍被 size 夹住', () => {
+  test('没配百分比 → 按默认 20：宽窗口等于 px，窄窗口被屏宽夹住', () => {
     assert.equal(resolvePetSizePx(400, undefined, 1920), 400);
-    assert.equal(resolvePetSizePx(400, undefined, 375), 400);
+    assert.equal(resolvePetSizePx(400, undefined, 375), 200);
   });
 
   test('窄屏：20% 人物 → 画框 200px（本体 75px = 屏宽 20%）', () => {

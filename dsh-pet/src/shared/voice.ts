@@ -3,7 +3,7 @@
  *
  * 两端各判各的：叶子里的 `voiceTo` 指向哪一端，就只有那一端出声；缺省 = 谁都不念。
  * 网页端另加一道「页面可见」——被切到后台的页面没人看，出声只是打扰。
- * 音色与总开关经 `setVoiceConfig` 从成品配置注入；手动点播（对话面板的喇叭）不受这些门控。
+ * 音色、总开关与音量经 `setVoiceConfig` 从成品配置注入；手动点播（对话面板的喇叭）不受这些门控。
  * 不负责合成与缓存：那些在宿主侧（`/voice/speak`）。
  * @module dsh-pet/src/shared/voice
  */
@@ -14,6 +14,8 @@ import type { VoiceTarget } from './state.ts';
 let voiceName = '';
 /** 播报总开关；只有成品配置明确为 true 才播。 */
 let voiceEnabled = false;
+/** 播放音量系数（0–1，1 = 最大音量）；两端共用，只作用于播放，不影响已合成好的音频。 */
+let voiceVolume = 1;
 /** 本端是网页端还是桌面端；`null` = 还没声明，此时不按叶子播放。 */
 let surface: VoiceTarget | null = null;
 /** 接口基址：网页端是同源前缀，桌面端由 `setVoiceBase` 换成 bridge 地址。 */
@@ -87,15 +89,23 @@ export function setSurface(next: unknown): void {
 }
 
 /**
- * 记录成品配置里的音色与总开关；网页端在读到 `/config` 时调一次。
+ * 记录成品配置里的音色、总开关与音量；网页端在读到 `/config` 时调一次。
  * 调用即视为配置已就绪，后续播放不再自己去拉。
  * @param name - 音色 id（非字符串按未指定处理）。
  * @param enabled - 播报总开关（严格 `=== true` 才算开启）。
+ * @param volume - 音量系数（0–1）；缺省或非数值按最大音量播放。
  */
-export function setVoiceConfig(name: unknown, enabled: unknown): void {
+export function setVoiceConfig(name: unknown, enabled: unknown, volume?: unknown): void {
   voiceName = typeof name === 'string' ? name : '';
   voiceEnabled = enabled === true;
+  voiceVolume = clampVolume(volume);
   configLoaded = true;
+}
+
+/** 把音量收敛到 0–1；非数值按最大音量（1）处理——脏配置不该把声音悄悄变成 0。 */
+function clampVolume(value: unknown): number {
+  const n = Number(value);
+  return Number.isFinite(n) ? Math.min(1, Math.max(0, n)) : 1;
 }
 
 /** 懒加载成品配置；失败按「不播」处理，且只试一次（避免每句都发请求）。 */
@@ -107,6 +117,7 @@ async function loadConfigOnce(): Promise<void> {
     const main = body?.main;
     voiceName = typeof main?.voiceName === 'string' ? main.voiceName : '';
     voiceEnabled = main?.voiceEnabled === true;
+    voiceVolume = clampVolume(main?.voiceVolume);
     // 只有成功才置位：拉不到（bridge 还没就绪 / 瞬时故障）留给下一句重试——
     // 否则一次失败就把这一端永久静音了。
     configLoaded = true;
@@ -162,6 +173,7 @@ async function speak(text: string): Promise<void> {
     }
     const objectUrl = URL.createObjectURL(await response.blob());
     const audio = new Audio(objectUrl);
+    audio.volume = voiceVolume;
     // 播完或出错都要释放，否则每句留一个 blob 引用
     audio.onended = () => URL.revokeObjectURL(objectUrl);
     audio.onerror = () => URL.revokeObjectURL(objectUrl);
@@ -222,6 +234,7 @@ async function playManual(text: string, onPhase?: (phase: SpeakPhase) => void): 
     const objectUrl = URL.createObjectURL(await response.blob());
     if (token !== manualSeq) return;
     const audio = new Audio(objectUrl);
+    audio.volume = voiceVolume;
     audio.onended = () => {
       URL.revokeObjectURL(objectUrl);
       if (manualAudio === audio) {

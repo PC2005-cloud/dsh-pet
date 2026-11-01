@@ -8,7 +8,7 @@
 import type { FunctionComponent } from 'react';
 import type { VoiceOption, VoicePickerProps } from './picker/voice-picker.ts';
 import type { SettingsRuntime } from './runtime.ts';
-import { makeUiKit } from './ui.ts';
+import { makeUiKit, numberInputProps } from './ui.ts';
 
 export type { VoiceOption } from './picker/voice-picker.ts';
 
@@ -20,6 +20,8 @@ export interface VoiceCardProps {
   readonly enabled: boolean;
   /** 当前音色 id。 */
   readonly voiceName: string;
+  /** 播放音量系数：0–1 的小数，1 = 最大音量。 */
+  readonly volume: number;
   /** 可选音色；为空时选择器只显示当前值（列表还没拉回来或拉取失败）。 */
   readonly voices: readonly VoiceOption[];
   /** 周期碎碎念要不要念出来（受总开关约束）。 */
@@ -30,6 +32,8 @@ export interface VoiceCardProps {
   readonly onToggle: (value: boolean) => void;
   /** 选择音色。 */
   readonly onVoiceChange: (voiceName: string) => void;
+  /** 调整播放音量。 */
+  readonly onVolumeChange: (volume: number) => void;
   /** 切换周期碎碎念的播报。 */
   readonly onWhisperToggle: (value: boolean) => void;
   /** 切换待办提醒的播报。 */
@@ -48,20 +52,26 @@ export function makeVoiceCard(
   picker: FunctionComponent<VoicePickerProps>,
 ): FunctionComponent<VoiceCardProps> {
   const { h, t } = rt;
-  const { cardHead, toggleCell } = makeUiKit({ h, t });
+  const { cardHead, field, toggleCell } = makeUiKit({ h, t });
 
   return function VoiceCard(props: VoiceCardProps) {
     return h('div', {
       className: 'dsh-pet-cfg__card',
       children: [
         cardHead(t('voiceTitle'), t('voiceHint')),
-        // 两行两列：第一行是总开关与音色下拉，第二行是两个同级子开关（它们必须相邻，
-        // 被音色插在中间就读不出是「同一类子项」）。音色不挂文字标签也不挂问号：一排开关
-        // 中间多一行字只是噪音，下拉当前值「晓伊（女·活泼）」自己就说明了它是什么。
+        // 第一行三个开关：总开关与两个子项必须相邻，读得出是「同一类」；第二行两个输入：音色与音量。
+        // 音色不挂文字标签也不挂问号：下拉当前值「晓伊（女·活泼）」自己就说明了它是什么。
+        h('div', {
+          className: 'dsh-pet-cfg__grid3',
+          children: [
+            toggleCell('voiceEnabled', props.enabled, props.busy, props.onToggle),
+            toggleCell('voiceWhisperEnabled', props.whisperEnabled, props.busy, props.onWhisperToggle),
+            toggleCell('voiceTodoEnabled', props.todoEnabled, props.busy, props.onTodoToggle),
+          ],
+        }),
         h('div', {
           className: 'dsh-pet-cfg__grid2',
           children: [
-            toggleCell('voiceEnabled', props.enabled, props.busy, props.onToggle),
             h(picker, {
               label: t('voiceNameLabel'),
               value: props.voiceName,
@@ -69,8 +79,19 @@ export function makeVoiceCard(
               disabled: props.busy,
               onChange: props.onVoiceChange,
             }),
-            toggleCell('voiceWhisperEnabled', props.whisperEnabled, props.busy, props.onWhisperToggle),
-            toggleCell('voiceTodoEnabled', props.todoEnabled, props.busy, props.onTodoToggle),
+            field(
+              t('voiceVolumeLabel'),
+              h(
+                'input',
+                numberInputProps(props.volume, props.onVolumeChange, {
+                  step: '0.05',
+                  min: '0',
+                  max: '1',
+                  disabled: props.busy,
+                }),
+              ),
+              t('voiceVolumeHint'),
+            ),
           ],
         }),
       ],

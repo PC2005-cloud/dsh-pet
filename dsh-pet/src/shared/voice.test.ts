@@ -35,13 +35,21 @@ function stubFetch(options: { ok?: boolean } = {}): { calls: Array<{ text: strin
   };
 }
 
-/** 补上浏览器才有的两个对象：音频元素与 blob 地址。 */
-function stubBrowser(): () => void {
+/**
+ * 补上浏览器才有的两个对象：音频元素与 blob 地址。
+ *
+ * @param sink - 可选：每段音频开始播放时把它的 `volume` 记进来，用来断言音量。
+ * @returns 还原函数。
+ */
+function stubBrowser(sink?: { volumes: number[] }): () => void {
   const previousAudio = (globalThis as { Audio?: unknown }).Audio;
   const previousCreate = URL.createObjectURL;
   const previousRevoke = URL.revokeObjectURL;
   (globalThis as { Audio?: unknown }).Audio = class {
+    /** 与真实 Audio 同名的音量字段：被测代码写它，这里在 play 时取出。 */
+    volume = 1;
     play(): Promise<void> {
+      sink?.volumes.push(this.volume);
       return Promise.resolve();
     }
   };
@@ -154,6 +162,48 @@ describe('playSayVoice —— 这一句该不该念', () => {
       await flush();
       assert.equal(fetchStub.calls.length, 1, '该请求的合成请求照发');
       assert.equal(getVoiceState(), 'failed', '失败要看得见，不能静默回 idle');
+    } finally {
+      restoreBrowser();
+      fetchStub.restore();
+    }
+  });
+});
+
+describe('setVoiceConfig —— 音量系数', () => {
+  test('0.35 原样落到播放：audio.volume 就是 0.35', async () => {
+    const sink = { volumes: [] as number[] };
+    const fetchStub = stubFetch();
+    const restoreBrowser = stubBrowser(sink);
+    try {
+      setSurface('web');
+      setVoiceConfig('', true, 0.35);
+      playSayVoice({ text: '小声说', voiceTo: 'web' });
+      await flush();
+      assert.deepEqual(sink.volumes, [0.35], '音量要落到真正播放的那段音频上');
+    } finally {
+      restoreBrowser();
+      fetchStub.restore();
+    }
+  });
+
+  test('越界与脏值收敛到 0–1：2 → 1、-1 → 0、非数值 → 1', async () => {
+    const sink = { volumes: [] as number[] };
+    const fetchStub = stubFetch();
+    const restoreBrowser = stubBrowser(sink);
+    try {
+      setSurface('web');
+      const cases: ReadonlyArray<readonly [unknown, number]> = [
+        [2, 1],
+        [-1, 0],
+        ['不是数字', 1],
+        [0, 0],
+      ];
+      for (const [input, wanted] of cases) {
+        setVoiceConfig('', true, input);
+        playSayVoice({ text: '说一句', voiceTo: 'web' });
+        await flush();
+        assert.equal(sink.volumes[sink.volumes.length - 1], wanted, `音量 ${String(input)} 应收敛到 ${wanted}`);
+      }
     } finally {
       restoreBrowser();
       fetchStub.restore();

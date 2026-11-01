@@ -174,6 +174,9 @@ export function topFieldValid(key: string, value: unknown): boolean {
     case 'voiceName':
       // 音色必须是白名单内的 id；写错即非法，读取侧回落到默认音色并告警
       return typeof value === 'string' && isKnownVoice(value);
+    case 'voiceVolume':
+      // 播放音量系数：0–1 的有限数，与 Audio.volume 同量纲；越界即非法（不夹取，读取侧回落默认）
+      return typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 1;
     case 'voiceWhisperEnabled':
       // 周期碎碎念的语音开关（全局布尔）：只决定念不念，不影响气泡与记忆
       return typeof value === 'boolean';

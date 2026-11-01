@@ -148,6 +148,8 @@ export function makePetConfigSection(
     // 语音播报开关与音色（全局默认）：随「保存」整包写入；初值即内置默认，加载后用成品值覆盖。
     const [voiceEnabled, setVoiceEnabled] = useState(false);
     const [voiceName, setVoiceName] = useState('zh-CN-XiaoyiNeural');
+    // 播放音量（全局系数 0–1）：初值 1 是内置默认（最大音量），加载后由成品值覆盖。
+    const [voiceVolume, setVoiceVolume] = useState(1);
     // 语音的两个细分开关（周期碎碎念 / 待办提醒）：与总开关同一套语义，初值 false 是内置默认。
     const [voiceWhisperEnabled, setVoiceWhisperEnabled] = useState(false);
     const [voiceTodoEnabled, setVoiceTodoEnabled] = useState(false);
@@ -182,6 +184,7 @@ export function makePetConfigSection(
         if (patch.trayEnabled !== undefined) setTrayEnabled(patch.trayEnabled);
         if (patch.voiceEnabled !== undefined) setVoiceEnabled(patch.voiceEnabled);
         if (patch.voiceName !== undefined) setVoiceName(patch.voiceName);
+        if (patch.voiceVolume !== undefined) setVoiceVolume(patch.voiceVolume);
         if (patch.voiceWhisperEnabled !== undefined) setVoiceWhisperEnabled(patch.voiceWhisperEnabled);
         if (patch.voiceTodoEnabled !== undefined) setVoiceTodoEnabled(patch.voiceTodoEnabled);
         if (patch.physics !== undefined) setPhysics(patch.physics);
@@ -265,6 +268,7 @@ export function makePetConfigSection(
         trayEnabled,
         voiceEnabled,
         voiceName,
+        voiceVolume,
         voiceWhisperEnabled,
         voiceTodoEnabled,
         physics,
@@ -341,11 +345,13 @@ export function makePetConfigSection(
           busy,
           enabled: voiceEnabled,
           voiceName,
+          volume: voiceVolume,
           voices: voiceOptions,
           whisperEnabled: voiceWhisperEnabled,
           todoEnabled: voiceTodoEnabled,
           onToggle: setVoiceEnabled,
           onVoiceChange: setVoiceName,
+          onVolumeChange: setVoiceVolume,
           onWhisperToggle: setVoiceWhisperEnabled,
           onTodoToggle: setVoiceTodoEnabled,
         }),

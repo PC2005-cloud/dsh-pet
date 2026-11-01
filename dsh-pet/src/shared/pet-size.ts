@@ -10,12 +10,11 @@ import { HIT_BOX } from './constants.ts';
 /** 人物本体宽度占画框宽度的比例；由命中框反推（240/640），不在别处再写一份 0.375。 */
 const BODY_WIDTH_RATIO = (HIT_BOX.x1 - HIT_BOX.x0) / 640;
 
-/** 百分比下限（%）：小于它等于没写。 */
 /** 百分比下限（%）：小于它等于没写。不设上限——填 150 就是「人物比屏还宽」，由 `size` 决定画框最终多大。 */
 export const SIZE_PERCENT_MIN = 1;
 
-/** 默认值：人物最多占满一屏宽。约等于「不限制」，实际仍被 `size` 这个画框上限夹住。 */
-export const SIZE_PERCENT_DEFAULT = 100;
+/** 默认值：人物占屏宽的 20%——小屏不糊脸，宽屏下实际仍被 `size` 这个画框上限夹住。 */
+export const SIZE_PERCENT_DEFAULT = 20;
 
 /**
  * 百分比是否可用：必须是有限数字，且不小于下限。

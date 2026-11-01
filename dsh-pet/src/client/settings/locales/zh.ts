@@ -150,6 +150,9 @@ export const zh = {
   voiceTodoEnabled: '待办播报',
   voiceTodoEnabledHint: '到点的待办提醒念出来（同一句照样弹气泡，本项只决定念不念）。受上面的总开关约束。默认关闭。',
   voiceNameLabel: '音色',
+  voiceVolumeLabel: '音量',
+  voiceVolumeHint:
+    '播报音量，0–1 的小数：1 是最大音量（100%），0 是静音。只改播放响度，不会重新合成音频，调它不额外花钱。与上面的总开关是两件事——总开关关着时它不起作用。',
   physicsTitle: '物理（拖拽抛掷手感）',
   physicsHint:
     '全局默认，所有宠物共用（pet pack 可在自己种类文件里单独覆盖）；随「保存」写入用户配置（不做即时写入）。浏览器保存后即时生效，桌面端由保存重载宠物窗口后生效。',

@@ -54,6 +54,7 @@ export const GLOBAL_DEFAULT_KEYS = [
   'confineToScreen',
   'voiceEnabled',
   'voiceName',
+  'voiceVolume',
   'voiceWhisperEnabled',
   'voiceTodoEnabled',
   'whisperImageEnabled',

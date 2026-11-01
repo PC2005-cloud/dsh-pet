@@ -773,7 +773,7 @@ describe('saveUserConfig —— 实例级人设 whisperPrompt（白名单 + 清�
   });
 });
 
-describe('配置合并与保存 —— sizePercent（合法才落键，缺省按默认 100 消费）', () => {
+describe('配置合并与保存 —— sizePercent（合法才落键，缺省按默认 20 消费）', () => {
   const petAt = (merged: Record<string, Record<string, unknown>>): Record<string, unknown> =>
     (merged.main.pets as Record<string, unknown>[])[0];
 
@@ -782,7 +782,7 @@ describe('配置合并与保存 —— sizePercent（合法才落键，缺省按
     assert.equal(pet.sizePercent, 40);
   });
 
-  test('没写 → 不落键（渲染侧按默认 100，文件不长多余的键；无用户层时形状也一致）', () => {
+  test('没写 → 不落键（渲染侧按默认 20，文件不长多余的键；无用户层时形状也一致）', () => {
     assert.equal('sizePercent' in petAt(readAllConfig(withBase({}))), false);
   });
 

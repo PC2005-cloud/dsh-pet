@@ -29,6 +29,8 @@ export interface MainConfigPatch {
   voiceEnabled?: boolean;
   /** 语音音色 id（宿主已按白名单校验，客户端原样展示）。 */
   voiceName?: string;
+  /** 播放音量系数（0–1）；缺省表示这次响应里没有可信值。 */
+  voiceVolume?: number;
   /** 周期碎碎念的语音开关；缺省表示这次响应里没有可信值。 */
   voiceWhisperEnabled?: boolean;
   /** 待办提醒的语音开关；缺省表示这次响应里没有可信值。 */
@@ -96,6 +98,9 @@ export function readMainConfig(merged: MergedConfig): MainConfigPatch | null {
   if (rounds !== undefined) patch.chatMemoryRounds = rounds;
   const limit = nonNegative(main.chatImageLimit);
   if (limit !== undefined) patch.chatImageLimit = limit;
+  // 上界在宿主侧已经把关，这里补一次跨进程读回的判定：脏值只影响显示，不让它流到播放端
+  const volume = nonNegative(main.voiceVolume);
+  if (volume !== undefined && volume <= 1) patch.voiceVolume = volume;
   return patch;
 }
 

@@ -108,6 +108,9 @@ export function saveUserConfig(
   if (ve !== undefined && typeof ve !== 'boolean') return null;
   const vn = o.voiceName;
   if (vn !== undefined && !topFieldValid('voiceName', vn)) return null;
+  // 播放音量（全局系数，0–1）：与上面同一套语义——传了必须合法，没传走透传保留。
+  const vv = o.voiceVolume;
+  if (vv !== undefined && !topFieldValid('voiceVolume', vv)) return null;
   // 语音播报的两个细分开关（周期碎碎念 / 待办提醒）：与上面两个布尔同语义——传了必须是布尔，
   // 没传走透传保留；校验直接复用读取侧的 topFieldValid，读写同一份规则。
   const vwe = o.voiceWhisperEnabled;
@@ -158,6 +161,7 @@ export function saveUserConfig(
   if (cts !== undefined) outConfig.confineToScreen = cts;
   if (ve !== undefined) outConfig.voiceEnabled = ve;
   if (vn !== undefined) outConfig.voiceName = vn;
+  if (vv !== undefined) outConfig.voiceVolume = vv;
   if (vwe !== undefined) outConfig.voiceWhisperEnabled = vwe;
   if (vte !== undefined) outConfig.voiceTodoEnabled = vte;
   if (te !== undefined) outConfig.trayEnabled = te;
@@ -181,6 +185,7 @@ export function saveUserConfig(
   if (cts !== undefined) bodyOwned.add('confineToScreen');
   if (ve !== undefined) bodyOwned.add('voiceEnabled');
   if (vn !== undefined) bodyOwned.add('voiceName');
+  if (vv !== undefined) bodyOwned.add('voiceVolume');
   if (vwe !== undefined) bodyOwned.add('voiceWhisperEnabled');
   if (vte !== undefined) bodyOwned.add('voiceTodoEnabled');
   if (te !== undefined) bodyOwned.add('trayEnabled');

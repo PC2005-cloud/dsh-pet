@@ -4,6 +4,7 @@
  * @module dsh-pet/src/client/settings/pet-draft
  */
 import type { Pet } from '../../shared/types.ts';
+import { SIZE_PERCENT_DEFAULT } from '../../shared/pet-size.ts';
 
 /**
  * 生成一个未占用的宠物 id。
@@ -37,7 +38,7 @@ export function draftPet(template: Pet, id: string): Pet {
     id,
     name: id,
     size: template.size,
-    sizePercent: template.sizePercent ?? 100,
+    sizePercent: template.sizePercent ?? SIZE_PERCENT_DEFAULT,
     balanceEnabled: template.balanceEnabled,
     whisperEnabled: template.whisperEnabled,
     workStatusEnabled: template.workStatusEnabled,

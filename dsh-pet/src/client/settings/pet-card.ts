@@ -63,7 +63,7 @@ export function makePetCard(rt: SettingsRuntime): FunctionComponent<PetCardProps
       }),
     );
 
-  /** 百分比输入：默认 100；不设上限（超过 100 只在 size 也够大时才生效）。 */
+  /** 百分比输入：默认 20；不设上限（超过 100 只在 size 也够大时才生效）。 */
   const percentInput = (value: number, disabled: boolean, setter: (v: number) => void) =>
     h(
       'input',
