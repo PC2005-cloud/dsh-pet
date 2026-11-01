@@ -852,7 +852,7 @@ describe('saveUserConfig —— 物理参数 physics（白名单 + 透传保留�
     assert.equal(saveOnce({ pets: PETS, physics: { ...PHYS, hapticEnabled: 'yes' } }), null);
   });
 
-  test('tiltGravity / shakeThrow：缺键合法（默认关），非布尔整段拒绝', () => {
+  test('tiltGravity / shakeThrow：缺键合法（走默认），非布尔整段拒绝', () => {
     const missing: Record<string, unknown> = { ...PHYS };
     delete missing.tiltGravity;
     delete missing.shakeThrow;

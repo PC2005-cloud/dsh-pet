@@ -194,10 +194,10 @@
   //   按动量守恒 + 恢复系数 0.995 弹开（质量 ∝ size²）；false = 互相穿过（设置页「物理」卡可关）。
   // hapticEnabled：碰撞震动。true（默认）= 撞墙/落地/撞顶与宠物互撞时各震一下；
   //   只在支持 Vibration API 的浏览器生效（安卓），iOS 与桌面端没有硬件，会静默跳过。
-  // tiltGravity：倾斜控制重力。true = 手机倾斜方向代替固定向下的重力（大小仍由 gravity 决定，
-  //   竖直时取满值；gravity=0 时无从取值，等同关闭）；false = 关闭（默认）。
-  // shakeThrow：摇一摇抛出。true = 摇一摇沿甩动方向把宠物甩出去（力度 = 基准 × throwPower），
-  //   与重力大小无关，gravity=0 时也能甩；false = 关闭（默认）。
+  // tiltGravity：倾斜控制重力。true（默认）= 手机倾斜方向代替固定向下的重力（大小仍由 gravity 决定，
+  //   竖直时取满值；gravity=0 时无从取值，等同关闭）；false = 关闭。
+  // shakeThrow：摇一摇抛出。true（默认）= 摇一摇沿甩动方向把宠物甩出去（力度 = 基准 × throwPower），
+  //   与重力大小无关，gravity=0 时也能甩；false = 关闭。
   //   两个体感开关都只在 HTTPS / localhost 下有效（传感器 API 只在安全上下文存在）。
   "physics": {
     "gravity": 1400,
@@ -207,8 +207,8 @@
     "throwPower": 1.0,
     "petCollision": true,
     "hapticEnabled": true,
-    "tiltGravity": false,
-    "shakeThrow": false
+    "tiltGravity": true,
+    "shakeThrow": true
   },
   // ===================== 字体（全局默认，所有宠物共用；种类文件顶层可覆盖） =====================
   // family：字体种类（预设 id，必须在白名单内，写错即配置错误 → 告警并取默认 candy）。

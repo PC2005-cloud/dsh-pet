@@ -40,7 +40,7 @@ dsh plugin --profile web add dsh-pet
 dsh plugin --profile desktop add dsh-pet
 ```
 
-> **兼容性**：本插件当前在 dsh **`0.2.1-rc.3`** 下开发并测试（`dsh --version` 可查看你的版本）。建议使用相同版本；其他版本如遇问题欢迎反馈。
+> **兼容性**：本插件当前在 dsh **`0.2.2-alpha.2`** 下开发并测试（`dsh --version` 可查看你的版本）。建议使用相同版本；其他版本如遇问题欢迎反馈。
 
 ## 方式三：从源码安装（clone 本仓库后）
 

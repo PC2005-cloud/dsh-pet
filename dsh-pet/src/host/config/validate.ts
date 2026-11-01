@@ -105,7 +105,7 @@ export function physicsValid(value: unknown): boolean {
     Number.isFinite(tp) &&
     tp > 0 &&
     typeof p.petCollision === 'boolean' &&
-    // 可选：旧配置（与手写配置）没有这三个键，各按默认处理（hapticEnabled 开、tiltGravity / shakeThrow 关），
+    // 可选：旧配置（与手写配置）没有这三个键，各按默认处理（三个都按开处理），
     // 缺键不算整段非法。
     (p.hapticEnabled === undefined || typeof p.hapticEnabled === 'boolean') &&
     (p.tiltGravity === undefined || typeof p.tiltGravity === 'boolean') &&
