@@ -61,11 +61,9 @@ export function createStandaloneAi(
     store,
     logger,
     fetcher: dependencies.fetch ?? globalThis.fetch.bind(globalThis),
-    now: dependencies.now ?? Date.now,
     disposed: false,
     paused: false,
     saving: false,
-    requests: [],
     active: undefined,
     ready(): boolean {
       return (

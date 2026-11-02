@@ -101,10 +101,9 @@ async function fixture(
   run: (ai: ReturnType<typeof createStandaloneAi>, home: string) => Promise<void>,
   fetcher: typeof fetch,
   protocol = 'openai-compatible',
-  now?: () => number,
 ) {
   const home = mkdtempSync(join(tmpdir(), 'pet-ai-'));
-  const ai = createStandaloneAi(home, silent, { fetch: fetcher, now });
+  const ai = createStandaloneAi(home, silent, { fetch: fetcher });
   try {
     await ai.saveSettings({ ...config, protocol });
     await run(ai, home);
@@ -180,8 +179,7 @@ test('input, empty/nontext output, and response output caps are enforced before/
   );
 });
 
-test('text history ignores nontext/source data; provider-global rate limits reset only with time', async () => {
-  let time = 0;
+test('text history ignores nontext/source data and keeps plain text blocks', async () => {
   await fixture(
     async (ai) => {
       const history = [
@@ -195,20 +193,15 @@ test('text history ignores nontext/source data; provider-global rate limits rese
         { role: 'assistant', content: 'reply' },
         ...options.messages,
       ];
-      for (let n = 0; n < 6; n++)
-        assert.equal(await collect(ai.stream({ ...options, messages: history, sessionId: String(n) })), 'ok');
-      await assert.rejects(collect(ai.stream(options)), /rate limit/);
-      await assert.rejects(collect(ai.stream(options)), /rate limit/);
-      time = 60001;
-      assert.equal(await collect(ai.stream(options)), 'ok');
+      assert.equal(await collect(ai.stream({ ...options, messages: history })), 'ok');
     },
     async (_url, init) => {
       const body = JSON.parse(String(init?.body));
       assert.equal(JSON.stringify(body).includes('not-sent'), false);
+      assert.equal(JSON.stringify(body).includes('first'), true);
       return openAiResponse('ok');
     },
     'openai-compatible',
-    () => time,
   );
 });
 

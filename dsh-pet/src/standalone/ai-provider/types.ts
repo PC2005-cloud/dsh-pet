@@ -54,8 +54,6 @@ export interface AiRuntime {
   readonly store: AiStore;
   readonly logger: StandaloneLogger;
   readonly fetcher: AiFetch;
-  /** 限流窗口用的时钟。 */
-  readonly now: () => number;
   ready(): boolean;
   /** 已释放：此后一切请求与保存都拒绝。 */
   disposed: boolean;
@@ -63,8 +61,6 @@ export interface AiRuntime {
   paused: boolean;
   /** 保存进行中：期间不得发起请求。 */
   saving: boolean;
-  /** 最近一个限流窗口内的请求时刻。 */
-  requests: readonly number[];
   /** 在途请求的控制器；非空即表示忙碌。 */
   active: AbortController | undefined;
 }
@@ -103,10 +99,8 @@ export interface StandaloneAiService {
   dispose(): void;
 }
 
-/** 可注入的传输与时钟，仅供测试替换；生产使用官方 SDK 与真实时间。 */
+/** 可注入的传输，仅供测试替换；生产使用官方 SDK。 */
 export interface StandaloneAiDependencies {
   /** 替换 fetch 以隔离网络。 */
   fetch?: AiFetch;
-  /** 替换时钟以控制限流窗口。 */
-  now?: () => number;
 }

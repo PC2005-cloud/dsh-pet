@@ -1,5 +1,5 @@
 /**
- * 生成通道：把一次请求跑成文本增量序列，途中守住限流、忙状态与额度上限。
+ * 生成通道：把一次请求跑成文本增量序列，途中守住忙状态与额度上限。
  *
  * 不组装请求（归 ./request）、不定义限额（归 ./limits）、不管服务生命周期（归 ./create）。
  * 失败一律归一成固定文案：SDK 错误可能带地址、请求头或正文，只能进 cause 与日志。
@@ -7,7 +7,7 @@
  * @module dsh-pet/src/standalone/ai-provider/stream
  */
 import { isAuthenticationFailure, isRateLimitFailure, sdkTextStream, type AiTransportEvent } from '../ai-transport.ts';
-import { MAX_EVENTS, MAX_OUTPUT_CHARS, RATE_WINDOW_MS, REQUESTS_PER_MINUTE } from './limits.ts';
+import { MAX_EVENTS, MAX_OUTPUT_CHARS } from './limits.ts';
 import { abortable, parseRequest } from './request.ts';
 import type { AiRuntime } from './types.ts';
 
@@ -52,9 +52,6 @@ export function createTextStream(
     const { request, signal: callerSignal } = parseRequest(options, settings.model);
     if (callerSignal?.aborted) throw new Error('Standalone AI request cancelled.');
     if (runtime.active) throw new Error('Standalone AI is busy. Please wait.');
-    const recent = runtime.requests.filter((time) => runtime.now() - time < RATE_WINDOW_MS);
-    if (recent.length >= REQUESTS_PER_MINUTE) throw new Error('Standalone AI rate limit reached. Please wait.');
-    runtime.requests = [...recent, runtime.now()];
     const controller = new AbortController();
     runtime.active = controller;
     const abort = () => controller.abort();

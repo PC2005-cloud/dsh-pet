@@ -19,12 +19,6 @@ export const MAX_OUTPUT_CHARS = 16_384;
 /** 单次响应的流事件上限。 */
 export const MAX_EVENTS = 4096;
 
-/** 每分钟允许的请求数。 */
-export const REQUESTS_PER_MINUTE = 6;
-
-/** 限流窗口长度，单位毫秒。 */
-export const RATE_WINDOW_MS = 60_000;
-
 /** 文本块契约。 */
 export const textBlock = z.object({ type: z.literal('text'), text: z.string().max(MAX_INPUT_CHARS) });
 
