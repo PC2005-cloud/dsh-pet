@@ -25,13 +25,14 @@ export function sendJson(res: ServerResponse, status: number, body: unknown, cor
   res.end(payload);
 }
 
-/** 回静态资源，附带只允许同源脚本、样式与图片的 CSP。 */
+/** 回静态资源，附带只允许同源脚本、样式与同源 blob 图片的 CSP。 */
 export function sendAsset(res: ServerResponse, body: string, type: string): void {
   res.writeHead(200, {
     'content-type': `${type}; charset=utf-8`,
     'content-length': Buffer.byteLength(body),
+    // blob: 只给头像预览用：图片走带令牌的 fetch 再转 blob，不能直接放进 img src（同源 img 不带 Origin，会被判成文件来源）。
     'content-security-policy':
-      "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+      "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' blob:; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
     'x-frame-options': 'DENY',
   });
   res.end(body);

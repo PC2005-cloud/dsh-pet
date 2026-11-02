@@ -120,8 +120,9 @@ export function validateSettings(input: unknown, previous: Readonly<StandaloneAi
 
 /** 去掉密钥与启用位，只保留是否已保存密钥。 */
 function redact(settings: Readonly<StandaloneAiSettings>): StandaloneAiPublicSettings {
-  const { apiKey, enabled: ignored, ...publicFields } = settings;
-  void ignored;
+  const { apiKey, enabled, ...publicFields } = settings;
+  // 启用位只为旧文件保留，不进对外视图；解构出来显式丢弃，否则 lint 会当成未使用变量。
+  void enabled;
   return { ...publicFields, hasKey: apiKey.length > 0 };
 }
 

@@ -1,89 +1,91 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { runInNewContext } from 'node:vm';
 import { validateSettings, publicSettings } from './settings.ts';
 import { settingsPage, settingsScript, settingsStyle } from './settings-page.ts';
 
-test('settings validation accepts explicit costs and write-only blank/clear key semantics', () => {
-  const input = {
-    protocol: 'openai-compatible',
-    baseUrl: 'https://example.test/v1',
-    model: 'model',
-    apiKey: '',
-    automaticWhispers: false,
-    whisperIntervalSec: 300,
-    maxTokens: 512,
-  };
-  assert.deepEqual(validateSettings(input), input);
-  assert.deepEqual(validateSettings({ clearApiKey: true }), { clearApiKey: true });
-  for (const input of [
-    null,
-    [],
-    { protocol: 'other' },
-    { clearApiKey: 'yes' },
-    { whisperIntervalSec: 59 },
-    { whisperIntervalSec: 1.5 },
-    { maxTokens: 99999 },
-    { apiKey: 123 },
-    { hasKey: true },
-    { enabled: true },
-    { baseUrl: 'file:///a' },
-    { baseUrl: 'https://user:secret@example.test/v1' },
-    { baseUrl: 'https://example.test/?key=secret' },
-  ]) {
-    assert.throws(() => validateSettings(input), Error, JSON.stringify(input));
-  }
-});
-test('public settings are an allowlist even if backend accidentally includes credentials', () => {
-  const actual = publicSettings({
-    protocol: 'anthropic',
-    apiKey: 'never expose',
-    token: 'never expose',
-    hasKey: true,
-    model: 'x',
-    enabled: false,
-  });
-  assert.deepEqual(actual, { protocol: 'anthropic', hasKey: true, model: 'x' });
-  assert.equal(JSON.stringify(actual).includes('never expose'), false);
-});
-test('settings shell is accessible, self contained, and never saves browser secrets', () => {
-  assert.match(settingsPage, /lang="zh-CN"/);
-  assert.match(settingsPage, /type="password"/);
-  assert.match(settingsPage, /aria-live="polite"/);
-  assert.match(settingsPage, /桌宠配置/);
-  assert.match(settingsPage, /AI 服务商/);
-  assert.match(settingsScript, /history\.replaceState/);
-  assert.match(settingsScript, /X-DSH-Pet-Token/);
-  assert.doesNotMatch(settingsScript, /localStorage|sessionStorage|document\.cookie|innerHTML/);
-  assert.doesNotMatch(settingsPage, /https?:\/\/(?!example)/);
-  assert.match(settingsStyle, /focus-visible/);
-});
+/** 记录到的一条请求。 */
+type RecordedRequest = {
+  url: string;
+  options: { method: string; body?: string; headers: Record<string, string> };
+};
 
-test('settings browser script strips fragment, keeps key write-only, clears without AI requests and fills the model from a fetch', async () => {
-  const { runInNewContext } = await import('node:vm');
-  type Element = {
-    value: string;
-    checked: boolean;
-    disabled: boolean;
-    hidden: boolean;
-    textContent: string;
-    dataset: Record<string, string>;
-    children: unknown[];
-    listeners: Record<string, (event?: unknown) => Promise<void> | void>;
-    addEventListener: (name: string, fn: (event?: unknown) => Promise<void> | void) => void;
-    append: (...kids: unknown[]) => void;
-    setAttribute: () => void;
-    reportValidity: () => boolean;
-    getBoundingClientRect: () => {
-      left: number;
-      top: number;
-      right: number;
-      bottom: number;
-      width: number;
-      height: number;
-    };
+/** getElementById 的替身：只实现页面脚本用到的那几个属性。 */
+type FakeElement = {
+  value: string;
+  checked: boolean;
+  disabled: boolean;
+  hidden: boolean;
+  textContent: string;
+  dataset: Record<string, string>;
+  children: unknown[];
+  listeners: Record<string, (event?: unknown) => Promise<void> | void>;
+  addEventListener: (name: string, fn: (event?: unknown) => Promise<void> | void) => void;
+  append: (...kids: unknown[]) => void;
+  setAttribute: () => void;
+  reportValidity: () => boolean;
+  getBoundingClientRect: () => {
+    left: number;
+    top: number;
+    right: number;
+    bottom: number;
+    width: number;
+    height: number;
   };
-  const elements = new Map<string, Element>();
-  const element = (id: string): Element => {
+};
+
+/** createElement 的替身：能追加、能设属性、能点、能被读值。 */
+type FakeNode = {
+  nodeType: number;
+  isConnected: boolean;
+  hidden: boolean;
+  value: string;
+  checked: boolean;
+  disabled: boolean;
+  textContent: string;
+  className: string;
+  style: Record<string, string>;
+  dataset: Record<string, string>;
+  children: FakeNode[];
+  listeners: Record<string, () => void>;
+  classList: { toggle(): void };
+  append(...kids: unknown[]): void;
+  setAttribute(): void;
+  addEventListener(name: string, fn: () => void): void;
+  removeEventListener(): void;
+  remove(): void;
+  focus(): void;
+  scrollIntoView(): void;
+  getBoundingClientRect(): { left: number; top: number; right: number; bottom: number; width: number; height: number };
+  readonly firstElementChild: FakeNode | null;
+};
+
+/** 一次页面启动后的句柄：各 test 自己起一份，互不共享状态。 */
+interface Page {
+  /** 按 id 取到启动时被脚本访问过的元素。 */
+  element(id: string): FakeElement;
+  /** 脚本发出的全部请求，按发出顺序。 */
+  requests: RecordedRequest[];
+  /** createElement 造出来的节点都会挂到 body 上（菜单、弹窗）。 */
+  body: FakeNode;
+  /** 地址片段是否已被清掉，清成什么。 */
+  stripped(): string;
+  /** 打到 AI 设置端点的请求。 */
+  aiRequests(): RecordedRequest[];
+  /** 最后一次 AI 设置请求的请求体。 */
+  lastAiBody(): Record<string, unknown>;
+  /** 最近一次确认框的两个按钮；没弹过就是空数组。 */
+  lastDialogActions(): FakeNode[];
+}
+
+/**
+ * 起一份页面：假 DOM + 真脚本。
+ *
+ * 每个 test 都新建，避免用例之间互相污染——脚本在启动时会发请求、改元素状态。
+ */
+async function setupPage(): Promise<Page> {
+  const elements = new Map<string, FakeElement>();
+  const element = (id: string): FakeElement => {
     if (!elements.has(id))
       elements.set(id, {
         value: '',
@@ -106,11 +108,7 @@ test('settings browser script strips fragment, keeps key write-only, clears with
       });
     return elements.get(id)!;
   };
-  const requests: Array<{ url: string; options: { method: string; body?: string; headers: Record<string, string> } }> =
-    [];
-  let stripped = '';
-  /** 页面要渲染卡片与自绘下拉，测试只提供「够用」的节点替身：能追加、能设属性、能点、能被读值。 */
-  const node = () => {
+  const node = (): FakeNode => {
     const el: Record<string, unknown> = {
       nodeType: 1,
       isConnected: true,
@@ -143,20 +141,18 @@ test('settings browser script strips fragment, keeps key write-only, clears with
         return (el.children as Array<{ nodeType?: number }>).find((kid) => kid && kid.nodeType === 1) ?? null;
       },
     };
-    return el;
+    return el as unknown as FakeNode;
   };
+
   const body = node();
+  const requests: RecordedRequest[] = [];
+  let stripped = '';
   runInNewContext(settingsScript, {
     URLSearchParams,
     setTimeout,
     clearTimeout,
     console,
-    window: {
-      addEventListener() {},
-      removeEventListener() {},
-      innerHeight: 800,
-      confirm: () => false,
-    },
+    window: { addEventListener() {}, removeEventListener() {}, innerHeight: 800, confirm: () => false },
     document: {
       getElementById: element,
       createElement: node,
@@ -173,7 +169,7 @@ test('settings browser script strips fragment, keeps key write-only, clears with
         stripped = path;
       },
     },
-    fetch: async (url: string, options: { method: string; body?: string; headers: Record<string, string> }) => {
+    fetch: async (url: string, options: RecordedRequest['options']) => {
       requests.push({ url, options });
       if (url === '/standalone-ai/models') {
         return {
@@ -206,57 +202,137 @@ test('settings browser script strips fragment, keeps key write-only, clears with
     },
   });
   await new Promise((resolve) => setImmediate(resolve));
-  /** 启动时会同时读插件配置与 AI 设置，按端点取请求，不依赖先后顺序。 */
+
   const aiRequests = () => requests.filter(({ url }) => url === '/standalone-ai/settings');
-  /** 最后一次 AI 请求的请求体；调用点都在 await 之后，列表一定非空。 */
-  const lastAiBody = () => {
-    const list = aiRequests();
-    return JSON.parse(list[list.length - 1].options.body ?? '{}');
+  return {
+    element,
+    requests,
+    body,
+    stripped: () => stripped,
+    aiRequests,
+    lastAiBody: () => {
+      const list = aiRequests();
+      return JSON.parse(list[list.length - 1].options.body ?? '{}');
+    },
+    lastDialogActions: () => {
+      const masks = body.children.filter((kid) => kid.className === 'dialogMask');
+      const panel = masks[masks.length - 1]?.children[0];
+      return panel ? panel.children[2].children : [];
+    },
   };
-  assert.equal(stripped, '/standalone-ai/');
-  assert.equal(element('apiKey').value, '');
-  assert.equal(element('key-state').textContent, '已保存 · 不回显');
-  element('apiKey').value = 'write-only-fake-key';
-  await element('settings').listeners.submit({ preventDefault() {} });
-  assert.equal(element('apiKey').value, '');
-  assert.equal(lastAiBody().apiKey, 'write-only-fake-key');
-  assert.equal('enabled' in lastAiBody(), false, '页面不再提交启用位');
+}
 
-  // 删除密钥：先弹确认框；取消不发请求，确认才提交 clearApiKey。
-  type FakeNode = { className: string; children: FakeNode[]; listeners: Record<string, () => void> };
-  const lastDialogActions = (): FakeNode[] => {
-    const masks = (body.children as FakeNode[]).filter((kid) => kid.className === 'dialogMask');
-    const panel = masks[masks.length - 1]?.children[0];
-    return panel ? panel.children[2].children : [];
+/** 等两轮事件循环，让脚本里的 await 链落定。 */
+async function settle(): Promise<void> {
+  await new Promise((resolve) => setImmediate(resolve));
+  await new Promise((resolve) => setImmediate(resolve));
+}
+
+test('settings validation accepts explicit costs and write-only blank/clear key semantics', () => {
+  const input = {
+    protocol: 'openai-compatible',
+    baseUrl: 'https://example.test/v1',
+    model: 'model',
+    apiKey: '',
+    automaticWhispers: false,
+    whisperIntervalSec: 300,
+    maxTokens: 512,
   };
-  const clearRequests = () => requests.filter(({ url }) => url === '/standalone-ai/settings').length;
+  assert.deepEqual(validateSettings(input), input);
+  assert.deepEqual(validateSettings({ clearApiKey: true }), { clearApiKey: true });
+  for (const input of [
+    null,
+    [],
+    { protocol: 'other' },
+    { clearApiKey: 'yes' },
+    { whisperIntervalSec: 59 },
+    { whisperIntervalSec: 1.5 },
+    { maxTokens: 99999 },
+    { apiKey: 123 },
+    { hasKey: true },
+    { enabled: true },
+    { baseUrl: 'file:///a' },
+    { baseUrl: 'https://user:secret@example.test/v1' },
+    { baseUrl: 'https://example.test/?key=secret' },
+  ]) {
+    assert.throws(() => validateSettings(input), Error, JSON.stringify(input));
+  }
+});
 
-  element('key-delete').listeners.click();
-  await new Promise((resolve) => setImmediate(resolve));
-  assert.equal(lastDialogActions().length, 2, '删除前必须先弹确认框');
-  const before = clearRequests();
-  lastDialogActions()[0].listeners.click();
-  await new Promise((resolve) => setImmediate(resolve));
-  assert.equal(clearRequests(), before, '取消后不得发出删除请求');
+test('public settings are an allowlist even if backend accidentally includes credentials', () => {
+  const actual = publicSettings({
+    protocol: 'anthropic',
+    apiKey: 'never expose',
+    token: 'never expose',
+    hasKey: true,
+    model: 'x',
+    enabled: false,
+  });
+  assert.deepEqual(actual, { protocol: 'anthropic', hasKey: true, model: 'x' });
+  assert.equal(JSON.stringify(actual).includes('never expose'), false);
+});
 
-  element('key-delete').listeners.click();
-  await new Promise((resolve) => setImmediate(resolve));
-  lastDialogActions()[1].listeners.click();
-  await new Promise((resolve) => setImmediate(resolve));
-  assert.equal(lastAiBody().clearApiKey, true);
-  assert.equal(element('key-state').textContent, '尚未设置');
-  assert.equal(element('key-actions').hidden, true, '没有密钥时不再显示删除入口');
+test('settings shell is accessible, self contained, and never saves browser secrets', () => {
+  assert.match(settingsPage, /lang="zh-CN"/);
+  assert.match(settingsPage, /type="password"/);
+  assert.match(settingsPage, /aria-live="polite"/);
+  assert.match(settingsPage, /桌宠配置/);
+  assert.match(settingsPage, /AI 服务商/);
+  assert.match(settingsScript, /history\.replaceState/);
+  assert.match(settingsScript, /X-DSH-Pet-Token/);
+  assert.doesNotMatch(settingsScript, /localStorage|sessionStorage|document\.cookie|innerHTML/);
+  assert.doesNotMatch(settingsPage, /https?:\/\/(?!example)/);
+  assert.match(settingsStyle, /focus-visible/);
+});
+
+test('启动：地址片段被清掉，密钥框清空并显示已保存', async () => {
+  const page = await setupPage();
+  assert.equal(page.stripped(), '/standalone-ai/');
+  assert.equal(page.element('apiKey').value, '');
+  assert.equal(page.element('key-state').textContent, '已保存 · 不回显');
   assert.ok(
-    aiRequests().every(({ options }) => options.headers['X-DSH-Pet-Token'] === 'process-capability'),
+    page.aiRequests().every(({ options }) => options.headers['X-DSH-Pet-Token'] === 'process-capability'),
     'AI 请求必须带本次运行的访问令牌',
   );
+});
 
-  // 模型字段：点右侧箭头先拉取，拉到后直接在箭头下方弹出候选；页面上只有一个模型输入框。
-  element('baseUrl').value = 'https://draft.test/v1';
-  element('apiKey').value = 'draft-key';
-  element('model-toggle').listeners.click();
-  await new Promise((resolve) => setImmediate(resolve));
-  const modelRequests = () => requests.filter(({ url }) => url === '/standalone-ai/models');
+test('保存：密钥只写不回显，且不再提交启用位', async () => {
+  const page = await setupPage();
+  page.element('apiKey').value = 'write-only-fake-key';
+  await page.element('settings').listeners.submit({ preventDefault() {} });
+  assert.equal(page.element('apiKey').value, '');
+  assert.equal(page.lastAiBody().apiKey, 'write-only-fake-key');
+  assert.equal('enabled' in page.lastAiBody(), false, '页面不再提交启用位');
+});
+
+test('删除密钥：先弹确认框，取消不发请求，确认才提交 clearApiKey', async () => {
+  const page = await setupPage();
+  page.element('key-delete').listeners.click();
+  await settle();
+  assert.equal(page.lastDialogActions().length, 2, '删除前必须先弹确认框');
+
+  const before = page.aiRequests().length;
+  page.lastDialogActions()[0].listeners.click();
+  await settle();
+  assert.equal(page.aiRequests().length, before, '取消后不得发出删除请求');
+
+  page.element('key-delete').listeners.click();
+  await settle();
+  page.lastDialogActions()[1].listeners.click();
+  await settle();
+  assert.equal(page.lastAiBody().clearApiKey, true);
+  assert.equal(page.element('key-state').textContent, '尚未设置');
+  assert.equal(page.element('key-actions').hidden, true, '没有密钥时不再显示删除入口');
+});
+
+test('拉取模型：用表单草稿请求端点，选中后写回输入框并标记未保存', async () => {
+  const page = await setupPage();
+  page.element('baseUrl').value = 'https://draft.test/v1';
+  page.element('apiKey').value = 'draft-key';
+  page.element('model-toggle').listeners.click();
+  await settle();
+
+  const modelRequests = () => page.requests.filter(({ url }) => url === '/standalone-ai/models');
   assert.equal(modelRequests().length, 1);
   assert.deepEqual(JSON.parse(modelRequests()[0].options.body ?? '{}'), {
     protocol: 'anthropic',
@@ -264,12 +340,13 @@ test('settings browser script strips fragment, keeps key write-only, clears with
     apiKey: 'draft-key',
   });
   assert.equal(modelRequests()[0].options.headers['X-DSH-Pet-Token'], 'process-capability');
-  assert.match(element('model-result').textContent, /已拉取 2 个模型/);
-  assert.equal(element('model').value, 'x', '拉取本身不得改动已填的模型');
-  const menus = (body.children as FakeNode[]).filter((kid) => kid.className === 'selectMenu');
+  assert.match(page.element('model-result').textContent, /已拉取 2 个模型/);
+  assert.equal(page.element('model').value, 'x', '拉取本身不得改动已填的模型');
+
+  const menus = page.body.children.filter((kid) => kid.className === 'selectMenu');
   const menu = menus[menus.length - 1];
   assert.ok(menu, '拉到模型后必须直接弹出候选菜单');
   menu.children[0].listeners.click();
-  assert.equal(element('model').value, 'm-one');
-  assert.equal(element('dirty').hidden, false);
+  assert.equal(page.element('model').value, 'm-one');
+  assert.equal(page.element('dirty').hidden, false);
 });

@@ -42,14 +42,7 @@ function populateAi(data) {
   byId('apiKey').disabled = false;
 }
 
-function wireAiPanel() {
-  wireModelPicker();
-  const form = byId('settings');
-  const status = byId('status');
-  const save = byId('save');
-  const testBtn = byId('test-btn');
-  const testResult = byId('test-result');
-
+function wireKeyDelete(status) {
   byId('key-delete').addEventListener('click', async () => {
     const confirmed = await confirmDialog({
       title: '删除已保存的密钥',
@@ -66,7 +59,9 @@ function wireAiPanel() {
       setStatus(status, error && error.message ? error.message : String(error), 'error');
     }
   });
+}
 
+function wireTest(testBtn, testResult) {
   testBtn.addEventListener('click', async () => {
     testBtn.disabled = true;
     testResult.className = 'status';
@@ -104,7 +99,9 @@ function wireAiPanel() {
       testBtn.disabled = false;
     }
   });
+}
 
+function wireSave(form, save, status) {
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
     if (!form.reportValidity()) return;
@@ -126,6 +123,14 @@ function wireAiPanel() {
       save.disabled = false;
     }
   });
+}
+
+function wireAiPanel() {
+  wireModelPicker();
+  const status = byId('status');
+  wireKeyDelete(status);
+  wireTest(byId('test-btn'), byId('test-result'));
+  wireSave(byId('settings'), byId('save'), status);
 }
 `;
 }

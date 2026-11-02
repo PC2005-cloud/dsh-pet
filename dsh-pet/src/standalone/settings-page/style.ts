@@ -98,6 +98,11 @@ input:disabled,select:disabled,textarea:disabled{background:var(--dsw-static-neu
 .comboToggle:disabled{opacity:.45;cursor:not-allowed}
 .keyActions{display:flex;justify-content:flex-end;margin-top:8px}
 .keyActions .btn{height:26px;padding:0 10px;font-size:12px}
+.avatarRow{display:flex;align-items:center;gap:12px;margin:0 0 14px}
+.avatarImg{flex:none;width:56px;height:56px;border-radius:var(--dsw-radius-md);border:1px solid var(--dsw-alias-border-l2);object-fit:cover;background:var(--dsw-alias-bg-layer-1)}
+.avatarBox{display:flex;flex-direction:column;gap:6px;min-width:0;align-items:flex-start}
+.avatarBox .fieldHint{margin:0}
+.avatarBox .status{margin:0;min-height:0}
 .gridTight{margin-top:14px}
 .fieldTight{margin:0}
 .fineprint{margin:8px 0 0;font-size:12px;color:var(--dsw-alias-label-tertiary)}
