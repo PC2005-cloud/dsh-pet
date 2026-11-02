@@ -180,6 +180,15 @@ function registerIpc({ ipcMain, petWindows, shell, openTarget, petRoute }) {
     openSite(url);
   });
 
+  // 只叫窗口、不改去向：桌面宿主用 dsh:// 把主窗口提到前台（被别的窗口挡住也有效）。
+  // 必须按宿主形态门控：dsh:// 是系统级注册的，`dsh web` 形态下发它会把桌面版 DSH 拉起来。
+  ipcMain.on('pet:focus-host', () => {
+    if (openTarget !== 'desktop') return;
+    shell.openExternal('dsh://open').catch((error) => {
+      console.warn('[dsh-pet-desktop-helper] focus host failed:', error && error.message);
+    });
+  });
+
   /**
    * 截一帧桌面：只取宠物所在那块屏，按物理像素请求缩略图，回一次 JPEG base64。
    * 不做流、不落盘；渲染端拿到后与上传图片走同一条预算编码。

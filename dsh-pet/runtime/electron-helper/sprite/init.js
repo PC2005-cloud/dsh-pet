@@ -95,6 +95,8 @@ Object.assign(PetSprite.prototype, {
     this.workTimer = null;
     this.workText = null;
     this.workState = null; // 最近一次工作状态（互动/事件动画播完恢复档位循环用）
+    this.workSessionId = null; // 当前展示条目所属会话：有值才让工作气泡可点（点了跳过去）
+    this.bubbleSlot = 'none'; // 当前显示的气泡槽位（renderBubble 写）：点击处理据此分清翻页与跳会话
     this.prevWorkState = null; // 上一档状态（气泡只在状态变化时点亮/收起）
     this.prevWorkTick = 0;
     // 占用锁：frozen = 此刻正被第三方占用；lockTimer 按叶子里的 expiresAt 自己到点解除
@@ -161,8 +163,14 @@ Object.assign(PetSprite.prototype, {
     this.hit.setAttribute('aria-label', this.pet.name);
     this.bubble = document.createElement('div');
     this.bubble.className = 'pet-bubble';
-    // 余额气泡可点时点一下切页：就地吞掉事件，别让这次点击落到下面的本体命中层。
+    // 气泡点击按当前槽位分流：工作气泡跳会话，余额气泡切页。都就地吞掉事件，别落到下面的本体命中层。
     this.bubble.addEventListener('click', (e) => {
+      if (this.workClickable()) {
+        e.stopPropagation();
+        e.preventDefault();
+        this.openWorkSession();
+        return;
+      }
       if (!this.balanceClickable()) return;
       e.stopPropagation();
       e.preventDefault();

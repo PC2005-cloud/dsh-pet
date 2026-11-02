@@ -49,7 +49,7 @@ export function apply(ctx: any): void {
     EXTERNAL_WORK_SESSION,
     nextExternalWorkSeq,
   } = setup;
-  const workStatusBridge = createWorkStatusBridge({ state, workStatus });
+  const workStatusBridge = createWorkStatusBridge({ state, workStatus, EXTERNAL_WORK_SESSION });
   const { publishWorkStatus, stopWorkStatusFlush } = workStatusBridge;
   const downloadReport = createDownloadReport({
     EXTERNAL_WORK_SESSION,

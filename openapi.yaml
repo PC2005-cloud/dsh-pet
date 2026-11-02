@@ -317,6 +317,40 @@ paths:
         "405":
           $ref: "#/components/responses/MethodNotAllowed"
 
+  /dsh-pet-7340/focus-session:
+    post:
+      tags: [Action]
+      operationId: focusSession
+      summary: 请求页面切到指定会话
+      description: |
+        让页面切到指定会话。动作端点：只把意图写进 `sections.focusSession`，
+        不返回跳转结果，也不校验该会话是否存在（未知 id 由页面侧忽略）。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [sessionId]
+              properties:
+                sessionId:
+                  type: string
+                  description: |
+                    目标会话 id。`trim()` 后不得为空、不得是哨兵值 `unknown`，
+                    上限 128 字符；不满足时 `ok: false` + `reason: bad-request`。
+                  example: session-742cf7de-d1ce-4694-bfde-77158ce9e0ca
+      responses:
+        "200":
+          description: 意图已写入 `sections.focusSession`（不代表页面已经切过去）。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FocusSessionResponse"
+        "400":
+          description: "请求体不是合法 JSON（`reason: invalid-json`）。"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+
   /dsh-pet-7340/whisper:
     post:
       tags: [Action]
@@ -3169,6 +3203,25 @@ components:
           const: true
       description: 动作已完成。数据请从 `GET /state` 读取。
 
+    FocusSessionResponse:
+      type: object
+      required: [ok, sessionId, ts]
+      properties:
+        ok:
+          type: boolean
+          const: true
+        sessionId:
+          type: string
+          description: 已写入的会话 id（已裁掉首尾空白）。
+        ts:
+          type: integer
+          description: |
+            写入时刻（毫秒）。消费端拿它和自己的「已处理水位」比较，
+            大于水位才跳转——页面晚于写入加载时靠这一条重放，不会被首拉基线吞掉。
+      description: |
+        意图已写入 `sections.focusSession`。这不表示页面已经切过去：
+        页面在轮询到该叶子、且 `ts` 大于本地水位时才执行切换。
+
     SayResponse:
       type: object
       required: [ok, text]
@@ -3327,7 +3380,7 @@ components:
         sections:
           type: object
           description: 全局段（所有端共享一份）
-          required: [balance, workStatus, notify, config]
+          required: [balance, workStatus, notify, config, focusSession]
           properties:
             balance:
               $ref: "#/components/schemas/BalanceLeaf"
@@ -3337,6 +3390,8 @@ components:
               $ref: "#/components/schemas/NotifyLeaf"
             config:
               $ref: "#/components/schemas/ConfigLeaf"
+            focusSession:
+              $ref: "#/components/schemas/FocusSessionLeaf"
         pets:
           type: object
           description: 每只宠物各自一份；键是宠物 id（**可含点号，勿切分**）
@@ -3655,6 +3710,29 @@ components:
           type: object
           description: 恒为 `{}`（空对象）。不要从这里读配置内容——去 `GET /config`。
           maxProperties: 0
+
+    FocusSessionLeaf:
+      type: object
+      required: [counter, data]
+      description: |
+        **跳会话指令**（一次性信号）。`data` 为 `{ sessionId, ts }`，由 `POST /focus-session` 写入。
+        `data` 为 `null` 表示从未写过。
+      properties:
+        counter:
+          $ref: "#/components/schemas/Counter"
+        data:
+          oneOf:
+            - type: "null"
+            - type: object
+              required: [sessionId, ts]
+              properties:
+                sessionId:
+                  type: string
+                  description: 目标会话 id（已裁掉首尾空白）。
+                ts:
+                  type: integer
+                  format: int64
+                  description: 写入时刻（毫秒）。消费端据此判重，不回退。
 
     NotifyFrame:
       oneOf:

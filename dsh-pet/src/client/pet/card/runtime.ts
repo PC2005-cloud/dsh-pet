@@ -62,6 +62,7 @@ export function createCardRuntime(rt: PetRuntime) {
 
   return function useCardRuntime(props: PetCardProps): CardViewProps {
     const { arena, balance, balanceManual, cfg, lock, lockTick, menuItemsRef, sleep, sleepTick, workStatus } = props;
+    const { onFocusSession } = props;
 
     // 实际渲染宽度：百分比只在挂载与配置变更时按当次视口宽解析一次，拖窗口不跟随。
     // 物理、字号与 CSS 变量都吃这一个值——两处各算一次会让命中框与视觉错位。
@@ -128,6 +129,8 @@ export function createCardRuntime(rt: PetRuntime) {
       balanceManual,
       workStatusEnabled: cfg.workStatusEnabled,
       workTerminal: workStatus?.state === 'success' || workStatus?.state === 'error',
+      workSessionId: workStatus?.sessionId ?? null,
+      ...(onFocusSession === undefined ? {} : { onFocusSession }),
     });
 
     const ownAnim = useCardAnimation({

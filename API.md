@@ -65,6 +65,7 @@ dsh-pet 的宿主半侧向 DSH 自己的 Web 服务注册了**一条前缀路由
 | `POST /dsh-pet-7340/throw?pet=`           | **原生抛掷**（需锁）：给桌宠一个初速度让它飞出去（`angle` 度、`power` 倍率）                                                                                                   |
 | `POST /dsh-pet-7340/sleep?pet=`           | **让它睡下**：从 `animations.sleep` 里挑一整套（开始/循环/起来）写进 `pets.<id>.sleep`；睡着期间自动来源与手动触发一律拒绝（持锁时让路）；没配睡觉动画回 `no-sleep-animations` |
 | `POST /dsh-pet-7340/wake?pet=`            | **叫醒**：播「起来」后回随机链；本来没睡也回 ok（幂等）                                                                                                                        |
+| `POST /dsh-pet-7340/focus-session`        | **跳会话**：让页面切到指定会话；桌面端点会话气泡走这条                                                                                                                          |
 
 ## 五、改配置与重载
 
@@ -132,7 +133,7 @@ dsh-pet 的宿主半侧向 DSH 自己的 Web 服务注册了**一条前缀路由
 {
   "counter": 1755000000007,   // 整份 S 的版本号 = 最后一次写入的编号（顶层，不是叶子）
   "sections": {               // 全局段：所有端共享一份
-    "balance": {…}, "workStatus": {…}, "notify": {…}, "config": {…}
+    "balance": {…}, "workStatus": {…}, "notify": {…}, "config": {…}, "menu": {…}, "focusSession": {…}
   },
   "pets": {                   // 每只宠物各自一份；键是宠物 id（可含点号，勿切分）
     "main": { "say": {…}, "anim": {…}, "position": {…}, "throw": {…}, "lock": {…}, "sleep": {…} }
