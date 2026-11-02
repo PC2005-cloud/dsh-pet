@@ -2,7 +2,9 @@
  * 设置页脚本的公共层：令牌、请求封装、共享状态与 DOM 工具。
  *
  * 作为整页脚本的第一个片段被拼进同一个 IIFE，后续片段只调用这里导出的名字。
- * 令牌只放内存并随请求头送出；片段里不许出现第二份枚举清单，取值一律由调用方注入。
+ * 令牌只放内存并随请求头送出，地址栏里的那一份读完即清；刷新后内存里没有令牌时，
+ * 由首次访问换来的 HttpOnly cookie 继续认证，所以请求一律按同源凭据发出。
+ * 片段里不许出现第二份枚举清单，取值一律由调用方注入。
  * @module dsh-pet/src/standalone/settings-page/script/core
  */
 
@@ -86,7 +88,7 @@ function markDirty(value) {
 async function callApi(method, path, body) {
   const response = await fetch(API + path, {
     method: method,
-    credentials: 'omit',
+    credentials: 'same-origin',
     cache: 'no-store',
     headers: body
       ? { 'X-DSH-Pet-Token': TOKEN, 'Content-Type': 'application/json' }

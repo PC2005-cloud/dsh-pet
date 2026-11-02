@@ -16,7 +16,7 @@ const AI_BALANCE_URL = '/standalone-ai/balance';
 async function aiRequest(method, body) {
   const response = await fetch(AI_SETTINGS_URL, {
     method: method,
-    credentials: 'omit',
+    credentials: 'same-origin',
     cache: 'no-store',
     redirect: 'error',
     headers: body
@@ -77,7 +77,7 @@ function wireBalanceQuery() {
     try {
       const response = await fetch(AI_BALANCE_URL, {
         method: 'POST',
-        credentials: 'omit',
+        credentials: 'same-origin',
         cache: 'no-store',
         headers: { 'X-DSH-Pet-Token': TOKEN },
       });
@@ -129,7 +129,7 @@ function wireTest(testBtn, testResult) {
     try {
       const response = await fetch(AI_TEST_URL, {
         method: 'POST',
-        credentials: 'omit',
+        credentials: 'same-origin',
         cache: 'no-store',
         headers: { 'X-DSH-Pet-Token': TOKEN, 'Content-Type': 'application/json' },
         body: JSON.stringify(input),

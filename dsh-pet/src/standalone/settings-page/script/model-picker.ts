@@ -44,7 +44,7 @@ async function fetchModelOptions(trigger) {
   try {
     const response = await fetch(AI_MODELS_URL, {
       method: 'POST',
-      credentials: 'omit',
+      credentials: 'same-origin',
       cache: 'no-store',
       headers: { 'X-DSH-Pet-Token': TOKEN, 'Content-Type': 'application/json' },
       body: JSON.stringify({

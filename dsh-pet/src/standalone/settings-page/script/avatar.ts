@@ -63,7 +63,7 @@ async function encodeAvatar(file) {
 async function loadAvatar(image, assetRoot) {
   try {
     const response = await fetch(avatarSrc(assetRoot), {
-      credentials: 'omit',
+      credentials: 'same-origin',
       cache: 'no-store',
       headers: { 'X-DSH-Pet-Token': TOKEN },
     });
@@ -85,7 +85,7 @@ async function uploadAvatar(assetRoot, file, result, image) {
     const base64 = await encodeAvatar(file);
     const response = await fetch(API + '/pet-avatar?root=' + encodeURIComponent(assetRoot), {
       method: 'POST',
-      credentials: 'omit',
+      credentials: 'same-origin',
       cache: 'no-store',
       headers: { 'X-DSH-Pet-Token': TOKEN, 'Content-Type': 'application/json' },
       body: JSON.stringify({ base64: base64 }),

@@ -17,7 +17,10 @@ function response() {
     headers: {} as Record<string, string>,
     writeHead(status: number, headers: Record<string, string>) {
       this.status = status;
-      this.headers = headers;
+      Object.assign(this.headers, headers);
+    },
+    setHeader(name: string, value: string) {
+      this.headers[name.toLowerCase()] = String(value);
     },
     end() {},
   };
@@ -176,5 +179,40 @@ test('only minimal health, settings shell and known media GET are public; public
       false,
       path,
     );
+  }
+});
+
+test('首次头部认证后换取会话 cookie，刷新时凭 cookie 继续，且不重复下发', () => {
+  const security = createRequestSecurity();
+
+  const first = response();
+  assert.equal(
+    security.authorize(request({ 'x-dsh-pet-token': security.token }), first as unknown as ServerResponse),
+    true,
+  );
+  const cookie = first.headers['set-cookie'] ?? '';
+  assert.match(cookie, /^dsh_pet_token=[^;]+; HttpOnly; SameSite=Strict; Path=\/standalone-ai\/$/);
+  assert.equal(cookie.includes(security.token), true);
+  assert.equal(cookie.includes('Max-Age'), false, '会话 cookie 不该带 Max-Age');
+
+  // 刷新：地址栏里的令牌已被清掉，只剩 cookie，且它可能夹在别的 cookie 中间。
+  const refreshed = response();
+  assert.equal(
+    security.authorize(
+      request({ cookie: `other=1; dsh_pet_token=${security.token}; tail=2` }),
+      refreshed as unknown as ServerResponse,
+    ),
+    true,
+  );
+  assert.equal(refreshed.headers['set-cookie'], undefined, '已有 cookie 时不该再下发');
+});
+
+test('cookie 必须是本进程令牌：别的进程的值、错形状与空值一律拒绝', () => {
+  const security = createRequestSecurity();
+  const foreign = createRequestSecurity();
+  for (const cookie of [`dsh_pet_token=${foreign.token}`, 'dsh_pet_token=short', 'dsh_pet_token=', 'dsh_pet_token']) {
+    const res = response();
+    assert.equal(security.authorize(request({ cookie }), res as unknown as ServerResponse), false, cookie);
+    assert.equal(res.status, 403);
   }
 });
