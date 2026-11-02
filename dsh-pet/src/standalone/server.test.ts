@@ -358,7 +358,10 @@ describe('HTTP boundary protects every route and settings', () => {
       // 源码形态下包内 assets 不可达（PACKAGE_ROOT 指向 src/），此时只要求语义明确的 404。
       const icon = await fetch(base + '/standalone-ai/icon.png');
       assert.notEqual(icon.status, 403, '图标不得要求令牌');
-      assert.ok(icon.status === 404 || icon.headers.get('content-type') === 'image/png', '图标要么缺失 404，要么是 PNG');
+      assert.ok(
+        icon.status === 404 || icon.headers.get('content-type') === 'image/png',
+        '图标要么缺失 404，要么是 PNG',
+      );
       assert.equal((await fetch(base + '/standalone-ai/settings')).status, 403);
       const read = await fetch(base + '/standalone-ai/settings', { headers });
       assert.deepEqual(await read.json(), { protocol: 'anthropic', model: 'x', hasKey: true });

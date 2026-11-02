@@ -14,7 +14,7 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { dayKindOf, timeContextOf, timeSlotOf, type TimeSlot } from './time-context.ts';
+import { dayKindOf, historyStampOf, timeContextOf, timeSlotOf, type TimeSlot } from './time-context.ts';
 
 /** 0–23 点逐时期望时段（改划分口径时必须同步这里，否则测试红） */
 const EXPECTED_BY_HOUR: TimeSlot[] = [
@@ -332,5 +332,31 @@ describe('节日 —— 优先级＝数组顺序（靠前的先说话）', () =>
 
   test('暑假压过纪念日：7/1 既是建党节又是暑假首日，说暑假', () => {
     assertClause(new Date(2026, 6, 1, 12, 0), '暑假开始了');
+  });
+});
+
+describe('historyStampOf —— 历史消息的时间前缀', () => {
+  test('同年：月日不补零、时分补零', () => {
+    const at = new Date(2026, 9, 31, 22, 53).getTime();
+    assert.equal(historyStampOf(at, new Date(2026, 10, 2, 0, 52)), '10月31日 22:53');
+  });
+
+  test('个位数时/分补零：09:05 不能写成 9:5', () => {
+    const at = new Date(2026, 10, 2, 9, 5).getTime();
+    assert.equal(historyStampOf(at, new Date(2026, 10, 2, 9, 5)), '11月2日 09:05');
+  });
+
+  test('跨年：带上年份，消掉“哪一年”的歧义', () => {
+    const at = new Date(2025, 11, 31, 23, 59).getTime();
+    assert.equal(historyStampOf(at, new Date(2026, 0, 1, 0, 30)), '2025年12月31日 23:59');
+  });
+
+  test('ts 非法（NaN / 越界）→ 空串，调用方据此不发前缀', () => {
+    assert.equal(historyStampOf(Number.NaN, new Date(2026, 10, 2)), '');
+    assert.equal(historyStampOf(Number.POSITIVE_INFINITY, new Date(2026, 10, 2)), '');
+  });
+
+  test('now 非法 → 空串（没有“现在”就无法判断是否跨年）', () => {
+    assert.equal(historyStampOf(new Date(2026, 9, 31).getTime(), new Date('nope')), '');
   });
 });

@@ -1,5 +1,5 @@
 /**
- * 文案组装：把命中的节日、节气与时段拼成一句话。
+ * 文案组装：把命中的节日、节气与时段拼成一句话，另提供历史消息用的时间前缀。
  *
  * 不读时钟、不碰 IO；候选由 ./lunar 提供。
  * 必须始终成立：同一日期多次调用结果一致，不依赖调用顺序。
@@ -135,4 +135,25 @@ export function timeContextOf(date: Date): string {
     (holiday ? '，' + holiday : '') +
     '。这只是背景，不必刻意报时，也别句句都提节日——多数时候正常说话就好，真贴切时才顺口带一句。'
   );
+}
+
+/**
+ * 历史消息的时间前缀（对话历史专用）：`10月31日 22:53`，跨年时带年份。
+ *
+ * 不带方括号，由调用方决定怎么包；是否加前缀（阈值）也归调用方判断。
+ *
+ * @param ts - 那条消息的发送时刻（毫秒时间戳，`memory.json` 里每条都带）。
+ * @param now - 当前时刻；与发送时刻不同年时前缀带年份，消掉“哪一年”的歧义。
+ * @returns `ts` 或 `now` 非法时返回空串（调用方据此不加前缀，原样发送）。
+ */
+export function historyStampOf(ts: number, now: Date): string {
+  const at = new Date(ts);
+  if (Number.isNaN(at.getTime()) || Number.isNaN(now.getTime())) return '';
+  const date =
+    (at.getFullYear() === now.getFullYear() ? '' : at.getFullYear() + '年') +
+    (at.getMonth() + 1) +
+    '月' +
+    at.getDate() +
+    '日';
+  return date + ' ' + pad2(at.getHours()) + ':' + pad2(at.getMinutes());
 }

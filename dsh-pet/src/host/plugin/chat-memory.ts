@@ -92,15 +92,20 @@ export function createChatMemory(deps: ChatMemoryInput) {
   };
 
   /** 某宠物的最终人设 system：实例级 `pets[].whisperPrompt` 优先，没写回落到所属条目的那份。
-   *  拼装在 ./persona（纯函数）：人设正文 + 名字声明 + 一行时间背景，时间每次现算。
+   *  拼装在 ./persona（纯函数）：人设正文 + 名字声明 + 一行时间背景，时间每次现算；
+   *  对话路径传 `{ historyTimes: true }` 追加【历史】说明，碎碎念没有历史，不传。
    *  收 `findPetInstance` 的命中结果而不是 (petId, cfg)：调用方都已解析过，再查只会多一处
    *  「查不到就兜底 main」的不可达分支。 */
-  const petSystemPrompt = (found: { conf: Record<string, unknown>; pet: Record<string, unknown> }): string =>
+  const petSystemPrompt = (
+    found: { conf: Record<string, unknown>; pet: Record<string, unknown> },
+    options: { historyTimes?: boolean } = {},
+  ): string =>
     composeSystemPrompt({
       prompt: petPersona(found.conf, found.pet),
       name: String(found.pet.name ?? ''),
       id: String(found.pet.id ?? ''),
       now: new Date(),
+      ...(options.historyTimes === true ? { historyTimes: true } : {}),
     });
 
   /** 对话记忆轮数（1 轮 = 1 问 1 答）：该宠物所属条目的 chatMemoryRounds（合并器已填默认）。
@@ -230,8 +235,6 @@ export function createChatMemory(deps: ChatMemoryInput) {
       // 否则会在 memory.json 里永久留下一个已删宠物的分桶，外加一只幽灵叶子。
       if (!found) return { ok: false, reason: 'unknown-pet', message: '没有这只桌宠：' + petId };
       const rounds = memoryRounds(found.conf);
-      // 人设：实例级 whisperPrompt 优先，没写回落所属条目（与碎碎念同一拼装）
-      const system = petSystemPrompt(found);
       // 配图：开关关闭 → 空池（指令与解析都不介入）；目录链按所属条目取。
       // 张数上限（chatImageLimit，0 = 不限制）：整张清单每条消息都要附，截断后费用上限可控。
       const pool =
@@ -254,6 +257,9 @@ export function createChatMemory(deps: ChatMemoryInput) {
       // rounds = 0（用户关掉历史）→ 空历史；否则截尾部 rounds 轮（1 轮 = 1 问 1 答）。
       // 不能写 slice(-rounds * 2)：-0 在 JS 里 === 0，slice(-0) 返回整个数组而不是空。
       const list = sliceMemoryRounds(entry.messages, rounds);
+      // 人设：实例级 whisperPrompt 优先，没写回落所属条目（与碎碎念同一拼装）。
+      // 有历史才追加【历史】段：没有历史时那段话在描述不存在的前缀，只会误导模型。
+      const system = petSystemPrompt(found, { historyTimes: list.length > 0 });
       // 图片只记尺寸与字节数（不记 base64）：模型不支持读图时 dsh-llm 会把它投影成占位文本，靠这行日志定位
       if (image !== undefined) {
         log.info(
