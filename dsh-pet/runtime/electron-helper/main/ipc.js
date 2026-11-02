@@ -163,15 +163,18 @@ function registerIpc({ ipcMain, petWindows, shell, openTarget, petRoute }) {
     });
   };
 
-  // 去向由宿主形态决定：desktop 用应用自注册的 dsh:// 协议把主窗口叫回前台（已运行则被单实例锁
-  // 拦下、宿主收到 second-instance 后聚焦；未运行则协议直接把应用拉起来），比 spawn 宿主 exe 干净；
-  // site 则是原行为：系统默认浏览器打开站点。
+  // 应用自注册的 dsh:// 协议：已运行时把主窗口提到前台，未运行则直接把应用拉起来。
+  // 只有 desktop 形态能发——协议是系统级注册的，dsh web 形态下发它会把桌面版 DSH 拉起来。
+  const focusDesktopApp = () => shell.openExternal('dsh://open');
+
+  // 去向由宿主形态决定：desktop 把主窗口叫回前台，比 spawn 宿主 exe 干净；site 则是原行为：
+  // 系统默认浏览器打开站点。
   ipcMain.on('pet:open-site', (event, payload) => {
     const url = payload && typeof payload === 'object' ? String(payload.url || '') : '';
     if (!/^https?:[/][/]/.test(url)) return;
     if (openTarget === 'desktop') {
       // 协议未注册（绿色版 / 注册表被清）时回落成打开站点，至少不是"点了没反应"
-      shell.openExternal('dsh://open').catch((error) => {
+      focusDesktopApp().catch((error) => {
         console.error('[dsh-pet-desktop-helper] open dsh:// failed, falling back to site:', error);
         openSite(url);
       });
@@ -180,11 +183,10 @@ function registerIpc({ ipcMain, petWindows, shell, openTarget, petRoute }) {
     openSite(url);
   });
 
-  // 只叫窗口、不改去向：桌面宿主用 dsh:// 把主窗口提到前台（被别的窗口挡住也有效）。
-  // 必须按宿主形态门控：dsh:// 是系统级注册的，`dsh web` 形态下发它会把桌面版 DSH 拉起来。
+  // 只叫窗口、不改去向：被别的窗口挡住时把主窗口提到前台。
   ipcMain.on('pet:focus-host', () => {
     if (openTarget !== 'desktop') return;
-    shell.openExternal('dsh://open').catch((error) => {
+    focusDesktopApp().catch((error) => {
       console.warn('[dsh-pet-desktop-helper] focus host failed:', error && error.message);
     });
   });
