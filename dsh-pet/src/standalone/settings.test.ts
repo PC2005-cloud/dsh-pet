@@ -69,6 +69,8 @@ test('settings browser script strips fragment, keeps key write-only and explicit
     dataset: Record<string, string>;
     listeners: Record<string, (event?: unknown) => Promise<void> | void>;
     addEventListener: (name: string, fn: (event?: unknown) => Promise<void> | void) => void;
+    append: () => void;
+    setAttribute: () => void;
     reportValidity: () => boolean;
   };
   const elements = new Map<string, Element>();
@@ -84,6 +86,8 @@ test('settings browser script strips fragment, keeps key write-only and explicit
         addEventListener(name, fn) {
           this.listeners[name] = fn;
         },
+        append() {},
+        setAttribute() {},
         reportValidity: () => true,
       });
     return elements.get(id)!;
@@ -91,15 +95,47 @@ test('settings browser script strips fragment, keeps key write-only and explicit
   const requests: Array<{ url: string; options: { method: string; body?: string; headers: Record<string, string> } }> =
     [];
   let stripped = '';
+  /** 页面要渲染卡片，测试只提供「够用」的节点替身：能追加、能设属性、能被读值。 */
+  const node = () => {
+    const el: Record<string, unknown> = {
+      nodeType: 1,
+      hidden: false,
+      value: '',
+      checked: false,
+      disabled: false,
+      textContent: '',
+      dataset: {} as Record<string, string>,
+      children: [] as unknown[],
+      append(...kids: unknown[]) {
+        (el.children as unknown[]).push(...kids);
+      },
+      setAttribute() {},
+      addEventListener() {},
+      focus() {},
+      remove() {},
+      get firstElementChild() {
+        return (el.children as Array<{ nodeType?: number }>).find((kid) => kid && kid.nodeType === 1) ?? null;
+      },
+    };
+    return el;
+  };
   runInNewContext(settingsScript, {
     URLSearchParams,
+    window: { addEventListener() {}, confirm: () => false },
+    document: {
+      getElementById: element,
+      createElement: node,
+      createElementNS: node,
+      createTextNode: (text: string) => ({ nodeType: 3, textContent: text }),
+      querySelectorAll: () => [],
+      body: node(),
+    },
     location: { hash: '#token=process-capability', pathname: '/standalone-ai/' },
     history: {
       replaceState: (_a: unknown, _b: unknown, path: string) => {
         stripped = path;
       },
     },
-    document: { getElementById: element },
     fetch: async (url: string, options: { method: string; body?: string; headers: Record<string, string> }) => {
       requests.push({ url, options });
       return {
@@ -118,25 +154,30 @@ test('settings browser script strips fragment, keeps key write-only and explicit
     },
   });
   await new Promise((resolve) => setImmediate(resolve));
+  /** 启动时会同时读插件配置与 AI 设置，按端点取请求，不依赖先后顺序。 */
+  const aiRequests = () => requests.filter(({ url }) => url === '/standalone-ai/settings');
+  /** 最后一次 AI 请求的请求体；调用点都在 await 之后，列表一定非空。 */
+  const lastAiBody = () => {
+    const list = aiRequests();
+    return JSON.parse(list[list.length - 1].options.body ?? '{}');
+  };
   assert.equal(stripped, '/standalone-ai/');
   assert.equal(element('apiKey').value, '');
   assert.equal(element('key-state').textContent, '已保存 · 不回显');
   element('apiKey').value = 'write-only-fake-key';
   await element('settings').listeners.submit({ preventDefault() {} });
   assert.equal(element('apiKey').value, '');
-  assert.equal(JSON.parse(requests[1].options.body ?? '{}').apiKey, 'write-only-fake-key');
+  assert.equal(lastAiBody().apiKey, 'write-only-fake-key');
   element('clearApiKey').checked = true;
   element('clearApiKey').listeners.change();
   assert.equal(element('enabled').checked, false);
   assert.equal(element('apiKey').disabled, true);
   await element('settings').listeners.submit({ preventDefault() {} });
-  assert.equal(JSON.parse(requests[2].options.body ?? '{}').clearApiKey, true);
-  assert.equal(JSON.parse(requests[2].options.body ?? '{}').enabled, false);
+  assert.equal(lastAiBody().clearApiKey, true);
+  assert.equal(lastAiBody().enabled, false);
   assert.equal(element('apiKey').disabled, false);
   assert.ok(
-    requests.every(
-      ({ url, options }) =>
-        url === '/standalone-ai/settings' && options.headers['X-DSH-Pet-Token'] === 'process-capability',
-    ),
+    aiRequests().every(({ options }) => options.headers['X-DSH-Pet-Token'] === 'process-capability'),
+    'AI 请求必须带本次运行的访问令牌',
   );
 });

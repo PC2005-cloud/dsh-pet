@@ -1,0 +1,128 @@
+/**
+ * 「AI 服务商」面板：独立模式自己的模型接入配置（协议、地址、模型、密钥、测试连接、自动碎碎念）。
+ *
+ * 读写独立模式专属的 /standalone-ai/settings，与插件配置那份文件互不相干；
+ * 密钥只写不回显，请求一律带本次运行的访问令牌。
+ * @module dsh-pet/src/standalone/settings-page/script/ai
+ */
+
+/** 生成 AI 面板片段。 */
+export function aiScript(): string {
+  return `
+const AI_SETTINGS_URL = '/standalone-ai/settings';
+const AI_TEST_URL = '/standalone-ai/test';
+
+async function aiRequest(method, body) {
+  const response = await fetch(AI_SETTINGS_URL, {
+    method: method,
+    credentials: 'omit',
+    cache: 'no-store',
+    redirect: 'error',
+    headers: body
+      ? { 'X-DSH-Pet-Token': TOKEN, 'Content-Type': 'application/json' }
+      : { 'X-DSH-Pet-Token': TOKEN },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!response.ok) {
+    if (response.status === 403) throw new Error('打开凭据已失效。请从桌宠菜单重新打开设置。');
+    if (response.status === 429) throw new Error('保存过于频繁，请稍等一分钟再试。');
+    throw new Error('设置未保存。请检查接口地址、模型名称与密钥，再重试。');
+  }
+  return response.json();
+}
+
+function populateAi(data) {
+  if (data.protocol !== undefined && protocolSelect) protocolSelect.setValue(String(data.protocol));
+  for (const id of ['baseUrl', 'model', 'whisperIntervalSec', 'maxTokens']) {
+    if (data[id] !== undefined && byId(id)) byId(id).value = String(data[id]);
+  }
+  for (const id of ['enabled', 'automaticWhispers']) if (byId(id)) byId(id).checked = data[id] === true;
+  byId('key-state').textContent = data.hasKey ? '已保存 · 不回显' : '尚未设置';
+  byId('apiKey').value = '';
+  byId('clearApiKey').checked = false;
+  byId('apiKey').disabled = false;
+}
+
+function wireAiPanel() {
+  const form = byId('settings');
+  const status = byId('status');
+  const save = byId('save');
+  const testBtn = byId('test-btn');
+  const testResult = byId('test-result');
+
+  byId('clearApiKey').addEventListener('change', () => {
+    const clearing = byId('clearApiKey').checked;
+    byId('apiKey').disabled = clearing;
+    if (!clearing) return;
+    byId('apiKey').value = '';
+    byId('enabled').checked = false;
+    byId('automaticWhispers').checked = false;
+  });
+
+  testBtn.addEventListener('click', async () => {
+    testBtn.disabled = true;
+    testResult.className = 'status';
+    testResult.textContent = '正在测试连接，请稍候…';
+    const input = {
+      protocol: protocolSelect ? protocolSelect.getValue() : 'openai-compatible',
+      baseUrl: byId('baseUrl').value.trim(),
+      model: byId('model').value.trim(),
+      apiKey: byId('apiKey').value.trim(),
+    };
+    try {
+      const response = await fetch(AI_TEST_URL, {
+        method: 'POST',
+        credentials: 'omit',
+        cache: 'no-store',
+        headers: { 'X-DSH-Pet-Token': TOKEN, 'Content-Type': 'application/json' },
+        body: JSON.stringify(input),
+      });
+      const data = await response.json();
+      if (data.ok) {
+        testResult.className = 'status';
+        testResult.dataset.ok = 'true';
+        testResult.textContent = '✓ ' + data.message;
+        if (data.reply) testResult.textContent += '；回复：' + data.reply;
+      } else {
+        testResult.className = 'status';
+        testResult.dataset.error = 'true';
+        testResult.textContent = '✗ ' + (data.message || data.error || '测试失败');
+      }
+    } catch (error) {
+      testResult.className = 'status';
+      testResult.dataset.error = 'true';
+      testResult.textContent = '✗ 请求异常：' + (error && error.message ? error.message : String(error));
+    } finally {
+      testBtn.disabled = false;
+    }
+  });
+
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    if (!form.reportValidity()) return;
+    save.disabled = true;
+    setStatus(status, '正在保存到本机…');
+    const input = {
+      protocol: protocolSelect ? protocolSelect.getValue() : 'openai-compatible',
+      baseUrl: byId('baseUrl').value.trim(),
+      model: byId('model').value.trim(),
+      apiKey: byId('apiKey').value,
+      clearApiKey: byId('clearApiKey').checked,
+      enabled: byId('enabled').checked,
+      automaticWhispers: byId('automaticWhispers').checked,
+      whisperIntervalSec: Number(byId('whisperIntervalSec').value),
+      maxTokens: Number(byId('maxTokens').value),
+    };
+    byId('apiKey').value = '';
+    try {
+      populateAi(await aiRequest('POST', input));
+      setStatus(status, '已保存到本机。', 'ok');
+    } catch (error) {
+      setStatus(status, error && error.message ? error.message : String(error), 'error');
+    } finally {
+      save.disabled = false;
+    }
+  });
+}
+`;
+}
