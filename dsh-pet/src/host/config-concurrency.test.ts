@@ -49,7 +49,7 @@ before(async () => {
     external: (id) =>
       id.startsWith('node:') ||
       (id.startsWith('@deepseek-ai/') && !(id in aliases)) ||
-      ['zod', '@electron/get', '@electron-internal/extract-zip'].includes(id),
+      ['zod', '@electron/get', '@electron-internal/extract-zip', '@andresaya/edge-tts'].includes(id),
     plugins: [{ name: 'standalone-test-shims', resolveId: (id) => aliases[id] }],
   });
   const entry = join(pkg, 'lib/host.mjs');
