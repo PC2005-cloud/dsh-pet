@@ -8,6 +8,7 @@
 import { type createAiConfig, type StandaloneAiPublicSettings } from '../ai-config.ts';
 import { type AiFetch } from '../ai-transport.ts';
 import { type StandaloneLogger } from '../context.ts';
+import { type BalanceResult } from '../../host/balance/index.ts';
 
 /** 设置存储：`createAiConfig` 的返回形状。 */
 export type AiStore = ReturnType<typeof createAiConfig>;
@@ -92,6 +93,10 @@ export interface StandaloneAiService {
   testConnection(input: TestConnectionInput): Promise<TestConnectionResult>;
   /** 按协议拉取端点声明可用的模型；失败时 code 稳定、message 可直接展示。 */
   discoverModels(input: ModelDiscoveryInput): Promise<ModelDiscoveryResult>;
+  /** 按设置里选中的服务商查询余额；未选择或缺少密钥时返回显式失败，绝不伪造数字。 */
+  queryBalance(): Promise<BalanceResult>;
+  /** 余额查询要用的服务商与密钥；供宿主半侧的余额轮询取用，不进对外设置视图。 */
+  balanceAuth(): { provider: string; apiKey: string };
   /** 是否满足发起请求的全部条件。 */
   isReady(): boolean;
   /** 终止在途请求并释放服务。 */

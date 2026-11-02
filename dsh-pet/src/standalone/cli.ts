@@ -140,7 +140,10 @@ async function run(logger: StandaloneLogger, options: { port: number }): Promise
     ai.isReady()
       ? '  AI          本机 API 已启用；自动碎碎念遵循设置页开关'
       : '  AI          未配置或未启用，不发送模型请求；右键“打开 AI 设置”后在本机填写',
-    '  不可用      余额 / 会话工作状态 / DSH 系统通知',
+    ai.getSettings().balanceProvider
+      ? `  余额        已选 ${ai.getSettings().balanceProvider}，设置页点「查询余额」取数`
+      : '  余额        未选服务商；设置页「AI 服务商」→「余额查询服务商」里选一家',
+    '  不可用      会话工作状态 / DSH 系统通知',
     '  退出        Ctrl+C、POST /shutdown，或桌面托盘菜单的「退出」',
     '',
   ]) {

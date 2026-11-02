@@ -9,6 +9,12 @@
 import { z } from 'zod';
 import { readAiSettings, writeAiSettings } from './ai-storage.ts';
 
+/**
+ * 余额查询可选的服务商，空串表示不查询。
+ * `deepseek-account` 不在其中：它读的是 DSH 登录态，独立模式没有账号服务，选了也只会拿到 credential-missing。
+ */
+export const BALANCE_PROVIDERS = ['', 'deepseek-official', 'opencode-go', 'commandcode'] as const;
+
 /** 对外可见的设置视图：密钥只以 hasKey 表示；AI 是否可用只看地址、模型与密钥是否齐全。 */
 export interface StandaloneAiPublicSettings {
   /** 接口协议，仅支持 OpenAI 兼容与 Anthropic 两种。 */
@@ -17,6 +23,8 @@ export interface StandaloneAiPublicSettings {
   baseUrl: string;
   /** 模型标识，原样传给服务商。 */
   model: string;
+  /** 余额查询走哪个服务商的接口；空串表示不查询。与 baseUrl 无关，用于独立模式复用 host 半侧的余额定义。 */
+  balanceProvider: (typeof BALANCE_PROVIDERS)[number];
   /** 兼容旧配置文件的遗留字段，已不参与任何调度；保留只为让旧文件继续通过 strict 校验。 */
   automaticWhispers: boolean;
   /** 兼容旧配置文件的遗留字段；碎碎念周期唯一来源是宠物配置的 `eventsRefreshSec.whisper`。 */
@@ -40,6 +48,7 @@ export const DEFAULT_AI_SETTINGS: Readonly<StandaloneAiSettings> = Object.freeze
   protocol: 'openai-compatible',
   baseUrl: '',
   model: '',
+  balanceProvider: '',
   enabled: true,
   automaticWhispers: false,
   whisperIntervalSec: 300,
@@ -81,6 +90,8 @@ const fields = {
     .trim()
     .max(200)
     .refine((s) => !containsControlChar(s)),
+  /** 余额查询的服务商；空串表示不查询。 */
+  balanceProvider: z.enum(BALANCE_PROVIDERS),
   /** 只为旧文件兼容保留：保存时一律写 true，可用性由地址、模型与密钥决定。 */
   enabled: z.boolean(),
   automaticWhispers: z.boolean(),
@@ -146,9 +157,11 @@ export function createAiConfig(home: string): AiConfigStore {
   let settings: Readonly<StandaloneAiSettings> = DEFAULT_AI_SETTINGS;
   try {
     const loaded = readAiSettings(home);
-    // 持久化内容也要重新校验，坏数据不能进入内存。
+    // 旧配置文件没有后加的字段，先铺默认值再校验；否则升级后 strict 校验会拒绝整个文件，独立模式起不来。
     if (loaded !== undefined)
-      settings = Object.freeze(validateSettings(persistedSchema.parse(loaded), DEFAULT_AI_SETTINGS));
+      settings = Object.freeze(
+        validateSettings(persistedSchema.parse({ ...DEFAULT_AI_SETTINGS, ...loaded }), DEFAULT_AI_SETTINGS),
+      );
   } catch {
     // 读取失败说明无法确认文件权限，宁可整体失败。
     throw new Error('Cannot securely load standalone AI settings.');

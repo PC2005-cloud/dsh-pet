@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createAiConfig, validateSettings, DEFAULT_AI_SETTINGS } from './ai-config.ts';
@@ -53,6 +53,30 @@ test('validates safe endpoints and explicit configuration with fixed redacted er
   }
 });
 
+test('余额服务商：默认不查询，只接受三条可用路由，且随配置持久化', async () => {
+  assert.equal(DEFAULT_AI_SETTINGS.balanceProvider, '');
+  assert.equal(validateSettings({}, DEFAULT_AI_SETTINGS).balanceProvider, '');
+  for (const balanceProvider of ['deepseek-official', 'opencode-go', 'commandcode']) {
+    assert.equal(validateSettings({ balanceProvider }, DEFAULT_AI_SETTINGS).balanceProvider, balanceProvider);
+  }
+  // deepseek-account 读的是 DSH 登录态，独立模式没有账号服务，因此不进可选集合。
+  for (const balanceProvider of ['deepseek-account', 'openai', 'DEEPSEEK-OFFICIAL', ' ']) {
+    assert.throws(() => validateSettings({ balanceProvider }, DEFAULT_AI_SETTINGS), /Invalid standalone AI settings/);
+  }
+  const home = mkdtempSync(join(tmpdir(), 'pet-ai-balance-'));
+  try {
+    const store = createAiConfig(home);
+    assert.equal(store.publicSettings().balanceProvider, '');
+    const saved = await store.save({ ...configured, balanceProvider: 'deepseek-official' });
+    assert.equal(saved.balanceProvider, 'deepseek-official');
+    assert.equal(createAiConfig(home).publicSettings().balanceProvider, 'deepseek-official');
+    // 不传该字段时保留上一份值，不会被默认值冲掉。
+    assert.equal((await store.save({ model: 'next-model' })).balanceProvider, 'deepseek-official');
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
 test('persists only in isolated home, redacts keys, supports keep and clear, reloads offline', async () => {
   const home = mkdtempSync(join(tmpdir(), 'pet-ai-'));
   try {
@@ -74,6 +98,34 @@ test('persists only in isolated home, redacts keys, supports keep and clear, rel
     assert.equal(createAiConfig(home).publicSettings().hasKey, false);
     writeFileSync(join(home, 'dsh-pet', 'standalone-ai.json'), '{broken');
     assert.throws(() => createAiConfig(home), /^Error: Cannot securely load standalone AI settings\.$/);
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test('旧配置文件缺后加字段：铺默认值后仍可读，不因 strict 校验整体失败', async () => {
+  const home = mkdtempSync(join(tmpdir(), 'pet-ai-legacy-'));
+  try {
+    mkdirSync(join(home, 'dsh-pet'), { recursive: true });
+    // 升级前的落盘形状：没有 balanceProvider。
+    writeFileSync(
+      join(home, 'dsh-pet', 'standalone-ai.json'),
+      JSON.stringify({
+        protocol: 'openai-compatible',
+        baseUrl: 'https://example.test/v1',
+        model: 'legacy-model',
+        apiKey: 'legacy-secret',
+        enabled: true,
+        automaticWhispers: false,
+        whisperIntervalSec: 300,
+        maxTokens: 1024,
+        timeoutMs: 30000,
+      }),
+    );
+    const store = createAiConfig(home);
+    assert.equal(store.publicSettings().model, 'legacy-model');
+    assert.equal(store.publicSettings().hasKey, true);
+    assert.equal(store.publicSettings().balanceProvider, '', '缺的新字段用默认值补齐');
   } finally {
     rmSync(home, { recursive: true, force: true });
   }

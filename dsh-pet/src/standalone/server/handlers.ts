@@ -121,3 +121,30 @@ export function modelsHandler(
     }
   };
 }
+
+/**
+ * 创建余额查询处理器（POST）。
+ *
+ * 服务商与密钥都取自已保存的设置，请求体不参与：避免调用方把密钥经查询接口再传一遍。
+ * @param ai - 设置服务。
+ * @returns 处理请求的异步函数。
+ */
+export function balanceHandler(
+  ai: StandaloneSettingsService | undefined,
+): (req: IncomingMessage, res: ServerResponse) => Promise<void> {
+  return async (req, res) => {
+    if (req.method !== 'POST') {
+      rejectRequest(res, 405, '仅支持 POST');
+      return;
+    }
+    if (!ai?.queryBalance) {
+      sendJson(res, 200, { ok: false, provider: '', reason: 'unsupported' });
+      return;
+    }
+    try {
+      sendJson(res, 200, await ai.queryBalance());
+    } catch {
+      sendJson(res, 200, { ok: false, provider: '', reason: 'fetch-error', message: '余额查询失败' });
+    }
+  };
+}

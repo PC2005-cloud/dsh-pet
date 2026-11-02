@@ -11,6 +11,7 @@ export function aiScript(): string {
   return `
 const AI_SETTINGS_URL = '/standalone-ai/settings';
 const AI_TEST_URL = '/standalone-ai/test';
+const AI_BALANCE_URL = '/standalone-ai/balance';
 
 async function aiRequest(method, body) {
   const response = await fetch(AI_SETTINGS_URL, {
@@ -36,10 +37,63 @@ function populateAi(data) {
   for (const id of ['baseUrl', 'model']) {
     if (data[id] !== undefined && byId(id)) byId(id).value = String(data[id]);
   }
+  if (data.balanceProvider !== undefined && balanceSelect) balanceSelect.setValue(String(data.balanceProvider));
+  byId('balance-btn').disabled = !balanceSelect || balanceSelect.getValue() === '';
   byId('key-state').textContent = data.hasKey ? '已保存 · 不回显' : '尚未设置';
   byId('key-actions').hidden = data.hasKey !== true;
   byId('apiKey').value = '';
   byId('apiKey').disabled = false;
+}
+
+/** 把余额结果翻成一行可读文案；失败一律说明原因，不显示伪造数字。 */
+function describeBalance(data) {
+  if (!data || data.ok !== true) {
+    if (data && data.reason === 'credential-missing') return '缺少密钥：请先保存所选服务商的 API 密钥。';
+    if (data && data.reason === 'unsupported') return '该服务商不提供余额查询。';
+    return data && data.message ? '查询失败：' + data.message : '查询失败，请稍后重试。';
+  }
+  const payload = data.data || {};
+  if (data.shape === 'money' && payload.wallets) {
+    return payload.wallets
+      .map(function (wallet) {
+        return wallet.currency + ' ' + wallet.total;
+      })
+      .join(' / ');
+  }
+  if (data.shape === 'points') return payload.total + ' ' + payload.unit;
+  if (data.shape === 'windows') return '月度已用 ' + payload.monthly + '%';
+  return '已取到余额数据。';
+}
+
+function wireBalanceQuery() {
+  const button = byId('balance-btn');
+  const result = byId('balance-result');
+  button.addEventListener('click', async () => {
+    button.disabled = true;
+    result.className = 'status';
+    result.dataset.ok = '';
+    result.dataset.error = '';
+    result.textContent = '正在查询余额…';
+    try {
+      const response = await fetch(AI_BALANCE_URL, {
+        method: 'POST',
+        credentials: 'omit',
+        cache: 'no-store',
+        headers: { 'X-DSH-Pet-Token': TOKEN },
+      });
+      if (!response.ok) throw new Error('查询被拒绝（HTTP ' + response.status + '）');
+      const data = await response.json();
+      const ok = data && data.ok === true;
+      if (ok) result.dataset.ok = 'true';
+      else result.dataset.error = 'true';
+      result.textContent = (ok ? '✓ ' : '✗ ') + describeBalance(data);
+    } catch (error) {
+      result.dataset.error = 'true';
+      result.textContent = '✗ ' + (error && error.message ? error.message : String(error));
+    } finally {
+      button.disabled = !balanceSelect || balanceSelect.getValue() === '';
+    }
+  });
 }
 
 function wireKeyDelete(status) {
@@ -111,6 +165,7 @@ function wireSave(form, save, status) {
       protocol: protocolSelect ? protocolSelect.getValue() : 'openai-compatible',
       baseUrl: byId('baseUrl').value.trim(),
       model: byId('model').value.trim(),
+      balanceProvider: balanceSelect ? balanceSelect.getValue() : '',
       apiKey: byId('apiKey').value,
     };
     byId('apiKey').value = '';
@@ -130,6 +185,7 @@ function wireAiPanel() {
   const status = byId('status');
   wireKeyDelete(status);
   wireTest(byId('test-btn'), byId('test-result'));
+  wireBalanceQuery();
   wireSave(byId('settings'), byId('save'), status);
 }
 `;

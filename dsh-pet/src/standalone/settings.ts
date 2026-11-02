@@ -23,6 +23,8 @@ export interface StandaloneSettingsService {
   }): Promise<{ ok: boolean; message: string; reply?: string }>;
   /** 可选：拉取端点声明可用的模型。 */
   discoverModels?(input: ModelDiscoveryInput): Promise<ModelDiscoveryResult>;
+  /** 可选：按已保存的服务商与密钥查询余额。 */
+  queryBalance?(): Promise<unknown>;
 }
 
 /** 接口地址的校验：只允许干净的 HTTP 或 HTTPS 地址，凭据不放进 URL。 */
@@ -44,6 +46,8 @@ const settingsSchema = z
     protocol: z.enum(['openai-compatible', 'anthropic']).optional(),
     baseUrl: endpoint.optional(),
     model: z.string().max(200).optional(),
+    /** 只限长度；取值枚举由 ai-config.ts 的持久化校验把关，避免两处各写一份名单。 */
+    balanceProvider: z.string().max(40).optional(),
     apiKey: z.string().max(8192).optional(),
     clearApiKey: z.boolean().optional(),
     automaticWhispers: z.boolean().optional(),
@@ -65,6 +69,7 @@ const publicNames = [
   'protocol',
   'baseUrl',
   'model',
+  'balanceProvider',
   'automaticWhispers',
   'whisperIntervalSec',
   'maxTokens',

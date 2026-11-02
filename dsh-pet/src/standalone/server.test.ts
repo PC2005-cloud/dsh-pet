@@ -349,6 +349,12 @@ describe('HTTP boundary protects every route and settings', () => {
         ok: true as const,
         models: [{ id: input.baseUrl ?? 'missing', name: 'M1' }],
       }),
+      queryBalance: async () => ({
+        ok: true as const,
+        provider: 'deepseek-official',
+        shape: 'money' as const,
+        data: { wallets: [{ currency: 'CNY', total: '12.34', granted: '0.00', toppedUp: '12.34' }] },
+      }),
     };
     const server = await listenStandaloneServer({ port: 0, security, logger: silent, routes: [], ai });
     try {
@@ -416,6 +422,11 @@ describe('HTTP boundary protects every route and settings', () => {
       assert.equal(modelsRes.status, 200);
       // 回显草稿地址：证明表单里还没保存的地址被原样转给了发现逻辑。
       assert.deepEqual(await modelsRes.json(), { ok: true, models: [{ id: 'https://draft.test/v1', name: 'M1' }] });
+      assert.equal((await fetch(base + '/standalone-ai/balance')).status, 403);
+      assert.equal((await fetch(base + '/standalone-ai/balance', { headers })).status, 405);
+      const balanceRes = await fetch(base + '/standalone-ai/balance', { method: 'POST', headers });
+      assert.equal(balanceRes.status, 200);
+      assert.equal((await balanceRes.json()).provider, 'deepseek-official');
       let last = 0;
       for (let i = 0; i < 25; i++)
         last = (await fetch(base + '/standalone-ai/settings', { method: 'POST', headers, body: '{}' })).status;

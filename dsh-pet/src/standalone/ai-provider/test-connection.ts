@@ -5,7 +5,7 @@
  * 不判断服务是否已释放（归 ./create），也不校验设置是否已保存（用户可能正在填表单）。
  * @module dsh-pet/src/standalone/ai-provider/test-connection
  */
-import { type StandaloneAiSettings } from '../ai-config.ts';
+import { DEFAULT_AI_SETTINGS, type StandaloneAiSettings } from '../ai-config.ts';
 import { isAuthenticationFailure, isRateLimitFailure, sdkTextStream, type AiFetch } from '../ai-transport.ts';
 import type { TestConnectionInput, TestConnectionResult } from './types.ts';
 
@@ -55,13 +55,11 @@ export async function testAiConnection(
   if (missing !== null) return { ok: false, message: missing };
 
   const settings: StandaloneAiSettings = {
+    ...DEFAULT_AI_SETTINGS,
     protocol: protocol as 'openai-compatible' | 'anthropic',
     baseUrl,
     model,
     apiKey,
-    enabled: true,
-    automaticWhispers: false,
-    whisperIntervalSec: 300,
     maxTokens: 32,
     timeoutMs: PROBE_TIMEOUT_MS,
   };

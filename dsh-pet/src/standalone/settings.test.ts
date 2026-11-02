@@ -184,6 +184,18 @@ async function setupPage(): Promise<Page> {
           }),
         };
       }
+      if (url === '/standalone-ai/balance') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            ok: true,
+            provider: 'deepseek-official',
+            shape: 'money',
+            data: { wallets: [{ currency: 'CNY', total: '12.34', granted: '0.00', toppedUp: '12.34' }] },
+          }),
+        };
+      }
       const clearing =
         url === '/standalone-ai/settings' && options.body ? JSON.parse(options.body).clearApiKey === true : false;
       return {
@@ -193,6 +205,7 @@ async function setupPage(): Promise<Page> {
           protocol: 'anthropic',
           baseUrl: 'https://example.test',
           model: 'x',
+          balanceProvider: 'deepseek-official',
           hasKey: !clearing,
           automaticWhispers: false,
           whisperIntervalSec: 300,
@@ -303,6 +316,25 @@ test('保存：密钥只写不回显，且不再提交启用位', async () => {
   assert.equal(page.element('apiKey').value, '');
   assert.equal(page.lastAiBody().apiKey, 'write-only-fake-key');
   assert.equal('enabled' in page.lastAiBody(), false, '页面不再提交启用位');
+  assert.equal(page.lastAiBody().balanceProvider, 'deepseek-official', '余额服务商随设置一起提交');
+});
+
+test('查询余额：选了服务商才可点，结果拼成一行金额并带上访问令牌', async () => {
+  const page = await setupPage();
+  await settle();
+  const button = page.element('balance-btn');
+  const result = page.element('balance-result');
+  assert.equal(button.disabled, false, '已保存 deepseek-official，按钮应可点');
+
+  const balanceRequests = () => page.requests.filter(({ url }) => url === '/standalone-ai/balance');
+  await button.listeners.click();
+  await settle();
+
+  assert.equal(balanceRequests().length, 1);
+  assert.equal(balanceRequests()[0].options.headers['X-DSH-Pet-Token'], 'process-capability');
+  assert.match(result.textContent, /CNY 12\.34/);
+  assert.equal(result.dataset.ok, 'true');
+  assert.equal(button.disabled, false, '查询结束后按钮恢复可点');
 });
 
 test('删除密钥：先弹确认框，取消不发请求，确认才提交 clearApiKey', async () => {

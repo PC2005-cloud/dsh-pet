@@ -14,7 +14,7 @@ import { MAX_REQUEST_BYTES, MAX_SETTINGS_BYTES, boundedRequest } from '../reques
 import { type StandaloneLogger } from '../context.ts';
 import { DEFAULT_STANDALONE_PORT, PORT_SCAN_LIMIT } from './options.ts';
 import type { StandaloneServer, StandaloneServerOptions } from './options.ts';
-import { modelsHandler, settingsHandler, testHandler } from './handlers.ts';
+import { balanceHandler, modelsHandler, settingsHandler, testHandler } from './handlers.ts';
 import { fail, matches, sendAsset, sendIcon, sendJson } from './respond.ts';
 
 /** 组装请求分发器：先处理探针、设置页与停机，再交给插件路由。 */
@@ -25,6 +25,7 @@ function dispatch(
   const settings = settingsHandler(options.ai);
   const tester = testHandler(options.ai);
   const models = modelsHandler(options.ai);
+  const balance = balanceHandler(options.ai);
   return (req, res, pathname) => {
     const method = req.method ?? 'GET';
     if (method === 'OPTIONS') {
@@ -97,6 +98,10 @@ function dispatch(
     }
     if (pathname === '/standalone-ai/models') {
       void models(req, res).catch((error: unknown) => fail(res, error, options.logger));
+      return;
+    }
+    if (pathname === '/standalone-ai/balance') {
+      void balance(req, res).catch((error: unknown) => fail(res, error, options.logger));
       return;
     }
     const route = options.routes.find((candidate) => matches(candidate, pathname));

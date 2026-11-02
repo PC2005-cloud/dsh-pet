@@ -22,13 +22,14 @@ export type BalancePollInput = {
 } & Pick<HostSetup, 'configPaths'> &
   Pick<ChatMemory, 'getActivePetId'> &
   Pick<HostSetup, 'log'> &
+  Pick<HostSetup, 'standaloneAiBalance'> &
   Pick<HostSetup, 'state'>;
 
 /**
  * 创建余额与周期。
  */
 export function createBalancePoll(deps: BalancePollInput) {
-  const { ctx, configPaths, getActivePetId, log, state } = deps;
+  const { ctx, configPaths, getActivePetId, log, state, standaloneAiBalance } = deps;
   /** 当前生效宠物列表：成品配置拍平（合并器已保证 id 唯一、字段填满），命令与桌面模式共用。 */
   const effectivePetList = (): Record<string, unknown>[] => flattenPetList(readAllConfig(configPaths));
 
@@ -75,10 +76,14 @@ export function createBalancePoll(deps: BalancePollInput) {
     log.info(`[dsh-pet] 余额刷新开始（${manual ? '手动' : '周期'}）`);
     const mark = <T>(v: T): T | (T & { manual: true }) => (manual ? { ...v, manual: true } : v);
     try {
-      const sel = ctx.agentDefaultModel.currentSelection();
+      // 独立模式自己选余额服务商、自己持密钥：它的 provider 不是聊天用的那个，
+      // 也不能经 DSH 的 credential store 解析，所以优先走 standaloneAi 交出来的凭证。
+      const standalone = standaloneAiBalance();
+      const provider = standalone?.provider || ctx.agentDefaultModel.currentSelection().provider;
       const result = await queryBalance(
-        sel.provider,
+        provider,
         async (ref) => {
+          if (standalone?.apiKey) return standalone.apiKey;
           const rc = await ctx.credentials.resolve(credentialRef(ref));
           return rc?.value;
         },

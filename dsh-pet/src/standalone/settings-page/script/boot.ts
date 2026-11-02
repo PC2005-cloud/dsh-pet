@@ -10,6 +10,7 @@
 export function bootScript(): string {
   return `
 let protocolSelect = null;
+let balanceSelect = null;
 
 function mountProtocolSelect() {
   const host = byId('protocol-host');
@@ -24,6 +25,32 @@ function mountProtocolSelect() {
   );
   protocolSelect.root.firstElementChild.setAttribute('aria-labelledby', 'protocol-label');
   host.append(protocolSelect.root);
+}
+
+function mountBalanceSelect() {
+  const host = byId('balance-provider-host');
+  if (!host) return;
+  balanceSelect = createSelect(
+    [
+      { value: '', label: '不查询余额' },
+      { value: 'deepseek-official', label: 'DeepSeek 官方' },
+      { value: 'opencode-go', label: 'opencode Go' },
+      { value: 'commandcode', label: 'commandcode' },
+    ],
+    '',
+    (picked) => {
+      const button = byId('balance-btn');
+      if (button) button.disabled = picked === '';
+      const result = byId('balance-result');
+      if (result) {
+        result.textContent = '';
+        result.dataset.ok = '';
+        result.dataset.error = '';
+      }
+    },
+  );
+  balanceSelect.root.firstElementChild.setAttribute('aria-labelledby', 'balance-provider-label');
+  host.append(balanceSelect.root);
 }
 
 function selectTab(name) {
@@ -91,6 +118,7 @@ function boot() {
     return;
   }
   mountProtocolSelect();
+  mountBalanceSelect();
   wireAiPanel();
   byId('pet-save').addEventListener('click', savePets);
   window.addEventListener('beforeunload', (event) => {
