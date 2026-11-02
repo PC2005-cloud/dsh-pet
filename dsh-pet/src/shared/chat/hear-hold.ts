@@ -1,12 +1,14 @@
 /**
  * 「按住说话」的悬停快捷键：按住 `M` 开录，松手收尾。
  *
- * 管的是「按下到松开」这一段，不是一次按键。按住期间系统持续补发重复的 keydown，
- * 而弹窗一开焦点就进了输入框，不拦就会灌一串 m，所以这里**不看焦点**：
- * 闸门只有 isArmed（鼠标在宠物上，或光标在宠物自己的弹窗里），开录时由调用方 blur 输入框。
+ * 管的是「按下到松开」这一段，不是一次按键。首次按下与其他悬停键同一条判据
+ * （{@link isBareKey}：输入框、contenteditable 里打字不算），否则拼音里的 m 会被当成开录；
+ * 进入按住状态后不再判焦点——开录时输入框已 blur，期间系统持续补发的 keydown 必须照单全收，
+ * 漏一个就会往框里灌字符。
  * 只做判定与状态，不碰 DOM 与录音。
  * @module dsh-pet/src/shared/chat/hear-hold
  */
+import { isBareKey } from '../hotkey.ts';
 import type { HotkeyEvent } from '../hotkey.ts';
 
 /** 目标键的小写形式：判定与状态机共用这一份，避免两处各写一个字面量。 */
@@ -16,25 +18,22 @@ const HEAR_KEY = 'm';
 export const HEAR_HOTKEY_HINT = 'M 键';
 
 /**
- * 这次按下该不该被「按住说话」接走。
- *
- * 只认键名与修饰键，不看焦点——弹窗一打开焦点就在输入框里，那时恰恰是最想按住说话的时候。
+ * 这次按下该不该被「按住说话」接走：与其他悬停键共用同一条判据。
  *
  * @param e - 键盘事件。
- * @returns 裸按 `V`（含大写）时为 true，带 Ctrl/Meta/Alt 时为 false。
+ * @returns 裸按 `M`（含大写）、且焦点不在可编辑元素上时为 true。
  */
 export function isHearHotkey(e: HotkeyEvent): boolean {
-  if (e.ctrlKey || e.metaKey || e.altKey) return false;
-  return String(e.key).toLowerCase() === HEAR_KEY;
+  return isBareKey(e, HEAR_KEY);
 }
 
 /** 状态机的前置判据与两个动作。 */
 export interface HearHoldHooks {
   /**
-   * 现在该不该响应按下。
+   * 现在该不该响应按下：鼠标停在这只宠物身上，或焦点在宠物自己的弹窗里。
    *
-   * 两个来源：鼠标停在这只宠物身上，或光标还在宠物自己的对话弹窗里——
-   * 后者是「弹窗开着、焦点在输入框」的那条路，正是按住说话的主场景。
+   * 后一条留的是「焦点在麦克风按钮这类非可编辑元素上」这条路；在输入框里打字由
+   * {@link isHearHotkey} 挡在前面。
    */
   isArmed: () => boolean;
   /** 按下：打开对话弹窗并开始录音。 */

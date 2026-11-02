@@ -65,9 +65,9 @@ describe('isHearHotkey', () => {
     assert.equal(isHearHotkey(ev({ altKey: true })), false);
   });
 
-  test('焦点在输入框里也算（弹窗一开焦点就在那儿，那才是说话的时候）', () => {
+  test('焦点在可编辑元素上：不算，把 m 留给输入框', () => {
     for (const target of [tag('INPUT'), tag('TEXTAREA'), tag('SELECT'), tag('DIV', true)]) {
-      assert.equal(isHearHotkey(ev({ target })), true);
+      assert.equal(isHearHotkey(ev({ target })), false);
     }
   });
 });
@@ -93,10 +93,10 @@ describe('createHearHold', () => {
     assert.equal(counts.press, 0);
   });
 
-  test('光标在输入框里按下：照样开录（焦点不再是闸门）', () => {
+  test('光标在输入框里按下：不开录，也不吃事件', () => {
     const { hold, counts } = harness();
-    assert.equal(hold.onKeyDown(ev({ target: tag('TEXTAREA') })), true);
-    assert.equal(counts.press, 1);
+    assert.equal(hold.onKeyDown(ev({ target: tag('TEXTAREA') })), false, 'm 要能打进输入框');
+    assert.equal(counts.press, 0);
   });
 
   test('按住期间的自动重复全部吃掉，但不重复开录', () => {
