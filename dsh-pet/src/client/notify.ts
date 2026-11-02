@@ -86,28 +86,36 @@ export function sessionTitleFrom(
 }
 
 /**
- * 点通知：先页内切到那条会话，再聚焦页面，最后请桌面壳把主窗口叫回前台。
+ * 切到指定会话，并把窗口叫到前台。
+ *
  * 先切会话再叫窗口，用户看到窗口的那一刻就是目标会话；`dsh://open` 只在 Electron 宿主里发，
- * 浏览器里导航该协议会弹拦截框。`sessionId` 缺失时只跳过切换，其余照旧。
+ * 浏览器里导航该协议会弹拦截框。
+ *
+ * @param sessionId - 目标会话；缺省只尝试叫窗口。会话已删或服务缺失时静默跳过切换。
  */
+export function jumpToSession(sessionId?: string): void {
+  if (sessionId !== undefined) {
+    // 跳转失败（会话已删 / 旧版没有该服务）绝不能连累「把窗口叫回来」那条腿。
+    try {
+      sessionNavigator?.openSession(sessionId);
+    } catch {
+      /* 不跳会话而已，继续叫窗口。 */
+    }
+  }
+  window.focus();
+  if (!/electron/i.test(navigator.userAgent)) return;
+  const frame = document.createElement('iframe');
+  frame.style.display = 'none';
+  frame.src = 'dsh://open';
+  document.body.append(frame);
+  setTimeout(() => frame.remove(), 1000);
+}
+
+/** 点通知：收起弹窗并跳到它指的那条会话（跳转细化见 {@link jumpToSession}）。 */
 export function wireNotificationClick(n: Notification, sessionId?: string): void {
   n.onclick = () => {
     n.close();
-    if (sessionId !== undefined) {
-      // 跳转失败（会话已删 / 旧版没有该服务）绝不能连累「把窗口叫回来」那条腿。
-      try {
-        sessionNavigator?.openSession(sessionId);
-      } catch {
-        /* 不跳会话而已，继续叫窗口。 */
-      }
-    }
-    window.focus();
-    if (!/electron/i.test(navigator.userAgent)) return;
-    const frame = document.createElement('iframe');
-    frame.style.display = 'none';
-    frame.src = 'dsh://open';
-    document.body.append(frame);
-    setTimeout(() => frame.remove(), 1000);
+    jumpToSession(sessionId);
   };
 }
 

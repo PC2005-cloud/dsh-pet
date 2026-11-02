@@ -70,6 +70,8 @@ Object.assign(PetSprite.prototype, {
     const workTerminal = this.workState === 'success' || this.workState === 'error';
     const slot =
       workTerminal && workOn ? 'work' : whisperOn ? 'whisper' : balanceOn ? 'balance' : workOn ? 'work' : 'none';
+    // 记住当前槽位：点击处理在 init.js，必须知道「现在显示的是哪一种气泡」才能分清翻页与跳会话。
+    this.bubbleSlot = slot;
     // 配图两种形态二选一：url 用完整地址，image 按素材根拼表情包路径；样式/class 共用。
     const whisperImg =
       slot === 'whisper'
@@ -86,8 +88,9 @@ Object.assign(PetSprite.prototype, {
     // 可点/展开两个状态类：可点 → 气泡参与命中区（见 syncInputRegions）；index>0 → 更宽的盒与紧凑字号。
     // 展开态仅内置 windows 的窗口明细与用量页使用；custom 各页是对等页面，翻页不切紧凑字号。
     const isCustom = !!(this.balanceState && S.customViews(this.balanceState));
-    const clickable = slot === 'balance' && this.balanceClickable();
-    const expanded = clickable && !isCustom && this.balanceViewIndex > 0;
+    const workClickable = this.workClickable();
+    const clickable = (slot === 'balance' && this.balanceClickable()) || workClickable;
+    const expanded = slot === 'balance' && clickable && !isCustom && this.balanceViewIndex > 0;
     this.bubble.classList.toggle('is-clickable', clickable);
     this.bubble.classList.toggle('is-expanded', expanded);
     if (slot === 'none') {

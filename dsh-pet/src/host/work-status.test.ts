@@ -160,6 +160,17 @@ describe('WorkStatusStore —— 按会话聚合与展示（issue #59）', () =>
     );
   });
 
+  test('快照带上当前展示会话的 sessionId；空闲为 null', () => {
+    const s = new WorkStatusStore();
+    assert.equal(s.snapshot().sessionId, null);
+    s.setState('alpha', 'thinking', 1);
+    assert.equal(s.snapshot().sessionId, 'alpha');
+    s.setState('beta', 'waiting', 2); // waiting(60) > thinking(30) → 换展示会话
+    assert.equal(s.snapshot().sessionId, 'beta', '换展示会话时 id 必须一起换，否则点击会跳错');
+    s.clear('beta');
+    assert.equal(s.snapshot().sessionId, 'alpha', '退回上一条会话时 id 也要回来');
+  });
+
   test('无活动条目的会话写 task 不生效（不会制造幽灵文案）', () => {
     const s = new WorkStatusStore();
     assert.equal(s.has('ghost'), false);

@@ -21,6 +21,9 @@ PetSprite.prototype.onWorkTick = function onWorkTick(snapshot, tick) {
   if (this.frozen) return;
   const state = snapshot && snapshot.state ? snapshot.state : null;
   this.workState = state; // 当前工作状态：互动/事件动画播完恢复档位循环用
+  // 当前展示条目所属会话：点气泡跳过去要用它。外部槽（`api`）宿主已写成 null，这里只认非空串。
+  this.workSessionId =
+    snapshot && typeof snapshot.sessionId === 'string' && snapshot.sessionId ? snapshot.sessionId : null;
   const stateChanged = this.prevWorkState !== state;
   this.prevWorkState = state;
   if (!state) {
@@ -40,6 +43,7 @@ PetSprite.prototype.onWorkTick = function onWorkTick(snapshot, tick) {
     this.workTimer = null;
     this.workOn = false;
     this.workText = null;
+    this.workSessionId = null;
     this.renderBubble();
     return;
   }
@@ -95,6 +99,19 @@ PetSprite.prototype.onWorkTick = function onWorkTick(snapshot, tick) {
   const rotating = !terminal && Array.isArray(slot) && slot.length > 1;
   if (terminal || rotating) this.playOnce(name);
   else this.switchTo(name, false); // 进行中循环播（单动画/单候选档位）
+};
+
+// 点工作气泡：请宿主把「切到这条会话」写进状态，页面收到后自己切过去，同时把 DSH 主窗口叫到前台。
+// 桌面宠物是独立渲染进程、拿不到页面的会话服务，跨进程这一跳只能经宿主中转（契约见 openapi 的 /focus-session）。
+PetSprite.prototype.openWorkSession = function openWorkSession() {
+  const sessionId = this.workSessionId;
+  if (!sessionId) return;
+  S.postAction(FOCUS_SESSION_URL, { sessionId }).then((ok) => {
+    if (!ok) console.warn('[dsh-pet] 跳会话：宿主未接受 pet=' + this.pet.id);
+  });
+  if (window.petBridge && typeof window.petBridge.openDshSite === 'function') {
+    window.petBridge.openDshSite(ORIGIN);
+  }
 };
 
 // 余额事件：自动轮询按 balanceEnabled 门控，手动请求无条件。

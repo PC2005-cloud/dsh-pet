@@ -206,7 +206,14 @@ describe('/state + /balance —— 轮询统一状态与余额动作端点', () 
       sections: Record<string, { counter: number; data: unknown }>;
       pets: Record<string, unknown>;
     };
-    assert.deepEqual(Object.keys(body.sections).sort(), ['balance', 'config', 'menu', 'notify', 'workStatus']);
+    assert.deepEqual(Object.keys(body.sections).sort(), [
+      'balance',
+      'config',
+      'focusSession',
+      'menu',
+      'notify',
+      'workStatus',
+    ]);
     assert.equal(body.sections.balance.counter, 0, '没人写过时 counter=0（前端首拉当基线）');
     assert.equal(body.sections.balance.data, null);
     assert.equal(body.sections.config.data, null, '配置变更信号也没人写过（counter=0 / data=null）');
@@ -768,7 +775,11 @@ describe('/work-status —— 外部写入工作状态', () => {
     const r = await call('/dsh-pet-7340/work-status', 'POST', JSON.stringify({ state: 'working', task: '编译中' }));
     assert.equal(r.status, 200);
     assert.deepEqual(JSON.parse(r.body), { state: 'working', task: '编译中' });
-    assert.deepEqual((await work()).sections.workStatus.data, { state: 'working', task: '编译中' });
+    assert.deepEqual((await work()).sections.workStatus.data, {
+      state: 'working',
+      task: '编译中',
+      sessionId: null,
+    });
   });
 
   test('省略 task 保留上一次；显式 null / 空串清空', async () => {
@@ -790,7 +801,7 @@ describe('/work-status —— 外部写入工作状态', () => {
     const del = await call('/dsh-pet-7340/work-status', 'DELETE');
     assert.equal(del.status, 204);
     assert.equal(del.body, '');
-    assert.deepEqual((await work()).sections.workStatus.data, { state: null, task: null });
+    assert.deepEqual((await work()).sections.workStatus.data, { state: null, task: null, sessionId: null });
 
     const again = await call('/dsh-pet-7340/work-status', 'DELETE');
     assert.equal(again.status, 204);

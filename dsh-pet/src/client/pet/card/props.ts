@@ -28,6 +28,8 @@ export interface PetCardProps {
   workStatus: WorkStatusSnapshot | null;
   /** 工作状态变化次数。 */
   workStatusTick: number;
+  /** 点工作气泡时跳到它所属会话；缺省即气泡不可点（桌面端由容器转发）。 */
+  onFocusSession?: (sessionId: string) => void;
   /** 本宠物的说话指令；kind 为 clear 时收起气泡，其余弹气泡。 */
   say?: SayCue & { seq: number };
   /** 说话指令变化次数。 */

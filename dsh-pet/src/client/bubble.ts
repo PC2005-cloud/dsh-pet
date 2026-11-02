@@ -312,15 +312,15 @@ export function makeBalanceBubble(rt: {
  *  image 是池内名（按素材根拼路径），url 是第三方完整地址，两者互斥且由 host 判定层保证。
  *  有配图时渲染在文字上方，图片样式取自 shared 的 MEME_BUBBLE_CSS。
  */
-export function makeWhisperBubble(rt: {
-  h: typeof jsx;
-}): (props: {
+export function makeWhisperBubble(rt: { h: typeof jsx }): (props: {
   text: string;
   image?: string;
   url?: string;
   assetRoot?: string;
   on: boolean;
   voiceState?: 'idle' | 'loading' | 'ready' | 'failed';
+  /** 可点时的回调；工作状态气泡用它跳会话，缺省即不可点。 */
+  onClick?: (e: ReactNS.MouseEvent<HTMLDivElement>) => void;
 }) => ReactNode {
   const { h } = rt;
   injectBubbleCss();
@@ -333,6 +333,7 @@ export function makeWhisperBubble(rt: {
     assetRoot,
     on,
     voiceState = 'idle',
+    onClick,
   }: {
     text: string;
     image?: string;
@@ -340,6 +341,7 @@ export function makeWhisperBubble(rt: {
     assetRoot?: string;
     on: boolean;
     voiceState?: 'idle' | 'loading' | 'ready' | 'failed';
+    onClick?: (e: ReactNS.MouseEvent<HTMLDivElement>) => void;
   }) {
     const rows = whisperBubbleView({ ok: true, text, ts: 0 });
     const key = String(image ?? '').trim();
@@ -359,7 +361,18 @@ export function makeWhisperBubble(rt: {
         ]
       : rowsToNodes(h, rows);
     return h('div', {
-      className: 'dsh-pet-bubble dsh-pet-whisper' + (src ? ' ' + MEME_BUBBLE_CLASS : '') + (on ? ' is-on' : ''),
+      className:
+        'dsh-pet-bubble dsh-pet-whisper' +
+        (src ? ' ' + MEME_BUBBLE_CLASS : '') +
+        (on ? ' is-on' : '') +
+        (onClick ? ' is-clickable' : ''),
+      // 点在气泡上不能漏到底下的宠物本体：那里是拖拽与「摸一下」的命中区。
+      onClick: onClick
+        ? (e: ReactNS.MouseEvent<HTMLDivElement>) => {
+            e.stopPropagation();
+            onClick(e);
+          }
+        : undefined,
       children: voiceState === 'idle' ? body : [body, voiceBadgeNode(h, voiceState)],
     });
   };

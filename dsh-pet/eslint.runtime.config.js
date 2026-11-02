@@ -79,6 +79,7 @@ const scriptGlobals = {
   ORIGIN: 'readonly',
   STATE_URL: 'readonly',
   BALANCE_URL: 'readonly',
+  FOCUS_SESSION_URL: 'readonly',
   WHISPER_URL: 'readonly',
   POSE_REPORT_URL: 'readonly',
   POSE_THROTTLE_MS: 'readonly',

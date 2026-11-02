@@ -182,7 +182,11 @@ describe('并行工具的详情与调用对应', () => {
     assert.match((await h.snapshot()).task ?? '', /active\.ts/, 'todo 不该盖掉仍在跑的详情');
     now += 6000;
     h.emit('s', TOOL_RESULT(7, 'read-A'));
-    assert.deepEqual(await h.snapshot(), { state: 'result', task: '最新清单' }, '全部结束后应回落到最新 todo');
+    assert.deepEqual(
+      await h.snapshot(),
+      { state: 'result', task: '最新清单', sessionId: 's' },
+      '全部结束后应回落到最新 todo',
+    );
   });
 
   test('最后开始的工具先完成时，立即显示另一项仍在执行的操作', async (t) => {
@@ -255,7 +259,11 @@ describe('并行工具的详情与调用对应', () => {
       h.emit('s', DETAILED_CALL(5, 'new', 'new.ts'));
       now += 6000;
       h.emit('s', TOOL_RESULT(6, 'new'));
-      assert.deepEqual(await h.snapshot(), { state: 'result', task: null }, '上一轮未完成的条目不该被带到这一轮');
+      assert.deepEqual(
+        await h.snapshot(),
+        { state: 'result', task: null, sessionId: 's' },
+        '上一轮未完成的条目不该被带到这一轮',
+      );
     });
   }
 
