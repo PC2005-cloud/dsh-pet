@@ -8,6 +8,13 @@ export const de: Record<Key, string> = {
   intro: 'Mehrere Pets verwalten: Jedes Pet hat eigene Größe und Position (gilt sofort nach dem Speichern).',
   // 卡片标题与卡片级说明；说明统一进问号气泡。
   petCardTitle: 'Pet-Konfiguration',
+  avatarLabel: 'Avatar',
+  avatarHint:
+    'Das kleine Bild neben den Nachrichten dieses Pets im Chatfenster. Ohne Upload erscheint das Standard-Logo des Plugins; ein Upload greift sofort und ersetzt das vorherige — „Speichern" ist nicht nötig.',
+  avatarUpload: 'Avatar hochladen',
+  avatarChange: 'Ändern',
+  avatarUploading: 'Wird hochgeladen…',
+  avatarUploaded: 'Avatar aktualisiert',
   petCardHint:
     'Einstellungen pro Pet: Name / Größe / Anzeige / Position / Offsets / die vier Funktionsschalter. Nach dem Ändern unten auf „Speichern" klicken – gilt sofort.',
   globalTitle: 'Globale Schalter',

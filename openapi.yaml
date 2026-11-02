@@ -2475,22 +2475,139 @@ paths:
     get:
       tags: [Assets]
       operationId: getLogo
-      summary: 获取插件 logo
+      summary: 获取宠物头像（缺省是插件 logo）
       description: |
-        包内 `assets/logo.png`。只放行这一个文件——`assets/` 根下还有配置文件，不开放成静态目录，
-        所以路径不接受额外段（多一段是 400）。对话面板用它当宠物头像。
+        不带参数时回包内 `assets/logo.png`。只放行这一个文件——`assets/` 根下还有配置文件，
+        不开放成静态目录，所以路径不接受额外段（多一段是 400）。
+
+        带 `root=<素材根>` 时先找该 pet pack 上传的头像（`pet/<素材根>-avatar.<ext>`，
+        扩展名由文件头判定，可为 png / jpg / webp / gif）；没上传过就回退包内 logo。
+        `root=main`（内置条目）**不查**自定义文件，永远回包内 logo。
+
+        参数名是 `root` 而不是 `pet`：这里要的是素材根（目录前缀，如 `baimao`），不是其它端点
+        `PetIdQuery.pet` 的宠物实例 id（`pets[].id`，如 `main`）。同名不同义会让人按 `pet` 的既有
+        语义调用后静默拿到默认图。
+
+        `v` 是任意缓存破障参数，宿主不解析。
+      parameters:
+        - name: root
+          in: query
+          required: false
+          description: |
+            素材根（`pet/<名>-config.json(c)` 的文件名前缀）。缺省或 `main` → 回包内 logo。
+            含路径分隔符等非法字符 → 400。
+          schema:
+            type: string
+          example: baimao
+        - name: v
+          in: query
+          required: false
+          description: 缓存破障用的版本号（打开面板 / 刷新 / 上传成功时换一个），宿主忽略。
+          schema:
+            type: string
       responses:
         "200":
-          description: PNG 图片
+          description: |
+            图片。默认是 PNG；`root` 命中自定义头像时按文件实际类型。
           content:
             image/png:
               schema:
                 type: string
                 format: binary
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+            image/webp:
+              schema:
+                type: string
+                format: binary
+            image/gif:
+              schema:
+                type: string
+                format: binary
         "400":
-          description: 路径带了额外段（`text/plain`）。
+          description: 路径带了额外段，或 `root` 含路径分隔符等非法字符（`text/plain`）。
         "404":
           description: 包内没有 logo（安装损坏，`text/plain`）。
+
+  /dsh-pet-7340/pet-avatar:
+    post:
+      tags: [Assets]
+      operationId: uploadPetAvatar
+      summary: 上传 / 覆盖 pet pack 的头像
+      description: |
+        把一张图片写成 `pet/<素材根>-avatar.<ext>`，覆盖同一素材根的旧头像。
+        扩展名由**文件头的魔数**决定（png / jpg / webp / gif），不信文件名；换格式时会清掉旧的
+        其它扩展名，多份并存读取时也按修改时间取最新那份。
+
+        为什么走 base64 而不是二进制裸流：宿主请求体统一按 utf8 解码，二进制在解码处就被破坏。
+
+        必须知道的几点：
+
+        - **只属于 pet pack**：`root=main`（内置条目）直接拒绝——`pet/` 目录不接内置的头像，
+          内置永远用插件默认 logo。
+        - **上限 768 KiB（解码后）**：请求体上限 1 MiB，base64 膨胀 4/3，所以原图约 750 KB 封顶；
+          设置页会先把图缩到长边 512 再上传。
+        - **只校验「文件头像图片 + 在预算内」**：不裁剪、不重编码，尺寸与画质由调用方担保。
+        - 落盘后**立即生效**：不是配置字段，不需要 `PUT /config`，也不重启桌面 Helper。
+        - 同一素材根的所有实例**共用**一张头像（文件按素材根命名，不按实例 id）。
+      parameters:
+        - name: root
+          in: query
+          required: true
+          description: |
+            素材根（`pet/<名>-config.json(c)` 的文件名前缀）——**必填**，且不能是 `main`。
+          schema:
+            type: string
+          example: baimao
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [base64]
+              properties:
+                base64:
+                  type: string
+                  description: |
+                    不带 `data:` 前缀的规范 base64。非规范输入会被拒（与 `/chat` 的附件校验同一口径），
+                    不会静默解出别的字节。
+            examples:
+              upload:
+                summary: 给 baimao 换一张 PNG
+                value:
+                  base64: iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==
+      responses:
+        "200":
+          description: |
+            **成功** → `{ ok: true }`；
+            **业务失败** → `{ ok: false, reason, message }`（业务结论不用 400/404 表达）。
+
+            `reason` 取值：`bad-request`（缺 `root` / `root` 非法 / `root` 为 `main` /
+            `base64` 缺失或非规范）、`unsupported`（文件头不是 PNG / JPEG / WebP / GIF）、
+            `internal-error`（写盘失败）。
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/OkResponse"
+                  - $ref: "#/components/schemas/FailureResponse"
+        "400":
+          description: '请求体不是合法 JSON：`400` + `{"ok":false,"reason":"invalid-json"}`'
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FailureResponse"
+        "413":
+          description: '解码后超过 768 KiB：`413` + `{"ok":false,"reason":"payload-too-large"}`'
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FailureResponse"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
 
   "/dsh-pet-7340/sound/{file}":
     get:

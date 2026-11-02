@@ -39,6 +39,8 @@ export interface PanelData {
   readonly personaOpen: boolean;
   /** 正在点播的那一轮与阶段；null = 没有在播。同一时刻只播一条。 */
   readonly speaking: { readonly ts: number; readonly phase: 'loading' | 'playing' | 'failed' } | null;
+  /** 头像地址的破缓存版本号：打开面板与刷新时换一个，浏览器才会重新取图（换过头像后尤其需要）。 */
+  readonly avatarVersion: number;
 }
 
 /** 需要二次确认的破坏性操作：用面板内的确认条，不用浏览器原生 `confirm`。 */

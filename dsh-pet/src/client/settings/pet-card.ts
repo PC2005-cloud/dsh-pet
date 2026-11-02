@@ -1,19 +1,15 @@
 /**
- * 选中宠物的配置卡：名字 / 大小 / 显示位置、角落与偏移、四个功能开关、实例级人设。
+ * 选中宠物的配置卡：头像、名字 / 大小 / 显示位置、角落与偏移、四个功能开关、实例级人设。
  * 只编辑 main 条目的实例字段：条目级字段由成品配置回落，卡里不出现也不回写；文件宠物永不进这张卡。
  * 纯展示 + 回调，状态全在设置页外壳；`onChange` 的补丁形状即提交形状的预览。
+ * 头像格与两组字段在 ./pet-card-parts，本文件只做编排。
  * @module dsh-pet/src/client/settings/pet-card
  */
 import type { ChangeEvent, FunctionComponent } from 'react';
-import type { Corner, Pet, PetDisplay } from '../../shared/types.ts';
-import { PET_DISPLAYS } from '../../shared/config.ts';
-import { SIZE_PERCENT_DEFAULT, SIZE_PERCENT_MIN } from '../../shared/pet-size.ts';
+import type { Pet } from '../../shared/types.ts';
 import type { SettingsRuntime } from './runtime.ts';
-import { INPUT_CLASS, makeUiKit, numberInputProps } from './ui.ts';
-import { makeSelect } from './panel/select.ts';
-
-/** 宠物字段补丁：`position` 只带要改的子字段，其余字段走顶层。 */
-export type PetPatch = Partial<Omit<Pet, 'position'>> & { position?: Partial<Pet['position']> };
+import { INPUT_CLASS, makeUiKit } from './ui.ts';
+import { makePetAvatarCell, makePetIdentityFields, makePetPositionFields, type PetPatch } from './pet-card-parts.ts';
 
 /** 宠物卡的全部输入。 */
 export interface PetCardProps {
@@ -25,6 +21,12 @@ export interface PetCardProps {
   msg: { kind: 'ok' | 'err' | ''; text: string };
   /** 条目级人设正文，作为实例人设输入框的 placeholder。 */
   entryPrompt: string;
+  /** 头像预览地址（已带破缓存版本号）；没上传过时宿主回的就是默认 logo。 */
+  avatarSrc: string;
+  /** 头像正在上传：遮罩常显且文件框禁用。 */
+  avatarBusy: boolean;
+  /** 选中一张新头像；内置条目没有这个能力，传 undefined 时只显示预览、不可点。 */
+  onAvatar?: (file: File) => void;
   /** 改选中宠物的字段。 */
   onChange: (patch: PetPatch) => void;
   /** 就近保存。 */
@@ -32,9 +34,6 @@ export interface PetCardProps {
   /** 删除当前宠物（先弹确认）。 */
   onRemove: () => void;
 }
-
-/** 四个角落的固定顺序；文案走 `corner.<corner>`。 */
-const CORNERS: Corner[] = ['top-left', 'top-right', 'bottom-left', 'bottom-right'];
 
 /**
  * 造宠物配置卡。
@@ -45,34 +44,10 @@ const CORNERS: Corner[] = ['top-left', 'top-right', 'bottom-left', 'bottom-right
 export function makePetCard(rt: SettingsRuntime): FunctionComponent<PetCardProps> {
   const { h, t } = rt;
   const { tip, q, field, toggleCell } = makeUiKit({ h, t });
-  const Select = makeSelect(rt);
-
-  /** 宠物数值输入（大小 / 水平偏移 / 垂直偏移）；宽度交给栅格。 */
-  const numInput = (
-    key: 'size' | 'marginX' | 'marginY',
-    value: number,
-    disabled: boolean,
-    setter: (v: number) => void,
-  ) =>
-    h(
-      'input',
-      numberInputProps(value, setter, {
-        step: key === 'size' ? '10' : '1',
-        min: key === 'size' ? '120' : '',
-        disabled,
-      }),
-    );
-
-  /** 百分比输入：默认 20；不设上限（超过 100 只在 size 也够大时才生效）。 */
-  const percentInput = (value: number, disabled: boolean, setter: (v: number) => void) =>
-    h(
-      'input',
-      numberInputProps(value, setter, {
-        min: String(SIZE_PERCENT_MIN),
-        step: '1',
-        disabled,
-      }),
-    );
+  // 部件工厂在装配时各调一次：组件类型跨渲染稳定，卡片重渲染不会重建它们。
+  const AvatarCell = makePetAvatarCell(rt);
+  const IdentityFields = makePetIdentityFields(rt);
+  const PositionFields = makePetPositionFields(rt);
 
   return function PetCard(props: PetCardProps) {
     const { pet, busy, msg } = props;
@@ -121,71 +96,21 @@ export function makePetCard(rt: SettingsRuntime): FunctionComponent<PetCardProps
           ],
         }),
 
+        // 顶部一行：头像作左列，右侧是 2×2 的输入网格。
         h('div', {
-          className: 'dsh-pet-cfg__grid4',
+          className: 'dsh-pet-cfg__topRow',
           children: [
-            field(
-              t('nameLabel'),
-              h('input', {
-                type: 'text',
-                className: INPUT_CLASS,
-                value: String(pet.name ?? ''),
-                disabled: busy,
-                maxLength: 50,
-                onChange: (e: ChangeEvent<HTMLInputElement>) => props.onChange({ name: e.target.value }),
-              }),
-              t('nameHint'),
-            ),
-            field(
-              t('sizeLabel'),
-              numInput('size', pet.size, busy, (v) => props.onChange({ size: v })),
-              t('sizeHint'),
-            ),
-            field(
-              t('sizePercentLabel'),
-              percentInput(pet.sizePercent ?? SIZE_PERCENT_DEFAULT, busy, (v) => props.onChange({ sizePercent: v })),
-              t('sizePercentHint'),
-            ),
-            field(
-              t('displayLabel'),
-              h(Select, {
-                label: t('displayLabel'),
-                value: pet.display,
-                options: PET_DISPLAYS.map((d) => ({ id: d, label: t('display.' + d) })),
-                disabled: busy,
-                onChange: (id: string) => props.onChange({ display: id as PetDisplay }),
-              }),
-              t('displayHint'),
-            ),
+            h(AvatarCell, {
+              avatarSrc: props.avatarSrc,
+              avatarBusy: props.avatarBusy,
+              busy,
+              onAvatar: props.onAvatar,
+            }),
+            h(IdentityFields, { pet, busy, onChange: props.onChange }),
           ],
         }),
 
-        h('div', {
-          className: 'dsh-pet-cfg__grid3',
-          children: [
-            field(
-              t('cornerLabel'),
-              h(Select, {
-                label: t('cornerLabel'),
-                value: pet.position.corner,
-                options: CORNERS.map((c) => ({ id: c, label: t('corner.' + c) })),
-                disabled: busy,
-                onChange: (id: string) => props.onChange({ position: { corner: id as Corner } }),
-              }),
-              t('cornerHint'),
-            ),
-            field(
-              t('marginX'),
-              numInput('marginX', pet.position.marginX, busy, (v) => props.onChange({ position: { marginX: v } })),
-              t('marginXHint'),
-            ),
-            field(
-              t('marginY'),
-              numInput('marginY', pet.position.marginY, busy, (v) => props.onChange({ position: { marginY: v } })),
-              t('marginYHint'),
-            ),
-          ],
-        }),
+        h(PositionFields, { pet, busy, onChange: props.onChange }),
 
         h('div', {
           className: 'dsh-pet-cfg__grid4',

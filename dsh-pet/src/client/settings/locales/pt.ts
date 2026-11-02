@@ -8,6 +8,13 @@ export const pt: Record<Key, string> = {
   intro: 'Gerencie vários pets: cada um tem tamanho e posição próprios (aplicado na hora após salvar).',
   // 卡片标题与卡片级说明；说明统一进问号气泡。
   petCardTitle: 'Pet',
+  avatarLabel: 'Avatar',
+  avatarHint:
+    'A imagem pequena exibida ao lado das mensagens deste pet no painel de conversa. Sem envio, usa-se o logotipo padrão do plugin; o envio vale na hora e substitui o anterior, sem clicar em "Salvar".',
+  avatarUpload: 'Enviar avatar',
+  avatarChange: 'Trocar',
+  avatarUploading: 'Enviando…',
+  avatarUploaded: 'Avatar atualizado',
   petCardHint:
     'Ajustes por pet: nome / tamanho / exibição / posição / deslocamentos / os quatro interruptores. Clique em "Salvar" no fim para aplicar na hora.',
   globalTitle: 'Interruptores globais',

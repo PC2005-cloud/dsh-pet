@@ -7,6 +7,13 @@ export const zh = {
   intro: '管理多个桌宠：每个宠物可独立设置大小与位置（保存后即时生效）。',
   // 卡片标题与卡片级说明；说明统一进问号气泡。
   petCardTitle: '宠物配置',
+  avatarLabel: '头像',
+  avatarHint:
+    '对话面板里这条宠物消息旁边显示的小图。没上传过就是插件默认图；上传后立即生效并覆盖旧图，不需要点「保存」。',
+  avatarUpload: '上传头像',
+  avatarChange: '更换',
+  avatarUploading: '上传中…',
+  avatarUploaded: '头像已更新',
   petCardHint:
     '每只宠物独立配置：名字 / 大小 / 显示位置 / 位置 / 偏移 / 四个功能开关。改完点最下面的「保存」即时生效。',
   globalTitle: '全局开关',

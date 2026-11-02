@@ -42,6 +42,7 @@ const INITIAL: PanelData = {
   personas: {},
   personaOpen: false,
   speaking: null,
+  avatarVersion: 0,
 };
 
 /**
@@ -55,7 +56,8 @@ export function createPetChatState(rt: ChatPanelRuntime): () => ChatPanelState {
   const useChatEffects = createChatEffects(rt);
 
   return function usePetChatState(): ChatPanelState {
-    const [data, setData] = useState<PanelData>(INITIAL);
+    // 版本号在面板挂载时生成：每次打开面板都重新挂载，换过头像后重开一定拿到新图。
+    const [data, setData] = useState<PanelData>({ ...INITIAL, avatarVersion: Date.now() });
     const listRef = useRef<HTMLDivElement | null>(null);
     const draftRef = useRef<HTMLTextAreaElement | null>(null);
     /** 已贴到底的那条消息（`ts`）：只有它变化时才自动滚到底。 */

@@ -4,7 +4,7 @@
  * 纯映射，不做取数与状态；时间的位置是唯一的约定：贴着这一轮最后一条消息。
  * @module dsh-pet/src/client/chat/view-message
  */
-import { attachmentUrl, LOGO_URL, memeUrl, type ChatMessageView } from './api.ts';
+import { attachmentUrl, avatarUrl, memeUrl, type ChatMessageView } from './api.ts';
 import type { ChatPanelRuntime } from './runtime.ts';
 import { formatStamp } from './stamp.ts';
 import { tipAttrs } from './tooltip.ts';
@@ -63,13 +63,16 @@ function actionNode(h: ChatPanelRuntime['h'], action: string, state: ChatPanelSt
 }
 
 /**
- * 头像：宠物用插件 logo，我是一只 Q 版小脸（圆脸 + 呆毛 + 腮红 + 星星）。
+ * 头像：宠物用自己在设置页上传的头像（没上传过时宿主回退插件 logo），我是一只 Q 版小脸
+ * （圆脸 + 呆毛 + 腮红 + 星星）。
  *
- * 画成内联 SVG 而不是图片：能直接用主题 token（深浅色自动跟随），也不用多一个资源请求。
- * 造型对齐桌宠的二次元调性，不与插件 logo 抢风格。
+ * 我这一侧画成内联 SVG 而不是图片：能直接用主题 token（深浅色自动跟随），也不用多一个资源请求。
+ * 造型对齐桌宠的二次元调性，不与宠物头像抢风格。
  */
-export function avatarNode(h: ChatPanelRuntime['h'], isMe: boolean): unknown {
-  if (!isMe) return h('img', { className: 'pet-chat-avatar', src: LOGO_URL, alt: '', loading: 'lazy' });
+export function avatarNode(h: ChatPanelRuntime['h'], isMe: boolean, assetRoot: string, version: number): unknown {
+  if (!isMe) {
+    return h('img', { className: 'pet-chat-avatar', src: avatarUrl(assetRoot, version), alt: '', loading: 'lazy' });
+  }
   return h('svg', {
     className: 'pet-chat-avatar',
     viewBox: '0 0 32 32',
@@ -134,18 +137,25 @@ export function avatarNode(h: ChatPanelRuntime['h'], isMe: boolean): unknown {
   });
 }
 
+/** 一条消息的渲染输入；参数超过 4 个就收进对象，调用点不必靠位置记忆。 */
+export interface MessageNodeInput {
+  /** 消息正文与其附件引用。 */
+  readonly message: ChatMessageView;
+  /** true = 用户自己那一侧（内联小脸头像）。 */
+  readonly isMe: boolean;
+  /** 宠物所属素材根：头像与表情包都按它取图。 */
+  readonly assetRoot: string;
+  /** 头像地址的破缓存版本号。 */
+  readonly avatarVersion: number;
+  /** 点开大图；由轮节点传入，本模块不碰面板状态。 */
+  readonly onOpenImage: (url: string) => void;
+}
+
 /**
  * 一条消息：头像 + 气泡；图片排在文字之后，点一下放大。
- *
- * `onOpenImage` 由轮节点传入，本模块不直接碰面板状态。
  */
-export function messageNode(
-  h: ChatPanelRuntime['h'],
-  message: ChatMessageView,
-  isMe: boolean,
-  assetRoot: string,
-  onOpenImage: (url: string) => void,
-): unknown {
+export function messageNode(h: ChatPanelRuntime['h'], input: MessageNodeInput): unknown {
+  const { message, isMe, assetRoot, avatarVersion, onOpenImage } = input;
   const image =
     message.image !== undefined
       ? attachmentUrl(message.image)
@@ -155,7 +165,7 @@ export function messageNode(
   return h('div', {
     className: 'pet-chat-msg ' + (isMe ? 'is-me' : 'is-pet'),
     children: [
-      avatarNode(h, isMe),
+      avatarNode(h, isMe, assetRoot, avatarVersion),
       h('div', {
         className: 'pet-chat-bubble',
         children: [
@@ -216,10 +226,24 @@ export function roundNode(
       h('div', {
         className: 'pet-chat-round-body',
         children: [
-          round.user === undefined ? null : messageNode(h, round.user, true, state.assetRoot, state.showImage),
+          round.user === undefined
+            ? null
+            : messageNode(h, {
+                message: round.user,
+                isMe: true,
+                assetRoot: state.assetRoot,
+                avatarVersion: state.avatarVersion,
+                onOpenImage: state.showImage,
+              }),
           round.assistant === undefined
             ? null
-            : messageNode(h, round.assistant, false, state.assetRoot, state.showImage),
+            : messageNode(h, {
+                message: round.assistant,
+                isMe: false,
+                assetRoot: state.assetRoot,
+                avatarVersion: state.avatarVersion,
+                onOpenImage: state.showImage,
+              }),
           // 时间跟着这一轮的最后一条消息走：有回答就贴在回答下方，否则贴在我的问题下方
           round.ts > 0
             ? h('div', {

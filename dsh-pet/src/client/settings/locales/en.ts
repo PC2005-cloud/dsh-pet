@@ -8,6 +8,13 @@ export const en: Record<Key, string> = {
   intro: 'Manage multiple pets: each pet has its own size and position (applies instantly after saving).',
   // 卡片标题与卡片级说明；说明统一进问号气泡。
   petCardTitle: 'Pet',
+  avatarLabel: 'Avatar',
+  avatarHint:
+    'The small image shown next to this pet’s messages in the chat panel. Without an upload it falls back to the plugin logo; an upload takes effect immediately and replaces the previous one — no need to click Save.',
+  avatarUpload: 'Upload avatar',
+  avatarChange: 'Change',
+  avatarUploading: 'Uploading…',
+  avatarUploaded: 'Avatar updated',
   petCardHint:
     'Per-pet settings: name / size / display / corner / offsets / the four feature switches. Click "Save" at the bottom to apply instantly.',
   globalTitle: 'Global switches',

@@ -1,5 +1,5 @@
 /**
- * 宿主半侧的 HTTP 管道：素材路径校验、文件/JSON/文本应答、请求体收集与 MIME 映射。
+ * 宿主半侧的 HTTP 管道：素材路径校验、文件/JSON/文本应答、请求体收集、MIME 映射与图片类型判定。
  *
  * 只做协议层的事：不判断业务、不读配置、不碰状态；路由层（./routes）决定应答什么，这里决定怎么落盘。
  * 必须始终成立：素材路径一律经 resolveAsset 限定在给定根目录内，任何拼接都不得逃出该根。
@@ -15,6 +15,10 @@ export const MIME: Record<string, string> = {
   '.mov': 'video/quicktime',
   '.mp4': 'video/mp4',
   '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.webp': 'image/webp',
+  '.gif': 'image/gif',
   '.wav': 'audio/wav',
   '.json': 'application/json; charset=utf-8',
   '.jsonc': 'application/json; charset=utf-8',
@@ -22,6 +26,48 @@ export const MIME: Record<string, string> = {
   '.woff': 'font/woff',
   '.woff2': 'font/woff2',
 };
+
+/** 图片魔数判定需要读到的最大字节数：WebP 要看到第 12 字节。 */
+export const IMAGE_HEAD_BYTES = 16;
+
+/**
+ * 按文件头魔数判定图片类型。
+ *
+ * 只看前 {@link IMAGE_HEAD_BYTES} 字节，不解析完整图片：调用方要么刚写完校验过的字节，
+ * 要么手里没有扩展名可信的文件（附件对象按哈希命名、头像可被用户换成任意格式）。
+ *
+ * @param header - 文件头缓冲（可能不满 {@link IMAGE_HEAD_BYTES}）。
+ * @param size - header 里实际读到的字节数。
+ * @returns 图片的 Content-Type；不是 PNG / JPEG / GIF / WebP 之一时返回 undefined。
+ */
+export function imageTypeOf(header: Buffer, size: number): string | undefined {
+  if (size >= 8 && header.readUInt32BE(0) === 0x89504e47 && header.readUInt32BE(4) === 0x0d0a1a0a) {
+    return 'image/png';
+  }
+  if (size >= 3 && header[0] === 0xff && header[1] === 0xd8 && header[2] === 0xff) return 'image/jpeg';
+  if (size >= 6) {
+    const tag = header.toString('latin1', 0, 6);
+    if (tag === 'GIF87a' || tag === 'GIF89a') return 'image/gif';
+  }
+  if (size >= 12 && header.toString('latin1', 0, 4) === 'RIFF' && header.toString('latin1', 8, 12) === 'WEBP') {
+    return 'image/webp';
+  }
+  return undefined;
+}
+
+/**
+ * 图片 Content-Type → 落盘扩展名。
+ *
+ * @param contentType - {@link imageTypeOf} 的返回值。
+ * @returns 带点的扩展名；不在支持范围内返回 undefined。
+ */
+export function imageExtOf(contentType: string): string | undefined {
+  if (contentType === 'image/png') return '.png';
+  if (contentType === 'image/jpeg') return '.jpg';
+  if (contentType === 'image/webp') return '.webp';
+  if (contentType === 'image/gif') return '.gif';
+  return undefined;
+}
 
 /**
  * 规范化并校验请求路径，确保它在 assets 根目录内（防路径穿越）。

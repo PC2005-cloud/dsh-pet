@@ -178,6 +178,8 @@ export function createShellActions(deps: ShellDeps): {
           personas: config.personaByPet,
           orphans,
           petId: nextPetId,
+          // 刷新是「以磁盘为准重读」：头像也换一版，否则刚上传的图还挂在浏览器缓存里。
+          avatarVersion: Date.now(),
           error: '',
         });
         await ports.reload(nextPetId);

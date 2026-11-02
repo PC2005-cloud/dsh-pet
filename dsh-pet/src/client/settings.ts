@@ -6,6 +6,7 @@
  * @module dsh-pet/src/client/settings
  */
 import { ROUTE_PATH } from '../shared/constants.ts';
+import { avatarUrl } from '../shared/avatar.ts';
 import { DEFAULT_FONT } from '../shared/fonts.ts';
 import { DEFAULT_PHYSICS } from '../shared/physics.ts';
 import type { FontConfig, ModelSelection, PhysicsParams } from '../shared/types.ts';
@@ -27,6 +28,7 @@ import { runNotificationTest } from './settings/notify-test.ts';
 import { makeKindTabs } from './settings/kind-tabs.ts';
 import { makePathsCards } from './settings/paths-cards.ts';
 import { makePetCard } from './settings/pet-card.ts';
+import { uploadPetAvatar } from './settings/avatar-upload.ts';
 import { makePetTabs } from './settings/pet-tabs.ts';
 import { createWriteFlow } from './settings/config/index.ts';
 import { makePhysicsCard } from './settings/physics-card.ts';
@@ -166,6 +168,10 @@ export function makePetConfigSection(
     const [chatMemory, setChatMemory] = useState(10);
     // 对话配图张数上限（全局默认）：初值 20 是内置默认，加载后由成品值覆盖。
     const [chatImageLimit, setChatImageLimit] = useState(20);
+    // 头像预览的破缓存版本号：上传成功后换一个，预览才会重新取图（同一 URL 会被浏览器记住）。
+    const [avatarVersion, setAvatarVersion] = useState(Date.now());
+    // 头像上传中：按钮禁用并换文案，与「保存」的 busy 分开——上传不写配置。
+    const [avatarBusy, setAvatarBusy] = useState(false);
 
     // 首次读取与恢复默认必须更新同一组控件，避免下一次保存回写过期值。
     const applyConfig = useCallback(
@@ -213,6 +219,33 @@ export function makePetConfigSection(
 
     // 当前选中的宠物对象（表单数据源）；selId 由 add/remove/sync 同步维护，列表非空时恒有效
     const cur = pets.find((p) => p.id === selId) ?? null;
+    // 头像只能属于 pet pack：main（含没有 assetRoot 的实例）用插件默认 logo，不给上传入口。
+    const avatarEditable = cur !== null && cur.assetRoot !== undefined && cur.assetRoot !== 'main';
+
+    /** 上传当前宠物的头像：直接落盘、不经过「保存」——头像不是配置字段，改完不必再点保存。
+     *  归属看素材根（文件宠物是目录前缀，同一素材根的多只实例共用一张）。 */
+    const uploadAvatar = (file: File): void => {
+      if (cur === null) return;
+      const assetRoot = cur.assetRoot ?? '';
+      setAvatarBusy(true);
+      void (async () => {
+        try {
+          const result = await uploadPetAvatar(assetRoot, file);
+          if (!result.ok) {
+            setMsg({ kind: 'err', text: result.message });
+            return;
+          }
+          // 换版本号让预览立刻重取，否则浏览器还拿缓存里的旧图。
+          setAvatarVersion(Date.now());
+          setMsg({ kind: 'ok', text: t('avatarUploaded') });
+        } catch (error) {
+          setMsg({ kind: 'err', text: error instanceof Error ? error.message : String(error) });
+        } finally {
+          setAvatarBusy(false);
+        }
+      })();
+    };
+
     // 文件宠物条目数：只用于标题提示「另 n 只来自 pet/ 目录」。
     const packCount = kinds.filter((item) => item.kind === 'pack').length;
 
@@ -336,6 +369,11 @@ export function makePetConfigSection(
           busy,
           msg,
           entryPrompt,
+          // 预览与聊天面板同一个地址：内置回默认 logo，所以无需区分「有没有头像」。
+          avatarSrc: avatarUrl(cur?.assetRoot ?? '', avatarVersion),
+          avatarBusy,
+          // 内置条目没有这个能力：不传 onAvatar，卡片就只渲染预览。
+          ...(avatarEditable ? { onAvatar: uploadAvatar } : {}),
           onChange: update,
           onSave: () => void write.save(),
           onRemove: requestRemove,

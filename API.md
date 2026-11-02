@@ -95,7 +95,8 @@ dsh-pet 的宿主半侧向 DSH 自己的 Web 服务注册了**一条前缀路由
 | `GET /dsh-pet-7340/font/{file}`          | 字体文件                                                          |
 | `GET /dsh-pet-7340/pic/{file}`           | 通知图标（`pic/`）与表情包（`pic/memes/{素材根}/`，按宠物归属）   |
 | `GET /dsh-pet-7340/attachment?id=`       | **取图**：把对话记忆里 `image.attachmentId`（`sha256:…`）换回图片 |
-| `GET /dsh-pet-7340/logo`                 | 插件 logo（`assets/logo.png`），对话面板拿它当宠物头像            |
+| `GET /dsh-pet-7340/logo?root=`           | 宠物头像：缺省回插件 logo（`assets/logo.png`）；带 `root=<素材根>` 时回该 pet pack 上传的头像，没有就回默认 |
+| `POST /dsh-pet-7340/pet-avatar?root=`    | **上传头像**：`{ base64 }`，覆盖写 `pet/<素材根>-avatar.<ext>`；`root=main`（内置）被拒 |
 
 ## 八、工作状态（外部写入）
 

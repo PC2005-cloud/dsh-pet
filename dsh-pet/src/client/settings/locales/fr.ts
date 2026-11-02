@@ -9,6 +9,13 @@ export const fr: Record<Key, string> = {
     "Gérez plusieurs compagnons : chacun a sa taille et sa position (appliquées immédiatement après l'enregistrement).",
   // 卡片标题与卡片级说明；说明统一进问号气泡。
   petCardTitle: 'Compagnon',
+  avatarLabel: 'Avatar',
+  avatarHint:
+    'La petite image affichée à côté des messages de ce compagnon dans le panneau de discussion. Sans envoi, le logo par défaut du plugin est utilisé ; un envoi prend effet immédiatement et remplace le précédent, sans cliquer sur « Enregistrer ».',
+  avatarUpload: 'Envoyer un avatar',
+  avatarChange: 'Changer',
+  avatarUploading: 'Envoi…',
+  avatarUploaded: 'Avatar mis à jour',
   petCardHint:
     'Réglages par compagnon : nom / taille / affichage / coin / décalages / les quatre interrupteurs de fonctionnalités. Cliquez sur « Enregistrer » en bas pour appliquer immédiatement.',
   globalTitle: 'Interrupteurs globaux',

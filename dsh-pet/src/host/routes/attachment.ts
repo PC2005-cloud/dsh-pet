@@ -7,15 +7,13 @@
  * @module dsh-pet/src/host/routes/attachment
  */
 import { closeSync, existsSync, openSync, readSync } from 'node:fs';
+import { IMAGE_HEAD_BYTES, imageTypeOf } from '../http.ts';
 import type { PetImageLocator, PetImageSink } from '../image-attachment.ts';
 import type { PetRouteDeps, RouteInput } from './types.ts';
 import type { RouteResult } from '../http.ts';
 
 /** 附件 id 的合法形状（与宿主附件服务同一规则）：`sha256:` + 64 位小写 hex。 */
 const ATTACHMENT_ID = /^sha256:[a-f0-9]{64}$/;
-
-/** 嗅探读取的文件头长度：覆盖四种格式魔数所需的最大偏移（WebP 要看到第 12 字节）。 */
-const HEAD_BYTES = 16;
 
 /** 取图领域：未命中返回 undefined，命中返回应答。 */
 export async function handleAttachmentRoutes(deps: PetRouteDeps, input: RouteInput): Promise<RouteResult | undefined> {
@@ -54,34 +52,12 @@ function sniffImageType(file: string): string | undefined {
   try {
     const fd = openSync(file, 'r');
     try {
-      const head = Buffer.alloc(HEAD_BYTES);
-      return imageTypeOf(head, readSync(fd, head, 0, HEAD_BYTES, 0));
+      const head = Buffer.alloc(IMAGE_HEAD_BYTES);
+      return imageTypeOf(head, readSync(fd, head, 0, IMAGE_HEAD_BYTES, 0));
     } finally {
       closeSync(fd);
     }
   } catch {
     return undefined; // 读的瞬间被清理 / 权限不足：同样按不存在处理
   }
-}
-
-/**
- * 魔数判定（PNG / JPEG / GIF / WebP）。
- *
- * @param header - 文件头缓冲（可能不满 {@link HEAD_BYTES}）。
- * @param size - header 里实际读到的字节数。
- * @returns 图片的 Content-Type；不是这四种之一时返回 undefined。
- */
-function imageTypeOf(header: Buffer, size: number): string | undefined {
-  if (size >= 8 && header.readUInt32BE(0) === 0x89504e47 && header.readUInt32BE(4) === 0x0d0a1a0a) {
-    return 'image/png';
-  }
-  if (size >= 3 && header[0] === 0xff && header[1] === 0xd8 && header[2] === 0xff) return 'image/jpeg';
-  if (size >= 6) {
-    const tag = header.toString('latin1', 0, 6);
-    if (tag === 'GIF87a' || tag === 'GIF89a') return 'image/gif';
-  }
-  if (size >= 12 && header.toString('latin1', 0, 4) === 'RIFF' && header.toString('latin1', 8, 12) === 'WEBP') {
-    return 'image/webp';
-  }
-  return undefined;
 }

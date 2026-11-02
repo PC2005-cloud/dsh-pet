@@ -12,7 +12,7 @@ import { diffPackWrites } from './config/index.ts';
 import type { DialogState } from './dialog.ts';
 import { petBridge } from './bridge.ts';
 import { draftPet, nextPetId } from './pet-draft.ts';
-import type { PetPatch } from './pet-card.ts';
+import type { PetPatch } from './pet-card-parts.ts';
 import type { SettingsRuntime } from './runtime.ts';
 
 /** 种类条的一项。 */

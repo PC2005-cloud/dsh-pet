@@ -110,8 +110,8 @@ export function groupRounds(messages: readonly ChatMessageView[]): ChatRound[] {
   return rounds;
 }
 
-/** 插件 logo 地址：对话面板拿它当宠物头像。 */
-export const LOGO_URL = ROUTE_PATH + '/logo';
+/** 插件 logo 地址与按宠物的头像地址：拼装规则在 shared/avatar.ts，面板只做再导出。 */
+export { avatarUrl, LOGO_URL } from '../../shared/avatar.ts';
 
 /**
  * 让宠物重演一次记忆里记下的动作（聊天窗口「播放动作」按钮）。

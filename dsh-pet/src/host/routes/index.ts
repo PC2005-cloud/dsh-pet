@@ -9,6 +9,7 @@
 import type { RouteResult } from '../http.ts';
 import { handleAssetsRoutes } from './assets.ts';
 import { handleAttachmentRoutes } from './attachment.ts';
+import { handleAvatarRoutes } from './avatar.ts';
 import { handleBalanceRoutes } from './balance.ts';
 import { handleChatRoutes } from './chat.ts';
 import { handleConfigRoutes } from './config/index.ts';
@@ -38,6 +39,7 @@ const HANDLERS: readonly RouteHandler[] = [
   handleAttachmentRoutes,
   handleTodoRoutes,
   handleVoiceRoutes,
+  handleAvatarRoutes,
   handleAssetsRoutes,
 ];
 

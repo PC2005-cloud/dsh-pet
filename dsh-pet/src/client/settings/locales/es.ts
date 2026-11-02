@@ -9,6 +9,13 @@ export const es: Record<Key, string> = {
     'Gestiona varias mascotas: cada una tiene su propio tamaño y posición (se aplica al instante después de guardar).',
   // 卡片标题与卡片级说明；说明统一进问号气泡。
   petCardTitle: 'Mascota',
+  avatarLabel: 'Avatar',
+  avatarHint:
+    'La imagen pequeña que aparece junto a los mensajes de esta mascota en el panel de chat. Sin subir nada se usa el logotipo predeterminado del plugin; al subir una imagen se aplica al instante y reemplaza la anterior, sin pulsar "Guardar".',
+  avatarUpload: 'Subir avatar',
+  avatarChange: 'Cambiar',
+  avatarUploading: 'Subiendo…',
+  avatarUploaded: 'Avatar actualizado',
   petCardHint:
     'Ajustes por mascota: nombre / tamaño / visualización / esquina / márgenes / los cuatro interruptores de funciones. Pulsa "Guardar" abajo para aplicar al instante.',
   globalTitle: 'Interruptores globales',

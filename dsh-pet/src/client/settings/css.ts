@@ -80,6 +80,25 @@ const SETTINGS_CSS = [
   '.dsh-pet-cfg__field{display:flex;flex-direction:column;gap:4px;min-width:0}',
   '.dsh-pet-cfg__flabel{display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--dsw-alias-label-secondary)}',
 
+  // 顶部一行：头像作左列，右侧是 2×2 的输入网格；窄容器降成单列，头像回到输入之上。
+  '.dsh-pet-cfg__topRow{display:grid;grid-template-columns:auto minmax(0,1fr);gap:14px 18px;align-items:stretch;margin-bottom:10px}',
+
+  // 头像：宽度固定，高度**撑满右侧两行**——否则头像下方会空出一大块（右列比 72px 高得多）。
+  // 能换的时候整块就是按钮：悬浮出遮罩、点它直接开文件框，没有独立按钮。
+  '.dsh-pet-cfg__avatarCol{position:relative;width:120px;flex:none}',
+  '.dsh-pet-cfg__avatarImg{display:block;width:100%;height:100%;min-height:72px;border-radius:14px;border:1px solid var(--dsw-alias-border-l2);object-fit:cover;background:var(--dsw-alias-bg-layer-1)}',
+  '.dsh-pet-cfg__avatarPick{position:relative;display:block;height:100%;border-radius:14px}',
+  // 键盘可达：input 铺满整块且透明（display:none 会让它不可聚焦）；焦点与悬浮一样出遮罩。
+  '.dsh-pet-cfg__avatarPick:focus-within{outline:2px solid var(--dsw-alias-state-business-primary);outline-offset:2px}',
+  // 遮罩用 token，缺 token 时回退到半透明黑：与本文件其它「token + fallback」写法一致，
+  // 不在规则里直接写字面色值。文字色同理用静态白 token。
+  '.dsh-pet-cfg__avatarMask{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;border-radius:14px;background:var(--dsw-alias-bg-mask,rgba(0,0,0,.55));color:var(--dsw-static-neutral-00,#fff);font-size:12px;line-height:1;opacity:0;transition:opacity .12s;pointer-events:none}',
+  '.dsh-pet-cfg__avatarPick:hover .dsh-pet-cfg__avatarMask,.dsh-pet-cfg__avatarPick:focus-within .dsh-pet-cfg__avatarMask,.dsh-pet-cfg__avatarMask.is-busy{opacity:1}',
+  '.dsh-pet-cfg__file{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;font-size:0}',
+
+  // 竖排时没有「右侧两行」可撑：头像回到 72px 的方块，否则会被拉成整宽的大图。
+  '@container (max-width:400px){.dsh-pet-cfg__topRow{grid-template-columns:minmax(0,1fr)}.dsh-pet-cfg__avatarCol{width:72px}.dsh-pet-cfg__avatarImg{height:72px;min-height:0}}',
+
   '.dsh-pet-cfg__inp{box-sizing:border-box;width:100%;min-height:28px;padding:4px 10px;border:1px solid var(--dsw-alias-border-l2);border-radius:8px;background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);font:inherit;font-size:13px;outline:none}',
   '.dsh-pet-cfg__inp:focus{border-color:var(--dsw-alias-state-business-primary)}',
   '.dsh-pet-cfg__inp:disabled{color:var(--dsw-alias-label-tertiary);cursor:default}',
