@@ -551,6 +551,25 @@ export const PANEL_CSS = `
   cursor: default;
 }
 
+/* 生成中：输入的文字压成三级色，与转圈一起说明「这句已经发出去了，在等回复」。
+   输入框本身仍可编辑（可以先把下一句打好），所以只改颜色、不 pointer-events: none。 */
+.pet-chat-composer.is-busy .pet-chat-input {
+  color: var(--dsw-alias-label-tertiary);
+}
+
+/* 发送键里的转圈：与播报按钮共用 pet-chat-spin，只画半圈弧。
+   box-sizing 必须 border-box，否则 1.5px 描边会把 12px 撑大，在 34px 的圆钮里显得偏大。 */
+.pet-chat-send-spinner {
+  box-sizing: border-box;
+  width: ${px(SIZE.spinner)};
+  height: ${px(SIZE.spinner)};
+  border: 1.5px solid transparent;
+  border-top-color: currentColor;
+  border-right-color: currentColor;
+  border-radius: 50%;
+  animation: pet-chat-spin 0.8s linear infinite;
+}
+
 /* 悬浮提示气泡：挂在 body 上按光标定位（见 ./tooltip），不在 .pet-chat 里，
    所以字体与颜色全部自带——气泡是深色底，两种主题下都靠白字与背景的对比度读。 */
 .pet-chat-tip {

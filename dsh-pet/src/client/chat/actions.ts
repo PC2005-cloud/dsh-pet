@@ -6,7 +6,15 @@
  * @module dsh-pet/src/client/chat/actions
  */
 import { encodeImageFile } from '../../shared/chat/encode.ts';
-import { clearHistory, clearOrphans as clearOrphansApi, deleteRounds, sendMessage, type DeleteResult } from './api.ts';
+import {
+  clearHistory,
+  clearOrphans as clearOrphansApi,
+  deleteRounds,
+  fetchChatConfig,
+  fetchOrphans,
+  sendMessage,
+  type DeleteResult,
+} from './api.ts';
 import type { ConfirmKind, PanelData } from './types.ts';
 
 /** 动作需要的最小端口。 */
@@ -109,12 +117,13 @@ export interface ShellDeps {
   readonly pageRounds: number;
 }
 
-/** 外壳动作：孤儿清理、确认条分发、「加载更早」。 */
+/** 外壳动作：孤儿清理、确认条分发、刷新与「加载更早」。 */
 export function createShellActions(deps: ShellDeps): {
   clearOrphans: () => void;
   ask: (kind: ConfirmKind) => void;
   cancelAsk: () => void;
   confirmAsk: () => void;
+  refresh: () => void;
   showOlder: () => void;
 } {
   const { ports, history, listRef, pageRounds } = deps;
@@ -155,11 +164,35 @@ export function createShellActions(deps: ShellDeps): {
     });
   };
 
+  /** 重读配置、孤儿提示与当前宠物的历史：改完对话配置不必刷新整个页面。
+   *  当前宠物可能已被删（配置是重新拉的）→ 回落到第一只，否则面板会停在一只不存在的宠物上。 */
+  const refresh = (): void => {
+    void (async () => {
+      try {
+        const [config, orphans] = await Promise.all([fetchChatConfig(), fetchOrphans().catch(() => [])]);
+        const { petId } = ports.read();
+        const nextPetId = config.pets.some((one) => one.id === petId) ? petId : (config.pets[0]?.id ?? '');
+        ports.patch({
+          pets: config.pets,
+          roundsByEntry: config.roundsByEntry,
+          personas: config.personaByPet,
+          orphans,
+          petId: nextPetId,
+          error: '',
+        });
+        await ports.reload(nextPetId);
+      } catch (error) {
+        ports.fail(error);
+      }
+    })();
+  };
+
   return {
     clearOrphans,
     ask: (kind: ConfirmKind) => ports.patch({ pending: kind }),
     cancelAsk: () => ports.patch({ pending: null }),
     confirmAsk,
+    refresh,
     showOlder,
   };
 }

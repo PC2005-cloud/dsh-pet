@@ -212,6 +212,21 @@ export function memoryBoundaryIndex(totalRounds: number, memoryRounds: number | 
   return cut > 0 ? cut : null;
 }
 
+/** 分界线节点的定位标记：工具栏的「记忆线」按它找元素，不依赖 class 名。 */
+export const MEMORY_LINE_ATTR = 'data-pet-chat-memory';
+
+/**
+ * 让记忆分界线进入可视窗口所需的最少展示轮数。
+ *
+ * 线插在倒数第 `memoryRounds` 轮之前，窗口里至少要有它上面那一轮，线才画得出来。
+ *
+ * @param memoryRounds - 该条目保留的轮数。
+ * @returns 需要的展示轮数；`memoryRounds` 非法（`<= 0`）时返回 0（没有线，无需放轮）。
+ */
+export function roundsToRevealMemory(memoryRounds: number): number {
+  return memoryRounds > 0 ? memoryRounds + 1 : 0;
+}
+
 /** 一次取满接口允许的轮数（宿主上限 200）：面板在本地按需展示，不做分页取数。 */
 export const HISTORY_ROUNDS = 200;
 

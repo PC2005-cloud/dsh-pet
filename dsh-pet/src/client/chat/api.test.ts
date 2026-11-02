@@ -18,6 +18,7 @@ import {
   memoryBoundaryIndex,
   personaText,
   playAction,
+  roundsToRevealMemory,
   toChatMessages,
 } from './api.ts';
 
@@ -250,6 +251,18 @@ describe('memoryBoundaryIndex —— 记忆边界线的位置', () => {
 
   test('没有消息 → 不画线', () => {
     assert.equal(memoryBoundaryIndex(0, 5), null);
+  });
+});
+
+describe('roundsToRevealMemory —— 让记忆线进入视窗要放多少轮', () => {
+  test('线在倒数第 N 轮之前：至少要 N + 1 轮，线上才有一轮可显示', () => {
+    assert.equal(roundsToRevealMemory(5), 6);
+    assert.equal(roundsToRevealMemory(1), 2);
+  });
+
+  test('没有记忆（0 或负数）→ 0，调用方不必放轮', () => {
+    assert.equal(roundsToRevealMemory(0), 0);
+    assert.equal(roundsToRevealMemory(-3), 0);
   });
 });
 

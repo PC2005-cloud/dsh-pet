@@ -67,7 +67,7 @@ export function personaNode(h: ChatPanelRuntime['h'], state: ChatPanelState): un
   });
 }
 
-/** 工具栏：多选开关、删除选中（带数量）与清空历史；删除都先走面板内确认条。 */
+/** 工具栏：多选开关、删除选中（带数量）、记忆线定位、刷新与清空历史；删除都先走面板内确认条。 */
 export function toolsNode(h: ChatPanelRuntime['h'], state: ChatPanelState): unknown {
   return h('div', {
     className: 'pet-chat-tools',
@@ -89,6 +89,24 @@ export function toolsNode(h: ChatPanelRuntime['h'], state: ChatPanelState): unkn
             children: state.selected.length === 0 ? '删除选中' : '删除选中 ' + state.selected.length,
           })
         : null,
+      // 配置里没有 chatMemoryRounds 时不画线，这个入口也就不该出现
+      state.memoryRounds === undefined
+        ? null
+        : h('button', {
+            type: 'button',
+            className: 'pet-chat-tool',
+            disabled: !state.hasMemoryLine,
+            // 置灰时的原因只给读屏：可见文案与其它工具栏按钮一样保持干净
+            ...(state.hasMemoryLine ? {} : { 'aria-label': '记忆线（历史还没超过记忆轮数，没有分界线）' }),
+            onClick: () => state.jumpToMemory(),
+            children: '记忆线',
+          }),
+      h('button', {
+        type: 'button',
+        className: 'pet-chat-tool',
+        onClick: () => state.refresh(),
+        children: '刷新',
+      }),
       h('button', {
         type: 'button',
         className: 'pet-chat-tool',
@@ -210,7 +228,9 @@ function sendIcon(h: ChatPanelRuntime['h']): unknown {
  */
 export function composerNode(h: ChatPanelRuntime['h'], state: ChatPanelState): unknown {
   return h('div', {
-    className: 'pet-chat-composer',
+    className: 'pet-chat-composer' + (state.busy ? ' is-busy' : ''),
+    // 生成中整块压灰：读屏与视觉都据此说明「这条已经发出去了」
+    'aria-busy': state.busy ? 'true' : undefined,
     onDragEnter: markDropTarget,
     onDragLeave: unmarkDropTarget,
     onDragOver: (event: DragLike) => {
@@ -267,11 +287,14 @@ export function composerNode(h: ChatPanelRuntime['h'], state: ChatPanelState): u
           h('span', { className: 'pet-chat-composer-spacer' }),
           h('button', {
             type: 'button',
-            className: 'pet-chat-send',
+            className: 'pet-chat-send' + (state.busy ? ' is-busy' : ''),
             'aria-label': state.busy ? '生成中' : '发送',
             onClick: () => state.send(),
             disabled: state.busy,
-            children: sendIcon(h),
+            // 生成中换转圈：箭头留着会让人以为还能点（按钮此时是 disabled）
+            children: state.busy
+              ? h('span', { className: 'pet-chat-send-spinner', 'aria-hidden': 'true' })
+              : sendIcon(h),
           }),
         ],
       }),

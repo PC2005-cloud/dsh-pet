@@ -4,7 +4,7 @@
  * 只做装配，节点细节在 ./view-node；不取数、不持状态。
  * @module dsh-pet/src/client/chat/view
  */
-import { HISTORY_ROUNDS, memoryBoundaryIndex } from './api.ts';
+import { HISTORY_ROUNDS, memoryBoundaryIndex, MEMORY_LINE_ATTR } from './api.ts';
 import type { ChatPanelRuntime } from './runtime.ts';
 import type { ChatPanelState } from './types.ts';
 import { composerNode, confirmNode, orphansNode, personaNode, toolsNode } from './view-node.ts';
@@ -65,6 +65,8 @@ function memoryLineNode(h: ChatPanelRuntime['h'], rounds: number): unknown {
   return h('div', {
     key: 'memory-line',
     className: 'pet-chat-memory',
+    // 工具栏的「记忆线」按钮按这个标记滚过来：线在不在窗口里、第几个，都由渲染决定
+    [MEMORY_LINE_ATTR]: 'true',
     children: [h('span', { className: 'pet-chat-memory-note', children: `以下 ${rounds} 轮进入桌宠的记忆` })],
   });
 }
