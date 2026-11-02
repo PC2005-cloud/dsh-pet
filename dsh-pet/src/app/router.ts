@@ -14,6 +14,8 @@ import type { RegisteredRoute } from '../standalone/context.ts';
 import { boundedRequest, MAX_REQUEST_BYTES, MAX_SETTINGS_BYTES } from '../standalone/request-body.ts';
 import { rejectRequest, type RequestSecurity } from '../standalone/request-security.ts';
 import { settingsHandler, testHandler, type StandaloneServerOptions } from '../standalone/server.ts';
+import { sendIcon } from '../standalone/server/respond.ts';
+import { readSettingsIcon } from '../standalone/icon.ts';
 import { settingsPage, settingsScript, settingsStyle } from '../standalone/settings-page.ts';
 
 /** 路由依赖：安全校验、AI 处理器与两个页面的数据源，全部注入以脱离 Electron 测试。 */
@@ -66,6 +68,19 @@ export function startRouter(
         '/standalone-ai/settings.js': [settingsScript, 'text/javascript'],
         '/standalone-ai/settings.css': [settingsStyle, 'text/css'],
       };
+      if (url.pathname === '/standalone-ai/icon.png') {
+        if (method !== 'GET' && method !== 'HEAD') {
+          rejectRequest(res, 405, '仅支持 GET');
+          return;
+        }
+        const icon = readSettingsIcon();
+        if (!icon) {
+          rejectRequest(res, 404, '图标缺失');
+          return;
+        }
+        sendIcon(res, icon);
+        return;
+      }
       const asset = assets[url.pathname];
       if (asset || url.pathname === '/health' || url.pathname === '/') {
         if (method !== 'GET' && method !== 'HEAD') {

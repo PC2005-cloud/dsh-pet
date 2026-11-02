@@ -14,8 +14,6 @@ export interface StandaloneModelService {
   resolveModelInfo(provider?: string, model?: string, signal?: AbortSignal): Promise<unknown>;
   stream(options: unknown): AsyncIterable<unknown>;
   isReady(): boolean;
-  canWhisper(): boolean;
-  getSettings(): { whisperIntervalSec: number };
   dispose(): void;
 }
 

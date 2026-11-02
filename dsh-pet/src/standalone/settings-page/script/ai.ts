@@ -33,10 +33,10 @@ async function aiRequest(method, body) {
 
 function populateAi(data) {
   if (data.protocol !== undefined && protocolSelect) protocolSelect.setValue(String(data.protocol));
-  for (const id of ['baseUrl', 'model', 'whisperIntervalSec', 'maxTokens']) {
+  for (const id of ['baseUrl', 'model']) {
     if (data[id] !== undefined && byId(id)) byId(id).value = String(data[id]);
   }
-  for (const id of ['enabled', 'automaticWhispers']) if (byId(id)) byId(id).checked = data[id] === true;
+  byId('enabled').checked = data.enabled === true;
   byId('key-state').textContent = data.hasKey ? '已保存 · 不回显' : '尚未设置';
   byId('apiKey').value = '';
   byId('clearApiKey').checked = false;
@@ -56,7 +56,6 @@ function wireAiPanel() {
     if (!clearing) return;
     byId('apiKey').value = '';
     byId('enabled').checked = false;
-    byId('automaticWhispers').checked = false;
   });
 
   testBtn.addEventListener('click', async () => {
@@ -109,9 +108,6 @@ function wireAiPanel() {
       apiKey: byId('apiKey').value,
       clearApiKey: byId('clearApiKey').checked,
       enabled: byId('enabled').checked,
-      automaticWhispers: byId('automaticWhispers').checked,
-      whisperIntervalSec: Number(byId('whisperIntervalSec').value),
-      maxTokens: Number(byId('maxTokens').value),
     };
     byId('apiKey').value = '';
     try {

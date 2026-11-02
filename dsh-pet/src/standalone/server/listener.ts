@@ -9,12 +9,13 @@ import { createRequestSecurity, rejectRequest, secureResponse, type RequestSecur
 import { createServer, type IncomingMessage, type Server as HttpServer, type ServerResponse } from 'node:http';
 import { timingSafeEqual } from 'node:crypto';
 import { settingsPage, settingsScript, settingsStyle } from '../settings-page.ts';
+import { readSettingsIcon } from '../icon.ts';
 import { MAX_REQUEST_BYTES, MAX_SETTINGS_BYTES, boundedRequest } from '../request-body.ts';
 import { type StandaloneLogger } from '../context.ts';
 import { DEFAULT_STANDALONE_PORT, PORT_SCAN_LIMIT } from './options.ts';
 import type { StandaloneServer, StandaloneServerOptions } from './options.ts';
 import { settingsHandler, testHandler } from './handlers.ts';
-import { fail, matches, sendAsset, sendJson } from './respond.ts';
+import { fail, matches, sendAsset, sendIcon, sendJson } from './respond.ts';
 
 /** 组装请求分发器：先处理探针、设置页与停机，再交给插件路由。 */
 function dispatch(
@@ -63,6 +64,19 @@ function dispatch(
       '/standalone-ai/settings.js': [settingsScript, 'text/javascript'],
       '/standalone-ai/settings.css': [settingsStyle, 'text/css'],
     };
+    if (pathname === '/standalone-ai/icon.png') {
+      if (method !== 'GET' && method !== 'HEAD') {
+        rejectRequest(res, 405, '仅支持 GET');
+        return;
+      }
+      const icon = readSettingsIcon();
+      if (!icon) {
+        rejectRequest(res, 404, '图标缺失');
+        return;
+      }
+      sendIcon(res, icon);
+      return;
+    }
     const asset = assets[pathname];
     if (asset) {
       if (method !== 'GET' && method !== 'HEAD') {

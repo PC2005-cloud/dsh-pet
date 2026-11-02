@@ -25,8 +25,6 @@ function modelService() {
       };
     },
     isReady: () => true,
-    canWhisper: () => false,
-    getSettings: () => ({ whisperIntervalSec: 300 }),
     dispose: () => calls.push('dispose'),
   };
 }
@@ -61,12 +59,6 @@ test('trusted settings URL and automatic-whisper policy remain private context c
     connection.authenticatedUrl('http://127.0.0.1:31380'),
     'http://127.0.0.1:31380/standalone-ai/#token=test-only',
   );
-  const policy = context.ctx.standaloneAi as {
-    isReady(): boolean;
-    canWhisper(): boolean;
-    whisperIntervalSec(): number;
-  };
+  const policy = context.ctx.standaloneAi as { isReady(): boolean };
   assert.equal(policy.isReady(), true);
-  assert.equal(policy.canWhisper(), false);
-  assert.equal(policy.whisperIntervalSec(), 300);
 });

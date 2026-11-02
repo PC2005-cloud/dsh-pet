@@ -25,16 +25,27 @@ export function sendJson(res: ServerResponse, status: number, body: unknown, cor
   res.end(payload);
 }
 
-/** 回静态资源，附带只允许同源脚本与样式的 CSP。 */
+/** 回静态资源，附带只允许同源脚本、样式与图片的 CSP。 */
 export function sendAsset(res: ServerResponse, body: string, type: string): void {
   res.writeHead(200, {
     'content-type': `${type}; charset=utf-8`,
     'content-length': Buffer.byteLength(body),
     'content-security-policy':
-      "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+      "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
     'x-frame-options': 'DENY',
   });
   res.end(body);
+}
+
+/** 回设置页标签图标：二进制 PNG，不参与 CSP 与嗅探。 */
+export function sendIcon(res: ServerResponse, icon: Buffer): void {
+  res.writeHead(200, {
+    'content-type': 'image/png',
+    'content-length': icon.length,
+    'cache-control': 'no-store',
+    'x-content-type-options': 'nosniff',
+  });
+  res.end(icon);
 }
 
 /** 记录并回一个不含细节的 500。 */

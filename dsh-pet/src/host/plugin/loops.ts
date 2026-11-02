@@ -164,10 +164,8 @@ export function registerLoops(deps: LoopsInput): void {
             whisperPeriodSec(found.conf),
           );
           if (!schedule.enabled) {
-            // 两种「没启用」分开记：宠物自己关掉，与独立模式没授权，处理方式完全不同
-            skipped.push(
-              petId + ': ' + (pet.whisperEnabled === true ? '独立模式未授权自动碎碎念' : 'whisperEnabled=false'),
-            );
+            // 两种「没启用」分开记：宠物自己关掉，与独立模式 AI 未就绪，处理方式完全不同
+            skipped.push(petId + ': ' + (pet.whisperEnabled === true ? '独立模式 AI 未就绪' : 'whisperEnabled=false'));
             continue;
           }
           // 配置上不显示的宠物不生成：用户选「都不显示」就是不用了，后台继续调模型纯属白烧额度（#237）。

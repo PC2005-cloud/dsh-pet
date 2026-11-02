@@ -44,7 +44,6 @@ test('disabled model selection cannot be overridden; metadata and saves make no 
     await assert.rejects(collect(ai.stream(options)), /not ready/);
     await ai.saveSettings(config);
     assert.equal(ai.isReady(), true);
-    assert.equal(ai.canWhisper(), false);
     assert.deepEqual(ai.currentSelection(), { provider: 'standalone', model: 'test-model' });
     assert.equal((await ai.listModels('standalone'))[0].id, 'test-model');
     assert.equal((await ai.resolveModelInfo('standalone', 'test-model'))?.id, 'test-model');
@@ -199,8 +198,6 @@ test('text history ignores nontext/source data; provider-global rate limits rese
       for (let n = 0; n < 6; n++)
         assert.equal(await collect(ai.stream({ ...options, messages: history, sessionId: String(n) })), 'ok');
       await assert.rejects(collect(ai.stream(options)), /rate limit/);
-      await ai.saveSettings({ automaticWhispers: true });
-      assert.equal(ai.canWhisper(), true);
       await assert.rejects(collect(ai.stream(options)), /rate limit/);
       time = 60001;
       assert.equal(await collect(ai.stream(options)), 'ok');

@@ -354,6 +354,11 @@ describe('HTTP boundary protects every route and settings', () => {
       assert.equal(shell.status, 200);
       assert.match(shell.headers.get('content-security-policy') ?? '', /default-src 'none'/);
       assert.doesNotMatch(await shell.text(), new RegExp(security.token));
+      // 标签图标必须公开可读：浏览器取 favicon 既不带 Origin 也不带令牌，走令牌校验会 403。
+      // 源码形态下包内 assets 不可达（PACKAGE_ROOT 指向 src/），此时只要求语义明确的 404。
+      const icon = await fetch(base + '/standalone-ai/icon.png');
+      assert.notEqual(icon.status, 403, '图标不得要求令牌');
+      assert.ok(icon.status === 404 || icon.headers.get('content-type') === 'image/png', '图标要么缺失 404，要么是 PNG');
       assert.equal((await fetch(base + '/standalone-ai/settings')).status, 403);
       const read = await fetch(base + '/standalone-ai/settings', { headers });
       assert.deepEqual(await read.json(), { protocol: 'anthropic', model: 'x', hasKey: true });

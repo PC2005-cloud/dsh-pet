@@ -19,11 +19,11 @@ export interface StandaloneAiPublicSettings {
   model: string;
   /** 是否允许发起模型请求。 */
   enabled: boolean;
-  /** 是否按间隔自动碎碎念。 */
+  /** 兼容旧配置文件的遗留字段，已不参与任何调度；保留只为让旧文件继续通过 strict 校验。 */
   automaticWhispers: boolean;
-  /** 自动碎碎念间隔，单位秒。 */
+  /** 兼容旧配置文件的遗留字段；碎碎念周期唯一来源是宠物配置的 `eventsRefreshSec.whisper`。 */
   whisperIntervalSec: number;
-  /** 单次回复的输出上限。 */
+  /** 单次回复的输出上限（写入请求的 max_tokens）；页面不再暴露，沿用已存值或默认值。 */
   maxTokens: number;
   /** 单次请求超时，单位毫秒。 */
   timeoutMs: number;

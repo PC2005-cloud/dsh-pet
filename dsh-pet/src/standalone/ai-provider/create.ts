@@ -96,7 +96,6 @@ export function createStandaloneAi(
       runtime.disposed
         ? Promise.resolve({ ok: false, message: '服务已关闭' })
         : testAiConnection(runtime.fetcher, store.current(), input),
-    canWhisper: () => runtime.ready() && store.current().automaticWhispers,
     dispose() {
       runtime.disposed = true;
       runtime.active?.abort();

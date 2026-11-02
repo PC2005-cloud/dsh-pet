@@ -49,9 +49,8 @@ test('settings shell is accessible, self contained, and never saves browser secr
   assert.match(settingsPage, /lang="zh-CN"/);
   assert.match(settingsPage, /type="password"/);
   assert.match(settingsPage, /aria-live="polite"/);
-  assert.match(settingsPage, /automaticWhispers/);
-  assert.match(settingsPage, /费用/);
-  assert.match(settingsPage, /min="60"/);
+  assert.match(settingsPage, /桌宠配置/);
+  assert.match(settingsPage, /AI 服务商/);
   assert.match(settingsScript, /history\.replaceState/);
   assert.match(settingsScript, /X-DSH-Pet-Token/);
   assert.doesNotMatch(settingsScript, /localStorage|sessionStorage|document\.cookie|innerHTML/);

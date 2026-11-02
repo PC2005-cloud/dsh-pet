@@ -75,8 +75,6 @@ export interface StandaloneAiService {
   testConnection(input: TestConnectionInput): Promise<TestConnectionResult>;
   /** 是否满足发起请求的全部条件。 */
   isReady(): boolean;
-  /** 是否允许按间隔自动碎碎念。 */
-  canWhisper(): boolean;
   /** 终止在途请求并释放服务。 */
   dispose(): void;
 }

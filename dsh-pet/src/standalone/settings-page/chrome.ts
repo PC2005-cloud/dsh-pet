@@ -3,13 +3,15 @@
  *
  * 页面只在本机回环上由 ./server 提供；CSP 是 `style-src 'self'`，所以这里不许出现内联样式，
  * 也不许内联脚本。桌宠配置面板的内容依赖 GET /config，初始只有一句占位文案。
+ * 图标走设置页自己的公开资源路径（/standalone-ai/icon.png），内容读自包内 assets/logo.png，
+ * 不复制第二份图；不能用插件路由 /logo——浏览器取 favicon 不带 Origin 也不带令牌，会被判成文件来源而 403。
  * @module dsh-pet/src/standalone/settings-page/chrome
  */
 
 /** 设置页 HTML。 */
 export const settingsPage = `<!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>桌宠设置</title><link rel="stylesheet" href="/standalone-ai/settings.css">
+<title>桌宠设置</title><link rel="icon" type="image/png" href="/standalone-ai/icon.png"><link rel="stylesheet" href="/standalone-ai/settings.css">
 <script src="/standalone-ai/settings.js" defer></script></head><body>
 <main class="shell">
 <div class="navTitle">桌宠设置</div>
@@ -35,11 +37,6 @@ export const settingsPage = `<!doctype html>
 <label class="rowCheck"><input id="clearApiKey" type="checkbox"><span class="rowCheckText"><span class="rowCheckTitle">清除已保存的密钥，并关闭 AI</span></span></label>
 <label class="rowCheck"><input id="enabled" type="checkbox"><span class="rowCheckText"><span class="rowCheckTitle">启用 AI 对话</span><span class="rowCheckHint">关闭后桌宠仍可正常显示、移动与互动，只是不再调用模型。</span></span></label>
 <div class="testRow"><button id="test-btn" class="btn" type="button">测试连接</button><span id="test-result" class="status" role="status" aria-live="polite"></span></div>
-</div>
-<div class="card"><div class="cardHead"><h2 class="cardTitle">定时自动碎碎念</h2></div>
-<label class="rowCheck"><input id="automaticWhispers" type="checkbox" aria-describedby="cost"><span class="rowCheckText"><span class="rowCheckTitle">开启自动碎碎念</span><span class="rowCheckHint" id="cost">开启后按设定间隔调用模型并冒泡，产生 API 费用。默认关闭；右键菜单里的手动对话与手动碎碎念不受这个开关限制。</span></span></label>
-<div class="grid2 gridTight"><div class="field fieldTight"><label for="whisperIntervalSec">碎碎念间隔（秒）</label><input id="whisperIntervalSec" type="number" min="60" max="86400" step="1" value="300" required><p class="fieldHint">至少 60 秒，默认 300 秒。</p></div>
-<div class="field fieldTight"><label for="maxTokens">单次输出上限（tokens）</label><input id="maxTokens" type="number" min="128" max="4096" step="1" value="1024" required><p class="fieldHint">越小回复越简短。</p></div></div>
 </div>
 <p id="privacy" class="fineprint">所有配置与密钥仅保存在当前机器。</p>
 </div>

@@ -158,8 +158,6 @@ export function createStandaloneContext(options: StandaloneContextOptions): Stan
       ? {
           standaloneAi: {
             isReady: () => ai.isReady(),
-            canWhisper: () => ai.canWhisper(),
-            whisperIntervalSec: () => ai.getSettings().whisperIntervalSec,
           },
         }
       : {}),
