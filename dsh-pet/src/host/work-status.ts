@@ -131,6 +131,8 @@ export function currentTaskFromTodo(event: {
 export interface WorkStatusSnapshot {
   state: HostWorkStatusState | null; // null = 尚无会话活动（空闲）
   task: string | null; // 当前任务详情（todo/write 提供，可 null）
+  /** 当前展示快照对应的会话；空闲为 null。点击气泡跳转用。 */
+  sessionId: string | null;
   ts: number; // 最近一次变化的时间戳（轮询侧据此检测变化）
 }
 
@@ -142,6 +144,8 @@ export interface SessionWorkEntry {
   seq: number;
   /** 任务详情文案；null = 该会话没有清单。 */
   task: string | null;
+  /** 该条目所属会话。 */
+  sessionId: string;
 }
 
 /** 展示优先级：waiting > error > working > thinking > result > success。
@@ -187,7 +191,7 @@ export class WorkStatusStore {
 
   constructor() {
     this.sessions = new Map();
-    this.snap = { state: null, task: null, ts: 0 };
+    this.snap = { state: null, task: null, sessionId: null, ts: 0 };
   }
 
   /** 该会话当前是否有活动条目（决定 todo/write 是否还值得更新它的文案）。 */
@@ -209,7 +213,7 @@ export class WorkStatusStore {
   setState(sessionId: string, state: HostWorkStatusState, seq = 0): boolean {
     const prev = this.sessions.get(sessionId);
     if (prev?.state === state && prev.seq >= seq) return false;
-    this.sessions.set(sessionId, { state, seq, task: prev?.task ?? null });
+    this.sessions.set(sessionId, { state, seq, task: prev?.task ?? null, sessionId });
     this.refresh();
     return true;
   }
@@ -235,14 +239,16 @@ export class WorkStatusStore {
     return this.snap;
   }
 
-  /** 重算展示：state 与 task 任一变化才更新 ts（轮询侧据此触发，两端都靠它刷新）。 */
+  /** 重算展示：state / task / sessionId 任一变化才更新 ts。 */
   private refresh(): void {
     const best = pickDisplayed(this.sessions.values());
     const nextState = best?.state ?? null;
     const nextTask = best?.task ?? null;
-    if (nextState === this.snap.state && nextTask === this.snap.task) return;
+    const nextSession = best?.sessionId ?? null;
+    if (nextState === this.snap.state && nextTask === this.snap.task && nextSession === this.snap.sessionId) return;
     this.snap.state = nextState;
     this.snap.task = nextTask;
+    this.snap.sessionId = nextSession;
     this.snap.ts = Date.now();
   }
 }

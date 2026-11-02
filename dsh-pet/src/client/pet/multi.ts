@@ -48,7 +48,7 @@ import { setSurface, setVoiceConfig } from '../../shared/voice.ts';
 import { runStatePoll } from './state-poll.ts';
 import { setMenuItems } from '../menu-service.ts';
 import { setStateSnapshot } from '../state-service.ts';
-import { notifyFromFrame } from '../notify.ts';
+import { jumpToSession, notifyFromFrame } from '../notify.ts';
 import { STATE_FALLBACK_MS, STATE_WAIT_MS } from './timings.ts';
 
 /**
@@ -219,6 +219,17 @@ export function createPetMulti(
           case 'notify':
             // 系统通知：单槽，由 host 决定保留哪一条，内部有开关与权限门。
             notifyFromFrame(leaf.data);
+            return;
+          case 'focusSession': {
+            const id =
+              leaf.data && typeof (leaf.data as { sessionId?: unknown }).sessionId === 'string'
+                ? (leaf.data as { sessionId: string }).sessionId
+                : '';
+            if (id) jumpToSession(id);
+            return;
+          }
+          case 'usage':
+            // 本机用量由桌面端气泡消费；网页 overlay 在 display=desktop 时不渲染宠物。
             return;
           case 'menu':
             // 第三方菜单快照只更新 ref，不触发渲染；同一份交给页面内菜单镜像，供 petApi7340.menuEvents 读取。

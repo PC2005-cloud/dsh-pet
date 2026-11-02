@@ -333,6 +333,7 @@ export function makeWhisperBubble(rt: {
     assetRoot,
     on,
     voiceState = 'idle',
+    onClick,
   }: {
     text: string;
     image?: string;
@@ -340,6 +341,7 @@ export function makeWhisperBubble(rt: {
     assetRoot?: string;
     on: boolean;
     voiceState?: 'idle' | 'loading' | 'ready' | 'failed';
+    onClick?: (e: ReactNS.MouseEvent<HTMLDivElement>) => void;
   }) {
     const rows = whisperBubbleView({ ok: true, text, ts: 0 });
     const key = String(image ?? '').trim();
@@ -359,7 +361,17 @@ export function makeWhisperBubble(rt: {
         ]
       : rowsToNodes(h, rows);
     return h('div', {
-      className: 'dsh-pet-bubble dsh-pet-whisper' + (src ? ' ' + MEME_BUBBLE_CLASS : '') + (on ? ' is-on' : ''),
+      className:
+        'dsh-pet-bubble dsh-pet-whisper' +
+        (src ? ' ' + MEME_BUBBLE_CLASS : '') +
+        (on ? ' is-on' : '') +
+        (onClick ? ' is-clickable' : ''),
+      onClick: onClick
+        ? (e: ReactNS.MouseEvent<HTMLDivElement>) => {
+            e.stopPropagation();
+            onClick(e);
+          }
+        : undefined,
       children: voiceState === 'idle' ? body : [body, voiceBadgeNode(h, voiceState)],
     });
   };

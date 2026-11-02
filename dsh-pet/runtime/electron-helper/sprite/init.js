@@ -95,6 +95,8 @@ Object.assign(PetSprite.prototype, {
     this.workTimer = null;
     this.workText = null;
     this.workState = null; // 最近一次工作状态（互动/事件动画播完恢复档位循环用）
+    this.workSessionId = null;
+    this.usageText = '';
     this.prevWorkState = null; // 上一档状态（气泡只在状态变化时点亮/收起）
     this.prevWorkTick = 0;
     // 占用锁：frozen = 此刻正被第三方占用；lockTimer 按叶子里的 expiresAt 自己到点解除
@@ -163,6 +165,12 @@ Object.assign(PetSprite.prototype, {
     this.bubble.className = 'pet-bubble';
     // 余额气泡可点时点一下切页：就地吞掉事件，别让这次点击落到下面的本体命中层。
     this.bubble.addEventListener('click', (e) => {
+      if (this.workSessionId && (this.workOn || this.usageText)) {
+        e.stopPropagation();
+        e.preventDefault();
+        this.openWorkSession();
+        return;
+      }
       if (!this.balanceClickable()) return;
       e.stopPropagation();
       e.preventDefault();

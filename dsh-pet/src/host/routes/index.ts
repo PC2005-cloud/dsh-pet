@@ -13,6 +13,7 @@ import { handleBalanceRoutes } from './balance.ts';
 import { handleChatRoutes } from './chat.ts';
 import { handleConfigRoutes } from './config/index.ts';
 import { handleDesktopRoutes } from './desktop.ts';
+import { handleSessionRoutes } from './session.ts';
 import { handleInteractionRoutes } from './interaction.ts';
 import { handleMenuRoutes } from './menu.ts';
 import { handleMotionRoutes } from './motion.ts';
@@ -27,6 +28,7 @@ import type { PetRouteDeps, RouteHandler } from './types.ts';
 const HANDLERS: readonly RouteHandler[] = [
   handleConfigRoutes,
   handleDesktopRoutes,
+  handleSessionRoutes,
   handleMenuRoutes,
   handleStateRoutes,
   handleBalanceRoutes,

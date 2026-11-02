@@ -19,6 +19,7 @@ import { createSessionNotify } from './plugin/session-notify.ts';
 import { createPetLookup } from './plugin/pet-lookup.ts';
 import { createDownloadReport } from './plugin/download-report.ts';
 import { createWorkStatusBridge } from './plugin/work-status-bridge.ts';
+import { registerLocalUsage } from './plugin/local-usage.ts';
 import { registerTodoReminders } from './plugin/todo-reminders.ts';
 import { createVoiceService } from './voice/speak.ts';
 import { createHearService } from './voice/hear.ts';
@@ -129,6 +130,8 @@ export function apply(ctx: any): void {
   });
 
   registerBalanceCommand({ ctx, effectivePetList, refreshBalance, sleep, sleepRefusalText });
+
+  registerLocalUsage({ ctx, state, workStatus });
 
   registerLoops({
     ctx,

@@ -155,8 +155,8 @@ describe('WorkStatusStore —— 按会话聚合与展示（issue #59）', () =>
     assert.equal(s.has('a'), true);
     assert.equal(s.setTask('a', '正在执行 phase1'), true);
     assert.deepEqual(
-      { state: s.snapshot().state, task: s.snapshot().task },
-      { state: 'working', task: '正在执行 phase1' },
+      { state: s.snapshot().state, task: s.snapshot().task, sessionId: s.snapshot().sessionId },
+      { state: 'working', task: '正在执行 phase1', sessionId: 'a' },
     );
   });
 
@@ -207,6 +207,17 @@ describe('WorkStatusStore —— 按会话聚合与展示（issue #59）', () =>
     s.setTask('a', 'phase1');
     s.setTask('a', null);
     assert.equal(s.snapshot().task, null);
+  });
+
+  test('快照带上当前展示会话的 sessionId；空闲为 null', () => {
+    const s = new WorkStatusStore();
+    assert.equal(s.snapshot().sessionId, null);
+    s.setState('alpha', 'thinking', 1);
+    assert.equal(s.snapshot().sessionId, 'alpha');
+    s.setState('beta', 'waiting', 2);
+    assert.equal(s.snapshot().sessionId, 'beta', '更高优先级会话应带着自己的 id');
+    s.clear('beta');
+    assert.equal(s.snapshot().sessionId, 'alpha');
   });
 
   test('展示优先级表：waiting > error > working > thinking > result > success', () => {

@@ -90,24 +90,31 @@ export function sessionTitleFrom(
  * 先切会话再叫窗口，用户看到窗口的那一刻就是目标会话；`dsh://open` 只在 Electron 宿主里发，
  * 浏览器里导航该协议会弹拦截框。`sessionId` 缺失时只跳过切换，其余照旧。
  */
+/**
+ * 切到指定会话并把 DSH 主窗口叫到前台（桌面宠物点气泡走同一条路）。
+ * @param sessionId - 目标会话；空则只尝试聚焦窗口。
+ */
+export function jumpToSession(sessionId?: string): void {
+  if (sessionId) {
+    try {
+      sessionNavigator?.openSession(sessionId);
+    } catch {
+      /* 会话已删则只叫窗口。 */
+    }
+  }
+  window.focus();
+  if (!/electron/i.test(navigator.userAgent)) return;
+  const frame = document.createElement('iframe');
+  frame.style.display = 'none';
+  frame.src = 'dsh://open';
+  document.body.append(frame);
+  setTimeout(() => frame.remove(), 1000);
+}
+
 export function wireNotificationClick(n: Notification, sessionId?: string): void {
   n.onclick = () => {
     n.close();
-    if (sessionId !== undefined) {
-      // 跳转失败（会话已删 / 旧版没有该服务）绝不能连累「把窗口叫回来」那条腿。
-      try {
-        sessionNavigator?.openSession(sessionId);
-      } catch {
-        /* 不跳会话而已，继续叫窗口。 */
-      }
-    }
-    window.focus();
-    if (!/electron/i.test(navigator.userAgent)) return;
-    const frame = document.createElement('iframe');
-    frame.style.display = 'none';
-    frame.src = 'dsh://open';
-    document.body.append(frame);
-    setTimeout(() => frame.remove(), 1000);
+    jumpToSession(sessionId);
   };
 }
 

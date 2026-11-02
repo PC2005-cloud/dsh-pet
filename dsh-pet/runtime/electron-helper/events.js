@@ -21,6 +21,10 @@ PetSprite.prototype.onWorkTick = function onWorkTick(snapshot, tick) {
   if (this.frozen) return;
   const state = snapshot && snapshot.state ? snapshot.state : null;
   this.workState = state; // 当前工作状态：互动/事件动画播完恢复档位循环用
+  this.workSessionId =
+    snapshot && typeof snapshot.sessionId === 'string' && snapshot.sessionId && snapshot.sessionId !== 'unknown'
+      ? snapshot.sessionId
+      : null;
   const stateChanged = this.prevWorkState !== state;
   this.prevWorkState = state;
   if (!state) {
@@ -40,6 +44,7 @@ PetSprite.prototype.onWorkTick = function onWorkTick(snapshot, tick) {
     this.workTimer = null;
     this.workOn = false;
     this.workText = null;
+    this.workSessionId = null;
     this.renderBubble();
     return;
   }
@@ -95,6 +100,19 @@ PetSprite.prototype.onWorkTick = function onWorkTick(snapshot, tick) {
   const rotating = !terminal && Array.isArray(slot) && slot.length > 1;
   if (terminal || rotating) this.playOnce(name);
   else this.switchTo(name, false); // 进行中循环播（单动画/单候选档位）
+};
+
+PetSprite.prototype.openWorkSession = function openWorkSession() {
+  const id = this.workSessionId;
+  if (!id) return;
+  fetch(BASE + '/focus-session', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ sessionId: id }),
+  }).catch(() => {});
+  if (window.petBridge && typeof window.petBridge.openDshSite === 'function') {
+    window.petBridge.openDshSite(ORIGIN);
+  }
 };
 
 // 余额事件：自动轮询按 balanceEnabled 门控，手动请求无条件。
@@ -430,7 +448,16 @@ async function pollStateOnce() {
       if (change.leaf.data === null) continue;
       if (change.path === 'sections.balance') applyBalanceLeaf(change.leaf);
       else if (change.path === 'sections.workStatus') applyWorkStatusLeaf(change.leaf);
-      else if (change.path === 'sections.menu') applyMenuLeaf(change.leaf);
+      else if (change.path === 'sections.usage') {
+        const text = change.leaf.data && typeof change.leaf.data.text === 'string' ? change.leaf.data.text : '';
+        const sid =
+          change.leaf.data && typeof change.leaf.data.sessionId === 'string' ? change.leaf.data.sessionId : null;
+        for (const sp of sprites) {
+          sp.usageText = text;
+          if (sid && !sp.workSessionId) sp.workSessionId = sid;
+          sp.renderBubble();
+        }
+      } else if (change.path === 'sections.menu') applyMenuLeaf(change.leaf);
       else if (change.path.startsWith('pets.') && change.path.endsWith('.say')) {
         // 宠物 id 允许含点号：按前缀/后缀切片，绝不 split('.')
         applySayLeaf(change.path.slice('pets.'.length, -'.say'.length), change.leaf);

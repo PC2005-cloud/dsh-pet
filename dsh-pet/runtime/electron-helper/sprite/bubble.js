@@ -67,9 +67,20 @@ Object.assign(PetSprite.prototype, {
     const workOn = !!(this.workOn && this.workText);
     const whisperOn = !!(this.whisperOn && this.whisperView);
     const balanceOn = !!(this.bubbleOn && this.balanceView);
+    const usageOn = !!this.usageText;
     const workTerminal = this.workState === 'success' || this.workState === 'error';
     const slot =
-      workTerminal && workOn ? 'work' : whisperOn ? 'whisper' : balanceOn ? 'balance' : workOn ? 'work' : 'none';
+      workTerminal && workOn
+        ? 'work'
+        : whisperOn
+          ? 'whisper'
+          : balanceOn
+            ? 'balance'
+            : workOn
+              ? 'work'
+              : usageOn
+                ? 'usage'
+                : 'none';
     // 配图两种形态二选一：url 用完整地址，image 按素材根拼表情包路径；样式/class 共用。
     const whisperImg =
       slot === 'whisper'
@@ -80,13 +91,15 @@ Object.assign(PetSprite.prototype, {
     this.bubble.classList.toggle(
       'is-whisper',
       // 余额「文字说明」也套紧凑变体：字号更小、宽度下限更窄，多行说明更紧凑
-      slot === 'whisper' || slot === 'work' || (slot === 'balance' && this.balanceWrap),
+      slot === 'whisper' || slot === 'work' || slot === 'usage' || (slot === 'balance' && this.balanceWrap),
     );
     this.bubble.classList.toggle(S.MEME_BUBBLE_CLASS, !!whisperImg);
     // 可点/展开两个状态类：可点 → 气泡参与命中区（见 syncInputRegions）；index>0 → 更宽的盒与紧凑字号。
     // 展开态仅内置 windows 的窗口明细与用量页使用；custom 各页是对等页面，翻页不切紧凑字号。
     const isCustom = !!(this.balanceState && S.customViews(this.balanceState));
-    const clickable = slot === 'balance' && this.balanceClickable();
+    const clickable =
+      ((slot === 'work' || slot === 'usage') && !!this.workSessionId) ||
+      (slot === 'balance' && this.balanceClickable());
     const expanded = clickable && !isCustom && this.balanceViewIndex > 0;
     this.bubble.classList.toggle('is-clickable', clickable);
     this.bubble.classList.toggle('is-expanded', expanded);
@@ -102,6 +115,17 @@ Object.assign(PetSprite.prototype, {
       const line = document.createElement('div');
       line.className = 'pet-bub-row';
       line.textContent = this.workText;
+      this.bubble.appendChild(line);
+      if (this.usageText) {
+        const u = document.createElement('div');
+        u.className = 'pet-bub-sub';
+        u.textContent = this.usageText;
+        this.bubble.appendChild(u);
+      }
+    } else if (slot === 'usage') {
+      const line = document.createElement('div');
+      line.className = 'pet-bub-row';
+      line.textContent = this.usageText;
       this.bubble.appendChild(line);
     } else if (slot === 'whisper') {
       // 配图（shared 生成的 <img> + 共用样式）：先看图再读话

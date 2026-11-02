@@ -358,6 +358,7 @@ Object.assign(PetSprite.prototype, {
   onClick(e) {
     const d = this.dragState;
     if (d.active || d.dragging || this.justDragged) return;
+    if (this.workSessionId && (this.workOn || this.usageText)) this.openWorkSession();
     // Ctrl（macOS 为 Cmd）+ 左键 = 呼出 DSH：与菜单首项同一动作，只是快捷键——
     // 不播点击动画、也不参与积分，避免「摸一下宠物」变成「开窗口」。
     if (isOpenShortcut(e)) {

@@ -30,7 +30,7 @@ export function createWorkStatusBridge(deps: WorkStatusBridgeInput) {
 
   const publishWorkStatus = (): void => {
     const snap = workStatus.snapshot();
-    const key = String(snap.state) + '\u0000' + String(snap.task);
+    const key = String(snap.state) + '\u0000' + String(snap.task) + '\u0000' + String(snap.sessionId ?? '');
     if (key === publishedWork) return;
     // 抖动判定：只压 working → result 这一个方向（同档只换文案不算抖动，照常立即写；
     // 反向 result → working 立即写）
@@ -52,7 +52,11 @@ export function createWorkStatusBridge(deps: WorkStatusBridgeInput) {
     publishedWork = key;
     publishedState = snap.state;
     publishedWorkAt = Date.now();
-    state.writeSection('workStatus', { state: snap.state, task: snap.task });
+    state.writeSection('workStatus', {
+      state: snap.state,
+      task: snap.task,
+      sessionId: snap.sessionId ?? null,
+    });
   };
 
   /** 停掉挂起的补写定时器（插件卸载时调用）。 */

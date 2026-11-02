@@ -25,15 +25,19 @@ export const WORK_STATUS_INDEX: Record<WorkStatusState, number> = {
 export interface WorkStatusSnapshot {
   state: WorkStatusState | null; // null = 空闲
   task: string | null; // 当前任务详情（todo/write 提供，可 null）
+  /** 当前展示快照对应的会话；空闲或缺省为 null。 */
+  sessionId?: string | null;
 }
 
 /** 快照解析：档位不认识 → 归一成 null（空闲）；形状非法 → null，消费端跳过这一拍。 */
 export function toWorkStatus(raw: unknown): WorkStatusSnapshot | null {
   if (!raw || typeof raw !== 'object') return null;
-  const r = raw as { state?: unknown; task?: unknown };
+  const r = raw as { state?: unknown; task?: unknown; sessionId?: unknown };
   const state: WorkStatusState | null =
     r.state === null || (typeof r.state === 'string' && (WORK_STATUS_STATES as readonly string[]).includes(r.state))
       ? (r.state as WorkStatusState | null)
       : null;
-  return { state, task: typeof r.task === 'string' ? r.task : null };
+  const sessionId =
+    typeof r.sessionId === 'string' && r.sessionId.length > 0 && r.sessionId !== 'unknown' ? r.sessionId : null;
+  return { state, task: typeof r.task === 'string' ? r.task : null, sessionId };
 }
