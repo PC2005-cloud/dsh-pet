@@ -40,6 +40,7 @@ function publicRead(req: IncomingMessage): boolean {
       '/standalone-ai/',
       '/standalone-ai/settings.js',
       '/standalone-ai/settings.css',
+      '/standalone-ai/chat-panel.js',
       '/standalone-ai/icon.png',
     ].includes(path) || /^\/dsh-pet-\d+\//.test(path)
   );
@@ -116,7 +117,8 @@ export function createRequestSecurity(): RequestSecurity {
       }
       if (fromHeader && readTokenCookie(req) !== token) {
         // 会话级 cookie：不设 Max-Age，关掉浏览器即失效，同一进程内刷新继续可用。
-        res.setHeader('set-cookie', `${TOKEN_COOKIE}=${token}; HttpOnly; SameSite=Strict; Path=/standalone-ai/`);
+        // Path 取根：对话面板要调 /dsh-pet-<n>/chat 这类插件路由，限定在 /standalone-ai/ 会让它拿不到凭据。
+        res.setHeader('set-cookie', `${TOKEN_COOKIE}=${token}; HttpOnly; SameSite=Strict; Path=/`);
       }
       return true;
     },

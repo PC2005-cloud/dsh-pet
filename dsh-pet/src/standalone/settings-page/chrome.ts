@@ -11,9 +11,9 @@
 
 /** 设置页 HTML。 */
 export const settingsPage = `<!doctype html>
-<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<html lang="zh-CN"><head><meta charset="utf-8"><base href="/"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>桌宠设置</title><link rel="icon" type="image/png" href="/standalone-ai/icon.png"><link rel="stylesheet" href="/standalone-ai/settings.css">
-<script src="/standalone-ai/settings.js" defer></script></head><body>
+<script src="/standalone-ai/settings.js" defer></script><script src="/standalone-ai/chat-panel.js" defer></script></head><body>
 <main class="shell">
 <aside class="side">
 <div class="brand"><img class="brandLogo" src="/standalone-ai/icon.png" alt=""><span>桌宠</span></div>
@@ -46,11 +46,7 @@ export const settingsPage = `<!doctype html>
 </div>
 </section>
 <section class="panel" id="panel-chat" role="tabpanel" aria-labelledby="tab-chat">
-<div class="scroll">
-<div class="card"><div class="cardHead"><h2 class="cardTitle">对话</h2></div>
-<p class="cardHint">独立模式的对话窗口还没接上来，这里先把位置占住。接好之后这一页会是完整的聊天面板：消息列表、记忆线、输入框，和插件里的右侧栏用同一套渲染。</p>
-</div>
-</div>
+<div class="pet-chat-host" id="pet-chat-root"></div>
 </section>
 </div>
 </div>

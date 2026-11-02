@@ -9,6 +9,7 @@ import { createRequestSecurity, rejectRequest, secureResponse, type RequestSecur
 import { createServer, type IncomingMessage, type Server as HttpServer, type ServerResponse } from 'node:http';
 import { timingSafeEqual } from 'node:crypto';
 import { settingsPage, settingsScript, settingsStyle } from '../settings-page.ts';
+import { readChatPanelScript } from '../chat-panel-asset.ts';
 import { readSettingsIcon } from '../icon.ts';
 import { MAX_REQUEST_BYTES, MAX_SETTINGS_BYTES, boundedRequest } from '../request-body.ts';
 import { type StandaloneLogger } from '../context.ts';
@@ -77,6 +78,20 @@ function dispatch(
         return;
       }
       sendIcon(res, icon);
+      return;
+    }
+    if (pathname === '/standalone-ai/chat-panel.js') {
+      if (method !== 'GET' && method !== 'HEAD') {
+        rejectRequest(res, 405, '仅支持 GET');
+        return;
+      }
+      // 构建产物随包发布；缺失只可能是没跑 bundle，明确回 404 而不是给空脚本。
+      const chatPanel = readChatPanelScript();
+      if (chatPanel === undefined) {
+        rejectRequest(res, 404, '对话面板脚本缺失，请重新构建（npm run bundle）');
+        return;
+      }
+      sendAsset(res, chatPanel, 'text/javascript');
       return;
     }
     const asset = assets[pathname];

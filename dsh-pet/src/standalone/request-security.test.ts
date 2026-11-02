@@ -191,7 +191,7 @@ test('首次头部认证后换取会话 cookie，刷新时凭 cookie 继续，�
     true,
   );
   const cookie = first.headers['set-cookie'] ?? '';
-  assert.match(cookie, /^dsh_pet_token=[^;]+; HttpOnly; SameSite=Strict; Path=\/standalone-ai\/$/);
+  assert.match(cookie, /^dsh_pet_token=[^;]+; HttpOnly; SameSite=Strict; Path=\/$/);
   assert.equal(cookie.includes(security.token), true);
   assert.equal(cookie.includes('Max-Age'), false, '会话 cookie 不该带 Max-Age');
 
