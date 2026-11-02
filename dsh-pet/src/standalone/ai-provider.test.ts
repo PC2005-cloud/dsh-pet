@@ -226,7 +226,7 @@ test('abort, save changes, and dispose cancel in-flight requests; concurrency st
         await start;
         await assert.rejects(collect(ai.stream(options)), /busy/);
         if (mode === 'abort') controller.abort();
-        if (mode === 'save') await ai.saveSettings({ enabled: false });
+        if (mode === 'save') await ai.saveSettings({ clearApiKey: true });
         if (mode === 'dispose') ai.dispose();
         await rejected;
         if (mode !== 'abort') assert.equal(ai.isReady(), false);
@@ -326,7 +326,7 @@ test('testConnection checks parameters and reports success or friendly error', a
         ok: false,
         message: '请先填写模型名称',
       });
-      await ai.saveSettings({ clearApiKey: true, enabled: false });
+      await ai.saveSettings({ clearApiKey: true });
       assert.deepEqual(await ai.testConnection({ baseUrl: 'https://example.test/v1', model: 'm', apiKey: '' }), {
         ok: false,
         message: '请先填写 API 密钥',

@@ -1,5 +1,5 @@
 /**
- * 内置路由处理器：设置页与连通性自检。
+ * 内置路由处理器：设置页、连通性自检与模型清单。
  *
  * 不负责分发与监听；请求体已由上层解析并限长。
  * 必须始终成立：设置页只回本机数据，绝不回显凭据。
@@ -8,7 +8,25 @@
 import { publicSettings, validateSettings, type StandaloneSettingsService } from '../settings.ts';
 import { type IncomingMessage, type ServerResponse } from 'node:http';
 import { rejectRequest } from '../request-security.ts';
+import type { ModelDiscoveryInput } from '../ai-provider/types.ts';
 import { sendJson } from './respond.ts';
+
+/** 读完请求体并解析成 JSON；空体当作空对象。 */
+async function readJsonBody(req: IncomingMessage): Promise<unknown> {
+  const chunks: Buffer[] = [];
+  await new Promise<void>((resolve, reject) => {
+    req.on('data', (chunk: Buffer) => chunks.push(Buffer.from(chunk)));
+    req.once('end', resolve);
+    req.once('error', reject);
+  });
+  const text = Buffer.concat(chunks).toString('utf8');
+  return text ? JSON.parse(text) : {};
+}
+
+/** 只接受对象形态的草稿；数组、标量与 null 一律当未填。 */
+function asDraft(body: unknown): ModelDiscoveryInput {
+  return body !== null && typeof body === 'object' && !Array.isArray(body) ? (body as ModelDiscoveryInput) : {};
+}
 
 /**
  * 创建设置读写处理器（GET 读，POST 存）。
@@ -48,13 +66,7 @@ export function settingsHandler(
       return;
     }
     try {
-      const chunks: Buffer[] = [];
-      await new Promise<void>((resolve, reject) => {
-        req.on('data', (chunk: Buffer) => chunks.push(Buffer.from(chunk)));
-        req.once('end', resolve);
-        req.once('error', reject);
-      });
-      const input = validateSettings(JSON.parse(Buffer.concat(chunks).toString('utf8')));
+      const input = validateSettings(await readJsonBody(req));
       sendJson(res, 200, publicSettings(await ai.saveSettings(input)));
     } catch {
       rejectRequest(res, 400, '设置未保存：请检查接口地址、模型名称、密钥和数值范围');
@@ -76,22 +88,36 @@ export function testHandler(
       return;
     }
     try {
-      const chunks: Buffer[] = [];
-      await new Promise<void>((resolve, reject) => {
-        req.on('data', (chunk: Buffer) => chunks.push(Buffer.from(chunk)));
-        req.once('end', resolve);
-        req.once('error', reject);
-      });
-      const bodyStr = Buffer.concat(chunks).toString('utf8');
-      const input = bodyStr ? JSON.parse(bodyStr) : {};
-      if (ai?.testConnection) {
-        const result = await ai.testConnection(input);
-        sendJson(res, 200, result);
-      } else {
-        sendJson(res, 200, { ok: false, message: '当前环境未配置测试能力' });
-      }
+      const input = asDraft(await readJsonBody(req));
+      if (ai?.testConnection) sendJson(res, 200, await ai.testConnection(input));
+      else sendJson(res, 200, { ok: false, message: '当前环境未配置测试能力' });
     } catch {
       sendJson(res, 400, { ok: false, message: '请求格式无效' });
+    }
+  };
+}
+
+/**
+ * 创建模型清单处理器（POST）。
+ * @param ai - 设置服务。
+ * @returns 处理请求的异步函数。
+ */
+export function modelsHandler(
+  ai: StandaloneSettingsService | undefined,
+): (req: IncomingMessage, res: ServerResponse) => Promise<void> {
+  return async (req, res) => {
+    if (req.method !== 'POST') {
+      rejectRequest(res, 405, '仅支持 POST');
+      return;
+    }
+    if (!ai?.discoverModels) {
+      sendJson(res, 200, { ok: false, code: 'input', message: '当前环境未配置模型清单能力' });
+      return;
+    }
+    try {
+      sendJson(res, 200, await ai.discoverModels(asDraft(await readJsonBody(req))));
+    } catch {
+      sendJson(res, 400, { ok: false, code: 'input', message: '请求格式无效' });
     }
   };
 }

@@ -5,6 +5,7 @@
  * 必须始终成立：只放行已知字段，密钥永远不会出现在白名单输出里。
  * @module dsh-pet/src/standalone/settings
  */
+import type { ModelDiscoveryInput, ModelDiscoveryResult } from './ai-provider/types.ts';
 import { z } from 'zod';
 
 /** 设置服务的对外形状，不绑定具体模型后端。 */
@@ -20,6 +21,8 @@ export interface StandaloneSettingsService {
     model?: string;
     apiKey?: string;
   }): Promise<{ ok: boolean; message: string; reply?: string }>;
+  /** 可选：拉取端点声明可用的模型。 */
+  discoverModels?(input: ModelDiscoveryInput): Promise<ModelDiscoveryResult>;
 }
 
 /** 接口地址的校验：只允许干净的 HTTP 或 HTTPS 地址，凭据不放进 URL。 */
@@ -43,7 +46,6 @@ const settingsSchema = z
     model: z.string().max(200).optional(),
     apiKey: z.string().max(8192).optional(),
     clearApiKey: z.boolean().optional(),
-    enabled: z.boolean().optional(),
     automaticWhispers: z.boolean().optional(),
     whisperIntervalSec: z.number().int().min(60).max(86400).optional(),
     maxTokens: z.number().int().min(128).max(4096).optional(),
@@ -63,7 +65,6 @@ const publicNames = [
   'protocol',
   'baseUrl',
   'model',
-  'enabled',
   'automaticWhispers',
   'whisperIntervalSec',
   'maxTokens',

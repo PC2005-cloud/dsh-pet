@@ -13,7 +13,7 @@ import type { AddressInfo } from 'node:net';
 import type { RegisteredRoute } from '../standalone/context.ts';
 import { boundedRequest, MAX_REQUEST_BYTES, MAX_SETTINGS_BYTES } from '../standalone/request-body.ts';
 import { rejectRequest, type RequestSecurity } from '../standalone/request-security.ts';
-import { settingsHandler, testHandler, type StandaloneServerOptions } from '../standalone/server.ts';
+import { modelsHandler, settingsHandler, testHandler, type StandaloneServerOptions } from '../standalone/server.ts';
 import { sendIcon } from '../standalone/server/respond.ts';
 import { readSettingsIcon } from '../standalone/icon.ts';
 import { settingsPage, settingsScript, settingsStyle } from '../standalone/settings-page.ts';
@@ -38,6 +38,7 @@ export function startRouter(
 ): Promise<{ port: number; close: () => Promise<void> }> {
   const settings = settingsHandler(deps.ai);
   const tester = testHandler(deps.ai);
+  const models = modelsHandler(deps.ai);
   let boundPort = 0;
 
   const server = createServer((req, res) => {
@@ -93,8 +94,18 @@ export function startRouter(
         else sendText(res, 200, 'text/html', deps.landingPage(boundPort));
         return;
       }
-      if (url.pathname === '/standalone-ai/settings' || url.pathname === '/standalone-ai/test') {
-        await (url.pathname === '/standalone-ai/test' ? tester : settings)(request, res);
+      if (
+        url.pathname === '/standalone-ai/settings' ||
+        url.pathname === '/standalone-ai/test' ||
+        url.pathname === '/standalone-ai/models'
+      ) {
+        const handler =
+          url.pathname === '/standalone-ai/models'
+            ? models
+            : url.pathname === '/standalone-ai/test'
+              ? tester
+              : settings;
+        await handler(request, res);
         return;
       }
       if (!route) {

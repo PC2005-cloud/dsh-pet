@@ -16,6 +16,7 @@ import { aiScript } from './settings-page/script/ai.ts';
 import { bootScript } from './settings-page/script/boot.ts';
 import { coreScript } from './settings-page/script/core.ts';
 import { globalsScript } from './settings-page/script/globals.ts';
+import { modelPickerScript } from './settings-page/script/model-picker.ts';
 import { overlayScript } from './settings-page/script/overlay.ts';
 import { petsScript } from './settings-page/script/pets.ts';
 import { widgetsScript } from './settings-page/script/widgets.ts';
@@ -24,7 +25,7 @@ import { settingsStyle } from './settings-page/style.ts';
 
 export { settingsPage, settingsStyle };
 
-/** 整页脚本：公共层 + 控件 + 宠物/全局/AI 三个面板 + 启动。 */
+/** 整页脚本：公共层 + 控件 + 宠物/全局/AI 三个面板 + 模型选择 + 启动。 */
 export const settingsScript = [
   '(function () {',
   coreScript(ROUTE_SEGMENT, {
@@ -39,6 +40,7 @@ export const settingsScript = [
   overlayScript(),
   petsScript(),
   globalsScript(),
+  modelPickerScript(),
   aiScript(),
   bootScript(),
   'boot();',

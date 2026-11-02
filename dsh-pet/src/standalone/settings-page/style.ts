@@ -91,6 +91,13 @@ input:disabled,select:disabled,textarea:disabled{background:var(--dsw-static-neu
 .pathValue{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:ui-monospace,"SF Mono",Consolas,monospace;font-size:11.5px}
 .hintInline{font-weight:400;font-size:12px;color:var(--dsw-alias-label-tertiary)}
 .testRow{display:flex;align-items:center;gap:12px;margin-top:14px;flex-wrap:wrap}
+.combo{position:relative;display:flex;align-items:center}
+.combo input{padding-right:40px}
+.comboToggle{position:absolute;right:4px;display:flex;align-items:center;justify-content:center;width:28px;height:28px;border:0;border-radius:var(--dsw-radius-xs);background:transparent;color:var(--dsw-alias-label-tertiary);cursor:pointer}
+.comboToggle:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover)}
+.comboToggle:disabled{opacity:.45;cursor:not-allowed}
+.keyActions{display:flex;justify-content:flex-end;margin-top:8px}
+.keyActions .btn{height:26px;padding:0 10px;font-size:12px}
 .gridTight{margin-top:14px}
 .fieldTight{margin:0}
 .fineprint{margin:8px 0 0;font-size:12px;color:var(--dsw-alias-label-tertiary)}

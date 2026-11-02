@@ -27,6 +27,23 @@ export interface TestConnectionResult {
   reply?: string;
 }
 
+/** 「拉取模型」的输入：任一项缺省则沿用当前设置；空字符串视为未填。 */
+export interface ModelDiscoveryInput {
+  protocol?: string;
+  baseUrl?: string;
+  apiKey?: string;
+}
+
+/** 端点声明的一个可选模型。 */
+export interface DiscoveredModel {
+  id: string;
+  name: string;
+}
+
+/** 「拉取模型」的结果：失败时 code 稳定，message 可直接展示。 */
+export type ModelDiscoveryResult =
+  { ok: true; models: DiscoveredModel[] } | { ok: false; code: string; message: string };
+
 /**
  * 生成通道与连接测试共享的运行态：可变字段集中在装配根，子模块只读写自己那份。
  *
@@ -73,6 +90,8 @@ export interface StandaloneAiService {
   saveSettings(input: unknown): Promise<StandaloneAiPublicSettings>;
   /** 用一次最小请求验证地址、模型与密钥。 */
   testConnection(input: TestConnectionInput): Promise<TestConnectionResult>;
+  /** 按协议拉取端点声明可用的模型；失败时 code 稳定、message 可直接展示。 */
+  discoverModels(input: ModelDiscoveryInput): Promise<ModelDiscoveryResult>;
   /** 是否满足发起请求的全部条件。 */
   isReady(): boolean;
   /** 终止在途请求并释放服务。 */

@@ -345,6 +345,10 @@ describe('HTTP boundary protects every route and settings', () => {
         void input;
         return { ok: true, message: '连接成功', reply: 'pong' };
       },
+      discoverModels: async (input: { baseUrl?: string }) => ({
+        ok: true as const,
+        models: [{ id: input.baseUrl ?? 'missing', name: 'M1' }],
+      }),
     };
     const server = await listenStandaloneServer({ port: 0, security, logger: silent, routes: [], ai });
     try {
@@ -392,16 +396,26 @@ describe('HTTP boundary protects every route and settings', () => {
       const saved = await fetch(base + '/standalone-ai/settings', {
         method: 'POST',
         headers,
-        body: JSON.stringify({ apiKey: '', enabled: false }),
+        body: JSON.stringify({ apiKey: '' }),
       });
       assert.equal(saved.status, 200);
-      assert.deepEqual(await saved.json(), { enabled: false, hasKey: true });
+      assert.deepEqual(await saved.json(), { hasKey: true });
       assert.equal(saves, 1);
       assert.equal((await fetch(base + '/standalone-ai/test')).status, 403);
       assert.equal((await fetch(base + '/standalone-ai/test', { headers })).status, 405);
       const testRes = await fetch(base + '/standalone-ai/test', { method: 'POST', headers, body: '{}' });
       assert.equal(testRes.status, 200);
       assert.deepEqual(await testRes.json(), { ok: true, message: '连接成功', reply: 'pong' });
+      assert.equal((await fetch(base + '/standalone-ai/models')).status, 403);
+      assert.equal((await fetch(base + '/standalone-ai/models', { headers })).status, 405);
+      const modelsRes = await fetch(base + '/standalone-ai/models', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ protocol: 'openai-compatible', baseUrl: 'https://draft.test/v1', apiKey: 'k' }),
+      });
+      assert.equal(modelsRes.status, 200);
+      // 回显草稿地址：证明表单里还没保存的地址被原样转给了发现逻辑。
+      assert.deepEqual(await modelsRes.json(), { ok: true, models: [{ id: 'https://draft.test/v1', name: 'M1' }] });
       let last = 0;
       for (let i = 0; i < 25; i++)
         last = (await fetch(base + '/standalone-ai/settings', { method: 'POST', headers, body: '{}' })).status;

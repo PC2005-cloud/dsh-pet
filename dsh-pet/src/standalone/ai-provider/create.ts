@@ -9,6 +9,7 @@ import { type StandaloneLogger } from '../context.ts';
 import { createAiConfig, type StandaloneAiPublicSettings } from '../ai-config.ts';
 import type { AiRuntime, AiStore, StandaloneAiDependencies, StandaloneAiService } from './types.ts';
 import { PROVIDER } from './limits.ts';
+import { discoverModels } from './list-models.ts';
 import { createTextStream } from './stream.ts';
 import { testAiConnection } from './test-connection.ts';
 
@@ -70,7 +71,6 @@ export function createStandaloneAi(
         !runtime.disposed &&
         !runtime.paused &&
         !runtime.saving &&
-        store.current().enabled &&
         !!store.current().model &&
         !!store.current().baseUrl &&
         !!store.current().apiKey
@@ -96,6 +96,10 @@ export function createStandaloneAi(
       runtime.disposed
         ? Promise.resolve({ ok: false, message: '服务已关闭' })
         : testAiConnection(runtime.fetcher, store.current(), input),
+    discoverModels: (input) =>
+      runtime.disposed
+        ? Promise.resolve({ ok: false, code: 'input', message: '服务已关闭' })
+        : discoverModels(runtime.fetcher, store.current(), input),
     dispose() {
       runtime.disposed = true;
       runtime.active?.abort();

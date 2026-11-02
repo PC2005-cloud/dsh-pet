@@ -20,7 +20,7 @@ function mountProtocolSelect() {
       { value: 'anthropic', label: 'Anthropic' },
     ],
     'openai-compatible',
-    () => {},
+    () => forgetModelOptions(),
   );
   protocolSelect.root.firstElementChild.setAttribute('aria-labelledby', 'protocol-label');
   host.append(protocolSelect.root);

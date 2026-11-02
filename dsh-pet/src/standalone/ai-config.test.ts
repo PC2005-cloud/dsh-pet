@@ -36,8 +36,9 @@ test('validates safe endpoints and explicit configuration with fixed redacted er
   ]) {
     assert.equal(validateSettings({ ...configured, baseUrl }, DEFAULT_AI_SETTINGS).baseUrl, baseUrl);
   }
+  // 配置填一半是允许保存的：它只是暂时不可用，不该连保存都拒绝。
+  assert.equal(validateSettings({ model: '' }, DEFAULT_AI_SETTINGS).model, '');
   for (const patch of [
-    { model: '' },
     { timeoutMs: 60001 },
     { whisperIntervalSec: 59 },
     { maxTokens: 100000 },
@@ -65,8 +66,12 @@ test('persists only in isolated home, redacts keys, supports keep and clear, rel
     assert.equal((await store.save({ apiKey: '', automaticWhispers: true })).hasKey, true);
     assert.equal(createAiConfig(home).publicSettings().model, 'chosen-model');
     assert.match(readFileSync(join(home, 'dsh-pet', 'standalone-ai.json'), 'utf8'), /test-secret/);
-    assert.equal((await store.save({ clearApiKey: true, enabled: false })).hasKey, false);
-    assert.equal(createAiConfig(home).publicSettings().enabled, false);
+    // 启用位只为旧文件保留：无论传什么，落盘一律为 true，对外视图也不再暴露。
+    const forced = await store.save({ enabled: false });
+    assert.equal('enabled' in forced, false);
+    assert.match(readFileSync(join(home, 'dsh-pet', 'standalone-ai.json'), 'utf8'), /"enabled":true/);
+    assert.equal((await store.save({ clearApiKey: true })).hasKey, false);
+    assert.equal(createAiConfig(home).publicSettings().hasKey, false);
     writeFileSync(join(home, 'dsh-pet', 'standalone-ai.json'), '{broken');
     assert.throws(() => createAiConfig(home), /^Error: Cannot securely load standalone AI settings\.$/);
   } finally {

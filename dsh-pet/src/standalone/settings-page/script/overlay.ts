@@ -34,12 +34,13 @@ function chevron() {
   return svg;
 }
 
-function placeMenu(menu, trigger) {
+function placeMenu(menu, trigger, widthOf) {
   const rect = trigger.getBoundingClientRect();
+  const span = widthOf ? widthOf.getBoundingClientRect() : rect;
   const below = window.innerHeight - rect.bottom;
   const height = Math.min(260, Math.max(120, below > 200 ? below - 16 : rect.top - 16));
-  menu.style.left = Math.round(rect.left) + 'px';
-  menu.style.width = Math.round(rect.width) + 'px';
+  menu.style.left = Math.round(span.left) + 'px';
+  menu.style.width = Math.round(span.width) + 'px';
   menu.style.maxHeight = Math.round(height) + 'px';
   if (below > 200 || rect.top < 220) menu.style.top = Math.round(rect.bottom + 4) + 'px';
   else menu.style.top = Math.round(rect.top - height - 4) + 'px';
@@ -47,12 +48,13 @@ function placeMenu(menu, trigger) {
 
 /**
  * 打开一个下拉菜单。
- * @param trigger - 触发按钮，用来定位与判断「点外面」。
+ * @param trigger - 触发按钮，用来定位、判断「点外面」与标记展开状态。
  * @param options - 候选项，每项 { value, label }。
  * @param current - 当前值。
  * @param onPick - 选中回调。
+ * @param widthOf - 菜单对齐宽度的参照元素；缺省与 trigger 同宽，用于触发按钮比菜单窄的组合框。
  */
-function openSelectMenu(trigger, options, current, onPick) {
+function openSelectMenu(trigger, options, current, onPick, widthOf) {
   closeMenu();
   const menu = make('ul', { class: 'selectMenu' });
   menu.setAttribute('role', 'listbox');
@@ -66,7 +68,7 @@ function openSelectMenu(trigger, options, current, onPick) {
     items.push({ node: item, value: option.value });
   }
   document.body.append(menu);
-  placeMenu(menu, trigger);
+  placeMenu(menu, trigger, widthOf);
   trigger.setAttribute('aria-expanded', 'true');
   let active = Math.max(0, options.findIndex((option) => option.value === current));
   highlight(active);
@@ -109,7 +111,7 @@ function openSelectMenu(trigger, options, current, onPick) {
   }
 
   function onReflow() {
-    placeMenu(menu, trigger);
+    placeMenu(menu, trigger, widthOf);
   }
 
   function dispose() {
@@ -149,7 +151,7 @@ function createSelect(options, value, onChange) {
 
   function paint() {
     const hit = options.find((option) => option.value === current);
-    label.textContent = hit ? hit.label : '';
+    label.textContent = hit ? hit.label : current;
     trigger.disabled = options.length <= 1;
   }
 
