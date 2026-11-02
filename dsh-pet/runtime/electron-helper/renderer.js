@@ -92,6 +92,15 @@ async function boot() {
     }
     for (const s of sprites) s.dispose();
     sprites = [new PetSprite(pet)];
+    // 应用上次会话选定的尺寸档（大/中/小）：localStorage 不可写时静默跳过，回落配置默认尺寸
+    try {
+      if (typeof localStorage !== 'undefined' && sprites[0].applyPetSize) {
+        const savedSize = localStorage.getItem('dsh-pet-size:' + pet.id);
+        if (savedSize) sprites[0].applyPetSize(savedSize);
+      }
+    } catch {
+      /* 持久化不可用：用配置默认尺寸 */
+    }
     window.__dshPetDebug.configOk = true;
     window.__dshPetDebug.spriteCount = sprites.length;
     for (const s of sprites) s.playIdle();

@@ -13,6 +13,19 @@ const OPEN_LABEL = { desktop: '打开软件', standalone: '打开 AI 设置', we
 /** 睡觉拒绝台词的气泡时长（ms）：比默认 10s 略短，它只是「被打扰了」的一句回绝。 */
 const SLEEP_REFUSE_BUBBLE_MS = 8000;
 
+/** 右键菜单「调整大小」预设：key 即菜单项携带的尺寸档，factor 是相对配置基准尺寸（中=1）的缩放系数。
+ *  默认中（=配置里的宠物尺寸）：200% 缩放下显得过大时选「小」即可。基准尺寸在首次调用时锁定为
+ *  配置原始值，因此不论切多少档、重载多少次都不会叠加放大。 */
+const PET_SIZE_PRESETS = [
+  { key: 'small', label: '小' },
+  { key: 'medium', label: '中' },
+  { key: 'large', label: '大' },
+];
+const PET_SIZE_FACTORS = { small: 0.7, medium: 1, large: 1.4 };
+const PET_SIZE_DEFAULT = 'medium';
+const PET_SIZE_MIN = 80;
+const PET_SIZE_MAX = 1600;
+
 Object.assign(PetSprite.prototype, {
   onContextMenu(e) {
     const d = this.dragState;
@@ -49,8 +62,11 @@ Object.assign(PetSprite.prototype, {
       if (this.sleeping) tools.push({ label: '起来', action: 'wake', hint: S.SLEEP_HOTKEY_HINT });
       else tools.push({ label: '睡觉', action: 'sleep', hint: S.SLEEP_HOTKEY_HINT });
     }
-    // 动作树之后是维护类：显示位置 → 重载配置 → 回到初始位置。
+    // 动作树之后是维护类：调整大小 → 显示位置 → 重载配置 → 回到初始位置。
     const tail = [
+      // 调整大小（大/中/小，默认中）：就地改渲染尺寸并请主进程改窗，不写配置、不重载；
+      // 用户选择经 localStorage 最佳努力持久化（file:// 源可能不可写，失败只影响本次会话）。
+      this.buildSizeBranch(),
       // 显示位置（仅网页/仅桌面/两者/都不）：改这只宠物的 display 配置，由宿主重载生效。
       // 与浏览器端注入同一份子菜单，两端文案与取值不会漂移。不就地开关窗：窗口是进程启动时按
       // DSH_PET_PETS 一次性建的，就地增删既改不了磁盘配置也改不了窗口数量。
@@ -91,6 +107,12 @@ Object.assign(PetSprite.prototype, {
   onMenuAction(leaf, keepFacing, fromHost) {
     this.closeMenu();
     if (!leaf || typeof leaf !== 'object') return;
+    // 调整大小：与睡觉/第三方占用无关——睡着或被占用时也能改尺寸（只改渲染与窗口尺寸，不碰动画/锁）。
+    // 放在睡觉闸门之前，否则睡着时这一项会被当成「打扰」弹回绝台词。
+    if (leaf.action === 'set-size') {
+      this.applyPetSize(leaf.size);
+      return;
+    }
     // 睡觉：打扰类动作在点击这一刻就拒绝——弹一句台词，什么都不执行。持锁时让路（锁=控制权交给第三方）。
     // 对话弹窗、待办面板、点播动画都是渲染端行为，宿主闸门拦不到；两端用同一份放行判定。
     if (this.sleeping && !this.frozen && !fromHost && !S.isSleepAllowedAction(leaf.action)) {
@@ -163,6 +185,78 @@ Object.assign(PetSprite.prototype, {
       return;
     }
     this.playOnce(leaf.anim, playbackId);
+  },
+
+  /** 右键菜单「调整大小」分支：大/中/小三档，当前档用右侧 ✓ 标注（复用菜单 hint 槽位）。 */
+  buildSizeBranch() {
+    const current = this.sizePref || PET_SIZE_DEFAULT;
+    return {
+      label: '调整大小',
+      children: PET_SIZE_PRESETS.map((p) => ({
+        label: p.label,
+        action: 'set-size',
+        size: p.key,
+        hint: p.key === current ? '✓' : undefined,
+      })),
+    };
+  },
+
+  /** 应用某一档尺寸（small/medium/large）：相对配置基准尺寸缩放，并持久化用户选择。 */
+  applyPetSize(key) {
+    const factor = PET_SIZE_FACTORS[key];
+    if (!factor) return;
+    this.sizePref = key;
+    // 基准尺寸锁定配置里的原始宠物尺寸（首次调用时记下）；中档恒等于该值，不会被连续放大叠加。
+    if (this.baseSize === undefined) this.baseSize = this.pet.size;
+    const base = Number(this.baseSize) > 0 ? this.baseSize : 462;
+    const size = Math.max(PET_SIZE_MIN, Math.min(PET_SIZE_MAX, Math.round(base * factor)));
+    this.setPetSize(size);
+    // 最佳努力持久化：file:// 源下 localStorage 可能不可写，写失败不影响当前会话
+    try {
+      if (typeof localStorage !== 'undefined') localStorage.setItem('dsh-pet-size:' + this.pet.id, key);
+    } catch {
+      /* 持久化不可用：仅本次会话生效 */
+    }
+  },
+
+  /** 真正改尺寸：重算全部派生几何、注入 CSS 变量、把新窗口尺寸上报主进程（主进程 setContentBounds 实际改窗）。 */
+  setPetSize(size) {
+    this.size = size;
+    this.height = (size * 9) / 16;
+    this.halfW = size / 2;
+    this.halfH = this.height / 2;
+    this.bottomPad = (size * (9 / 16) * (S.CANVAS_H - S.FEET_Y)) / S.CANVAS_H;
+    this.winH = this.height + this.bottomPad;
+    this.hitRect = {
+      x: (S.HIT_BOX.x0 / 640) * size,
+      y: this.bottomPad + (S.HIT_BOX.y0 / 360) * this.height,
+      w: ((S.HIT_BOX.x1 - S.HIT_BOX.x0) / 640) * size,
+      h: ((S.HIT_BOX.y1 - S.HIT_BOX.y0) / 360) * this.height,
+    };
+    this.sideAllow = (S.HIT_BOX.x0 / 640) * size;
+    const m = size * WINDOW_MARGIN_RATIO;
+    this.margin = {
+      t: Math.max(m, S.bubbleTopMarginPx(this.font, size), S.todoPanelTopMarginPx(this.font, size)),
+      r: m,
+      b: m,
+      l: m,
+    };
+    // 容器相对窗口的偏移 = 余量；余量随尺寸变，必须同步更新，否则宠物相对窗口错位移、命中区漂移出身体
+    this.el.style.left = this.margin.l + 'px';
+    this.el.style.top = this.margin.t + 'px';
+    // --pet-size 驱动 .pet-stage / .pet-hit / 气泡尺寸；字号随尺寸重算注入
+    this.el.style.setProperty('--pet-size', size + 'px');
+    const fontPx = S.resolveFontPx(this.font, size);
+    this.el.style.setProperty('--dsh-pet-font-bubble', fontPx.bubble + 'px');
+    this.el.style.setProperty('--dsh-pet-font-tip', fontPx.tip + 'px');
+    // 舞台下移量（脚底垫高）随尺寸变
+    if (this.stage) this.stage.style.transform = 'translateY(' + this.bottomPad + 'px)';
+    // 抛掷空间依赖 size/sideAllow：置空让下一次抛掷立即按新尺寸重建
+    this.space = null;
+    // 重新落角落/边界，并把新窗口尺寸经 setBounds 上报主进程（主进程 setContentBounds 实际改窗）
+    this.position();
+    // 余量变了：命中区判定与控件矩形按新余量重算
+    this.syncInputRegions();
   },
 
   closeMenu() {
