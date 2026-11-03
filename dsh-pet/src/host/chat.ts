@@ -45,19 +45,18 @@ const TIMEOUT_MS = 60_000;
 const HISTORY_STAMP_GAP_MS = 30 * 60 * 1000;
 
 /**
- * 一条历史消息的时间前缀：assistant 距现在超过阈值时，前面加 `[10月31日 22:53]`。
+ * user 历史消息的正文：距现在超过阈值时，前面加 `[10月31日 22:53]`。
  *
- * 只给 assistant 打：同一轮 user / assistant 共享同一个 ts（落盘时两次 push 用的是同一个 now），
- * 两条都打就是重复；用户那句的时刻由紧随其后的 assistant 前缀精确反推。
+ * 只给 user 打：同一轮 user / assistant 共享同一个 ts，标一条就够；标在 assistant 上时，
+ * 模型会把这行当成自己的说话格式照抄（实际出现过回复以 `[11:54]` 开头）。
  * 阈值内的连续对话不加前缀——否则一段正常闲聊会变成每句一个时间戳。
- * 配图/动作标记不在这里追加（见 {@link historyMarkersOf}），两件事各自独立。
  *
  * @param message - 历史消息（带 ts）。
  * @param nowMs - 本次生成时刻（毫秒），整批历史共用一个，避免逐条取时钟导致同批时间不一致。
  * @returns 需要前缀时返回 `[时:分] 原文`，否则原样返回 `content`。
  */
-function historyTextOf(message: ChatMemoryMessage, nowMs: number): string {
-  if (message.role !== 'assistant' || !Number.isFinite(message.ts)) return message.content;
+function userHistoryTextOf(message: ChatMemoryMessage, nowMs: number): string {
+  if (!Number.isFinite(message.ts)) return message.content;
   // 用 > 而不是 >=：恰好 30 分钟仍算连续对话；ts 在未来（时钟回拨）时差为负，自然不加
   if (!(nowMs - message.ts > HISTORY_STAMP_GAP_MS)) return message.content;
   const stamp = historyStampOf(message.ts, new Date(nowMs));
@@ -172,17 +171,16 @@ async function generateWith(ctx: { llm?: unknown }, once: GenerateOnce): Promise
   const { llm, sel, system, history, userText, pool, actions, image } = once;
   // 历史 → dsh-llm 消息：user 经 createUserMessage（plugin 来源），assistant 经 createAssistantMessage
   // （provider/model 只是消息的角色载体，不涉及适配器回放）。
-  // assistant 正文可能带 [月日 时:分] 前缀：模型据此判断断档，没有它跨天对话会被当成连续发言。
-  // assistant 还要回填配图/动作标记：模型得知道自己前几轮配过哪张、演过什么（否则「换一个」无从判断）。
+  // 时间前缀只加在 user 上（模型会照抄 assistant 自己那侧的格式）；配图/动作标记只加在 assistant 上。
   const nowMs = Date.now();
   const historyMessages = history.map((m) =>
     m.role === 'user'
       ? createUserMessage({
-          content: [{ type: 'text', text: m.content }],
+          content: [{ type: 'text', text: userHistoryTextOf(m, nowMs) }],
           source: { kind: 'user' },
         })
       : createAssistantMessage({
-          content: [{ type: 'text', text: historyTextOf(m, nowMs) + historyMarkersOf(m) }],
+          content: [{ type: 'text', text: m.content + historyMarkersOf(m) }],
           source: { provider: sel.provider, model: sel.model },
         }),
   );

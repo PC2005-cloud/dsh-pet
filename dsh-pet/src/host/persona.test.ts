@@ -60,7 +60,7 @@ describe('composeSystemPrompt —— 分段拼装', () => {
     const lines = out.split('\n');
     assert.equal(lines.length, 4, '带历史说明时是四段');
     assert.ok(
-      lines[3].startsWith('【历史】你之前说过的话，前面标着 [月日 时:分]'),
+      lines[3].startsWith('【历史】对话记录里，主人的话前面标着 [月日 时:分]'),
       `第四行必须是【历史】：${lines[3]}`,
     );
     assert.ok(lines[3].includes('不要写时间'), '必须明确禁止在回复正文里写时间');
