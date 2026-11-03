@@ -17,6 +17,7 @@ import { displayOfHotkey } from '../../../shared/display-hotkey.ts';
 import { SLEEP_HOTKEY_HINT, isSleepHotkey } from '../../../shared/sleep-hotkey.ts';
 import { TODO_HOTKEY_HINT, isTodoHotkey } from '../../../shared/todo/hotkey.ts';
 import type { PetDisplay } from '../../../shared/types.ts';
+import type { LearningOrder } from '../../../shared/learning.ts';
 import { bindOpenChat } from './open-chat.ts';
 import { registerPetChatHandle } from './registry.ts';
 import {
@@ -67,6 +68,18 @@ export interface CardEntryInput {
   showTodo: () => void;
   /** 开关待办面板：D 键用，已开则收起。 */
   toggleTodo: () => void;
+  /** 自定义台词是否开启（右键菜单标签用）。 */
+  learningEnabled: () => boolean;
+  /** 台词顺序（乱序/顺序循环，右键菜单标签用）。 */
+  learningOrder: () => LearningOrder;
+  /** 台词优先级（高/低，右键菜单标签用）。 */
+  learningPriority: () => 'high' | 'low';
+  /** 台词内容名列表（右键「编辑台词」菜单用）。 */
+  learningContentNames: () => string[];
+  /** 当前选中的台词内容名。 */
+  learningContentKey: () => string;
+  /** 实时刷新台词内容表（右键菜单打开前调用，编辑 json 后无需刷新页面）。 */
+  refreshLearningContents: () => Promise<void>;
   /** 悬浮提示节点：位置由本模块直接写 style。 */
   tipRef: ReactNS.MutableRefObject<HTMLDivElement | null>;
   /** 舞台节点：对话弹窗贴命中区右上角。 */
@@ -99,7 +112,7 @@ export function createCardEntry(rt: CardEntryRuntime) {
   const { useEffect, useRef } = rt;
 
   return function useCardEntry(input: CardEntryInput): CardEntry {
-    const { card, cfgRef, drag, live, menuItemsRef, motion, runMenuAction, showTodo, stage, tipRef, toggleTodo } =
+    const { card, cfgRef, drag, live, menuItemsRef, motion, runMenuAction, showTodo, stage, tipRef, toggleTodo, learningEnabled, learningOrder, learningPriority, learningContentNames, learningContentKey, refreshLearningContents } =
       input;
     // 右键菜单与对话弹窗当前的句柄，卸载或重开前清理。对话弹窗还要按住说话遥控开录/收尾。
     const menuRef = useRef<{ close: () => void } | null>(null);
@@ -335,7 +348,12 @@ export function createCardEntry(rt: CardEntryRuntime) {
     live.current.tipOn = () => card.state.tipOn;
 
     /** 打开右键菜单。 */
-    const handleContextMenu = (e: ReactNS.MouseEvent<HTMLDivElement>): void => {
+    const handleContextMenu = async (e: ReactNS.MouseEvent<HTMLDivElement>): Promise<void> => {
+      e.preventDefault();
+      e.stopPropagation(); // 不触碰 DSH 页面的菜单与右键处理。
+      if (drag.isActive() || drag.justDragged()) return;
+      // 实时刷新台词内容（编辑 learningTxt.json 后无需刷新页面；本地拉取，延迟可忽略）。
+      await refreshLearningContents();
       // 工具项与动作树；「查看余额」无条件显示，手动请求不受开关限制。
       // 第三方菜单项收在「更多」下，0 项不出现，单 owner 单条时平铺（见 buildMoreBranch）。
       const more = buildMoreBranch(menuItemsRef.current);
@@ -358,6 +376,39 @@ export function createCardEntry(rt: CardEntryRuntime) {
         { label: '待办事项', action: 'todo', hint: TODO_HOTKEY_HINT },
         { label: '碎碎念', action: 'whisper' },
         { label: '对话', action: 'chat', hint: CHAT_HOTKEY_HINT },
+        // 自定义台词：开关 + 编辑台词 + 顺序 + 优先级整合成一个二级菜单
+        {
+          label: learningEnabled() ? '自定义台词：开' : '自定义台词：关',
+          children: [
+            { label: learningEnabled() ? '关闭' : '开启', action: 'toggle-learning' },
+            {
+              label: learningOrder() === 'random' ? '顺序：乱序' : '顺序：顺序循环',
+              children: [
+                { label: '乱序', action: 'set-learning-order', order: 'random' },
+                { label: '顺序循环', action: 'set-learning-order', order: 'cycle' },
+              ],
+            },
+            {
+              label: learningPriority() === 'high' ? '优先级：高' : '优先级：低',
+              children: [
+                { label: '高（压过所有气泡）', action: 'set-learning-priority', priority: 'high' },
+                { label: '低（可被任务打断）', action: 'set-learning-priority', priority: 'low' },
+              ],
+            },
+          ],
+        },
+        // 编辑台词：选择内容组（learningTxt.json 的键）+ 新建内容（打开文件）
+        {
+          label: '编辑台词',
+          children: [
+            ...learningContentNames().map((name) => ({
+              label: name === learningContentKey() ? name + '（当前）' : name,
+              action: 'select-learning-content' as const,
+              content: name,
+            })),
+            { label: '新建内容', action: 'edit-learning' },
+          ],
+        },
         ...(memes ? [memes] : []),
         ...(canSleep ? [sleepItem] : []),
       ];
@@ -373,9 +424,6 @@ export function createCardEntry(rt: CardEntryRuntime) {
         ...(more ? [more] : []),
       ];
       if (!tree.length) return;
-      e.preventDefault();
-      e.stopPropagation(); // 不触碰 DSH 页面的菜单与右键处理。
-      if (drag.isActive() || drag.justDragged()) return;
       motion.flight.stop(); // 菜单弹出前停住飞行中的宠物。
       motion.stopMove(); // 菜单悬停期间宠物不漫游。
       if (menuRef.current) menuRef.current.close();

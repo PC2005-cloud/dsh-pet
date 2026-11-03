@@ -27,9 +27,20 @@ export interface MenuLeaf {
     | 'set-display'
     | 'sleep'
     | 'wake'
+    | 'toggle-learning'
+    | 'edit-learning'
+    | 'select-learning-content'
+    | 'set-learning-order'
+    | 'set-learning-priority'
     | 'third-party';
   /** set-display 的目标显示位置（与设置页的下拉框同一套取值） */
   display?: PetDisplay;
+  /** select-learning-content 的目标内容名 */
+  content?: string;
+  /** set-learning-order 的目标顺序（乱序 / 顺序循环） */
+  order?: 'random' | 'cycle';
+  /** set-learning-priority 的目标优先级（高 / 低） */
+  priority?: 'high' | 'low';
   /** third-party：注册它的 owner（身份键，只用于回传，不显示）；同一个 owner 的项收在同一分组下，
    *  只有一项时跳过这层直接平铺。 */
   owner?: string;

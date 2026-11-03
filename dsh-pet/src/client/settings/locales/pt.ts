@@ -94,6 +94,8 @@ export const pt: Record<Key, string> = {
   marginX: 'Deslocamento horizontal',
   marginY: 'Deslocamento vertical',
   save: 'Salvar',
+  openLearningTxt: 'Open learningTxt.json',
+  learningTitle: 'Dialogue lines',
   saveHotkey: 'Ctrl+S / Cmd+S',
   sync: 'Sincronizar',
   confirmSync:

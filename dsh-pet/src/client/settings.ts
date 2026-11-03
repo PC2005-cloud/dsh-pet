@@ -360,6 +360,26 @@ export function makePetConfigSection(
           ],
         }),
 
+        // 台词文件：快捷入口放在最顶上，一眼能找到（气泡随机显示这里每一行）
+        h('div', {
+          className: 'dsh-pet-cfg__card',
+          children: [
+            h('div', {
+              className: 'dsh-pet-cfg__cardHead',
+              children: h('span', { className: 'dsh-pet-cfg__cardTitle', children: t('learningTitle') }),
+            }),
+            h('button', {
+              type: 'button',
+              className: 'dsh-pet-cfg__btn is-sm',
+              onClick: () => {
+                // 在系统默认编辑器打开 learningTxt.json（host POST /learningTxt 用 OS 打开命令）
+                void fetch(ROUTE_PATH + '/learningTxt', { method: 'POST' }).catch(() => {});
+              },
+              children: t('openLearningTxt'),
+            }),
+          ],
+        }),
+
         h(LoadStatus, { loadState, onRetry: retry }),
 
         h(KindTabs, { kinds, kind, busy, onSelect: selectKind }),

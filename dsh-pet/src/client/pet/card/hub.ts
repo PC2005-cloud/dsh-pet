@@ -44,6 +44,8 @@ export interface CardHub {
   playByName: PlayByName;
   /** 说一句。 */
   speak: Speak;
+  /** 按概率弹一句台词气泡（内容 = learningTxt.json 随机一行，回退空内容（不弹气泡））。 */
+  showLearningBubble(): void;
   /** 此刻是否在睡（含入睡/醒来两段过渡）：自动来源据此闭嘴，显式唤醒走菜单或点击。 */
   sleeping(): boolean;
   /** 此刻是否被占用锁冻结：锁的语义是「把控制权交给第三方」，睡觉闸门对它让路。 */

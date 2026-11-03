@@ -126,6 +126,8 @@ export function createAnimationFlow(rt: AnimationFlowRuntime) {
           (decision.anim ?? '移动进行中(不重播)'),
       );
       if (decision.play && decision.anim !== null) card.actions.setAnim(decision.anim);
+      // 随机链也按概率冒一句台词气泡（与点击/右键共用）
+      hub.showLearningBubble();
       card.actions.setOnce(true);
       card.actions.bumpSeq();
     };

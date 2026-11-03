@@ -269,6 +269,8 @@ Object.assign(PetSprite.prototype, {
       const act = S.pickCategoryAction(animations.categories, animations.idle, this.facing, this.anim);
       next = act.name;
     }
+    // 随机链也按概率冒一句台词气泡（与点击/右键共用）
+    this.showLearningBubble();
     this.playOnce(next);
   },
 

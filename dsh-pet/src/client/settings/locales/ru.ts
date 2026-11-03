@@ -95,6 +95,8 @@ export const ru: Record<Key, string> = {
   marginX: 'Горизонтальный отступ',
   marginY: 'Вертикальный отступ',
   save: 'Сохранить',
+  openLearningTxt: 'Open learningTxt.json',
+  learningTitle: 'Dialogue lines',
   saveHotkey: 'Ctrl+S / Cmd+S',
   sync: 'Синхронизировать',
   confirmSync:

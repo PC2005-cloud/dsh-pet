@@ -19,7 +19,7 @@ import type * as ReactNS from 'react';
 import type { jsx } from 'react/jsx-runtime';
 
 /** 当前该挂哪个气泡；`none` 表示哪个条件都不成立。 */
-export type BubbleSlot = 'todo' | 'work-terminal' | 'whisper' | 'balance' | 'work' | 'none';
+export type BubbleSlot = 'todo' | 'work-terminal' | 'whisper' | 'balance' | 'work' | 'learning' | 'none';
 
 /** 优先级判定的输入：全部是渲染期的既成事实，判定本身不产生副作用。 */
 export interface BubbleSlotInput {
@@ -37,6 +37,12 @@ export interface BubbleSlotInput {
   whisperOn: boolean;
   /** 说话气泡文本。 */
   whisperText: string | null;
+  /** 台词气泡是否点亮。 */
+  learningOn: boolean;
+  /** 台词气泡文本。 */
+  learningText: string | null;
+  /** 台词气泡是否设为高优先级（压过所有气泡与待办面板）。 */
+  learningPriorityHigh: boolean;
   /** 余额气泡是否点亮。 */
   balanceOn: boolean;
   /** 余额数据是否已拉到；null 表示尚未拉到。 */
@@ -56,12 +62,15 @@ export interface BubbleSlotInput {
  * @returns 命中的槽位；都不成立时为 `none`。
  */
 export function decideBubbleSlot(input: BubbleSlotInput): BubbleSlot {
+  // 高优先级台词：压过所有（含待办面板）
+  if (input.learningPriorityHigh && input.learningOn && input.learningText) return 'learning';
   // 面板是用户主动打开的窗口：它占槽时其余气泡一律让位，关掉后按原规则恢复。
   if (input.todoOn) return 'todo';
   if (input.workTerminal && input.workOn && input.workText && input.workStatusEnabled) return 'work-terminal';
   if (input.whisperOn && input.whisperText) return 'whisper';
   if (input.balanceOn && input.balanceAvailable && (input.balanceEnabled || input.balanceManual)) return 'balance';
   if (input.workOn && input.workText && input.workStatusEnabled) return 'work';
+  if (input.learningOn && input.learningText) return 'learning';
   return 'none';
 }
 
@@ -139,6 +148,8 @@ export interface BubbleSlotsInput {
   onFocusSession?: (sessionId: string) => void;
   /** 说话气泡配图的素材根。 */
   assetRoot?: string;
+  /** 台词气泡是否设为高优先级（压过所有气泡与待办面板）。 */
+  learningPriorityHigh?: boolean;
 }
 
 /** 气泡单槽对外的读写面。 */
@@ -149,6 +160,10 @@ export interface BubbleSlots {
   cycleBalance(): void;
   /** 点亮说话气泡；duration 为 0 时不改动当前气泡，undefined 用默认时长。 */
   showWhisper(text: string, parts: { image?: string; url?: string }, duration?: number): void;
+  /** 点亮台词气泡：常驻不自动收起，直到更高优先级气泡替换它。 */
+  showLearning(text: string): void;
+  /** 收起台词气泡（关掉自定义台词时用）。 */
+  clearLearning(): void;
   /** 收起说话气泡；不碰动画与另两种气泡。 */
   clearWhisper(): void;
   /** 更新工作气泡文本，显隐不动。 */
@@ -193,6 +208,9 @@ export function createBubbleSlots(rt: BubbleSlotsRuntime, components: BubbleComp
     const [whisperText, setWhisperText] = useState<string | null>(null);
     const [whisperImage, setWhisperImage] = useState<string | undefined>(undefined);
     const [whisperUrl, setWhisperUrl] = useState<string | undefined>(undefined);
+    // 台词气泡：常驻不自动收起，单槽最低优先级。
+    const [learningOn, setLearningOn] = useState(false);
+    const [learningText, setLearningText] = useState<string | null>(null);
     const whisperHoldRef = useRef<BubbleHoldState>(BUBBLE_HOLD_IDLE);
     const whisperTextRef = useRef<string | null>(null);
     const whisperTimerRef = useRef<number | null>(null);
@@ -273,6 +291,16 @@ export function createBubbleSlots(rt: BubbleSlotsRuntime, components: BubbleComp
       applyWhisperHold({ durationMs: duration ?? BUBBLE_DURATION_MS, kind: 'show' });
     };
 
+    const showLearning = (text: string) => {
+      setLearningText(text);
+      setLearningOn(true);
+    };
+
+    const clearLearning = () => {
+      setLearningOn(false);
+      setLearningText(null);
+    };
+
     const clearWhisper = () => {
       whisperTextRef.current = null;
       setWhisperText(null);
@@ -311,6 +339,9 @@ export function createBubbleSlots(rt: BubbleSlotsRuntime, components: BubbleComp
         workStatusEnabled: input.workStatusEnabled,
         whisperOn,
         whisperText,
+        learningOn,
+        learningText,
+        learningPriorityHigh: input.learningPriorityHigh === true,
         balanceOn,
         balanceAvailable: input.balance !== null,
         balanceEnabled: input.balanceEnabled,
@@ -347,10 +378,15 @@ export function createBubbleSlots(rt: BubbleSlotsRuntime, components: BubbleComp
           ...(onClick === undefined ? {} : { onClick }),
         });
       }
+      // 台词气泡：常驻，与说话气泡同款组件（纯文本）。
+      if (slot === 'learning') {
+        return learningText === null ? null : h(WhisperBubble, { text: learningText, on: learningOn });
+      }
       return null;
     };
 
     return {
+      clearLearning,
       clearWhisper,
       cycleBalance,
       hideTodo,
@@ -359,6 +395,7 @@ export function createBubbleSlots(rt: BubbleSlotsRuntime, components: BubbleComp
       node,
       resetWork,
       showBalance,
+      showLearning,
       showTodo,
       showWhisper,
       toggleTodo,

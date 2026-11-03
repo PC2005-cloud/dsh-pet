@@ -90,6 +90,8 @@ export const zh = {
   marginX: '水平偏移',
   marginY: '垂直偏移',
   save: '保存',
+  openLearningTxt: '打开台词文件',
+  learningTitle: '台词文件',
   saveHotkey: 'Ctrl+S / Cmd+S',
   sync: '同步',
   confirmSync: '确定同步吗？将用项目内置的默认配置（完整字段 + 注释）覆盖用户配置，当前的自定义内容会丢失。',

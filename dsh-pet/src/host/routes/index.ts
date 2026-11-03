@@ -15,6 +15,7 @@ import { handleChatRoutes } from './chat.ts';
 import { handleConfigRoutes } from './config/index.ts';
 import { handleDesktopRoutes } from './desktop.ts';
 import { handleInteractionRoutes } from './interaction.ts';
+import { handleLearningRoutes } from './learning.ts';
 import { handleMenuRoutes } from './menu.ts';
 import { handleMotionRoutes } from './motion.ts';
 import { handlePlaybackRoutes } from './playback.ts';
@@ -28,6 +29,7 @@ import type { PetRouteDeps, RouteHandler } from './types.ts';
 /** 处理器顺序：越靠前越先匹配；素材兜底必须在末尾。 */
 const HANDLERS: readonly RouteHandler[] = [
   handleConfigRoutes,
+  handleLearningRoutes,
   handleDesktopRoutes,
   handleMenuRoutes,
   handleStateRoutes,

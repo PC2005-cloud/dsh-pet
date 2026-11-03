@@ -222,6 +222,24 @@ PetSprite.prototype.showWhisper = function showWhisper(text, image, url, duratio
   this.applyWhisperHold({ durationMs: duration ?? BUBBLE_DURATION_MS, kind: 'show' });
 };
 
+// 台词气泡：弹当前选中内容组（乱序或顺序循环），常驻不自动消失，单槽最低优先级。
+PetSprite.prototype.showLearningBubble = function showLearningBubble() {
+  if (!this.learningEnabled) return;
+  if (Math.random() >= S.LEARNING_DIALOGUE_CHANCE) return;
+  const lines = S.learningLines(this.learningContents, this.learningContentKey);
+  let text;
+  if (this.learningOrder === 'cycle' && lines.length > 0) {
+    const r = S.cycleBubbleLine(lines, this.learningIndex);
+    text = r.line;
+    this.learningIndex = r.next;
+  } else {
+    text = S.randomBubbleLine(lines);
+  }
+  this.learningText = text;
+  this.learningOn = true;
+  this.renderBubble();
+};
+
 // 余额展示（气泡 + 档位动画）：周期轮询与菜单点播共用同一展示路径，视觉与行为严格一致。
 // 弹气泡：手动请求无条件弹（哪怕关了 balanceEnabled、哪怕没有百分比语义）；自动轮询要求有内容可展示，
 // custom 形态不看百分比。档位动画只属于启用余额的宠物，且必须有百分比依据，关掉开关的点菜单也不演。

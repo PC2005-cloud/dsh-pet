@@ -67,9 +67,22 @@ Object.assign(PetSprite.prototype, {
     const workOn = !!(this.workOn && this.workText);
     const whisperOn = !!(this.whisperOn && this.whisperView);
     const balanceOn = !!(this.bubbleOn && this.balanceView);
+    const learningOn = !!(this.learningOn && this.learningText);
     const workTerminal = this.workState === 'success' || this.workState === 'error';
     const slot =
-      workTerminal && workOn ? 'work' : whisperOn ? 'whisper' : balanceOn ? 'balance' : workOn ? 'work' : 'none';
+      this.learningPriority === 'high' && learningOn
+        ? 'learning'
+        : workTerminal && workOn
+          ? 'work'
+          : whisperOn
+            ? 'whisper'
+            : balanceOn
+              ? 'balance'
+              : workOn
+                ? 'work'
+                : learningOn
+                  ? 'learning'
+                  : 'none';
     // 记住当前槽位：点击处理在 init.js，必须知道「现在显示的是哪一种气泡」才能分清翻页与跳会话。
     this.bubbleSlot = slot;
     // 配图两种形态二选一：url 用完整地址，image 按素材根拼表情包路径；样式/class 共用。
@@ -82,7 +95,7 @@ Object.assign(PetSprite.prototype, {
     this.bubble.classList.toggle(
       'is-whisper',
       // 余额「文字说明」也套紧凑变体：字号更小、宽度下限更窄，多行说明更紧凑
-      slot === 'whisper' || slot === 'work' || (slot === 'balance' && this.balanceWrap),
+      slot === 'whisper' || slot === 'work' || slot === 'learning' || (slot === 'balance' && this.balanceWrap),
     );
     this.bubble.classList.toggle(S.MEME_BUBBLE_CLASS, !!whisperImg);
     // 可点/展开两个状态类：可点 → 气泡参与命中区（见 syncInputRegions）；index>0 → 更宽的盒与紧凑字号。
@@ -125,6 +138,12 @@ Object.assign(PetSprite.prototype, {
         else if (voice === 'failed') badge.textContent = '🔇';
         this.bubble.appendChild(badge);
       }
+    } else if (slot === 'learning') {
+      // 台词气泡：纯文本行（无配图），常驻不自动消失
+      const line = document.createElement('div');
+      line.className = 'pet-bub-row';
+      line.textContent = this.learningText;
+      this.bubble.appendChild(line);
     } else if (this.balanceState && S.customViews(this.balanceState)) {
       // custom 形态：第三方自己的节点树。页索引取当前页；页数变少时夹到最后一页，不显示残页。
       const views = S.customViews(this.balanceState);

@@ -14,5 +14,8 @@ export const PACKAGE_ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)
 /** 包内 assets 根 */
 export const PACKAGE_ROOT_ASSETS = join(PACKAGE_ROOT, 'assets');
 
+/** 台词内容文件：包根目录 learningTxt.json，`{ 名称: [台词行...] }`，GET /learningTxt 读它。 */
+export const LEARNING_TXT_PATH = join(PACKAGE_ROOT, 'learningTxt.json');
+
 /** 包内表情包目录（表情包池的最后一环：assets/memes/<名称>.png） */
 export const PACKAGE_MEMES_DIR = join(PACKAGE_ROOT_ASSETS, 'memes');

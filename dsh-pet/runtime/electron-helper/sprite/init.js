@@ -89,6 +89,17 @@ Object.assign(PetSprite.prototype, {
     this.whisperImage = '';
     // 配图地址（与 whisperImage 二选一）：两种形态由字段名区分，不靠嗅探。
     this.whisperUrl = '';
+    // 台词气泡：单槽最低优先级、常驻不自动消失；learningContents 从 host 的 learningTxt.json 读。
+    this.learningOn = false;
+    this.learningText = '';
+    this.learningContents = null; // { 名称: [台词行...] }
+    this.learningContentKey = '';
+    // 台词模式开关、顺序与优先级（会话级，右键菜单切换）
+    this.learningEnabled = true;
+    this.learningOrder = 'random';
+    this.learningIndex = 0;
+    this.learningPriority = 'low';
+    this.refreshLearningContents(); // 启动拉一次；此后右键菜单打开前会再拉一次
     // 工作状态联动：容器每秒轮询递增 workTick → 本宠物按档位播动画与气泡，未启用时完全免疫。
     // 气泡单槽优先级：终态任务 > whisper > balance > 非终态任务（见 renderBubble）。
     this.workOn = false;
@@ -128,6 +139,25 @@ Object.assign(PetSprite.prototype, {
     this.todoOpen = false;
   },
 
+  /** 拉取台词内容表（`{ 名称: [台词行...] }`）；失败/解析失败留在当前或内置回退。 */
+  async refreshLearningContents() {
+    try {
+      const r = await fetch(BASE + '/learningTxt', { cache: 'no-store' });
+      if (!r.ok) return;
+      const t = await r.text();
+      const map = S.parseLearningContents(t);
+      if (!map) return;
+      this.learningContents = map;
+      const keys = Object.keys(map);
+      // 当前选中的内容被删了才改选第一个；否则保留用户选择。
+      if (!keys.includes(this.learningContentKey)) {
+        this.learningContentKey = keys[0];
+      }
+    } catch {
+      /* 拿不到就留在当前回退 */
+    }
+  },
+
   /** 建 DOM 并把首帧位置落到窗口；布局数值全部来自上面算好的 geometry。 */
   buildDom() {
     // DOM：sprite 钉在窗口内 (margin.l, margin.t)；宠物"位置"= sprite 位置，窗口随余量外扩
@@ -142,7 +172,6 @@ Object.assign(PetSprite.prototype, {
     this.el.style.setProperty('--dsh-pet-font-tip', fontPx.tip + 'px');
     const stage = document.createElement('div');
     stage.className = 'pet-stage';
-    // 位移恒定：拖拽中也不取消，否则视频会相对光标上跳、抓取点全程偏移 bottomPad。
     stage.style.transform = 'translateY(' + this.bottomPad + 'px)';
     this.videoA = document.createElement('video');
     this.videoA.className = 'pet-video is-front';

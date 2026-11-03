@@ -14,12 +14,14 @@ const OPEN_LABEL = { desktop: '打开软件', standalone: '打开 AI 设置', we
 const SLEEP_REFUSE_BUBBLE_MS = 8000;
 
 Object.assign(PetSprite.prototype, {
-  onContextMenu(e) {
+  async onContextMenu(e) {
     const d = this.dragState;
     if (d.active || d.dragging || this.justDragged || this.menuOpen) return;
     e.preventDefault();
     this.stopThrow(); // 菜单弹出前停住飞行中的宠物
     this.stopMove(); // 菜单悬停期间宠物不漫游
+    // 实时刷新台词内容（编辑 learningTxt.json 后无需刷新页面）
+    await this.refreshLearningContents();
     // 桌面专属工具根项 + 共享菜单树（动作 → 分类 → 具体动画）。碎碎念/对话无条件显示：手动触发
     // 不受 whisperEnabled 限制（该字段只影响自动轮询）。首项文案与去向随宿主形态变，见 OPEN_LABEL。
     // 顺序：打开软件 / 余额 / 待办 / 碎碎念 / 对话 / 配图 / 睡觉 → 动作树 → 显示位置 / 重载配置 / 回到初始位置。
@@ -35,6 +37,39 @@ Object.assign(PetSprite.prototype, {
       { label: '待办事项', action: 'todo', hint: S.TODO_HOTKEY_HINT },
       { label: '碎碎念', action: 'whisper' },
       { label: '对话', action: 'chat', hint: S.CHAT_HOTKEY_HINT },
+      // 自定义台词：开关 + 顺序 + 优先级
+      {
+        label: this.learningEnabled ? '自定义台词：开' : '自定义台词：关',
+        children: [
+          { label: this.learningEnabled ? '关闭' : '开启', action: 'toggle-learning' },
+          {
+            label: this.learningOrder === 'random' ? '顺序：乱序' : '顺序：顺序循环',
+            children: [
+              { label: '乱序', action: 'set-learning-order', order: 'random' },
+              { label: '顺序循环', action: 'set-learning-order', order: 'cycle' },
+            ],
+          },
+          {
+            label: this.learningPriority === 'high' ? '优先级：高' : '优先级：低',
+            children: [
+              { label: '高（压过所有气泡）', action: 'set-learning-priority', priority: 'high' },
+              { label: '低（可被任务打断）', action: 'set-learning-priority', priority: 'low' },
+            ],
+          },
+        ],
+      },
+      // 编辑台词：选择内容组（learningTxt.json 的键）+ 新建内容（打开文件）
+      {
+        label: '编辑台词',
+        children: [
+          ...Object.keys(this.learningContents || {}).map((name) => ({
+            label: name === this.learningContentKey ? name + '（当前）' : name,
+            action: 'select-learning-content',
+            content: name,
+          })),
+          { label: '新建内容', action: 'edit-learning' },
+        ],
+      },
     ];
     // 「配图」：与浏览器端同一份分支（纳入对话的配图 / 其他），点一张就用它说一句；没有可用图时
     // 返回 null，整项不出现。数据来自拍平层吹入的条目级字段（this.pet.memes / chatImageEnabled /
@@ -147,7 +182,50 @@ Object.assign(PetSprite.prototype, {
       this.reloadDesktop(); // 请宿主重启桌面 Helper：全部桌面宠物窗口按最新配置重建
       return;
     }
+    if (leaf.action === 'toggle-learning') {
+      this.learningEnabled = !this.learningEnabled;
+      if (this.learningEnabled) {
+        // 立即弹一句（绕过概率，给用户即时反馈）
+        const lines = S.learningLines(this.learningContents, this.learningContentKey);
+        this.learningText = S.randomBubbleLine(lines);
+        this.learningOn = true;
+        this.renderBubble();
+      } else {
+        this.learningOn = false;
+        this.learningText = '';
+        this.renderBubble();
+      }
+      return;
+    }
+    if (leaf.action === 'edit-learning') {
+      // 在系统默认编辑器打开 learningTxt.json（host POST /learningTxt 用 OS 打开命令）
+      fetch(BASE + '/learningTxt', { method: 'POST' }).catch(() => {});
+      return;
+    }
+    if (leaf.action === 'select-learning-content') {
+      if (leaf.content) {
+        this.learningContentKey = leaf.content;
+        // 立即弹一句新内容的台词（给用户即时反馈）
+        if (this.learningEnabled) {
+          const lines = S.learningLines(this.learningContents, this.learningContentKey);
+          this.learningText = S.randomBubbleLine(lines);
+          this.learningOn = true;
+          this.renderBubble();
+        }
+      }
+      return;
+    }
+    if (leaf.action === 'set-learning-order') {
+      this.learningOrder = leaf.order === 'cycle' ? 'cycle' : 'random';
+      return;
+    }
+    if (leaf.action === 'set-learning-priority') {
+      this.learningPriority = leaf.priority === 'high' ? 'high' : 'low';
+      return;
+    }
     if (!leaf.anim) return;
+    // 右键动画点播也按概率冒一句台词气泡（与随机链/点击共用）
+    this.showLearningBubble();
     // 回执归属：这一段若来自第三方点播，编号跟着换源走（自播动画传 null）
     const playbackId = typeof leaf.playbackId === 'string' && leaf.playbackId ? leaf.playbackId : null;
     // 文字类（noMirror）朝右是镜像的：点播前强制朝左，避免文字镜像。keepFacing 时跳过（显式值优先）。

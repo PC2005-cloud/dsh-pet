@@ -96,6 +96,8 @@ export const es: Record<Key, string> = {
   marginX: 'Margen horizontal',
   marginY: 'Margen vertical',
   save: 'Guardar',
+  openLearningTxt: 'Open learningTxt.json',
+  learningTitle: 'Dialogue lines',
   saveHotkey: 'Ctrl+S / Cmd+S',
   sync: 'Sincronizar',
   confirmSync:

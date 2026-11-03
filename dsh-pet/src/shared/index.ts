@@ -16,6 +16,7 @@ export * from './balance/index.ts';
 export * from './whisper.ts';
 export * from './config.ts';
 export * from './fonts.ts';
+export * from './learning.ts';
 export * from './notify.ts';
 export * from './menu.ts';
 export * from './chat/index.ts';
