@@ -7,7 +7,14 @@
  */
 import { pick } from '../../../shared/pickers.ts';
 import { postAction } from '../../../shared/state.ts';
-import { cycleBubbleLine, LEARNING_DIALOGUE_CHANCE, learningLines, parseLearningContents, randomBubbleLine, type LearningOrder } from '../../../shared/learning.ts';
+import {
+  cycleBubbleLine,
+  LEARNING_DIALOGUE_CHANCE,
+  learningLines,
+  parseLearningContents,
+  randomBubbleLine,
+  type LearningOrder,
+} from '../../../shared/learning.ts';
 import { ROUTE_PATH } from '../../../shared/constants.ts';
 import { resolveFontPx } from '../../../shared/fonts.ts';
 import { resolvePetSizePx } from '../../../shared/pet-size.ts';
@@ -117,7 +124,6 @@ export function createCardRuntime(rt: PetRuntime) {
     // 启动拉一次；此后每次右键菜单打开前都会再拉一次，保证编辑 json 后实时可见。
     useEffect(() => {
       void refreshLearningContents();
-      // eslint-disable-next-line react-hooks/exhaustive-deps -- 只启动拉一次
     }, []);
 
     // 成品配置与工作状态的最新值：回调晚于状态更新，只能读 ref。

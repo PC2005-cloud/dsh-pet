@@ -112,8 +112,25 @@ export function createCardEntry(rt: CardEntryRuntime) {
   const { useEffect, useRef } = rt;
 
   return function useCardEntry(input: CardEntryInput): CardEntry {
-    const { card, cfgRef, drag, live, menuItemsRef, motion, runMenuAction, showTodo, stage, tipRef, toggleTodo, learningEnabled, learningOrder, learningPriority, learningContentNames, learningContentKey, refreshLearningContents } =
-      input;
+    const {
+      card,
+      cfgRef,
+      drag,
+      live,
+      menuItemsRef,
+      motion,
+      runMenuAction,
+      showTodo,
+      stage,
+      tipRef,
+      toggleTodo,
+      learningEnabled,
+      learningOrder,
+      learningPriority,
+      learningContentNames,
+      learningContentKey,
+      refreshLearningContents,
+    } = input;
     // 右键菜单与对话弹窗当前的句柄，卸载或重开前清理。对话弹窗还要按住说话遥控开录/收尾。
     const menuRef = useRef<{ close: () => void } | null>(null);
     const chatRef = useRef<ChatDialogMount | null>(null);
