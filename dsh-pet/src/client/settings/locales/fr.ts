@@ -286,7 +286,7 @@ export const fr: Record<Key, string> = {
     '3. Supprimez les emplacements ci-dessus selon vos besoins : les caches sont sans risque ; supprimer les « données utilisateur du plugin » fait perdre la configuration et la mémoire de discussion (sauvegardez main-config.jsonc si vous voulez le garder).',
   motionTitle: 'Fréquence des actions',
   motionHint:
-    "Quatre champs : repos / rotation / déplacement sont modifiables ; l'action aléatoire est calculée (100 − les trois autres). S'applique uniquement à l'entrée main ; les pet packs définissent leurs poids dans leur fichier de type.",
+    "Quatre champs : repos / rotation / déplacement sont modifiables ; l'action aléatoire est calculée (100 − les trois autres). Valeur globale pour tous les compagnons ; un pet pack peut la remplacer dans son fichier de type.",
   'motion.idle': 'Repos',
   'motion.turn': 'Rotation',
   'motion.move': 'Déplacement',

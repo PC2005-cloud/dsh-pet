@@ -280,7 +280,7 @@ export const de: Record<Key, string> = {
     '3. Die obigen Orte nach Bedarf löschen: Caches sind unschädlich; „Plugin-Benutzerdaten" löschen kostet Konfiguration und Chat-Gedächtnis (vorher main-config.jsonc sichern, wenn Sie es behalten wollen).',
   motionTitle: 'Aktionshäufigkeit',
   motionHint:
-    'Vier Felder: Leerlauf / Drehen / Bewegen sind editierbar, die Zufallsaktion wird berechnet (100 − die anderen drei). Gilt nur für den main-Eintrag; Pet-Packs setzen ihre Gewichte in ihrer Art-Datei.',
+    'Vier Felder: Leerlauf / Drehen / Bewegen sind editierbar, die Zufallsaktion wird berechnet (100 − die anderen drei). Globaler Standard für alle Pets; ein Pet-Pack kann ihn in seiner Art-Datei überschreiben.',
   'motion.idle': 'Leerlauf',
   'motion.turn': 'Drehen',
   'motion.move': 'Bewegen',

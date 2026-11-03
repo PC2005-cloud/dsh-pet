@@ -82,7 +82,7 @@ function motionCard() {
       weights[key] = Math.round(Math.min(Math.max(value, 0), max));
       syncAction();
     }, { min: 0, max: 100, step: 1 });
-  return card('动作频率', '四个框：待机 / 转向 / 移动可改，随机动作自动算（= 100 − 其余三项）。只作用于默认条目；保存后生效。', [
+  return card('动作频率', '四个框：待机 / 转向 / 移动可改，随机动作自动算（= 100 − 其余三项）。所有宠物共用；pet pack 可在自己种类文件里覆盖。', [
     make('div', { class: 'grid2' }, [
       weightField('idle', '待机（%）'),
       weightField('turn', '转向（%）'),

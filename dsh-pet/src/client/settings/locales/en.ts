@@ -278,7 +278,7 @@ export const en: Record<Key, string> = {
     '3. Delete the locations above as needed: cache folders are harmless; deleting "plugin user data" loses your config and chat memory (back up main-config.jsonc first if you want to keep it).',
   motionTitle: 'Action frequency',
   motionHint:
-    'Four boxes: idle / turn / move are editable, and the random action is computed (100 − the other three). Applies to the main entry only; pet packs set their own weights in their kind files.',
+    'Four boxes: idle / turn / move are editable, and the random action is computed (100 − the other three). Global default, shared by every pet; a pet pack may override it in its own kind file.',
   'motion.idle': 'Idle',
   'motion.turn': 'Turn',
   'motion.move': 'Move',
