@@ -36,6 +36,10 @@ function numberField(id, label, value, onChange, opts) {
     if (opts.max !== undefined) input.max = String(opts.max);
     if (opts.step !== undefined) input.step = String(opts.step);
     if (opts.disabled) input.disabled = true;
+    if (opts.readOnly) {
+      input.readOnly = true;
+      input.tabIndex = -1;
+    }
   }
   input.addEventListener('input', () => {
     const parsed = Number(input.value);

@@ -283,5 +283,12 @@ export const es: Record<Key, string> = {
     '2. Quita el plugin en sí (ejecútalo en la terminal; también lo elimina de la capa de bundles del perfil):',
   uninstallStep3:
     '3. Borra las ubicaciones de arriba según necesites: las cachés no hacen daño; borrar los «datos de usuario del plugin» pierde la configuración y la memoria del chat (haz una copia de main-config.jsonc si quieres conservarla).',
+  motionTitle: 'Frecuencia de acciones',
+  motionHint:
+    'Cuatro casillas: espera / giro / movimiento son editables; la acción aleatoria se calcula (100 − las otras tres). Solo se aplica a la entrada main; los pet packs definen sus pesos en su archivo de tipo.',
+  'motion.idle': 'En espera',
+  'motion.turn': 'Giro',
+  'motion.move': 'Movimiento',
+  'motion.action': 'Acción aleatoria',
   uninstallCmd: 'dsh plugin --profile {profile} remove dsh-pet',
 };

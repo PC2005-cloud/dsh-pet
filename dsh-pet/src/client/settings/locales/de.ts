@@ -278,5 +278,12 @@ export const de: Record<Key, string> = {
     '2. Das Plugin selbst entfernen (im Terminal ausführen; entfernt es auch aus der Bundle-Schicht des Profils):',
   uninstallStep3:
     '3. Die obigen Orte nach Bedarf löschen: Caches sind unschädlich; „Plugin-Benutzerdaten" löschen kostet Konfiguration und Chat-Gedächtnis (vorher main-config.jsonc sichern, wenn Sie es behalten wollen).',
+  motionTitle: 'Aktionshäufigkeit',
+  motionHint:
+    'Vier Felder: Leerlauf / Drehen / Bewegen sind editierbar, die Zufallsaktion wird berechnet (100 − die anderen drei). Gilt nur für den main-Eintrag; Pet-Packs setzen ihre Gewichte in ihrer Art-Datei.',
+  'motion.idle': 'Leerlauf',
+  'motion.turn': 'Drehen',
+  'motion.move': 'Bewegen',
+  'motion.action': 'Zufallsaktion',
   uninstallCmd: 'dsh plugin --profile {profile} remove dsh-pet',
 };

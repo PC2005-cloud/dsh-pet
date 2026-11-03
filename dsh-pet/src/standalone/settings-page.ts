@@ -13,6 +13,7 @@ import { PET_DISPLAYS } from '../shared/config.ts';
 import { ROUTE_SEGMENT } from '../shared/constants.ts';
 import { DEFAULT_FONT, FONT_PRESETS } from '../shared/fonts.ts';
 import { DEFAULT_PHYSICS } from '../shared/physics.ts';
+import { DEFAULT_WEIGHTS } from '../shared/weights.ts';
 import { aiScript } from './settings-page/script/ai.ts';
 import { avatarScript } from './settings-page/script/avatar.ts';
 import { bootScript } from './settings-page/script/boot.ts';
@@ -41,6 +42,7 @@ export const settingsScript = [
     corners: [...CORNER_SET],
     physics: DEFAULT_PHYSICS,
     font: DEFAULT_FONT,
+    weights: DEFAULT_WEIGHTS,
   }),
   widgetsScript(),
   overlayScript(),

@@ -16,6 +16,17 @@ function cloneJson(value) {
 /** 原配置里的 physics 段，用来判断哪些可选键「本来就有」。 */
 let physicsSource = null;
 
+/** 动作频率权重：缺字段或非法项回落到内置默认，三项各自独立判定。 */
+function pickWeights(raw) {
+  const base = Object.assign({}, FALLBACK_WEIGHTS);
+  if (!raw || typeof raw !== 'object') return base;
+  for (const key of ['idle', 'turn', 'move']) {
+    const value = Number(raw[key]);
+    if (Number.isFinite(value) && value >= 0) base[key] = value;
+  }
+  return base;
+}
+
 function pickGlobals(main) {
   const source = main || {};
   const physics = source.physics && typeof source.physics === 'object' ? source.physics : null;
@@ -37,6 +48,7 @@ function pickGlobals(main) {
     font: Object.assign({}, FALLBACK_FONT, source.font || {}),
     chatMemoryRounds: Number.isFinite(Number(source.chatMemoryRounds)) ? Number(source.chatMemoryRounds) : 0,
     chatImageLimit: Number.isFinite(Number(source.chatImageLimit)) ? Number(source.chatImageLimit) : 0,
+    animationWeights: pickWeights(source.animationWeights),
   };
 }
 
@@ -119,6 +131,7 @@ function petsBody() {
     font: state.globals.font,
     chatMemoryRounds: state.globals.chatMemoryRounds,
     chatImageLimit: state.globals.chatImageLimit,
+    animationWeights: state.globals.animationWeights,
   });
 }
 

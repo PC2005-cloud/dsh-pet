@@ -10,7 +10,7 @@
 export function globalsScript(): string {
   return `
 function globalCards() {
-  return [globalFlagsCard, voiceCard, fontCard, physicsCard, modelCard, advancedCard];
+  return [globalFlagsCard, voiceCard, fontCard, physicsCard, motionCard, modelCard, advancedCard];
 }
 
 function setGlobal(key, value) {
@@ -63,6 +63,32 @@ function physicsCard() {
     ]),
     toggleRow('g-ceiling', '顶部反弹', '关掉后上方没有边界，抛掷可以飞出屏幕顶部。', g.physics.ceilingBounce !== false, (value) => { g.physics = Object.assign({}, g.physics, { ceilingBounce: value }); }),
     toggleRow('g-collide', '宠物互相碰撞', '飞行中的宠物撞到其它宠物时按动量弹开。', g.physics.petCollision !== false, (value) => { g.physics = Object.assign({}, g.physics, { petCollision: value }); }),
+  ]);
+}
+
+function motionCard() {
+  const g = state.globals;
+  const weights = g.animationWeights;
+  const actionId = 'g-motion-action';
+  const actionValue = () => String(Math.max(0, 100 - weights.idle - weights.turn - weights.move));
+  const syncAction = () => {
+    const node = byId(actionId);
+    if (node) node.value = actionValue();
+  };
+  const weightField = (key, label) =>
+    numberField('g-motion-' + key, label, weights[key], (value) => {
+      const others = weights.idle + weights.turn + weights.move - weights[key];
+      const max = Math.max(0, 100 - others);
+      weights[key] = Math.round(Math.min(Math.max(value, 0), max));
+      syncAction();
+    }, { min: 0, max: 100, step: 1 });
+  return card('动作频率', '四个框：待机 / 转向 / 移动可改，随机动作自动算（= 100 − 其余三项）。只作用于默认条目；保存后生效。', [
+    make('div', { class: 'grid2' }, [
+      weightField('idle', '待机（%）'),
+      weightField('turn', '转向（%）'),
+      weightField('move', '移动（%）'),
+      numberField(actionId, '随机动作（%，自动）', actionValue(), () => {}, { min: 0, max: 100, step: 1, readOnly: true }),
+    ]),
   ]);
 }
 

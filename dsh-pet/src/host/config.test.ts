@@ -884,6 +884,31 @@ describe('saveUserConfig —— 物理参数 physics（白名单 + 透传保留�
   });
 });
 
+describe('saveUserConfig —— 动作频率 animationWeights（白名单 + 透传保留）', () => {
+  const WEIGHTS = { idle: 30, turn: 5, move: 5 };
+
+  test('整段随请求体写入（设置页「动作频率」卡）', () => {
+    const out = saveOnce({ pets: PETS, animationWeights: WEIGHTS });
+    assert.deepEqual(out?.animationWeights, WEIGHTS, 'animationWeights 必须按请求体整段写入');
+  });
+
+  test('未传时透传磁盘旧值；磁盘上也没有则不凭空造字段', () => {
+    const kept = saveOnce({ pets: PETS }, { pets: PETS, animationWeights: WEIGHTS });
+    assert.deepEqual(kept?.animationWeights, WEIGHTS, '未传时必须原样保留磁盘上的手改值');
+    assert.equal('animationWeights' in (saveOnce({ pets: PETS }) ?? {}), false, '磁盘上也没有时不得凭空写入');
+  });
+
+  test('数值归一化：字符串也按数字落盘', () => {
+    const out = saveOnce({ pets: PETS, animationWeights: { idle: '30', turn: 5, move: 5 } });
+    assert.deepEqual(out?.animationWeights, WEIGHTS);
+  });
+
+  test('非法值 → 整体拒绝（负数与非对象是脏值）', () => {
+    assert.equal(saveOnce({ pets: PETS, animationWeights: { idle: -1, turn: 5, move: 5 } }), null);
+    assert.equal(saveOnce({ pets: PETS, animationWeights: '30' }), null);
+  });
+});
+
 describe('saveUserConfig —— 碎碎念 / 对话模型（白名单 + 透传保留）', () => {
   const WM = { provider: 'deepseek', model: 'deepseek-chat' };
   const CM = { provider: 'opencode', model: 'big-model' };

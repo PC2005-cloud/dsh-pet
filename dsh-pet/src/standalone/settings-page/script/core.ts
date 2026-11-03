@@ -22,6 +22,8 @@ export interface ScriptConsts {
   readonly physics: unknown;
   /** 字体默认值（来自 shared/fonts.ts）。 */
   readonly font: unknown;
+  /** 动作频率默认值（来自 shared/weights.ts）。 */
+  readonly weights: unknown;
 }
 
 /**
@@ -42,6 +44,7 @@ const DISPLAYS = ${JSON.stringify(consts.displays)};
 const CORNERS = ${JSON.stringify(consts.corners)};
 const FALLBACK_PHYSICS = ${JSON.stringify(consts.physics)};
 const FALLBACK_FONT = ${JSON.stringify(consts.font)};
+const FALLBACK_WEIGHTS = ${JSON.stringify(consts.weights)};
 const FALLBACK_INTERVAL_SEC = 300;
 const state = { config: null, meta: null, globals: null, pets: {}, prompts: {}, entry: 'main', petIndex: 0, dirty: false };
 

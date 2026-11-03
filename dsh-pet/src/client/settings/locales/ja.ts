@@ -275,5 +275,12 @@ export const ja: Record<Key, string> = {
     '2. プラグイン本体を削除します（ターミナルで実行します。profile の bundle レイヤーからも同時に削除されます）：',
   uninstallStep3:
     '3. 上記の場所を必要に応じて削除します：キャッシュは削除しても影響ありません。「プラグインのユーザーデータ」を削除すると設定と会話メモリが失われます（残したい場合は中の main-config.jsonc を先にバックアップしてください）。',
+  motionTitle: 'アクション頻度',
+  motionHint:
+    '4つの欄：待機 / 方向転換 / 移動は編集でき、ランダムアクションは自動計算（100 − 残り3つ）。main エントリのみに適用されます。pet pack は自身の種類ファイルで重みを設定します。',
+  'motion.idle': '待機',
+  'motion.turn': '方向転換',
+  'motion.move': '移動',
+  'motion.action': 'ランダムアクション',
   uninstallCmd: 'dsh plugin --profile {profile} remove dsh-pet',
 };
