@@ -6,6 +6,8 @@
  * @module dsh-pet/src/client/chat/state
  */
 import { speakText } from '../../shared/voice.ts';
+import { createCompositionWatch, decideEnter } from '../../shared/chat/enter.ts';
+import type { CompositionWatch } from '../../shared/chat/enter.ts';
 import {
   fetchHistory,
   groupRounds,
@@ -17,7 +19,7 @@ import {
 import { createHistoryActions, createSendActions, createShellActions } from './actions.ts';
 import { createChatEffects } from './effects.ts';
 import type { ChatPanelRuntime } from './runtime.ts';
-import type { ChatPanelState, PanelData } from './types.ts';
+import type { ChatPanelState, DraftKeyEvent, PanelData } from './types.ts';
 
 /** 首屏与每次「加载更早」放出的轮数。 */
 const PAGE_ROUNDS = 10;
@@ -60,6 +62,9 @@ export function createPetChatState(rt: ChatPanelRuntime): () => ChatPanelState {
     const [data, setData] = useState<PanelData>({ ...INITIAL, avatarVersion: Date.now() });
     const listRef = useRef<HTMLDivElement | null>(null);
     const draftRef = useRef<HTMLTextAreaElement | null>(null);
+    /** 输入法组合态：必须跨渲染存活，重建一次就会把「正在组合」忘掉。 */
+    const imeRef = useRef<CompositionWatch | null>(null);
+    const ime = (imeRef.current ??= createCompositionWatch());
     /** 已贴到底的那条消息（`ts`）：只有它变化时才自动滚到底。 */
     const newestTs = useRef(0);
 
@@ -81,6 +86,7 @@ export function createPetChatState(rt: ChatPanelRuntime): () => ChatPanelState {
     const ports = { read: () => data, patch, fail, reload };
     const history = createHistoryActions(ports);
     const shell = createShellActions({ ports, history, listRef, pageRounds: PAGE_ROUNDS });
+    const sendActions = createSendActions(ports);
     const pet = data.pets.find((one) => one.id === data.petId);
     const allRounds = groupRounds(data.messages);
     const rounds = allRounds.slice(-data.visibleRounds);
@@ -91,7 +97,7 @@ export function createPetChatState(rt: ChatPanelRuntime): () => ChatPanelState {
 
     return {
       ...data,
-      ...createSendActions(ports),
+      ...sendActions,
       ...history,
       ...shell,
       rounds,
@@ -138,6 +144,23 @@ export function createPetChatState(rt: ChatPanelRuntime): () => ChatPanelState {
           selected: data.selected.includes(ts) ? data.selected.filter((one) => one !== ts) : [...data.selected, ts],
         }),
       setDraft: (draft: string) => patch({ draft }),
+      onDraftKeyDown: (event: DraftKeyEvent) => {
+        // React 合成事件不带 isComposing，只挂在 nativeEvent 上；原生事件直接有
+        const isComposing = event.isComposing === true || event.nativeEvent?.isComposing === true;
+        const sendKey = {
+          key: event.key,
+          shiftKey: event.shiftKey,
+          isComposing,
+          keyCode: event.keyCode,
+          repeat: event.repeat,
+        };
+        const action = decideEnter(sendKey, ime, performance.now());
+        if (action === 'ignore') return;
+        event.preventDefault();
+        if (action === 'send') sendActions.send();
+      },
+      onDraftCompositionStart: ime.start,
+      onDraftCompositionEnd: () => ime.end(performance.now()),
       speakRound: (ts: number, text: string) => {
         // 阶段回调只写「仍是这一轮」的状态：被别的一条顶掉时，旧请求的 idle 不能清掉新状态
         speakText(text, (phase) => {

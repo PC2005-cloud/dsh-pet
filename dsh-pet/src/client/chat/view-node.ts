@@ -7,7 +7,7 @@
 import { claimFileDragOver, claimFileDrop, markDropTarget, unmarkDropTarget } from '../file-drop.ts';
 import type { DragLike, DropTargetLike } from '../file-drop.ts';
 import type { ChatPanelRuntime } from './runtime.ts';
-import type { ChatPanelState, ConfirmKind } from './types.ts';
+import type { ChatPanelState, ConfirmKind, DraftKeyEvent } from './types.ts';
 
 /**
  * 已删宠物残留历史的提示条：显示数量并给一个「清理」。
@@ -257,12 +257,9 @@ export function composerNode(h: ChatPanelRuntime['h'], state: ChatPanelState): u
           event.preventDefault();
           state.pickFile(file);
         },
-        onKeyDown: (event: { key: string; shiftKey: boolean; preventDefault: () => void }) => {
-          if (event.key === 'Enter' && !event.shiftKey) {
-            event.preventDefault();
-            state.send();
-          }
-        },
+        onKeyDown: (event: DraftKeyEvent) => state.onDraftKeyDown(event),
+        onCompositionStart: () => state.onDraftCompositionStart(),
+        onCompositionEnd: () => state.onDraftCompositionEnd(),
       }),
       h('div', {
         className: 'pet-chat-composer-bar',

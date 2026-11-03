@@ -81,6 +81,9 @@ function stateOf(overrides: Partial<ChatPanelState> = {}): ChatPanelState {
     memoryRounds: 5,
     hasMemoryLine: true,
     persona: '',
+    onDraftKeyDown: () => {},
+    onDraftCompositionStart: () => {},
+    onDraftCompositionEnd: () => {},
     ...overrides,
   } as unknown as ChatPanelState;
 }
@@ -138,5 +141,33 @@ describe('composerNode —— 生成中的灰化与转圈', () => {
     const send = byClass(node, 'pet-chat-send');
     assert.equal(send?.props.disabled, false);
     assert.equal((send?.props.children as Node).tag, 'svg', '空闲时是箭头图标');
+  });
+});
+
+describe('composerNode —— 回车发送要让开输入法', () => {
+  test('输入框接上了组合事件与按键处理器', () => {
+    const area = byClass(composerNode(h, stateOf()), 'pet-chat-input');
+    assert.ok(area !== undefined, '应有输入框');
+    assert.equal(typeof area?.props.onKeyDown, 'function');
+    assert.equal(typeof area?.props.onCompositionStart, 'function');
+    assert.equal(typeof area?.props.onCompositionEnd, 'function');
+  });
+
+  test('三个处理器原样转给 state（判定在 enter，发送在 state）', () => {
+    const calls: string[] = [];
+    const node = composerNode(
+      h,
+      stateOf({
+        onDraftKeyDown: () => calls.push('keydown'),
+        onDraftCompositionStart: () => calls.push('start'),
+        onDraftCompositionEnd: () => calls.push('end'),
+      }),
+    );
+    const area = byClass(node, 'pet-chat-input');
+    const keydown = area?.props.onKeyDown as (e: unknown) => void;
+    keydown({ key: 'Enter', shiftKey: false, preventDefault: () => {} });
+    (area?.props.onCompositionStart as () => void)();
+    (area?.props.onCompositionEnd as () => void)();
+    assert.deepEqual(calls, ['keydown', 'start', 'end']);
   });
 });

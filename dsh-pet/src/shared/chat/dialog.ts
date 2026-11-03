@@ -7,6 +7,7 @@
  */
 import { ROUTE_PATH } from '../constants.ts';
 import { createChatDom } from './dom.ts';
+import { createCompositionWatch, decideEnter } from './enter.ts';
 import type { EncodedImage } from './encode.ts';
 import { sendChat, type ChatAttachment } from './send.ts';
 import { injectChatCss } from './styles.ts';
@@ -96,11 +97,15 @@ function bindSend(binding: SendBinding): void {
         if (!binding.isClosed()) binding.input.focus();
       });
   };
+  // 回车要让开输入法：组合中的回车是上屏键，长按重复的回车只该被吞掉、不该插换行
+  const ime = createCompositionWatch();
+  binding.input.addEventListener('compositionstart', ime.start);
+  binding.input.addEventListener('compositionend', () => ime.end(performance.now()));
   binding.input.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      doSend();
-    }
+    const action = decideEnter(e, ime, performance.now());
+    if (action === 'ignore') return;
+    e.preventDefault();
+    if (action === 'send') doSend();
   });
 }
 

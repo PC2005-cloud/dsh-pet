@@ -46,6 +46,21 @@ export interface PanelData {
 /** 需要二次确认的破坏性操作：用面板内的确认条，不用浏览器原生 `confirm`。 */
 export type ConfirmKind = 'delete-selected' | 'clear-all' | 'clear-orphans';
 
+/** 输入框按键的最小形状：原生 KeyboardEvent 与 React 合成事件都能直接传。 */
+export interface DraftKeyEvent {
+  readonly key: string;
+  readonly shiftKey: boolean;
+  /** 输入法吞键时的老标志（React 合成事件也保留了它）。 */
+  readonly keyCode?: number;
+  /** 自动重复：长按时由系统补发。 */
+  readonly repeat?: boolean;
+  /** 原生事件直接带；React 合成事件只挂在 {@link DraftKeyEvent.nativeEvent} 上。 */
+  readonly isComposing?: boolean;
+  /** React 合成事件的原始事件。 */
+  readonly nativeEvent?: { readonly isComposing?: boolean };
+  readonly preventDefault: () => void;
+}
+
 /** hook 返回：状态、派生值、动作与列表引用。 */
 export interface ChatPanelState extends PanelData {
   /** 当前要渲染的轮（已经按 {@link PanelData.visibleRounds} 截过）。 */
@@ -93,6 +108,12 @@ export interface ChatPanelState extends PanelData {
   /** 关闭图片放大。 */
   readonly closeImage: () => void;
   readonly setDraft: (text: string) => void;
+  /** 输入框按键：真回车且输入法没在组合时发送，其余原样交给输入框。 */
+  readonly onDraftKeyDown: (event: DraftKeyEvent) => void;
+  /** 输入法开始组合（对应 textarea 的 compositionstart）。 */
+  readonly onDraftCompositionStart: () => void;
+  /** 输入法结束组合（对应 textarea 的 compositionend）。 */
+  readonly onDraftCompositionEnd: () => void;
   /** 点播某一轮的回答：请求合成 → 播放 → 归位，阶段写进 {@link PanelData.speaking}。 */
   readonly speakRound: (ts: number, text: string) => void;
   /** 让宠物重演某一轮回答里演过的动作（名称来自记忆里的 `action`）。 */
