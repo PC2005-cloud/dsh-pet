@@ -280,15 +280,16 @@ export function createChatMemory(deps: ChatMemoryInput) {
       });
       if (!generated.ok) return generated;
       const now = Date.now();
-      // 图信息只存不送：记忆要能还原「这一轮带过图、配过哪张」（聊天记录存档），
-      // 但历史回放一律只带正文——否则每轮都会把旧图重发一遍给模型。
+      // 用户上传的图只存不送：记忆要能还原「这一轮带过图」（聊天记录存档），但不把图本体重发给模型；
+      // AI 配的图只回填名称标记（见 chat.ts 的 historyMarkersOf），同样不带图本体。
       entry.messages.push({ role: 'user', content: text, ts: now, ...(image ? { image } : {}) });
       entry.messages.push({
         role: 'assistant',
         content: generated.text,
         ts: now,
         ...(generated.image ? { meme: generated.image } : {}),
-        // 动作名与配图名同类：只存不送——历史回放只带正文，否则每轮都会把动作标记重发一遍
+        // 动作名与配图名同类：落盘只存名字，回放历史时由 chat.ts 以 [动作:名] 回填——
+        // 否则模型记不得自己演过什么，用户说「换一个」它无从判断
         ...(generated.action ? { action: generated.action } : {}),
       });
       await writeMemory(mem);

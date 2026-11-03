@@ -32,9 +32,9 @@ export interface ChatMemoryMessage {
   ts: number;
   /** 该轮用户上传的图片（附件引用，不含图片本体）；只存不送——历史回放不带图。 */
   image?: PetImageRef;
-  /** 该轮 AI 配的表情包名称（不是条目对象）；只存不送——不进上下文。 */
+  /** 该轮 AI 配的表情包名称（不是条目对象）；回放历史时以 `[图:名称]` 回填给模型（不带图本体）。 */
   meme?: string;
-  /** 该轮 AI 表演的动作名（animations.categories 内的名字）；只存不送——不进上下文。 */
+  /** 该轮 AI 表演的动作名（animations.categories 内的名字）；回放历史时以 `[动作:名称]` 回填。 */
   action?: string;
 }
 
@@ -45,11 +45,12 @@ const TIMEOUT_MS = 60_000;
 const HISTORY_STAMP_GAP_MS = 30 * 60 * 1000;
 
 /**
- * 一条历史消息送进模型时的正文：assistant 距现在超过阈值时，前面加 `[10月31日 22:53]`。
+ * 一条历史消息的时间前缀：assistant 距现在超过阈值时，前面加 `[10月31日 22:53]`。
  *
  * 只给 assistant 打：同一轮 user / assistant 共享同一个 ts（落盘时两次 push 用的是同一个 now），
  * 两条都打就是重复；用户那句的时刻由紧随其后的 assistant 前缀精确反推。
  * 阈值内的连续对话不加前缀——否则一段正常闲聊会变成每句一个时间戳。
+ * 配图/动作标记不在这里追加（见 {@link historyMarkersOf}），两件事各自独立。
  *
  * @param message - 历史消息（带 ts）。
  * @param nowMs - 本次生成时刻（毫秒），整批历史共用一个，避免逐条取时钟导致同批时间不一致。
@@ -61,6 +62,25 @@ function historyTextOf(message: ChatMemoryMessage, nowMs: number): string {
   if (!(nowMs - message.ts > HISTORY_STAMP_GAP_MS)) return message.content;
   const stamp = historyStampOf(message.ts, new Date(nowMs));
   return stamp === '' ? message.content : '[' + stamp + '] ' + message.content;
+}
+
+/**
+ * 历史里回填的配图 / 动作标记（`[动作:名称]` 与 `[图:名称]`，各占一行，顺序固定）。
+ *
+ * 记忆里只存名字、正文里的标记在落盘前已被剥掉；不回填的话模型看不到自己前几轮配过哪张图、
+ * 演过什么动作，用户说“换一个”时它连换的是什么都不知道，只会重复挑同一张或答非所问。
+ * 只回填 assistant：user 的附件引用依旧不带（旧图不重发给模型）。
+ * 名称可能为空串（手改过记忆文件）——空值不回填，纯文本历史逐字不变。
+ *
+ * @param message - 历史消息。
+ * @returns 需要回填时返回 `\n[动作:…]\n[图:…]`，否则空串。
+ */
+function historyMarkersOf(message: ChatMemoryMessage): string {
+  if (message.role !== 'assistant') return '';
+  const lines: string[] = [];
+  if (typeof message.action === 'string' && message.action !== '') lines.push('[动作:' + message.action + ']');
+  if (typeof message.meme === 'string' && message.meme !== '') lines.push('[图:' + message.meme + ']');
+  return lines.length === 0 ? '' : '\n' + lines.join('\n');
 }
 
 /** 配图指令：附在 user 正文之后（紧邻回答位置，模型更容易遵守）。
@@ -153,6 +173,7 @@ async function generateWith(ctx: { llm?: unknown }, once: GenerateOnce): Promise
   // 历史 → dsh-llm 消息：user 经 createUserMessage（plugin 来源），assistant 经 createAssistantMessage
   // （provider/model 只是消息的角色载体，不涉及适配器回放）。
   // assistant 正文可能带 [月日 时:分] 前缀：模型据此判断断档，没有它跨天对话会被当成连续发言。
+  // assistant 还要回填配图/动作标记：模型得知道自己前几轮配过哪张、演过什么（否则「换一个」无从判断）。
   const nowMs = Date.now();
   const historyMessages = history.map((m) =>
     m.role === 'user'
@@ -161,7 +182,7 @@ async function generateWith(ctx: { llm?: unknown }, once: GenerateOnce): Promise
           source: { kind: 'user' },
         })
       : createAssistantMessage({
-          content: [{ type: 'text', text: historyTextOf(m, nowMs) }],
+          content: [{ type: 'text', text: historyTextOf(m, nowMs) + historyMarkersOf(m) }],
           source: { provider: sel.provider, model: sel.model },
         }),
   );
