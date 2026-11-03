@@ -127,7 +127,6 @@ function harness(extra: Partial<DragCard> = {}) {
     stopFlight: 0,
     stopAutonomy: 0,
     releaseLock: 0,
-    setDragging: [] as boolean[],
     plays: [] as string[],
     flights: [] as Array<{ px: number; py: number; vx: number; vy: number }>,
     places: [] as Array<{ x: number; y: number }>,
@@ -141,7 +140,6 @@ function harness(extra: Partial<DragCard> = {}) {
     size: 200,
     halfW: 100,
     halfH: 56.25,
-    bottomPad: 10,
     physics: DEFAULT_PHYSICS,
     dragAnims: ['drag1'],
     clickAnims: ['click1'],
@@ -155,7 +153,6 @@ function harness(extra: Partial<DragCard> = {}) {
     markSquash: () => {
       calls.squashes++;
     },
-    setDragging: (on) => calls.setDragging.push(on),
     resumeWork: () => false,
     stopAutonomy: () => {
       calls.stopAutonomy++;
@@ -175,7 +172,6 @@ function harness(extra: Partial<DragCard> = {}) {
     tipOn: () => false,
     placeTip: () => {},
     setTipOn: (on) => calls.tipOn.push(on),
-    stage: () => stage as unknown as HTMLDivElement,
     root: () => el as unknown as HTMLDivElement,
     box: () => box,
     setBox: (next) => {
@@ -238,22 +234,21 @@ describe('createDrag —— 按下与阈值', () => {
       const { drag, el, calls } = harness();
       drag.onPointerDown(pointer(el, 500, 350));
       drag.onPointerMove(pointer(el, 502, 351));
-      assert.deepEqual(calls.setDragging, []);
       assert.deepEqual(calls.plays, []);
     } finally {
       frames.restore();
     }
   });
 
-  test('超过阈值：进入拖拽，播拖拽动画并取消舞台位移', () => {
+  test('超过阈值：进入拖拽并播拖拽动画，但不改写舞台位移（抓取点不跳）', () => {
     const frames = withFakeFrames();
     try {
       const { drag, el, stage, calls } = harness();
+      stage.style.transform = 'translateY(10px)';
       drag.onPointerDown(pointer(el, 500, 350));
       drag.onPointerMove(pointer(el, 540, 350));
-      assert.deepEqual(calls.setDragging, [true]);
       assert.deepEqual(calls.plays, ['drag1']);
-      assert.equal(stage.style.transform, 'none');
+      assert.equal(stage.style.transform, 'translateY(10px)', '舞台位移应保持恒定');
     } finally {
       frames.restore();
     }
@@ -288,7 +283,6 @@ describe('createDrag —— 松手去向', () => {
       drag.onPointerUp(pointer(el, 560, 350));
       assert.equal(calls.flights.length, 0);
       assert.equal(calls.places.length, 1);
-      assert.deepEqual(calls.setDragging, [true, false]);
     } finally {
       frames.restore();
     }
@@ -350,7 +344,6 @@ describe('createDrag —— 鼠标松开兜底', () => {
       frames.advance(400); // 停顿够久，结算是「原地放下」
       win.mouseUp(560, 350);
       assert.equal(calls.places.length, 1, '捕获丢失后 mouseup 应该完成松手结算');
-      assert.deepEqual(calls.setDragging, [true, false], '拖拽态应该被复位');
       assert.equal(el.hasClass('dragging'), false, '拖拽类应该被摘掉');
       assert.deepEqual(calls.tipOn, [false, true], '提示应该复位');
     } finally {

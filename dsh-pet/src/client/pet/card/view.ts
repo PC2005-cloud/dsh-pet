@@ -16,7 +16,7 @@ import type { Corner } from '../../../shared/types.ts';
 export interface CardViewProps {
   /** 根节点：定位与尺寸变量的宿主。 */
   rootRef: ReactNS.MutableRefObject<HTMLDivElement | null>;
-  /** 舞台：拖拽时在这里取消脚垫位移。 */
+  /** 舞台：位移恒定，脚底垫高不随拖拽取消。 */
   stageRef: ReactNS.MutableRefObject<HTMLDivElement | null>;
   /** 前台视频（A/B 双缓冲之一）。 */
   videoARef: ReactNS.MutableRefObject<HTMLVideoElement | null>;

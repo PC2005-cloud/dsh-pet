@@ -76,7 +76,7 @@ export function createCardRuntime(rt: PetRuntime) {
       size: effectiveSizePx,
     });
     const { actions, state } = card;
-    const { corner, customPos, dragging, facing, margin, size, tipOn } = state;
+    const { corner, customPos, facing, margin, size, tipOn } = state;
 
     // 驱动实例与跨关注点入口：创建顺序见模块头，填充只在本函数内。
     const liveRef = useRef<CardLive>({} as CardLive);
@@ -171,10 +171,8 @@ export function createCardRuntime(rt: PetRuntime) {
       root: () => rootRef.current,
       setAnim: actions.setAnim,
       setCustomPos: actions.setCustomPos,
-      setDragging: actions.setDragging,
       setOnce: actions.setOnce,
       setTipOn: actions.setTipOn,
-      stage: () => stageRef.current,
     });
 
     // 右键菜单、对话与悬浮提示：动作派发经 ref 转发，避免与 menu-actions 构造期成环。
@@ -281,7 +279,7 @@ export function createCardRuntime(rt: PetRuntime) {
       // eslint-disable-next-line react-hooks/exhaustive-deps -- 只按叶子变化次数触发，sleep 是当拍快照
     }, [sleepTick]);
 
-    const stageStyle = petStageStyle(dragging, bottomPad);
+    const stageStyle = petStageStyle(bottomPad);
     const rootStyle = petRootStyle(
       customPos,
       { width: window.innerWidth, height: window.innerHeight },

@@ -104,7 +104,6 @@ Object.assign(PetSprite.prototype, {
     this.dragState.sling = sling;
     this.dragState.anchorX = this.pos.x + this.halfW;
     this.dragState.anchorY = this.pos.y + this.halfH;
-    // 舞台「拍平」不能在这里做：纯点击会让人物瞬移上移再落下，只有拖拽超过阈值才拍平。
   },
 
   onPointerMove(e) {
@@ -116,8 +115,6 @@ Object.assign(PetSprite.prototype, {
     if (!d.dragging) {
       if (Math.hypot(dx, dy) < S.DRAG_THRESHOLD) return;
       d.dragging = true;
-      // 真正开始拖拽才把舞台拍平（人物随光标拿起）
-      this.stage.style.transform = 'none';
       // 睡觉：位置照常跟手，但不换拖拽动画——睡姿循环整段归睡觉状态机，顶掉就回不来了。
       if (this.animations.drag.length && !this.sleeping) {
         this.playOnce(S.pick(this.animations.drag));
@@ -140,7 +137,6 @@ Object.assign(PetSprite.prototype, {
     d.dragging = false;
     this.hit.classList.remove('dragging');
     this.stopDragFollow(); // 弹簧跟随立即停（位置定格在实时 this.pos）
-    this.stage.style.transform = 'translateY(' + this.bottomPad + 'px)';
     this.syncInputBusy(); // 拖拽结束：交还给常规判定（幂等，非拖拽时多调一次不发 IPC）
     // 提示复位：点击/拖拽期间收起，指针仍在命中区内就恢复。用 hitRect 而不是 getBoundingClientRect
     // ——命中区是窗口坐标里的权威几何，与 onMouseMove 同源。必须留在 syncInputBusy() 之后：

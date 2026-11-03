@@ -128,9 +128,14 @@ function clampAxis(value: number, lo: number, hi: number, centered: number): num
   return lo > hi ? centered : Math.min(Math.max(value, lo), hi);
 }
 
-/** 舞台内联样式：拖拽中取消脚垫位移，让视频贴着指针走。 */
-export function petStageStyle(dragging: boolean, bottomPad: number): CSSProperties {
-  return dragging ? { transform: 'none' } : { transform: 'translateY(' + bottomPad + 'px)' };
+/**
+ * 舞台内联样式：脚底垫高恒定生效，拖拽中也不取消。
+ *
+ * 拖拽的抓取偏移按根节点包围盒量（不含这段位移），一旦取消，视频会相对光标
+ * 整体上跳 bottomPad、松手再落回；位移恒定，抓取点才始终落在光标下。
+ */
+export function petStageStyle(bottomPad: number): CSSProperties {
+  return { transform: 'translateY(' + bottomPad + 'px)' };
 }
 
 /**

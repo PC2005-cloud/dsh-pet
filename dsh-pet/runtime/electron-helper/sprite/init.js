@@ -142,8 +142,8 @@ Object.assign(PetSprite.prototype, {
     this.el.style.setProperty('--dsh-pet-font-tip', fontPx.tip + 'px');
     const stage = document.createElement('div');
     stage.className = 'pet-stage';
+    // 位移恒定：拖拽中也不取消，否则视频会相对光标上跳、抓取点全程偏移 bottomPad。
     stage.style.transform = 'translateY(' + this.bottomPad + 'px)';
-    this.stage = stage;
     this.videoA = document.createElement('video');
     this.videoA.className = 'pet-video is-front';
     this.videoB = document.createElement('video');

@@ -2,7 +2,7 @@
  * 指针拖拽：按下态、拖拽阈值、触屏长按菜单与点击互动。
  * 不负责飞行与走位；弹簧跟随在 ./drag-follow，松手结算在 ./drag-release。
  * 依赖 PetCard 每帧给出的当帧能力 getter：尺寸、动画池、状态设置器与停/起运动。
- * 不变量：按下后所有位置写入都经包围盒读写；松手必须先停弹簧跟随再结算落点。
+ * 不变量：按下后所有位置写入都经包围盒读写；舞台脚垫位移恒定；松手必须先停弹簧跟随再结算落点。
  * 鼠标松开兜底也在这里：指针捕获被浏览器提前丢掉时，window 上的 mouseup 走同一套收尾。
  * @module dsh-pet/src/client/pet/motion/drag
  */
@@ -59,8 +59,6 @@ export interface DragCard {
   halfW: number;
   /** 盒半高（px）。 */
   halfH: number;
-  /** 舞台脚底垫高（px）。 */
-  bottomPad: number;
   /** 该宠物的物理参数。 */
   physics: PhysicsParams;
   /** 拖拽动画池。 */
@@ -79,8 +77,6 @@ export interface DragCard {
   bumpSeq: () => void;
   /** 标记「等新首帧就位后压 Q 弹」。 */
   markSquash: () => void;
-  /** 拖拽态：控制舞台位移与指针样式。 */
-  setDragging: (on: boolean) => void;
   /** 恢复非终态工作循环；返回 false 表示没有可恢复的状态。 */
   resumeWork: () => boolean;
   /** 停走位与位置跟随。 */
@@ -103,8 +99,6 @@ export interface DragCard {
   placeTip: (x: number, y: number) => void;
   /** 切换提示显隐。 */
   setTipOn: (on: boolean) => void;
-  /** 舞台元素。 */
-  stage: () => HTMLDivElement | null;
   /** 根元素。 */
   root: () => HTMLDivElement | null;
   /** 当前包围盒位置。 */
@@ -322,7 +316,6 @@ export function createDrag(card: () => DragCard): Drag {
     if (!press.dragging) {
       if (Math.hypot(dx, dy) < DRAG_THRESHOLD) return;
       press.dragging = true;
-      c.setDragging(true);
       c.setOnce(true);
       if (c.dragAnims.length) {
         const name = pick(c.dragAnims);
@@ -337,8 +330,6 @@ export function createDrag(card: () => DragCard): Drag {
     follow.aim({ x: e.clientX - press.offX - c.halfW, y: e.clientY - press.offY - c.halfH });
     const rootEl = c.root();
     if (rootEl) follow.start(rootEl);
-    const stageEl = c.stage();
-    if (stageEl) stageEl.style.transform = 'none';
   };
 
   /**
@@ -420,9 +411,6 @@ export function createDrag(card: () => DragCard): Drag {
     follow.stop();
     if (wasDragging) {
       justDraggedUntil = performance.now() + JUST_DRAGGED_MS;
-      c.setDragging(false);
-      const stageEl = c.stage();
-      if (stageEl) stageEl.style.transform = 'translateY(' + c.bottomPad + 'px)';
       // 拖拽松手：非终态恢复工作循环，否则播一遍待机后回随机链。
       // once 必须为 true，否则 ended 不触发，随机链回不来。
       if (!c.resumeWork()) {
