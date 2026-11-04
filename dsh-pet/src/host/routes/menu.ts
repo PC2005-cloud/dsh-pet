@@ -17,7 +17,7 @@ export async function handleMenuRoutes(deps: PetRouteDeps, input: RouteInput): P
 
   // 第三方右键菜单：POST /menu/item 注册（该 owner 整体覆盖），DELETE 清除，GET /menu/events
   // 读取即消费（支持长轮询），POST /menu/click 由渲染端上报。
-  // 注册表在进程内存，快照写进 S 的 sections.menu：两端据此拼「更多」，注册后不用重启 Helper。
+  // 注册表在进程内存，快照写进 S 的 sections.menu：两端据此拼「更多」与一级菜单项，注册后不用重启 Helper。
   // 业务失败一律 200 + { ok:false, reason, message }；400 只留给 JSON 坏了，405 只留给方法错。
   if (rest === 'menu/item') {
     if (method === 'DELETE') {

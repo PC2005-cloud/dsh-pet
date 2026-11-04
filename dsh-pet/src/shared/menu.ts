@@ -5,12 +5,13 @@
  * 必须始终成立：数据与判据是纯函数，浏览器与桌面两端共用同一份。
  * @module dsh-pet/src/shared/menu
  */
-export type { ContextMenuMount, MenuBranch, MenuLeaf, MenuMoreItem, MenuNode } from './menu/types.ts';
+export type { ContextMenuMount, MenuBranch, MenuLeaf, MenuMoreItem, MenuNode, MenuPlacement } from './menu/types.ts';
 export type { MemeGroups, MemeGroupSource } from './menu/memes.ts';
 export {
   MORE_MENU_LABEL,
   buildMenuTree,
   buildMoreBranch,
+  buildTopLevelItems,
   displayMenuBranch,
   isNoMirrorAnimation,
   isSleepAllowedAction,

@@ -414,7 +414,7 @@ function applySleepLeaf(petId, leaf) {
   }
 }
 
-/** 第三方菜单快照叶子 → 灌进各宠物（右键菜单据此拼「更多」）。它是当前状态、不是事件，
+/** 第三方菜单快照叶子 → 灌进各宠物（右键菜单据此拼「更多」与一级项）。它是当前状态、不是事件，
  *  注册与覆盖时写一次，所有窗口共用同一份快照。 */
 function applyMenuLeaf(leaf) {
   const items = S.readMenuItems(leaf ? leaf.data : null, 'desktop');

@@ -62,19 +62,35 @@ export function readMenuItems(data: unknown, surface: 'web' | 'desktop'): MenuMo
     const owner = rec.owner;
     const label = rec.label;
     if (typeof owner === 'string' && owner !== '' && typeof label === 'string' && label !== '') {
-      out.push({ owner, label });
+      // placement 只认 'top'：缺失 / 写坏 / 老宿主快照一律按 'more'，不让一条数据搞崩菜单
+      const item: MenuMoreItem = { owner, label };
+      if (rec.placement === 'top') item.placement = 'top';
+      out.push(item);
     }
   }
   return out;
 }
 
-/** 「更多」一级菜单：把第三方菜单项拼成菜单树的一枝；没有第三方项时返回 null，菜单里不会出现空的「更多」。
+/** 一级菜单项：`placement='top'` 的第三方项按快照顺序平铺成叶子；没有就返回空数组。
+ *  与 {@link buildMoreBranch} 配套：同一份 items 传给两边，一项只会出现在其中一侧，不会重复。
+ *  一级项排在工具项、动作树、维护项之后、「更多」之前——不打断宿主原有的菜单顺序。 */
+export function buildTopLevelItems(items: readonly MenuMoreItem[]): MenuLeaf[] {
+  const out: MenuLeaf[] = [];
+  for (const item of items) {
+    if (item.placement !== 'top') continue;
+    out.push({ label: item.label, action: 'third-party', owner: item.owner });
+  }
+  return out;
+}
+
+/** 「更多」一级菜单：把 placement 不是 'top' 的第三方菜单项拼成菜单树的一枝；没有第三方项时返回 null。
  *  层级只按项数决定：某 owner 只有 1 项就直接平铺（少一次点击），2 项及以上才加 owner 这一层。
  *  同名不同 owner 的项允许共存，不做去重、编号或来源标注——文案由注册方负责。 */
 export function buildMoreBranch(items: readonly MenuMoreItem[]): MenuBranch | null {
   // owner → 项名（Map 保序：注册顺序 = 分组顺序 = 组内顺序）
   const groups = new Map<string, string[]>();
   for (const item of items) {
+    if (item.placement === 'top') continue; // 一级项归 buildTopLevelItems，不在「更多」里重复出现
     const list = groups.get(item.owner);
     if (list) list.push(item.label);
     else groups.set(item.owner, [item.label]);

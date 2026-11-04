@@ -23,6 +23,7 @@ import {
   buildMemeBranch,
   buildMenuTree,
   buildMoreBranch,
+  buildTopLevelItems,
   displayMenuBranch,
   memeThumbUrl,
   mountContextMenu,
@@ -337,7 +338,8 @@ export function createCardEntry(rt: CardEntryRuntime) {
     /** 打开右键菜单。 */
     const handleContextMenu = (e: ReactNS.MouseEvent<HTMLDivElement>): void => {
       // 工具项与动作树；「查看余额」无条件显示，手动请求不受开关限制。
-      // 第三方菜单项收在「更多」下，0 项不出现，单 owner 单条时平铺（见 buildMoreBranch）。
+      // 第三方菜单项：placement='top' 的平铺到一级，其余收在「更多」下（0 项不出现，
+      // 单 owner 单条时跳过 owner 那层）。两者都排在最后，不打断宿主原有菜单顺序。
       const more = buildMoreBranch(menuItemsRef.current);
       // 「配图」：按配置里的清单分成「纳入对话的配图 / 其他」，点一张就用它说一句。
       // 没有可用图时返回 null，整项不出现（不占一个点开是空的菜单）。
@@ -370,6 +372,7 @@ export function createCardEntry(rt: CardEntryRuntime) {
         ...tools,
         ...buildMenuTree(cfgRef.current.animations),
         ...tail,
+        ...buildTopLevelItems(menuItemsRef.current),
         ...(more ? [more] : []),
       ];
       if (!tree.length) return;

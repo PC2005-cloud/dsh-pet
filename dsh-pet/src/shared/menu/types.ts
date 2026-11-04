@@ -50,12 +50,17 @@ export interface MenuBranch {
 
 export type MenuNode = MenuLeaf | MenuBranch;
 
+/** 第三方菜单项在右键菜单里的层级；与 host/menu 的同名定义保持同步（宿主半侧自包含，不 import shared）。 */
+export type MenuPlacement = 'more' | 'top';
+
 /** 第三方菜单项（宿主经 /state 的 sections.menu 下发的快照，一条 = 一个可点项）。 */
 export interface MenuMoreItem {
   /** 注册方身份；同时也是一级分组名（显示用） */
   owner: string;
   /** 项名（显示用，也是回传给注册方的标识） */
   label: string;
+  /** 'top' = 平铺到一级菜单；缺失 / 'more' / 不认识的值一律按 'more'（老宿主没有这个字段） */
+  placement?: MenuPlacement;
 }
 
 /** 右键菜单挂载句柄。 */

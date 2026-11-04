@@ -59,10 +59,12 @@ Object.assign(PetSprite.prototype, {
       { label: '重载配置', action: 'reload' },
       { label: '回到初始位置', action: 'home' },
     ];
-    // 第三方菜单项统一收在「更多」下：0 项不出现；某个 owner 只有 1 项时跳过 owner 那层直接平铺。
-    // 放在最后——「更多」不插在工具项与动作之间。
+    // 第三方菜单项：注册时 placement='top' 的平铺到一级（排在维护项之后），其余仍收在「更多」下。
+    // 0 项时「更多」不出现；某个 owner 只有 1 项时跳过 owner 那层直接平铺。
+    // 都放在最后——第三方项不插在工具项与动作之间，宿主菜单顺序不受影响。
+    const topItems = S.buildTopLevelItems(this.menuItems);
     const more = S.buildMoreBranch(this.menuItems);
-    const tree = tools.concat(S.buildMenuTree(this.animations), tail, more ? [more] : []);
+    const tree = tools.concat(S.buildMenuTree(this.animations), tail, topItems, more ? [more] : []);
     if (!tree.length) return;
     this.menuOpen = true;
     this.setInteractive(true); // 菜单是窗口内 DOM：悬停期间整窗保持可交互，关闭后恢复命中区穿透

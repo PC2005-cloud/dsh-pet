@@ -2752,9 +2752,14 @@ paths:
       operationId: registerMenuItems
       summary: 注册第三方右键菜单项（该 owner 的菜单项整体覆盖）
       description: |
-        别的插件想在桌宠右键菜单里加自己的入口时用它。所有第三方菜单项统一收在**「更多」**这个
+        别的插件想在桌宠右键菜单里加自己的入口时用它。默认所有第三方菜单项统一收在**「更多」**这个
         一级菜单下；某个 owner 只有一项时跳过 owner 那层直接平铺（`更多 / 弹弓`），两项及以上才
         分组（`更多 / 小游戏 / 弹弓`）。0 项时「更多」不出现。
+
+        注册时可带 `placement: "top"`，让该 owner 的全部项**平铺到一级菜单**（排在宿主维护项之后、
+        「更多」之前），不再收进「更多」。适合需要一眼可见的状态/读数类插件（例如常驻显示积分、
+        用时、连接状态），省掉「更多 → owner → 项」两次点击。`placement: "more"` 或不写 = 上面的
+        默认行为，`target` 过滤对两种 placement 同样生效。
 
         **注册 = 整体覆盖**：该 owner 当前的全部菜单项 = 本次 `labels`（不在列表里的项连同触发
         标记一起丢弃）。每次调用都用一份完整列表描述"我现在有什么"，所以不会留下僵尸项，调用方
@@ -2793,6 +2798,18 @@ paths:
                     type: string
                     maxLength: 32
                   example: [弹弓, 钓鱼]
+                target:
+                  type: string
+                  enum: [web, desktop, both]
+                  default: both
+                  description: 只在该端显示；不写 = 两端都显示。
+                placement:
+                  type: string
+                  enum: [more, top]
+                  default: more
+                  description: |
+                    `more`（默认）收进「更多」；`top` 把该 owner 的全部项平铺到一级菜单。
+                    与 `target` 一样是 owner 级设置，每次注册整体覆盖。
       responses:
         "200":
           description: "成功 `{ ok: true }`；失败 `{ ok: false, reason, message }`"
@@ -2806,7 +2823,7 @@ paths:
                     type: boolean
                   reason:
                     type: string
-                    description: "失败原因：`bad-request` / `invalid-owner` / `invalid-labels` / `invalid-label` / `too-many-items` / `too-many-owners`"
+                    description: "失败原因：`bad-request` / `invalid-owner` / `invalid-labels` / `invalid-label` / `invalid-target` / `invalid-placement` / `too-many-items` / `too-many-owners`"
                   message:
                     type: string
         "400":

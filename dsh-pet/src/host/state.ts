@@ -108,7 +108,7 @@ export class PollStateStore {
       notify: emptyLeaf(),
       config: emptyLeaf(),
       // 第三方右键菜单项（src/host/menu 的注册表快照）：第三方注册 / 覆盖菜单时写它，两端据此在
-      // 右键菜单里拼出「更多」。data 形状见 shared/menu 的 readMenuItems。
+      // 右键菜单里拼出「更多」与一级项。data 形状见 shared/menu 的 readMenuItems。
       menu: emptyLeaf(),
       // 桌面宠物点会话气泡后的跳转意图（`POST /focus-session`）：页面据此切会话。
       // 一次性信号：带 ts，消费端据它判重，页面晚于写入加载时仍可重放一次。

@@ -20,6 +20,7 @@ export type ResultReason =
   | 'invalid-label'
   | 'invalid-labels'
   | 'invalid-owner'
+  | 'invalid-placement'
   | 'invalid-target'
   | 'lock-lost'
   | 'lock-required'
