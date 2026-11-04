@@ -10,6 +10,10 @@
 Object.assign(PetSprite.prototype, {
   switchTo(next, nextOnce, playbackId, url) {
     if (!next) return;
+    // 「当前在播哪一段」只在这里写：ended 分流、回空闲补丁、随机链避重都读它。
+    // 交给调用方维护时 switchTo(x, false) 会留下过期值，events.js 判「是不是工作动画」就永远不成立。
+    this.anim = next;
+    this.once = !nextOnce;
     const pending = this.pending;
     if (pending && pending.anim === next && pending.once === nextOnce) {
       // 防重命中（单动画点击时目标=当前动画，不重播）：仍消费 Q 弹标记，压当前前台视频，
@@ -37,7 +41,7 @@ Object.assign(PetSprite.prototype, {
     el.muted = true;
     el.autoplay = true;
     el.playsInline = true;
-    el.onended = nextOnce ? () => this.handleEnded() : null;
+    el.onended = nextOnce ? () => this.handleEnded() : () => this.restartLoop(el);
     // 加载兜底（同浏览器端 10s 超时）：素材加载失败或卡住时必须释放 pending，否则它永久挂起——
     // 相同目标会被防重分支吞掉、不同目标靠 gen 覆盖，表现就是「点了没反应」。
     const loadGuard = (why) => {
@@ -99,9 +103,18 @@ Object.assign(PetSprite.prototype, {
     if (el.readyState >= 2) onReady();
   },
 
+  /**
+   * 循环段收到 ended：原地回起点续播。
+   *
+   * 循环段本不该有 ended；出现说明素材被截断或解码提前结束，画面已停在末帧。
+   * 不换源：换源会重建整条播放链，代价更大，还可能在同一处再次截断。
+   */
+  restartLoop(el) {
+    el.currentTime = 0;
+    void el.play().catch(() => {});
+  },
+
   playOnce(name, playbackId, url) {
-    this.anim = name;
-    this.once = true;
     this.switchTo(name, true, playbackId, url);
   },
 
@@ -287,9 +300,8 @@ Object.assign(PetSprite.prototype, {
       const set = this.sleepSet;
       if (set && this.sleepPhase === 'start') {
         this.sleepPhase = 'loop';
-        this.anim = set.loop;
-        this.once = false;
-        this.switchTo(set.loop, false); // 循环段：loop=true、不挂 onended，永远不再触发这里
+        // 循环段：loop=true；万一素材提前 ended，restartLoop 原地续播，不进 handleEnded。
+        this.switchTo(set.loop, false);
         return;
       }
       if (this.sleepPhase === 'end') {
@@ -302,8 +314,6 @@ Object.assign(PetSprite.prototype, {
       }
       // loop 段本不该有 ended；真收到说明前台被别的动画（本地菜单点播）顶掉过，接回睡姿，别停在末帧
       if (set && this.anim !== set.loop) {
-        this.anim = set.loop;
-        this.once = false;
         this.switchTo(set.loop, false);
       }
       return;
@@ -319,7 +329,7 @@ Object.assign(PetSprite.prototype, {
     const isEvent = S.isEventAnim(animations.events, this.anim);
     if (isEvent) {
       // 工作状态多候选档位：播完一段自动轮换到下一候选，长时间状态不单段重复；仅非终态档位轮换，
-      // 终态播完即止；单候选档位由 loop 无限循环（不触发 ended，走不到这里）。
+      // 终态播完即止；单候选档位由 loop 无限循环（正常不触发 ended，走不到这里）。
       const nonTerminal = this.workState && this.workState !== 'success' && this.workState !== 'error';
       const nextWork = nonTerminal ? S.nextWorkStatusAnim(animations.events?.workStatus ?? [], this.anim) : null;
       if (nextWork !== null) {
@@ -429,8 +439,6 @@ Object.assign(PetSprite.prototype, {
     });
     if (!plan) return false;
     this.pendingMove = { ...plan, dir, leadSec: mp.leadSec, tailSec: mp.tailSec };
-    this.anim = chosen.name;
-    this.once = true;
     this.switchTo(chosen.name, true, playbackId);
     return chosen.name;
   },

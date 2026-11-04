@@ -28,7 +28,7 @@ PetSprite.prototype.onWorkTick = function onWorkTick(snapshot, tick) {
   this.prevWorkState = state;
   if (!state) {
     // 回空闲：把正在循环播的进行中档位动画改成「播完即停」。进行中档位走 switchTo(name, false)
-    // （loop=true、onended=null），ended 永不触发；这里不切动画，链就拿不到推进信号，
+    // （loop=true），正常不触发 ended；这里不切动画，链就拿不到推进信号，
     // 宠物会卡在那段工作动画上。只改当前段：它结束后走 handleEnded → playIdle。
     // 睡觉时前台那段是睡姿循环：改掉它的 loop/onended 会既打断睡姿又把随机链拽回来，跳过。
     if (!this.sleeping && S.poolIncludes(this.animations.events?.workStatus ?? [], this.anim)) {
