@@ -16,7 +16,8 @@ const PET_CSS = [
   '.dsh-pet-root[data-corner="top-right"]{right:var(--dsh-pet-mx,24px);top:var(--dsh-pet-my,0)}',
   '.dsh-pet-root[data-corner="top-left"]{left:var(--dsh-pet-mx,24px);top:var(--dsh-pet-my,0)}',
   '.dsh-pet-stage{position:relative;width:var(--dsh-pet-size,462px);height:calc(var(--dsh-pet-size,462px)*9/16);pointer-events:none}',
-  '.dsh-pet-video{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;pointer-events:none;opacity:0;transition:opacity .18s ease;transform-origin:center}',
+  // 与桌面 helper 同一条修正，滤镜定义见 ensureAlphaFilter。
+  '.dsh-pet-video{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;pointer-events:none;opacity:0;transition:opacity .18s ease;transform-origin:center;filter:url(#dsh-pet-alpha-fix)}',
   '.dsh-pet-video.is-front{opacity:1}',
   // 触屏拖拽必需：缺 touch-action:none 时浏览器会把手势判成滚动并触发 pointercancel；
   // 两条 -webkit-* 抑制长按选中与 iOS 长按系统菜单。
@@ -32,6 +33,36 @@ const PET_CSS = [
 /** 注入去重用的标记值，写在 `<style>` 的 `data-plugin-css` 上。 */
 const cssTag = 'dsh-pet/style.css';
 
+/** alpha 修正滤镜的 id，CSS 与注入的 SVG 共用。 */
+const ALPHA_FIX_ID = 'dsh-pet-alpha-fix';
+
+/**
+ * 注入 alpha 修正滤镜：素材「透明」背景实测恒为 alpha 1/255，扣掉一档归零，
+ * 宠物本体只降一档（≤1/255，不可见）；同一页面只注入一次。
+ */
+function ensureAlphaFilter(): void {
+  if (document.querySelector('svg[data-dsh-pet-alpha-fix]') !== null) return;
+  const NS = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(NS, 'svg');
+  svg.setAttribute('width', '0');
+  svg.setAttribute('height', '0');
+  svg.setAttribute('aria-hidden', 'true');
+  svg.setAttribute('data-dsh-pet-alpha-fix', '');
+  const defs = document.createElementNS(NS, 'defs');
+  const filter = document.createElementNS(NS, 'filter');
+  filter.id = ALPHA_FIX_ID;
+  const transfer = document.createElementNS(NS, 'feComponentTransfer');
+  const func = document.createElementNS(NS, 'feFuncA');
+  func.setAttribute('type', 'linear');
+  func.setAttribute('slope', '1');
+  func.setAttribute('intercept', '-0.0039215686');
+  transfer.appendChild(func);
+  filter.appendChild(transfer);
+  defs.appendChild(filter);
+  svg.appendChild(defs);
+  document.body.appendChild(svg);
+}
+
 /** 注入宠物页面样式，每页只注入一次；没有 document 时静默返回。 */
 export function injectPetCss(): void {
   if (typeof document === 'undefined') return;
@@ -41,4 +72,5 @@ export function injectPetCss(): void {
   tag.dataset.pluginCss = cssTag;
   tag.textContent = PET_CSS;
   document.head.appendChild(tag);
+  ensureAlphaFilter();
 }
