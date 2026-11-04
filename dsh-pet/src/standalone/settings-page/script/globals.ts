@@ -63,6 +63,7 @@ function physicsCard() {
     ]),
     toggleRow('g-ceiling', '顶部反弹', '关掉后上方没有边界，抛掷可以飞出屏幕顶部。', g.physics.ceilingBounce !== false, (value) => { g.physics = Object.assign({}, g.physics, { ceilingBounce: value }); }),
     toggleRow('g-collide', '宠物互相碰撞', '飞行中的宠物撞到其它宠物时按动量弹开。', g.physics.petCollision !== false, (value) => { g.physics = Object.assign({}, g.physics, { petCollision: value }); }),
+    toggleRow('g-icons', '撞桌面图标（实验性）', '仅 Windows：甩飞或拖着的宠物能把桌面图标像台球一样撞开；退出时图标自动放回原位。', g.physics.iconCollision === true, (value) => { g.physics = Object.assign({}, g.physics, { iconCollision: value }); }),
   ]);
 }
 

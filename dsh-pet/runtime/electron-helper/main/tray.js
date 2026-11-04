@@ -23,6 +23,7 @@ const path = require('node:path');
  * @param deps.petRoute - 宠物路由前缀。
  * @param deps.platform - 托盘平台差异（tray-platform.js 的判定结果）。
  * @param deps.helperDir - runtime/electron-helper 的绝对目录（图标在包的 assets/ 下）。
+ * @param deps.extraItems - 可选：追加在宠物列表后的菜单项（桌面图标碰撞启用时的「还原桌面图标布局」）。
  */
 function createTray({
   app,
@@ -36,6 +37,7 @@ function createTray({
   petRoute,
   platform,
   helperDir,
+  extraItems,
 }) {
   const isDesktopDisplay = (display) => display === 'desktop' || display === 'both';
 
@@ -107,6 +109,7 @@ function createTray({
       .filter((pet) => pet.id);
     if (!pets.length) return null; // 配置里没有任何宠物：没有可切换的对象，不建托盘
     const canQuit = await canQuitSelf();
+    const extra = typeof extraItems === 'function' ? extraItems() : [];
     const quitApp = () => {
       if (!isBridge || appMode) {
         app.quit();
@@ -124,6 +127,7 @@ function createTray({
         checked: isDesktopDisplay(pet.display),
         click: () => traySetPetDisplay(pet.id, toggleDisplay(pet.display)),
       })),
+      ...(extra.length ? [{ type: 'separator' }, ...extra] : []),
       ...(canQuit ? [{ type: 'separator' }, { label: '退出', click: quitApp }] : []),
     ]);
   }

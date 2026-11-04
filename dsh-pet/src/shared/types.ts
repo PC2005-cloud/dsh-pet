@@ -182,6 +182,10 @@ export interface PhysicsParams {
    *  仅浏览器半侧生效，且要求环境有 Vibration API——iOS 与桌面端没有，静默跳过。
    *  缺省按 true；旧配置里没有这个键也算开。 */
   hapticEnabled?: boolean;
+  /** 桌面图标碰撞（实验性）：true = 飞行中/被拖着的宠物能把 Windows 桌面图标像台球一样撞开，图标也会把宠物弹回来。
+   *  仅 Windows 桌面端生效（浏览器半侧与 macOS/Linux 忽略）；启用期间临时关闭桌面「自动排列」「将图标与网格对齐」，
+   *  helper 退出或托盘「还原桌面图标布局」时把图标放回原位、恢复设置。缺省按 false（默认关，不动用户桌面）。 */
+  iconCollision?: boolean;
 }
 
 /** 字体种类预设 id（font.family 白名单；清单与对应字体栈见 shared/fonts.ts）。 */

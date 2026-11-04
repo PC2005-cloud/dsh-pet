@@ -50,6 +50,7 @@ const { createBridge } = require('./main/bridge.js');
 const { createTray } = require('./main/tray.js');
 const { createWindows } = require('./main/windows.js');
 const { registerIpc } = require('./main/ipc.js');
+const { createIconCollision } = require('./main/icon-collision.js');
 const { createDisplaySync } = require('./main/displays.js');
 const { dshHomeDir, resolveUserDataDir } = require('./main/user-data.js');
 
@@ -222,6 +223,7 @@ const petWindows = createWindows({
   shouldReassertTopmost,
   topmostLevel,
   taskbarWatchdogEnabled: taskbarWatchdogEnabledFromEnv(process.env.DSH_PET_TASKBAR_WATCHDOG),
+  onWindowClosed: (petId) => iconCollision.removePet(petId),
 });
 /** 托盘：显示开关与退出入口。 */
 const tray = createTray({
@@ -236,6 +238,18 @@ const tray = createTray({
   petRoute: PET_ROUTE,
   platform: TRAY_PLATFORM,
   helperDir: __dirname,
+  extraItems: () => iconCollision.menuItems(),
+});
+/** 桌面图标碰撞（实验性，仅 Windows）：physics.iconCollision 没开时什么都不做。 */
+const iconCollision = createIconCollision({
+  hostRequest: bridge.hostRequest,
+  callbackUrl: BRIDGE ? bridge.callbackUrl : null,
+  petRoute: PET_ROUTE,
+  petWindows,
+  dpi,
+  screen,
+  helperDir: __dirname,
+  onChange: () => void tray.refresh(),
 });
 
 /**
@@ -247,6 +261,7 @@ if (process.env.DSH_PET_IN_PROCESS === '1') {
   globalThis.__dshPetRebuildUi = async () => {
     petWindows.closeAll();
     petWindows.create();
+    await iconCollision.reload();
     await tray.refresh();
   };
 }
@@ -301,7 +316,9 @@ app.whenReady().then(() => {
   powerMonitor.on('resume', reassertTaskbar);
   powerMonitor.on('unlock-screen', reassertTaskbar);
 
-  registerIpc({ ipcMain, petWindows, shell, openTarget: OPEN_TARGET, petRoute: PET_ROUTE });
+  registerIpc({ ipcMain, petWindows, shell, openTarget: OPEN_TARGET, petRoute: PET_ROUTE, iconCollision });
+  // 不 await：编译 bridge 要几秒，不能挡住建窗
+  void iconCollision.start();
   createDisplaySync({ screen, petWindows, dpi });
 
   // 冒烟自检（默认关闭）：DSH_PET_SMOKE=1 时延时截图到 DSH_PET_SMOKE_OUT 后退出，
@@ -320,6 +337,7 @@ app.whenReady().then(() => {
 // 宿主改 display 时是 SIGTERM/SIGKILL 硬杀，Windows 上拦不到，所以这条只覆盖优雅退出。
 app.on('before-quit', () => {
   petWindows.stopTaskbarWatchdog();
+  iconCollision.stop(); // bridge 收到 Q 会还原图标布局与桌面设置再退出
   if (!tray.exists()) return;
   try {
     tray.destroy();

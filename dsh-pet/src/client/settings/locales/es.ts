@@ -196,6 +196,9 @@ export const es: Record<Key, string> = {
     'Desactívalo para que un lanzamiento pueda salir por la parte superior de la pantalla (la gravedad sigue tirando de él hacia abajo)',
   physicsPetCollision: 'Colisiones entre mascotas',
   physicsPetCollisionHint: 'Una mascota en vuelo rebota contra las demás conservando el momento (masa ∝ tamaño²)',
+  physicsIconCollision: 'Golpear iconos del escritorio (experimental)',
+  physicsIconCollisionHint:
+    'Solo en el escritorio de Windows: una mascota lanzada o arrastrada empuja los iconos del escritorio como bolas de billar. Organizar automáticamente y alinear a la cuadrícula quedan en pausa mientras tanto; la disposición original se restaura al salir o desde la bandeja',
   physicsHaptic: 'Vibración al chocar',
   physicsHapticHint:
     'Una vibración por impacto (paredes, suelo, techo, otras mascotas). Funciona en Chrome/Edge; no en iOS ni en navegadores WebView como Via. El modo No molestar la bloquea.',

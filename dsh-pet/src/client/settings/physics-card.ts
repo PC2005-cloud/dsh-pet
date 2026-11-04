@@ -1,5 +1,5 @@
 /**
- * 物理卡（全局）：重力、弹性、地面摩擦、抛掷力度，以及顶部反弹 / 宠物互撞两个开关。
+ * 物理卡（全局）：重力、弹性、地面摩擦、抛掷力度，以及顶部反弹 / 宠物互撞 / 撞桌面图标（实验性，仅 Windows 桌面端）三个开关。
  * 只改本地状态，随「保存」整包写入；浏览器保存后即时生效，桌面端由保存触发的 Helper 重启重读——
  * physics 在 sprite 构造时只读一次，所以这里不做即时写入。
  * 碰撞震动与两个体感开关依赖手机硬件，放在「移动端效果」卡里。
@@ -64,6 +64,9 @@ export function makePhysicsCard(rt: SettingsRuntime): FunctionComponent<PhysicsC
               props.onChange({ ceilingBounce: v }),
             ),
             toggleCell('physicsPetCollision', physics.petCollision, busy, (v) => props.onChange({ petCollision: v })),
+            toggleCell('physicsIconCollision', physics.iconCollision === true, busy, (v) =>
+              props.onChange({ iconCollision: v }),
+            ),
           ],
         }),
       ],

@@ -64,6 +64,7 @@ export const DEFAULT_PHYSICS: PhysicsParams = {
   hapticEnabled: true,
   tiltGravity: true,
   shakeThrow: true,
+  iconCollision: false,
 };
 
 /** 总力度默认量（throwPower=1 即现状）。 */

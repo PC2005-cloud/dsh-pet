@@ -192,6 +192,9 @@ export const de: Record<Key, string> = {
   physicsCeilingBounceHint: 'Aus: Würfe können oben aus dem Bildschirm fliegen (die Schwerkraft holt sie zurück)',
   physicsPetCollision: 'Pet-Kollisionen',
   physicsPetCollisionHint: 'Ein fliegendes Pet prallt mit Impulserhaltung von anderen ab (Masse ∝ Größe²)',
+  physicsIconCollision: 'Desktop-Symbole anstoßen (experimentell)',
+  physicsIconCollisionHint:
+    'Nur Windows-Desktop: Ein geworfenes oder gezogenes Pet stößt Desktop-Symbole wie Billardkugeln weg. „Automatisch anordnen“ und „Am Raster ausrichten“ sind währenddessen pausiert; das ursprüngliche Layout wird beim Beenden oder über das Tray-Menü wiederhergestellt',
   physicsHaptic: 'Kollisions-Vibration',
   physicsHapticHint:
     'Ein Impuls pro Treffer (Wand, Boden, Decke, andere Pets). Funktioniert in Chrome/Edge; nicht auf iOS oder in WebView-Hüllen wie Via. „Nicht stören“ blockiert die Vibration.',

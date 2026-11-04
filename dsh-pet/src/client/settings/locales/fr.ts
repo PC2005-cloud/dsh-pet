@@ -195,6 +195,9 @@ export const fr: Record<Key, string> = {
   physicsPetCollision: 'Collisions entre compagnons',
   physicsPetCollisionHint:
     'Un compagnon en vol rebondit sur les autres en conservant la quantité de mouvement (masse ∝ taille²)',
+  physicsIconCollision: 'Percuter les icônes du bureau (expérimental)',
+  physicsIconCollisionHint:
+    'Bureau Windows uniquement : un compagnon lancé ou traîné bouscule les icônes du bureau comme des boules de billard. La réorganisation automatique et l’alignement sur la grille sont suspendus pendant ce temps ; la disposition d’origine revient à la fermeture ou depuis la zone de notification',
   physicsHaptic: 'Vibration aux collisions',
   physicsHapticHint:
     'Une vibration par impact (murs, sol, plafond, autres compagnons). Fonctionne dans Chrome/Edge ; pas sur iOS ni dans les coques WebView comme Via. Le mode Ne pas déranger la bloque.',

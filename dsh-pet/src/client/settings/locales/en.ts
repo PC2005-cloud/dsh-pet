@@ -192,6 +192,9 @@ export const en: Record<Key, string> = {
     'Turn this off to let a throw fly out through the top of the screen (gravity still pulls it back)',
   physicsPetCollision: 'Pet collisions',
   physicsPetCollisionHint: 'A flying pet bounces off the others with momentum conservation (mass ∝ size²)',
+  physicsIconCollision: 'Knock desktop icons (experimental)',
+  physicsIconCollisionHint:
+    'Windows desktop only: a thrown or dragged pet knocks desktop icons around like billiard balls. Auto-arrange and align-to-grid are paused while it runs; the original layout comes back on exit or via “Restore desktop icon layout” in the tray',
   physicsHaptic: 'Collision haptics',
   physicsHapticHint:
     'One buzz per hit (walls, floor, ceiling, other pets). Works in Chrome/Edge; not on iOS or WebView shells like Via. Do Not Disturb blocks it.',

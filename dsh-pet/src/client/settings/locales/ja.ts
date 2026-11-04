@@ -188,6 +188,9 @@ export const ja: Record<Key, string> = {
   physicsCeilingBounceHint: 'オフにすると、投げたペットが画面の上端を越えて飛び出せます（重力が引き戻します）',
   physicsPetCollision: 'ペット同士の衝突',
   physicsPetCollisionHint: '飛行中のペットが他のペットに当たると、運動量保存に従って弾き返されます（質量 ∝ サイズ²）',
+  physicsIconCollision: 'デスクトップアイコンを弾く（実験的）',
+  physicsIconCollisionHint:
+    'Windows のデスクトップのみ：投げたり引きずったりしたペットがデスクトップアイコンをビリヤードの球のように弾きます。動作中は「アイコンの自動整列」「アイコンを等間隔に整列」を一時的に無効にし、終了時またはトレイメニューから元の配置に戻します',
   physicsHaptic: '衝突時の振動',
   physicsHapticHint:
     '壁・床・天井・ペット同士の衝突ごとに 1 回振動します。Chrome / Edge で動作。iOS と Via のような WebView ブラウザでは無効。サイレント/集中モードは振動を止めます。',

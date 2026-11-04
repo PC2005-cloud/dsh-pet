@@ -177,6 +177,8 @@ class PetSprite {
         // 不能再按「窗口宽/4」反推（见 pointer-target.js 的 spriteHitRect）。
         toScreen(this.margin.l),
         toScreen(this.margin.t),
+        !!fly, // 桌面图标碰撞：飞行中才会撞走图标
+        !!(this.dragState && this.dragState.dragging), // 被拖着（手抓着 = 质量无穷大）
       );
     }
     // 位置变了：提示跟的是光标，而光标存视口坐标，窗口一移就必须重摆，否则提示会跟着窗口漂走。

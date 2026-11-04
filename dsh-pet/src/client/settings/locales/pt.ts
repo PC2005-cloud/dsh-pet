@@ -193,6 +193,9 @@ export const pt: Record<Key, string> = {
     'Desligado, o arremesso pode sair pelo topo da tela (a gravidade ainda traz o pet de volta)',
   physicsPetCollision: 'Colisão entre pets',
   physicsPetCollisionHint: 'Um pet em voo quica nos outros com conservação de momento (massa ∝ tamanho²)',
+  physicsIconCollision: 'Empurrar ícones da área de trabalho (experimental)',
+  physicsIconCollisionHint:
+    'Somente na área de trabalho do Windows: um pet arremessado ou arrastado empurra os ícones como bolas de bilhar. Organizar automaticamente e alinhar à grade ficam pausados enquanto isso; o layout original volta ao sair ou pela bandeja do sistema',
   physicsHaptic: 'Vibração ao colidir',
   physicsHapticHint:
     'Uma vibração por impacto (paredes, chão, teto, outros pets). Funciona no Chrome/Edge; não no iOS nem em navegadores WebView como o Via. O modo Não perturbe bloqueia o vibrador.',

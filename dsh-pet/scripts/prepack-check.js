@@ -86,6 +86,10 @@ const required = [
   'runtime/electron-helper/sprite/init.js', // 桌面模式构建期初始化（同上）
   'runtime/electron-helper/shared-core.js', // 桌面模式共享纯逻辑（src/shared 构建产物，window.PetShared）
   'runtime/electron-helper/index.html', // 桌面模式页面壳
+  'runtime/electron-helper/main/icon-collision.js', // 桌面图标碰撞（main.js require，缺了启动即崩；功能默认关闭）
+  'runtime/electron-helper/main/icon-world.js', // 桌面图标碰撞的物理（icon-collision.js require）
+  'runtime/electron-helper/icon-bridge.cs', // 桌面图标碰撞的 Windows 图标桥源码（启用时现场编译）
+  'runtime/electron-helper/icon-fx.js', // 桌面图标碰撞的撞击音效/冲击环（index.html 加载）
 ];
 for (const f of required) {
   existsSync(join(ROOT, f)) ? ok(`exists ${f}`) : fail(`missing ${f}`);

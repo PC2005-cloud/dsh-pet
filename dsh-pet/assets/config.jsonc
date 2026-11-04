@@ -199,6 +199,10 @@
   // shakeThrow：摇一摇抛出。true（默认）= 摇一摇沿甩动方向把宠物甩出去（力度 = 基准 × throwPower），
   //   与重力大小无关，gravity=0 时也能甩；false = 关闭。
   //   两个体感开关都只在 HTTPS / localhost 下有效（传感器 API 只在安全上下文存在）。
+  // iconCollision：撞桌面图标（实验性）。false（默认）= 关；true = 甩飞或拖着的宠物能把 Windows 桌面图标
+  //   像台球一样撞开，图标也会把宠物弹回来。仅 Windows 桌面端生效；首次启用时用系统自带的 csc.exe 编译一个
+  //   小程序（$DSH_HOME/dsh-pet/icon-collision/bin），只改图标显示位置、不碰文件；启用期间临时关闭桌面
+  //   「自动排列」「将图标与网格对齐」，helper 退出或托盘「还原桌面图标布局」时放回原位并恢复设置。
   "physics": {
     "gravity": 1400,
     "restitution": 0.78,
@@ -208,7 +212,8 @@
     "petCollision": true,
     "hapticEnabled": true,
     "tiltGravity": true,
-    "shakeThrow": true
+    "shakeThrow": true,
+    "iconCollision": false
   },
   // ===================== 字体（全局默认，所有宠物共用；种类文件顶层可覆盖） =====================
   // family：字体种类（预设 id，必须在白名单内，写错即配置错误 → 告警并取默认 candy）。

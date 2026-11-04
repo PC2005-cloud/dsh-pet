@@ -14,7 +14,8 @@ contextBridge.exposeInMainWorld('petBridge', {
   // size/bottomPad 让静止宠物也登记进碰撞站场，vx/vy 是当前速度（静止/拖拽为 0）。
   // marginL/marginT 是窗口左右/上余量：上边距按气泡最大高度加高后余量不再四边相等，
   // 主进程不能按「窗口宽/4」反推命中区，所以必须上报。
-  setBounds(x, y, width, height, boxX, boxY, size, bottomPad, vx, vy, marginL, marginT) {
+  // flying/dragging：桌面图标碰撞（physics.iconCollision）用——只有飞行中/被拖着的宠物才会撞走图标。
+  setBounds(x, y, width, height, boxX, boxY, size, bottomPad, vx, vy, marginL, marginT, flying, dragging) {
     ipcRenderer.send('pet:set-bounds', {
       x,
       y,
@@ -28,6 +29,8 @@ contextBridge.exposeInMainWorld('petBridge', {
       vy,
       marginL,
       marginT,
+      flying: !!flying,
+      dragging: !!dragging,
     });
   },
   // 点击穿透翻转：窗口默认整窗穿透，渲染端在光标进出身体命中区时上报。
@@ -75,6 +78,10 @@ contextBridge.exposeInMainWorld('petBridge', {
   },
   onPetHit(cb) {
     ipcRenderer.on('pet:hit', (e, payload) => cb(payload));
+  },
+  // 桌面图标碰撞的撞击反馈（音效 / 冲击环），见 icon-fx.js；功能没开时不会有消息。
+  onIconFx(cb) {
+    ipcRenderer.on('pet:icon-fx', (e, payload) => cb(payload));
   },
   // 显示器热更新：分辨率/缩放变化、插拔屏、旋转后主进程重算并推来桌面几何（屏幕坐标），
   // 渲染端就地重挂视口与边界。

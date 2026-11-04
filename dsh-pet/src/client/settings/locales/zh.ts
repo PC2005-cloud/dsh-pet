@@ -178,6 +178,9 @@ export const zh = {
   physicsCeilingBounceHint: '关掉后抛掷可飞出屏幕顶部（重力仍会把它拉回来）',
   physicsPetCollision: '宠物互撞',
   physicsPetCollisionHint: '飞行中的宠物撞到别的宠物按动量守恒弹开（质量 ∝ 尺寸²）',
+  physicsIconCollision: '撞桌面图标（实验性）',
+  physicsIconCollisionHint:
+    '仅 Windows 桌面端：甩飞或拖着宠物能把桌面图标像台球一样撞开。启用期间临时关闭桌面「自动排列」「将图标与网格对齐」，退出时或从托盘「还原桌面图标布局」恢复原位',
   physicsHaptic: '碰撞震动',
   physicsHapticHint:
     '撞墙、落地、撞顶、互撞各震一下。Chrome / Edge 可用；iOS 与 Via 等 WebView 壳不生效；勿扰模式会挡住振动。',

@@ -110,6 +110,8 @@ function physicsBody() {
   for (const key of ['tiltGravity', 'shakeThrow', 'hapticEnabled']) {
     if (!physicsSource || !(key in physicsSource)) delete out[key];
   }
+  // 撞桌面图标在本页有开关：打开过就必须带出去；原配置没写过、也没打开，同样不凭空补键
+  if (out.iconCollision !== true && (!physicsSource || !('iconCollision' in physicsSource))) delete out.iconCollision;
   return out;
 }
 

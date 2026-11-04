@@ -16,8 +16,9 @@ const { decideWindowIgnore } = require('../pointer-target.js');
  * @param deps.shell - Electron shell（打开站点）。
  * @param deps.openTarget - 菜单首项的去向：desktop 唤起桌面应用；其余形态交给默认浏览器打开已鉴权地址。
  * @param deps.petRoute - 宠物路由前缀。
+ * @param deps.iconCollision - 可选：桌面图标碰撞（physics.iconCollision 没开时 updatePet 直接返回）。
  */
-function registerIpc({ ipcMain, petWindows, shell, openTarget, petRoute }) {
+function registerIpc({ ipcMain, petWindows, shell, openTarget, petRoute, iconCollision }) {
   // 宠物窗口跟随：renderer 逐帧上报窗口内容区位置/尺寸
   ipcMain.on('pet:set-bounds', (event, bounds) => {
     const win = BrowserWindow.fromWebContents(event.sender);
@@ -62,6 +63,23 @@ function registerIpc({ ipcMain, petWindows, shell, openTarget, petRoute }) {
         vx: Number.isFinite(vx) ? vx : 0,
         vy: Number.isFinite(vy) ? vy : 0,
       });
+      // 桌面图标碰撞：包围盒的屏幕坐标 = 窗口内容区 + 余量（boxX/boxY 是视口相对坐标，不能直接用）
+      if (iconCollision && iconCollision.enabled && Number.isFinite(ml) && Number.isFinite(mt) && size > 0) {
+        try {
+          iconCollision.updatePet(petId, {
+            bx: x + ml,
+            by: y + mt,
+            size,
+            bottomPad: Number.isFinite(bottomPad) ? bottomPad : 0,
+            vx: Number.isFinite(vx) ? vx : 0,
+            vy: Number.isFinite(vy) ? vy : 0,
+            flying: bounds?.flying === true,
+            held: bounds?.dragging === true || petWindows.state.inputBusy.get(win.id) === true,
+          });
+        } catch (e) {
+          console.error('[dsh-pet-desktop-helper] icon collision update failed:', String(e && e.stack ? e.stack : e));
+        }
+      }
     }
   });
 

@@ -28,6 +28,7 @@ const POINTER_POLL_MS = 60;
  * @param deps.shouldReassertTopmost - 看门狗的纯判定。
  * @param deps.topmostLevel - 平台对应的置顶层级。
  * @param deps.taskbarWatchdogEnabled - 任务栏看门狗总开关（main.js 按 DSH_PET_TASKBAR_WATCHDOG 传入）。
+ * @param deps.onWindowClosed - 可选：宠物窗口关闭后回调（petId），桌面图标碰撞据此把它移出物理世界。
  */
 function createWindows({
   BrowserWindow,
@@ -41,6 +42,7 @@ function createWindows({
   shouldReassertTopmost,
   topmostLevel,
   taskbarWatchdogEnabled,
+  onWindowClosed,
 }) {
   /** 窗口表：petId -> BrowserWindow */
   const windows = new Map();
@@ -253,6 +255,7 @@ function createWindows({
       inputBusy.delete(win.id);
       inputRegions.delete(win.id);
       offBodyMs.delete(win.id);
+      if (onWindowClosed) onWindowClosed(pet.id);
     });
     win.loadFile(path.join(helperDir, 'index.html'), { query: windowQuery(pet, geo, scale) }).catch((error) => {
       console.error(`[dsh-pet-desktop-helper] page load failed (${pet.id}):`, error);

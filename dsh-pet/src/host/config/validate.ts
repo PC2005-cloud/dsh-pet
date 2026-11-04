@@ -85,7 +85,7 @@ function weightsValid(w: unknown): boolean {
 
 /** physics 段校验：gravity ≥ 0（0 = 无重力，合法）、restitution ∈ [0,1]、groundFriction ≥ 0（均为有限数字）、
  *  ceilingBounce / petCollision 为布尔、throwPower > 0（有限数字）。
- *  hapticEnabled / tiltGravity / shakeThrow 为可选布尔（旧配置没有这几个键）。 */
+ *  hapticEnabled / tiltGravity / shakeThrow / iconCollision 为可选布尔（旧配置没有这几个键）。 */
 export function physicsValid(value: unknown): boolean {
   if (!value || typeof value !== 'object') return false;
   const p = value as Record<string, unknown>;
@@ -109,7 +109,8 @@ export function physicsValid(value: unknown): boolean {
     // 缺键不算整段非法。
     (p.hapticEnabled === undefined || typeof p.hapticEnabled === 'boolean') &&
     (p.tiltGravity === undefined || typeof p.tiltGravity === 'boolean') &&
-    (p.shakeThrow === undefined || typeof p.shakeThrow === 'boolean')
+    (p.shakeThrow === undefined || typeof p.shakeThrow === 'boolean') &&
+    (p.iconCollision === undefined || typeof p.iconCollision === 'boolean')
   );
 }
 
