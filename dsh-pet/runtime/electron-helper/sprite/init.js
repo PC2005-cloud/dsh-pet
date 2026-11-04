@@ -130,11 +130,12 @@ Object.assign(PetSprite.prototype, {
 
   /** 建 DOM 并把首帧位置落到窗口；布局数值全部来自上面算好的 geometry。 */
   buildDom() {
-    // DOM：sprite 钉在窗口内 (margin.l, margin.t)；宠物"位置"= sprite 位置，窗口随余量外扩
+    // DOM：sprite 摆在窗口内 (winOffset.x, winOffset.y)；宠物"位置"= sprite 位置，窗口随余量外扩。
+    // 初值等于余量，窗口被系统钳回工作区后由 fitWindow 逐帧改成更大的偏移。
     this.el = document.createElement('div');
     this.el.className = 'pet-sprite';
-    this.el.style.left = this.margin.l + 'px';
-    this.el.style.top = this.margin.t + 'px';
+    this.el.style.left = this.winOffset.x + 'px';
+    this.el.style.top = this.winOffset.y + 'px';
     this.el.style.setProperty('--pet-size', this.size + 'px');
     // 字号（配置 font）：按本宠物尺寸算好最终 px 注入，气泡与提示的 CSS 读这两个变量
     const fontPx = S.resolveFontPx(this.font, this.size);

@@ -12,6 +12,9 @@ export const FEET_Y = 330;
 export const HIT_BOX = { x0: 200, y0: 50, x1: 440, y1: 335 };
 /** 拖拽判定阈值（px）。 */
 export const DRAG_THRESHOLD = 5;
+/** 越界摆放的可见下限（px）：命中区至少留这么多在可视区内，右键才点得到。
+ *  网页端由 clampReachableBox 在提交位置时夹取，桌面端由窗口落位按同一条规则留边界。 */
+export const MIN_REACHABLE_PX = 24;
 /** 弹弓窗口（ms）：两次按下之间的间隔小于它即按弹弓算，与这次拖了多久、何时松手无关。
  *  只认左键，没有待拉状态（换算见 physics.ts）。 */
 export const SLINGSHOT_DOUBLE_MS = 200;

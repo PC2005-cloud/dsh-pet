@@ -201,6 +201,19 @@ describe('spriteHitRect —— 与渲染端命中判定同源（否则两条通�
     assert.ok(r.left > 150 && r.left < 300);
     assert.ok(r.right > 300 && r.right < 450);
   });
+
+  test('本体在窗口内偏移（X11 把窗口钳回工作区之后） → 命中区整体跟着偏移，左右不再对称', () => {
+    // issue #274 的实测窗口：880×782，本体 440 宽。贴右下角时窗口被钳到 (1040,258)，
+    // 本体偏移变成左 416 / 上 524.5，右侧只剩 880 − 416 − 440 = 24
+    const clamped = { x: 1040, y: 258, width: 880, height: 782 };
+    const r = spriteHitRect(clamped, { l: 416, t: 524.5, r: 24 });
+    // 期望值写死，不重算被测公式：命中区按本体宽 440 的比例落在窗口内，左缘 200/640×440 = 137.5、右缘 440/640×440 = 302.5
+    assert.ok(Math.abs(r.left - 1593.5) < 0.01, `命中区左缘应为 1593.5，实得 ${r.left}`);
+    assert.ok(Math.abs(r.right - 1758.5) < 0.01, `命中区右缘应为 1758.5，实得 ${r.right}`);
+    assert.ok(r.left > spriteHitRect(clamped).left, '偏移后命中区必须整体右移，不能仍按「窗口宽/4」算');
+    assert.ok(r.right <= clamped.x + clamped.width, '命中区不得越出窗口右缘');
+    assert.ok(r.bottom <= clamped.y + clamped.height, '命中区不得越出窗口下缘');
+  });
 });
 
 describe('菜单/聊天框只占控件矩形，不吞掉其它应用点击', () => {

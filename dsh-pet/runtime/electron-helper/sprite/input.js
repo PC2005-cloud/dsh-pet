@@ -143,12 +143,12 @@ Object.assign(PetSprite.prototype, {
     // 源码守卫只扫本函数开头 400 字符找上报调用，插到前面会把上报挤出窗口。
     if (e && Number.isFinite(e.clientX)) {
       const r = this.hitRect;
-      const px = e.clientX - this.margin.l;
-      const py = e.clientY - this.margin.t;
+      const px = e.clientX - this.winOffset.x;
+      const py = e.clientY - this.winOffset.y;
       // 先按松手位置更新光标再摆位/显示，否则会重现拖拽前的位置（与浏览器 placeTip 同一处理）
       this.tipCursor = {
-        x: this.pos.x - this.margin.l + e.clientX,
-        y: this.pos.y - this.margin.t + e.clientY,
+        x: this.pos.x - this.winOffset.x + e.clientX,
+        y: this.pos.y - this.winOffset.y + e.clientY,
       };
       this.setTip(px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h);
     }
@@ -344,18 +344,18 @@ Object.assign(PetSprite.prototype, {
       return;
     }
     const r = this.hitRect;
-    // forwarded 事件坐标以窗口为原点；转换到 sprite 坐标要扣减窗口余量。异常时退回屏幕坐标推导：
+    // forwarded 事件坐标以窗口为原点；转换到 sprite 坐标要扣减本体在窗口内的偏移。异常时退回屏幕坐标推导：
     // ÷scale 后减去窗口屏幕原点即窗口内坐标（hitRect/pos 均为 CSS 系）。
-    const wx = Number.isFinite(e.clientX) ? e.clientX : toLocal(e.screenX) - (this.pos.x + VIEW.x - this.margin.l);
-    const wy = Number.isFinite(e.clientY) ? e.clientY : toLocal(e.screenY) - (this.pos.y + VIEW.y - this.margin.t);
-    const px = wx - this.margin.l;
-    const py = wy - this.margin.t;
+    const wx = Number.isFinite(e.clientX) ? e.clientX : toLocal(e.screenX) - (this.pos.x + VIEW.x - this.winOffset.x);
+    const wy = Number.isFinite(e.clientY) ? e.clientY : toLocal(e.screenY) - (this.pos.y + VIEW.y - this.winOffset.y);
+    const px = wx - this.winOffset.x;
+    const py = wy - this.winOffset.y;
     const inBody = px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h;
     // 快捷键与拖拽都只在"光标在身体上"时生效，与提示/穿透同源，避免另一套判定
     this.hoverBody = inBody;
     // 光标存视口坐标（窗口原点 + 窗口内坐标）：窗口随宠物移动时贴光标不会漂。必须在 setTip 之前
     // 更新——setTip 变显隐时会立刻渲染一次，晚一步就会用上一次的光标摆位。
-    if (inBody) this.tipCursor = { x: this.pos.x - this.margin.l + wx, y: this.pos.y - this.margin.t + wy };
+    if (inBody) this.tipCursor = { x: this.pos.x - this.winOffset.x + wx, y: this.pos.y - this.winOffset.y + wy };
     this.setInteractive(inBody);
     // 悬浮提示与可交互判定同源（同一个 inBody）：进身体出现，离开收起
     this.setTip(inBody);

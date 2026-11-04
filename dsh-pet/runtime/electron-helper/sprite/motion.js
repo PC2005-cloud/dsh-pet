@@ -27,7 +27,7 @@ Object.assign(PetSprite.prototype, {
       // 按规划落点插值而不是 dir × 距离：minDist/maxDist 为负时符号必须保留，
       // 否则规划往左、驱动往右，走完再跳回原本的方向。
       else ratioX = startRatio + (targetRatio - startRatio) * ((t - leadSec) / travelWindow);
-      // 移动的是窗口（宠物包围盒跟随），sprite 在本窗口内不动
+      // 移动的是窗口（宠物包围盒跟随）；本体在窗口内的偏移由 sendBounds 按钳制情况算
       this.sendBounds(ratioX * W - this.halfW, startYRatio * H - this.halfH);
       if (t < duration - tailSec) {
         this.moveRef = requestAnimationFrame(step);
@@ -83,7 +83,7 @@ Object.assign(PetSprite.prototype, {
       vel.vy = S.springStep(vel.vy, y, target.y, dt, this.physics.throwPower);
       x += vel.vx * dt;
       y += vel.vy * dt;
-      this.sendBounds(x, y); // 移动的是窗口（this.pos 实时更新）；sprite 在本窗口内不动
+      this.sendBounds(x, y); // 移动的是窗口（this.pos 实时更新）；本体偏移由 sendBounds 统一算
       this.dragFollow = requestAnimationFrame(step);
     };
     this.dragFollow = requestAnimationFrame(step);

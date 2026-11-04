@@ -1,12 +1,12 @@
 /**
- * 移动几何与角落定位：纯计算，无 DOM / ref，可独立单测。
+ * 移动几何、角落定位与窗口落位：纯计算，无 DOM / ref，可独立单测。
  * 移动规划归一化为视口比例，px 换算由调用方完成；角落定位返回宠物根节点左上角的像素坐标。
  * 不负责 rAF 驱动与样式写入，那些在各端的薄壳里。
  * 依赖共享层的选择函数与显示器几何，保证两端算出同一条路线。
  * @module dsh-pet/src/shared/motion
  */
 import { randomBetween } from './pickers.ts';
-import { rectAtPoint } from './displays.ts';
+import { rectAtPoint, rectBottom, rectRight } from './displays.ts';
 import type { Corner, Rect } from './types.ts';
 
 /** 一次移动的几何参数（比例坐标）。 */
@@ -89,4 +89,72 @@ export const anchorPixel = (o: {
     case 'bottom-right':
       return { x: right, y: bottom };
   }
+};
+
+/** 窗口落位结果：窗口左上角 + 本体相对窗口原点的偏移。 */
+export interface WindowFit {
+  /** 窗口左上角：期望值被钳进工作区后的位置（与 area 同坐标系）。 */
+  x: number;
+  y: number;
+  /** 本体原点相对窗口原点的偏移：没被钳制时等于余量，被钳制时变化，越界时为负。 */
+  offsetX: number;
+  offsetY: number;
+}
+
+/** 越界允许量：本体盒可以超出工作区的像素数，由命中区与可见下限算出。 */
+export interface ReachInset {
+  /** 向左越界的允许量（px）。 */
+  left: number;
+  /** 向右越界的允许量（px）。 */
+  right: number;
+  /** 向上越界的允许量（px）。 */
+  top: number;
+  /** 向下越界的允许量（px）。 */
+  bottom: number;
+}
+
+/** 单轴钳制：窗口比工作区还大（max < min）时贴住起点，与窗口管理器的行为一致。 */
+const clampAxis = (want: number, min: number, max: number): number => Math.min(Math.max(want, min), Math.max(min, max));
+
+/**
+ * 本体位置 → 窗口落位：窗口尺寸固定，本体在窗口内的偏移随之变化。
+ *
+ * @remarks
+ * 钳窗口的平台允许的窗口位置不含工作区外，探不出去的那一截转成本体在窗口内的偏移，本体落脚点因此
+ * 不受钳制影响；`area` 缺省表示该平台不钳窗口，此时偏移恒等于余量。越界那截由窗口裁掉，与网页端
+ * 的可见下限同一条规则：宠物能挂出去，但命中区永远留一角可点。
+ * @param o - 几何输入：本体位置、窗口与本体尺寸、期望余量、越界允许量、所在屏工作区。
+ * @returns 窗口落位与本体偏移；调用方按 { x, y, width, height } 摆窗口，按偏移摆本体。
+ */
+export const fitWindowInArea = (o: {
+  /** 本体左上角的期望位置（与 area 同坐标系）。 */
+  bodyX: number;
+  bodyY: number;
+  /** 窗口尺寸（含余量；钳制不改尺寸）。 */
+  width: number;
+  height: number;
+  /** 本体盒宽，决定本体能摆到哪。 */
+  bodyWidth: number;
+  /** 本体盒高（含脚底透明垫，与窗口高度同基准）。 */
+  bodyHeight: number;
+  /** 期望余量 = 窗口原点到本体原点。 */
+  insetX: number;
+  insetY: number;
+  /** 越界允许量；缺省 0，本体完全留在工作区内。 */
+  reach?: ReachInset;
+  /** 窗口所在屏的工作区；缺省表示该平台不钳窗口，窗口原样探出屏幕。 */
+  area?: Rect;
+}): WindowFit => {
+  const wantX = o.bodyX - o.insetX;
+  const wantY = o.bodyY - o.insetY;
+  if (!o.area) return { x: wantX, y: wantY, offsetX: o.insetX, offsetY: o.insetY };
+  const area = o.area;
+  const reach = o.reach ?? { left: 0, right: 0, top: 0, bottom: 0 };
+  // 本体能摆到哪：工作区再外扩 reach。越界那截由窗口裁掉，命中区仍留一角可点
+  const bodyX = clampAxis(o.bodyX, area.x - reach.left, rectRight(area) - o.bodyWidth + reach.right);
+  const bodyY = clampAxis(o.bodyY, area.y - reach.top, rectBottom(area) - o.bodyHeight + reach.bottom);
+  // 窗口只跟着本体走，但被系统钳在工作区内；差出来的那截就是本体在窗口内的偏移
+  const x = clampAxis(bodyX - o.insetX, area.x, rectRight(area) - o.width);
+  const y = clampAxis(bodyY - o.insetY, area.y, rectBottom(area) - o.height);
+  return { x, y, offsetX: bodyX - x, offsetY: bodyY - y };
 };

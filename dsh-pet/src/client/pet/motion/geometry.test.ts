@@ -5,14 +5,13 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { HIT_BOX } from '../../../shared/constants.ts';
+import { HIT_BOX, MIN_REACHABLE_PX } from '../../../shared/constants.ts';
 import { bodyPixelBox } from '../../../shared/physics.ts';
 import {
   boxToRatio,
   centerToBox,
   clampReachableBox,
   derivePetMetrics,
-  MIN_REACHABLE_PX,
   PET_HIT_STYLE,
   petRootStyle,
   petStageStyle,

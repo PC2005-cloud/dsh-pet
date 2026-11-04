@@ -15,6 +15,9 @@ const CONFIG = {
   scale: Number(params.get('scale') || '1'),
   petIndex: Number(params.get('petIndex') || '0'),
   topInsetRatio: Number(params.get('topInsetRatio') || '0'),
+  // 窗口是否被系统钳在工作区内：X11 的窗口管理器如此（Windows / macOS 允许窗口探出屏幕），
+  // 由主进程按平台注入。开启时窗口探不出屏幕，本体靠窗口内偏移贴边（见 fitWindow）。
+  isWindowClampedToWorkArea: params.get('isWindowClampedToWorkArea') === '1',
 };
 
 // 坐标系约定：主进程对窗口 setZoomFactor(CONFIG.scale) 后，DOM 度量、事件坐标、桌面几何与全部

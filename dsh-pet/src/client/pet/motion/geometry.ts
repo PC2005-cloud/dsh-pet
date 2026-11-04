@@ -5,7 +5,7 @@
  * 换算本身不夹取；越界摆放的可见下限由 {@link clampReachableBox} 在提交位置时保证。
  * @module dsh-pet/src/client/pet/motion/geometry
  */
-import { CANVAS_H, FEET_Y, HIT_BOX } from '../../../shared/constants.ts';
+import { CANVAS_H, FEET_Y, HIT_BOX, MIN_REACHABLE_PX } from '../../../shared/constants.ts';
 import { bodyPixelBox } from '../../../shared/physics.ts';
 import type { CSSProperties } from 'react';
 
@@ -83,9 +83,6 @@ export function centerToBox(center: Center, viewport: Viewport, half: HalfSize):
 export function boxToRatio(box: BoxPoint, viewport: Viewport, half: HalfSize): Center {
   return { rx: (box.x + half.w) / viewport.width, ry: (box.y + half.h) / viewport.height };
 }
-
-/** 越界摆放的可见下限（px）：命中区留在视口内至少这么多，右键才点得到。 */
-export const MIN_REACHABLE_PX = 24;
 
 /**
  * 把越界摆放的盒子收到「命中区至少还可见 {@link MIN_REACHABLE_PX}」。

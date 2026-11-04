@@ -19,16 +19,18 @@ const FEET_Y = 330;
  * 窗口矩形 → 宠物身体命中区的屏幕矩形（DIP）。
  *
  * 窗口 = 宠物包围盒 + 四周余量，而余量不再四边相等（上边距按气泡最大高度加高），所以不能按
- * 「窗口宽/4」反推，否则命中区整体偏移。余量由渲染端随 setBounds 上报，缺失时回退旧口径。
+ * 「窗口宽/4」反推，否则命中区整体偏移。左/上偏移由渲染端随 setBounds 上报，右侧由主进程按
+ * 「窗口宽 − 本体宽 − 左偏移」算出——窗口被系统钳回工作区后本体在窗口内会向右偏，左右不再是同一个数。
  *
  * @param bounds - 窗口矩形（DIP）。
- * @param margins - 渲染端上报的窗口余量（DIP）。
+ * @param margins - 渲染端上报的左/上偏移（DIP），右侧可在 margins.r 给出。
  */
 function spriteHitRect(bounds, margins) {
   const legacy = Math.round(bounds.width / 4);
   const ml = Number.isFinite(margins?.l) ? margins.l : legacy;
   const mt = Number.isFinite(margins?.t) ? margins.t : legacy;
-  const stageW = bounds.width - ml * 2;
+  const mr = Number.isFinite(margins?.r) ? margins.r : ml;
+  const stageW = Math.max(0, bounds.width - ml - mr);
   const stageH = (stageW * CANVAS_H) / STAGE_W;
   const bottomPad = (stageH * (CANVAS_H - FEET_Y)) / CANVAS_H;
   return {
@@ -52,7 +54,7 @@ const OFF_BODY_RELEASE_MS = 400;
  *
  * @param bounds - 窗口矩形（DIP）。
  * @param point - 真实光标位置（DIP）。
- * @param margins - 渲染端上报的窗口余量（DIP），见 spriteHitRect。
+ * @param margins - 渲染端上报的左/上偏移（DIP），见 spriteHitRect。
  * @returns 分区。
  */
 function pointerZone(bounds, point, margins) {
@@ -75,7 +77,7 @@ function pointerZone(bounds, point, margins) {
  * @param busy - 渲染端是否正在使用本窗口的鼠标输入。
  * @param offBodyMs - 余量区（非 busy）的连续停留时长。
  * @param input - 渲染端上报的控件矩形与拖拽标记。
- * @param margins - 渲染端上报的窗口余量（DIP）。
+ * @param margins - 渲染端上报的左/上偏移（DIP）。
  * @returns 新的穿透状态。
  */
 function decideWindowIgnore(bounds, point, ignoring, busy, offBodyMs = 0, input, margins) {

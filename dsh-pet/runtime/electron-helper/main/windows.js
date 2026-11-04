@@ -278,6 +278,9 @@ function createWindows({
       topInsetRatio: String(geo.topInsetRatio),
       panels: JSON.stringify(geo.panels),
       primaryIndex: String(geo.primaryIndex),
+      // X11 的窗口管理器把普通窗口钳在工作区内，窗口探不出屏幕；Windows / macOS 没这个限制。
+      // 渲染端据此决定要不要把钳掉的量转成本体在窗口内的偏移（见 fitWindow）。
+      isWindowClampedToWorkArea: process.platform === 'linux' ? '1' : '0',
     };
   }
 

@@ -35,10 +35,14 @@ function registerIpc({ ipcMain, petWindows, shell, openTarget, petRoute }) {
       petWindows.state.lastRequestedBounds.set(win.id, key);
       win.setContentBounds(rect, false);
     }
-    // 窗口余量（左右/上）：命中区判定的依据，余量四边不再相等。
+    // 窗口原点到本体原点的距离（左/上）：命中区判定的依据。它不再恒等于余量——窗口被系统钳回
+    // 工作区后本体在窗口内的偏移变大，右侧只剩「窗口宽 − 本体宽 − 左偏移」，一并算出并记下。
     const ml = Number(bounds?.marginL);
     const mt = Number(bounds?.marginT);
-    if (Number.isFinite(ml) && Number.isFinite(mt)) petWindows.state.winMargins.set(win.id, { l: ml, t: mt });
+    const bodyWidth = Number(bounds?.size);
+    if (Number.isFinite(ml) && Number.isFinite(mt) && Number.isFinite(bodyWidth)) {
+      petWindows.state.winMargins.set(win.id, { l: ml, t: mt, r: rect.width - ml - bodyWidth });
+    }
     // 碰撞站场的位置必须用包围盒左上角（渲染端显式上报 boxX/boxY）：窗口坐标 = 包围盒 − margin，
     // 直接拿窗口坐标会让跨窗检测整体错位。
     const petId = [...petWindows.state.windows.keys()].find((id) => petWindows.state.windows.get(id) === win);

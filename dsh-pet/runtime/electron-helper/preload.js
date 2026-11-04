@@ -12,8 +12,8 @@ contextBridge.exposeInMainWorld('petBridge', {
   // 宠物窗口逐帧跟随：x/y/width/height 是窗口内容区坐标（用于移动窗口），
   // boxX/boxY 是宠物包围盒左上角的工作区坐标——碰撞站场必须用包围盒，窗口坐标差半只宠物宽。
   // size/bottomPad 让静止宠物也登记进碰撞站场，vx/vy 是当前速度（静止/拖拽为 0）。
-  // marginL/marginT 是窗口左右/上余量：上边距按气泡最大高度加高后余量不再四边相等，
-  // 主进程不能按「窗口宽/4」反推命中区，所以必须上报。
+  // marginL/marginT 是窗口原点到本体原点的距离：上边距按气泡最大高度加高后四边不相等，
+  // 窗口被系统钳回工作区后还会变大，主进程不能按「窗口宽/4」反推命中区，所以必须上报。
   setBounds(x, y, width, height, boxX, boxY, size, bottomPad, vx, vy, marginL, marginT) {
     ipcRenderer.send('pet:set-bounds', {
       x,

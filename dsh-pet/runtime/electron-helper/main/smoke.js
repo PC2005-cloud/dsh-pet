@@ -93,16 +93,16 @@ function runSmokeCheck({ app, windows, windowIgnore, setPointerFallbackPaused })
           })(),
           interactiveFlip: (function () {
             // 点击穿透命中判定：光标在命中区内→可交互；移出→穿透；拖拽中（pointer 已捕获）→强制可交互。
-            // hitRect 是 sprite 坐标，mousemove 用窗口坐标——测试事件需加上窗口外扩余量 winMargin。
+            // hitRect 是 sprite 坐标，mousemove 用窗口坐标——测试事件需加上本体在窗口内的偏移 winOffset。
             var d = window.__dshPetDebug;
             var hit = document.querySelector('.pet-hit');
-            if (!d || !d.hitRect || !d.winMargin || !hit) return null;
+            if (!d || !d.hitRect || !d.winOffset || !hit) return null;
             var r = d.hitRect;
-            var m = d.winMargin;
-            var xIn = m.l + r.x + r.w / 2;
-            var yIn = m.t + r.y + r.h / 2;
-            var xOut = Math.max(0, m.l + r.x - 20);
-            var yOut = Math.max(0, m.t + r.y - 20);
+            var m = d.winOffset;
+            var xIn = m.x + r.x + r.w / 2;
+            var yIn = m.y + r.y + r.h / 2;
+            var xOut = Math.max(0, m.x + r.x - 20);
+            var yOut = Math.max(0, m.y + r.y - 20);
             var out = {};
             window.dispatchEvent(new MouseEvent('mousemove', { clientX: xIn, clientY: yIn, screenX: xIn, screenY: yIn }));
             out.inside = d.interactive === true;

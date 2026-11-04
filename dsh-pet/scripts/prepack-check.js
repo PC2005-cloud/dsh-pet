@@ -84,6 +84,7 @@ const required = [
   'runtime/electron-helper/sprite/motion.js', // 桌面模式运动驱动（同上）
   'runtime/electron-helper/sprite/input.js', // 桌面模式指针与命中（同上）
   'runtime/electron-helper/sprite/init.js', // 桌面模式构建期初始化（同上）
+  'runtime/electron-helper/sprite/window-fit.js', // 桌面模式窗口落位与钳制补偿（sprite.js 的原型扩展，须在其后加载）
   'runtime/electron-helper/shared-core.js', // 桌面模式共享纯逻辑（src/shared 构建产物，window.PetShared）
   'runtime/electron-helper/index.html', // 桌面模式页面壳
 ];
