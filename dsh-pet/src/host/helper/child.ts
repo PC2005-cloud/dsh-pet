@@ -19,6 +19,7 @@ import {
   crashLoopAdvice,
   describeExit,
   envPositiveInt,
+  helperOutputIsMeaningful,
   helperRunIsStable,
   restartBackoffDelayMs,
   shouldCircuitBreak,
@@ -100,7 +101,7 @@ export class HelperProcess {
   declare private launchIdentity: string;
   /** 是否已经因为「沙箱初始化失败」改用过 `--no-sandbox`（只退一次） */
   declare private hasSandboxFallbackApplied: boolean;
-  /** 当前子进程有没有写过 stdout/stderr：有输出说明 JS 已经跑过，秒退就不能赖沙箱 */
+  /** 当前子进程有没有写过非空白 stdout/stderr：有输出说明 JS 已经跑过，秒退就不能赖沙箱 */
   declare private hasChildOutput: boolean;
 
   constructor(options: HelperOptions = {}, logger: Logger = console) {
@@ -183,12 +184,15 @@ export class HelperProcess {
       }
     });
     child.stdout.on('data', (chunk) => {
-      this.hasChildOutput = true;
-      this.onStdoutChunk(String(chunk));
+      // Electron 在低完整性环境 abort 前会往 stdout 写 2 字节 \r\n：空白不算「JS 已跑过」，
+      // 否则 #286 的沙箱兜底会被这 2 字节永久挡住。
+      const text = String(chunk);
+      if (helperOutputIsMeaningful(text)) this.hasChildOutput = true;
+      this.onStdoutChunk(text);
     });
     child.stderr.on('data', (chunk) => {
       const line = String(chunk).trim();
-      if (line) {
+      if (helperOutputIsMeaningful(line)) {
         this.hasChildOutput = true;
         this.logger.warn?.(`[dsh-pet desktop helper] ${line}`);
       }

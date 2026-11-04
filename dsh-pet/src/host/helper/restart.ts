@@ -130,6 +130,18 @@ export function shouldFallbackToNoSandbox(input: {
   return input.ranMs < SANDBOX_FALLBACK_WINDOW_MS;
 }
 
+/**
+ * 子进程输出是否算「进程真的跑起来了」：纯空白不算。
+ *
+ * Electron 在低完整性环境 abort 前会往 stdout 写 2 字节 `\r\n`；把它当输出会让
+ * {@link shouldFallbackToNoSandbox} 的秒退兜底永远不触发（#286）。
+ * @param chunk - 本次管道数据。
+ * @returns 去掉首尾空白后仍有内容时为 true。
+ */
+export function helperOutputIsMeaningful(chunk: string): boolean {
+  return Boolean(chunk.trim());
+}
+
 /** 退避基值（ms）：默认 750 与旧版首延一致，DSH_PET_RESTART_BASE_MS 可调。 */
 export const RESTART_BASE_MS_DEFAULT = 750;
 
