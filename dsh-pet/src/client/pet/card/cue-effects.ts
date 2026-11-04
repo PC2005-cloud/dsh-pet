@@ -107,7 +107,6 @@ export function createCueEffects(rt: CueEffectsRuntime) {
     const consumeWorkStatus = (): void => {
       const cfg = hub.cfg();
       const card = hub.card;
-      if (!cfg.workStatusEnabled) return; // 未启用工作状态联动，该宠物完全免疫。
       if (workStatusTick === 0 || workStatusTick === prevWorkRef.current) return;
       prevWorkRef.current = workStatusTick;
       // 占用锁：工作状态是自动来源，锁生效时不响应；解冻时由冻结驱动重新对齐当前状态。
