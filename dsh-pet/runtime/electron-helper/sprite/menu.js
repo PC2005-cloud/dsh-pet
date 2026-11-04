@@ -59,7 +59,7 @@ Object.assign(PetSprite.prototype, {
       { label: '重载配置', action: 'reload' },
       { label: '回到初始位置', action: 'home' },
     ];
-    // 第三方菜单项统一收在「更多」下：0 项不出现；某个 owner 只有 1 项时跳过 owner 那层直接平铺。
+    // 第三方菜单项统一收在「更多」下：label 唯一的直接平铺，label 重名的按 owner 分子菜单。
     // 放在最后——「更多」不插在工具项与动作之间。
     const more = S.buildMoreBranch(this.menuItems);
     const tree = tools.concat(S.buildMenuTree(this.animations), tail, more ? [more] : []);
