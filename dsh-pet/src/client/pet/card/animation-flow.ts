@@ -159,6 +159,8 @@ export function createAnimationFlow(rt: AnimationFlowRuntime) {
         const next = card.state.facing === 'left' ? 'right' : 'left';
         card.actions.setFacing(next);
         card.facingRef.current = next; // 立即同步：翻转后的掷骰用新朝向过滤。
+        // 翻面不改 anim/once/seq，换源 effect 不会重跑：不显式回链，随机链就此停在末帧。
+        pickNext();
         return;
       }
       if (cue.kind === 'interaction-done') {
