@@ -15,7 +15,7 @@ import { MAX_REQUEST_BYTES, MAX_SETTINGS_BYTES, boundedRequest } from '../reques
 import { type StandaloneLogger } from '../context.ts';
 import { DEFAULT_STANDALONE_PORT, PORT_SCAN_LIMIT } from './options.ts';
 import type { StandaloneServer, StandaloneServerOptions } from './options.ts';
-import { balanceHandler, modelsHandler, settingsHandler, testHandler } from './handlers.ts';
+import { balanceHandler, modelsHandler, settingsHandler, testHandler, setupHandler } from './handlers.ts';
 import { fail, matches, sendAsset, sendIcon, sendJson } from './respond.ts';
 
 /** 组装请求分发器：先处理探针、设置页与停机，再交给插件路由。 */
@@ -27,6 +27,7 @@ function dispatch(
   const tester = testHandler(options.ai);
   const models = modelsHandler(options.ai);
   const balance = balanceHandler(options.ai);
+  const setup = setupHandler(options.setup);
   return (req, res, pathname) => {
     const method = req.method ?? 'GET';
     if (method === 'OPTIONS') {
@@ -103,6 +104,10 @@ function dispatch(
       sendAsset(res, asset[0], asset[1]);
       return;
     }
+    if (pathname === '/standalone-ai/setup') {
+      void setup(req, res).catch((error: unknown) => fail(res, error, options.logger));
+      return;
+    }
     if (pathname === '/standalone-ai/settings') {
       void settings(req, res).catch((error: unknown) => fail(res, error, options.logger));
       return;
@@ -163,7 +168,9 @@ export function createRequestListener(
     const bodyMethod = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method ?? '');
     // 有正文或写方法都要先走有界读取，避免插件自己无限读。
     if ((hasBody || bodyMethod) && typeof req.on === 'function') {
-      const limit = pathname === '/standalone-ai/settings' ? MAX_SETTINGS_BYTES : MAX_REQUEST_BYTES;
+      const limit = ['/standalone-ai/settings', '/standalone-ai/setup'].includes(pathname)
+        ? MAX_SETTINGS_BYTES
+        : MAX_REQUEST_BYTES;
       void boundedRequest(req, res, limit, options.bodyTimeoutMs)
         .then((bounded) => {
           if (bounded) route(bounded, res, pathname);

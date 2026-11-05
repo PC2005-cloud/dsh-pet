@@ -1,6 +1,7 @@
 /** PowerContext v1.5 HTTP boundary and durable, per-pet delivery state. */
 import { createHash, randomUUID } from 'node:crypto';
 import type { ChatMemoryConfig } from '../shared/chat-memory-config.ts';
+import { memoryToken } from './powercontext-auth.ts';
 
 export interface MemoryTurn {
   id: string;
@@ -93,7 +94,7 @@ export class PowerContextClient {
 
   private async request(path: string, body: unknown, signal: AbortSignal): Promise<Record<string, unknown>> {
     const headers: Record<string, string> = { 'content-type': 'application/json' };
-    const token = process.env.DSH_PET_POWERCONTEXT_TOKEN;
+    const token = memoryToken(this.config.serverUrl);
     if (token) headers.authorization = 'Bearer ' + token;
     const response = await this.fetcher(this.config.serverUrl.replace(/\/+$/, '') + path, {
       method: 'POST',

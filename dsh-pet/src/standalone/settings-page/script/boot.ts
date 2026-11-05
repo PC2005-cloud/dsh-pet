@@ -120,6 +120,7 @@ function boot() {
   mountProtocolSelect();
   mountBalanceSelect();
   wireAiPanel();
+  wireSetup();
   byId('pet-save').addEventListener('click', savePets);
   window.addEventListener('beforeunload', (event) => {
     if (!state.dirty) return;

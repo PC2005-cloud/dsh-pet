@@ -16,7 +16,7 @@ describe('parseArgs —— 独立模式的命令行契约', () => {
   test('无参数：默认端口、不体检、不打印用法', () => {
     const parsed = parseArgs([]);
     assert.ok('options' in parsed);
-    assert.deepEqual(parsed.options, { port: DEFAULT_STANDALONE_PORT, check: false, help: false });
+    assert.deepEqual(parsed.options, { port: DEFAULT_STANDALONE_PORT, check: false, help: false, setup: false });
   });
 
   test('--port 的两种写法等价', () => {

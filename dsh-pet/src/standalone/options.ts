@@ -16,6 +16,7 @@ export interface CliOptions {
   port: number;
   check: boolean;
   help: boolean;
+  setup: boolean;
 }
 
 /** --help 正文。 */
@@ -26,6 +27,7 @@ export const USAGE = `dsh-pet 独立模式（不需要 DSH）
 选项：
   --port <端口>   监听端口（默认 ${DEFAULT_STANDALONE_PORT}；被占用时自动向后顺延）
   --check         只体检：打印配置来源、宠物清单与 Electron 状态，不启动窗口
+  --setup         启动桌宠并打开「开始养鱼」，配置聊天与本机长期记忆
   -h, --help      显示本帮助
 
 说明：
@@ -40,10 +42,12 @@ export const USAGE = `dsh-pet 独立模式（不需要 DSH）
  * @returns 选项，或带 error 的失败结果，由调用方打印用法并以 2 退出。
  */
 export function parseArgs(argv: string[]): { options: CliOptions } | { error: string } {
-  const options: CliOptions = { port: DEFAULT_STANDALONE_PORT, check: false, help: false };
+  const options: CliOptions = { port: DEFAULT_STANDALONE_PORT, check: false, help: false, setup: false };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index] ?? '';
-    if (arg === '--check') {
+    if (arg === '--setup') {
+      options.setup = true;
+    } else if (arg === '--check') {
       options.check = true;
     } else if (arg === '-h' || arg === '--help') {
       options.help = true;

@@ -18,6 +18,7 @@ import {
   modelsHandler,
   settingsHandler,
   testHandler,
+  setupHandler,
   type StandaloneServerOptions,
 } from '../standalone/server.ts';
 import { sendIcon } from '../standalone/server/respond.ts';
@@ -29,6 +30,7 @@ import { settingsPage, settingsScript, settingsStyle } from '../standalone/setti
 interface RouterDeps {
   security: RequestSecurity;
   ai?: StandaloneServerOptions['ai'];
+  setup?: StandaloneServerOptions['setup'];
   log(message: string): void;
   status(port: number): unknown;
   landingPage(port: number): string;
@@ -52,6 +54,7 @@ export function startRouter(
   const balance = balanceHandler(deps.ai);
   /** 独立模式自带的 AI 路由：路径即处理器的查表，条目再多也不会把分支嵌套加深。 */
   const aiRoutes: Record<string, typeof settings> = {
+    '/standalone-ai/setup': setupHandler(deps.setup),
     '/standalone-ai/settings': settings,
     '/standalone-ai/test': tester,
     '/standalone-ai/models': models,
@@ -145,7 +148,9 @@ export function startRouter(
     const bodyMethod = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method);
     void (async () => {
       if (hasBody || bodyMethod) {
-        const limit = url.pathname === '/standalone-ai/settings' ? MAX_SETTINGS_BYTES : MAX_REQUEST_BYTES;
+        const limit = ['/standalone-ai/settings', '/standalone-ai/setup'].includes(url.pathname)
+          ? MAX_SETTINGS_BYTES
+          : MAX_REQUEST_BYTES;
         const bounded = await boundedRequest(req, res, limit);
         if (bounded) await dispatch(bounded);
       } else await dispatch(req);

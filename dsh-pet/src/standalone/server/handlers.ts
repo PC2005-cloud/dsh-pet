@@ -10,6 +10,42 @@ import { type IncomingMessage, type ServerResponse } from 'node:http';
 import { rejectRequest } from '../request-security.ts';
 import type { ModelDiscoveryInput } from '../ai-provider/types.ts';
 import { sendJson } from './respond.ts';
+import type { SetupService } from '../setup.ts';
+
+/** Installation is explicit, authenticated and asynchronous; polling never returns credentials. */
+export function setupHandler(
+  setup: SetupService | undefined,
+): (req: IncomingMessage, res: ServerResponse) => Promise<void> {
+  return async (req, res) => {
+    if (!setup) {
+      rejectRequest(res, 503, '当前环境未启用快速开始');
+      return;
+    }
+    if (req.method === 'GET') {
+      sendJson(res, 200, setup.status());
+      return;
+    }
+    if (req.method !== 'POST') {
+      rejectRequest(res, 405, '仅支持 GET 或 POST');
+      return;
+    }
+    if (req.headers['content-type']?.split(';')[0].trim().toLowerCase() !== 'application/json') {
+      rejectRequest(res, 415, '请使用 JSON');
+      return;
+    }
+    try {
+      setup.submit(await readJsonBody(req));
+      sendJson(res, 202, setup.status());
+    } catch (error) {
+      const busy = error instanceof Error && error.message === 'setup_busy';
+      rejectRequest(
+        res,
+        busy ? 409 : 400,
+        busy ? '正在准备，请稍候。' : '请检查模型信息；已有记忆的 embedding 模型和维度应保持不变。',
+      );
+    }
+  };
+}
 
 /** 读完请求体并解析成 JSON；空体当作空对象。 */
 async function readJsonBody(req: IncomingMessage): Promise<unknown> {

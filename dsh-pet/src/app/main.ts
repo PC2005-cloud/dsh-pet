@@ -23,6 +23,8 @@ import { createRequestSecurity } from '../standalone/request-security.ts';
 import { installDesktopAuth, type DesktopSession } from './desktop-auth.ts';
 import { startRouter } from './router.ts';
 import { ROUTE_SEGMENT } from '../shared/constants.ts';
+import { createSetup, setupMemoryBinding } from '../standalone/setup.ts';
+import { openSetup } from '../standalone/open-setup.ts';
 
 /**
  * `electron` 由 Electron 运行时提供，不是本包依赖；只声明实际用到的成员。
@@ -105,6 +107,11 @@ async function boot(): Promise<void> {
   // 与 CLI 同一套安全模型：令牌只经「配置页地址的 #token=」递给浏览器，不进日志
   const security = createRequestSecurity();
   const ai = createStandaloneAi(dshHomeDir(), logger);
+  const setup = createSetup(
+    dshHomeDir(),
+    ai,
+    setupMemoryBinding(() => `http://127.0.0.1:${port}`, security.token),
+  );
   const context = createStandaloneContext({
     port: () => port,
     logger,
@@ -113,7 +120,7 @@ async function boot(): Promise<void> {
     authenticatedUrl: security.authenticatedUrl,
   });
 
-  const server = await startRouter(routes, { security, ai, log, status, landingPage });
+  const server = await startRouter(routes, { security, ai, setup, log, status, landingPage });
   port = server.port;
   const origin = `http://127.0.0.1:${port}`;
   log(`本机服务 ${origin}`);
@@ -131,6 +138,8 @@ async function boot(): Promise<void> {
   if (!process.env.DSH_PET_SCALE) process.env.DSH_PET_SCALE = '1';
 
   apply(context.ctx);
+  setup.resume();
+  if (!ai.isReady()) void app.whenReady().then(() => openSetup(security.authenticatedUrl(origin)));
   log(`apply() 完成：routes=${routes.length} 失败=${context.failures.length}`);
 
   // helper 读它决定建几个窗口；读不到时它会回落到单个默认窗口，首帧再由渲染端自校正
@@ -165,6 +174,7 @@ async function boot(): Promise<void> {
     void logger.flush();
     logger.dispose();
     void ai.dispose();
+    void setup.dispose();
     void context.dispose().catch(() => undefined);
     void server.close().catch(() => undefined);
   });

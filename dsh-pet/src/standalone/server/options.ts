@@ -8,6 +8,7 @@
 import { type RegisteredRoute, type StandaloneLogger } from '../context.ts';
 import { type RequestSecurity } from '../request-security.ts';
 import { type StandaloneSettingsService } from '../settings.ts';
+import type { SetupService } from '../setup.ts';
 
 /** 默认监听端口。 */
 export const DEFAULT_STANDALONE_PORT = 3080;
@@ -31,6 +32,8 @@ export interface StandaloneServerOptions {
   security?: RequestSecurity;
   /** 设置服务。 */
   ai?: StandaloneSettingsService;
+  /** First-run installation and managed local memory. */
+  setup?: SetupService;
   /** 正文读取时限，仅供超时测试覆盖。 */
   bodyTimeoutMs?: number;
 }

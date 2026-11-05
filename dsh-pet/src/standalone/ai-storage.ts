@@ -64,7 +64,11 @@ function configPath(home: string): string {
  * @throws 路径、大小或权限不安全时抛出。
  */
 export function readAiSettings(home: string): unknown | undefined {
-  const path = configPath(home);
+  return readPrivateJson(configPath(home));
+}
+
+/** Read a private JSON configuration using the same permission and size contract as AI settings. */
+export function readPrivateJson(path: string): unknown | undefined {
   if (!existsSync(path)) return undefined;
   const stat = lstatSync(path);
   if (!stat.isFile() || stat.isSymbolicLink() || stat.size > MAX_CONFIG_BYTES) throw new Error('Unsafe settings file');

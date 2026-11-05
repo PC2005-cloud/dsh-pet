@@ -2,11 +2,29 @@
 
 桌宠默认只使用原生近期对话。开启 PowerContext 后，每次聊天会召回相关的历史证据，成功完成的文本问答会在本地落盘后异步同步。每只宠物、每个服务地址分别保存 Scope 绑定和待同步队列。
 
-## 启用
+## 快速开始：由桌宠管理本机记忆
+
+独立应用第一次启动会打开「开始养鱼」。已有用户可以右键桌宠 →「打开 AI 设置」→「开始养鱼」；源码构建后也可运行 `pnpm standalone --setup`。无需先安装 Python、手写 `.env` 或单独运行记忆服务。
+
+1. 选择模型预设，填写服务商提供的 API 地址和密钥。「查看或调整模型」可修改模型名；embedding 使用另一家服务时，也在这里填写它的地址和密钥。
+2. 勾选「开启本机长期记忆」，点击「开始养鱼」。程序先检查聊天连接，再下载并校验 uv 0.9.26，在用户目录安装 Python 3.12 和 PowerContext 1.5.0。需要联网和系统 `curl`、`tar`；不会修改全局 Python 或 PATH。预设模型必须在自己的账户和地域可用。
+3. 等待「长期记忆：服务已就绪」，点击「去聊天」。程序会为默认宠物条目设置 4 轮近期历史、6000 字节近期正文与 4096 字节召回正文预算。其他 pet pack 的独立配置仍在「配置」中管理。
+
+不勾选长期记忆时，只检查并保存聊天模型，不下载记忆服务。快速开始使用 OpenAI Chat Completions 兼容接口；Anthropic 聊天或已有远程服务继续使用下面的手动配置。
+
+本机服务只监听 `127.0.0.1`，使用自动生成的 Bearer 令牌。密钥与令牌写入用户目录 `dsh-pet/powercontext/settings.json`，设置接口不回显。数据库、运行环境和缓存也留在该目录；端口与数据库身份在重启后保持不变。已有 embedding 的地址、模型和维度不能直接覆盖，以免混用向量空间。
+
+再次启动桌宠时，已启用的本机记忆自动启动；退出桌宠时停止其拥有的记忆进程，不删除数据，也不安装开机服务。「停止本机记忆」会切回原生近期历史并停止服务。仅在高级设置里切换后端，不会立即停止已运行的本机服务。端口被占用或服务失败时显示错误，可按已保存配置重试；不会改端口另建一份记忆，也不会自动清空数据。
+
+首次模型检查和后续聊天、记忆整理、检索可能产生模型费用。只开启 Atomic Memory 会话抽取与 embedding；不开启 Dream、Topic Memory 或 Profile 定时生成。服务就绪不代表新对话已经整理成记忆，后台检查间隔 30 秒也不是完成时限。自动安装支持 Linux/macOS；Windows 随 PowerContext 保持实验性支持。
+
+无图形桌面的机器不会自动打开浏览器或出现桌面角色；可在本机启动清单 `dsh-pet/standalone-runtime.json` 中找到带凭据的 `settingsUrl`，不要分享该地址。
+
+## 手动连接已有服务
 
 1. 部署 [PowerContext 1.5.0 Server](https://github.com/oceanbase/powercontext/releases/tag/powercontext-v1.5.0)，配置生成模型及所选检索方式需要的 embedding 模型，并开启 Memory 后台抽取。桌宠的「重试同步」只补传 Source，不执行抽取。
 2. 在 DSH 设置页的「AI 模型与对话上下文」，或独立模式设置页的「长期记忆」中选择 PowerContext，填写服务地址并保存。支持本机 HTTP；远程地址必须使用 HTTPS。
-3. 若服务需要 Bearer 令牌，在启动桌宠宿主的环境中设置 `DSH_PET_POWERCONTEXT_TOKEN`。令牌不写入配置文件或 URL，也不会通过设置接口返回。请求不跟随重定向。
+3. 若手动连接的服务需要 Bearer 令牌，在启动桌宠宿主的环境中设置 `DSH_PET_POWERCONTEXT_TOKEN`。手动连接的令牌不写入宠物配置或 URL，也不会通过设置接口返回。请求不跟随重定向。本机自动服务使用自己的私有令牌，不覆盖此环境变量。
 4. 告诉桌宠一条独特偏好，聊到它退出近期窗口，等待后台抽取后再追问。可在设置页刷新当前宠物的状态。
 
 开启后仅采集后续成功问答，不自动导入旧聊天，不发送图片本体，也不采集周期碎碎念和梦话。对话发送到指定服务后是否进一步发送给模型提供商，由该服务的模型配置决定。
@@ -38,3 +56,12 @@ Scope 幂等键、Source ID 和精确载荷随 `memory.json` 持久化，重启�
 - `POST /dsh-pet-7340/chat/powercontext?pet=main`：重试一批待同步记录并返回状态。
 
 接口字段见 [OpenAPI](openapi.yaml)。原有 `/chat/memory` 仍用于已删除宠物的本地残留记录。
+
+### 独立模式首次设置接口
+
+独立 CLI 与打包应用额外提供 `/standalone-ai/setup`，沿用本机 Host、同源和进程令牌校验。它不属于 DSH 插件 HTTP 契约，不在插件 OpenAPI 的 `/dsh-pet-7340/` 路径中。
+
+- `GET` 返回 `stage`（`idle/checking/installing/starting/ready/error/stopped`）、`message`、`busy`、`chatReady`、`memoryReady`、`configured`，以及可选的 `serverUrl` 和不含密钥的 `models`。`chatReady` 表示已有可用配置，不是每次读取都请求模型。
+- `POST` 使用 JSON。首次设置传 `action: "start"`、`memory` 布尔值、`baseUrl`、`model`、`apiKey`；`memory: true` 时另需 `embeddingBaseUrl`、`embeddingModel`、`embeddingApiKey`、`embeddingDimension`。未知字段拒绝，两个模型分别支持自己的密钥；界面在提交前补齐复用项。
+- `POST {"action":"retry"}` 按已保存配置启动本机记忆；`POST {"action":"stop"}` 停止本机记忆并关闭自动启动，保留数据库。接受操作返回 HTTP 202，通过 GET 轮询；忙时再次提交返回 409。
+- 缺少能力令牌或来自不可信 Origin 返回 403；错误 JSON/字段返回 400，非 JSON 写入返回 415，其他方法返回 405。安装、模型和磁盘错误只返回固定说明，不返回原始子进程输出、服务商正文、密钥或令牌。

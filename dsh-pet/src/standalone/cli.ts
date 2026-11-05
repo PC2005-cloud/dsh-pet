@@ -23,9 +23,11 @@ import { createStandaloneLogger } from './logger.ts';
 import { configPathsFor, describePets, isDesktopVisible, parseArgs, USAGE } from './options.ts';
 import { listenStandaloneServer } from './server.ts';
 import { ROUTE_SEGMENT } from '../shared/constants.ts';
+import { createSetup, setupMemoryBinding } from './setup.ts';
+import { openSetup } from './open-setup.ts';
 
 /** 启动独立模式：先起服务拿到端口，再 apply。 */
-async function run(logger: StandaloneLogger, options: { port: number }): Promise<void> {
+async function run(logger: StandaloneLogger, options: { port: number; setup: boolean }): Promise<void> {
   const home = dshHomeDir();
   const paths = configPathsFor(packageRoot, home);
 
@@ -46,6 +48,11 @@ async function run(logger: StandaloneLogger, options: { port: number }): Promise
   const portRef = { value: options.port };
   const ai = createStandaloneAi(home, logger);
   const security = createRequestSecurity();
+  const setup = createSetup(
+    home,
+    ai,
+    setupMemoryBinding(() => `http://127.0.0.1:${portRef.value}`, security.token),
+  );
   const context = createStandaloneContext({
     port: () => portRef.value,
     logger,
@@ -62,6 +69,7 @@ async function run(logger: StandaloneLogger, options: { port: number }): Promise
     port: options.port,
     security,
     ai,
+    setup,
     status: () => ({
       name: 'dsh-pet-standalone',
       pid: process.pid,
@@ -94,6 +102,7 @@ async function run(logger: StandaloneLogger, options: { port: number }): Promise
     logger.info(`收尾（${reason}）…`);
     // 先释放插件注册的 effect（停 Helper、清周期定时器），再关服务。
     try {
+      await setup.dispose();
       await context.dispose();
     } finally {
       await server.close();
@@ -115,6 +124,8 @@ async function run(logger: StandaloneLogger, options: { port: number }): Promise
 
   // 这一句里注册路由表、状态仓与桌面 Helper（含 bridge 管道）。
   apply(context.ctx);
+  setup.resume();
+  if (options.setup || !ai.isReady()) openSetup(security.authenticatedUrl(`http://127.0.0.1:${server.port}`));
 
   let pets: Record<string, unknown>[] = [];
   let configSource = paths.userFile;

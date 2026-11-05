@@ -9,6 +9,8 @@
  * @module dsh-pet/src/standalone/settings-page/chrome
  */
 
+import { setupPanel } from './setup-panel.ts';
+
 /** 设置页 HTML。 */
 export const settingsPage = `<!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8"><base href="/"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -18,6 +20,7 @@ export const settingsPage = `<!doctype html>
 <aside class="side">
 <div class="brand"><img class="brandLogo" src="/standalone-ai/icon.png" alt=""><span>桌宠</span></div>
 <nav class="nav" aria-label="设置分区"><div class="navList" role="tablist">
+<button type="button" class="navCell" role="tab" id="tab-setup" data-tab="setup" data-title="开始养鱼" aria-controls="panel-setup" aria-selected="false"><span class="navLabel">开始养鱼</span></button>
 <button type="button" class="navCell" role="tab" id="tab-chat" data-tab="chat" data-title="对话" aria-controls="panel-chat" aria-selected="true"><svg class="navGlyph" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3.4h10a1.1 1.1 0 0 1 1.1 1.1v5.6A1.1 1.1 0 0 1 13 11.2H8.2L5 13.6v-2.4H3a1.1 1.1 0 0 1-1.1-1.1V4.5A1.1 1.1 0 0 1 3 3.4Z" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg><span class="navLabel">对话</span></button>
 <button type="button" class="navCell" role="tab" id="tab-config" data-tab="config" data-title="配置" aria-controls="panel-config" aria-selected="false"><svg class="navGlyph" viewBox="0 0 16 16" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"><path d="M2.6 4.6h10.8M2.6 11.4h10.8"/><circle cx="6.2" cy="4.6" r="1.6" fill="currentColor" stroke="none"/><circle cx="9.8" cy="11.4" r="1.6" fill="currentColor" stroke="none"/></g></svg><span class="navLabel">配置</span></button>
 </div></nav>
@@ -26,6 +29,7 @@ export const settingsPage = `<!doctype html>
 <div class="main">
 <div class="topbar"><h1 class="pageTitle" id="page-title">对话</h1><span class="dirty" id="dirty" hidden>有未保存的改动</span></div>
 <div class="options">
+${setupPanel}
 <section class="panel" id="panel-config" role="tabpanel" aria-labelledby="tab-config" hidden>
 <div class="scroll">
 <div id="pet-cards"><p class="empty">正在读取本机配置…</p></div>
