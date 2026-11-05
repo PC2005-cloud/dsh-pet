@@ -8,9 +8,9 @@ export const setupPanel = `
 <div class="field"><label for="setup-key">API 密钥</label><input id="setup-key" type="password" required maxlength="4096" autocomplete="new-password" placeholder="填写服务商提供的密钥"></div>
 <div class="field"><label><input id="setup-memory" type="checkbox"> 开启本机长期记忆</label><p class="fieldHint">让她有机会记起更早聊过的事。首次会下载 uv、Python 和 PowerContext 1.5.0；后续随桌宠启动和退出。模型检查、聊天、记忆整理和检索会调用所填服务商，可能产生费用。</p></div>
 <details id="setup-model-details"><summary>查看或调整模型</summary>
-<div class="field"><label for="setup-model">聊天与记忆整理模型</label><input id="setup-model" required maxlength="200" value="qwen3.7-plus"></div>
+<div class="field"><label for="setup-model">聊天与记忆整理模型</label><input id="setup-model" type="text" required maxlength="200" value="qwen3.7-plus"></div>
 <div id="setup-embedding-fields" hidden>
-<div class="field"><label for="setup-embedding-model">Embedding 模型</label><input id="setup-embedding-model" maxlength="200" value="qwen3.7-text-embedding"></div>
+<div class="field"><label for="setup-embedding-model">Embedding 模型</label><input id="setup-embedding-model" type="text" maxlength="200" value="qwen3.7-text-embedding"></div>
 <div class="field"><label for="setup-dimension">向量维度</label><input id="setup-dimension" type="number" min="1" max="65536" value="1024"></div>
 <div class="field"><label for="setup-embedding-url">Embedding 接口地址（可选）</label><input id="setup-embedding-url" type="url" maxlength="2048" placeholder="留空使用上面的接口地址"></div>
 <div class="field"><label for="setup-embedding-key">Embedding 密钥（可选）</label><input id="setup-embedding-key" type="password" maxlength="4096" autocomplete="new-password" placeholder="留空使用上面的密钥"></div>
