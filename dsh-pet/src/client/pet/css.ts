@@ -48,6 +48,15 @@ function ensureAlphaFilter(): void {
   svg.setAttribute('height', '0');
   svg.setAttribute('aria-hidden', 'true');
   svg.setAttribute('data-dsh-pet-alpha-fix', '');
+  // 这个 SVG 必须留在文档里，供 `.dsh-pet-video` 的 `filter:url(#dsh-pet-alpha-fix)` 解析；
+  // 但它是行内元素，挂在 <body> 末尾会在 #root（100% 视口高）之后多出一个匿名行盒
+  // （约 font-size 16px 的行高），把文档撑高一行，让整页出现可滚动溢出：
+  // 右侧冒出整页滚动条、滚到底时顶部标签条被顶出、左侧栏底部留出一条空白。
+  // 绝对定位让它脱离行内流即可，滤镜引用不受影响。
+  svg.style.position = 'absolute';
+  svg.style.width = '0';
+  svg.style.height = '0';
+  svg.style.overflow = 'hidden';
   const defs = document.createElementNS(NS, 'defs');
   const filter = document.createElementNS(NS, 'filter');
   filter.id = ALPHA_FIX_ID;
