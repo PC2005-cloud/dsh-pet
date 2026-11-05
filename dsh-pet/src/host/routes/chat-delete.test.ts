@@ -127,3 +127,34 @@ describe('/chat/memory —— 已删宠物的残留历史', () => {
     assert.equal((result as { status: number }).status, 405);
   });
 });
+
+test('PowerContext status and sync leave orphan-history routes intact', async () => {
+  const { deps: base } = makeDeps();
+  let synced = false;
+  const deps: PetRouteDeps = {
+    ...base,
+    memoryStatus: async () => ({
+      ok: true,
+      backend: 'powercontext',
+      pending: synced ? 0 : 1,
+      captured: synced ? 1 : 0,
+      skipped: 0,
+      scopeId: 'scope-test',
+      recall: 'empty',
+      error: null,
+      processing: 'Source capture does not establish Memory extraction.',
+    }),
+    syncMemory: async () => {
+      synced = true;
+    },
+  };
+  const input: RouteInput = {
+    rest: 'chat/powercontext',
+    method: 'GET',
+    url: new URL('http://127.0.0.1/dsh-pet-7340/chat/powercontext?pet=main'),
+  };
+  assert.equal(body(await handleChatRoutes(deps, input)).pending, 1);
+  assert.equal(body(await handleChatRoutes(deps, { ...input, method: 'POST' })).pending, 0);
+  assert.equal(((await handleChatRoutes(deps, { ...input, method: 'DELETE' })) as { status: number }).status, 405);
+  assert.ok(Array.isArray(body(await handleChatRoutes(deps, { ...input, rest: 'chat/memory' })).orphans));
+});

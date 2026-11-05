@@ -3,6 +3,24 @@
  */
 
 export const zh = {
+  memoryStatusHint: '已保存配置的当前宠物状态；已同步不代表已经提炼成长期记忆。',
+  memoryPending: '待同步',
+  memoryCaptured: '已同步',
+  memorySkipped: '未采集',
+  memoryRecall: '最近召回',
+  memoryRecall_not_run: '尚未运行',
+  memoryRecall_empty: '暂无相关记忆',
+  memoryRecall_ready: '已召回',
+  memoryRecall_unavailable: '暂不可用',
+  memoryRefresh: '刷新状态',
+  memoryRetry: '重试同步',
+  longTermMemory: '长期记忆',
+  memoryNative: '原生近期对话',
+  memoryHint:
+    '启用后，将双方对话发送到所配置的 PowerContext。需先配置 Server 的记忆提取；删除聊天记录不会删除远端长期记忆。',
+  historyBytes: '近期正文字节上限（0 为不限）',
+  recallBytes: '召回字节上限',
+
   nav: '桌宠配置',
   intro: '管理多个桌宠：每个宠物可独立设置大小与位置（保存后即时生效）。',
   // 卡片标题与卡片级说明；说明统一进问号气泡。

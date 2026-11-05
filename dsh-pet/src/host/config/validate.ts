@@ -8,6 +8,7 @@
 import { FONT_SIZE_MAX, FONT_SIZE_MIN } from '../../shared/fonts.ts';
 import { isKnownVoice } from '../voice/voices.ts';
 import { FONT_FAMILY_SET } from './constants.ts';
+import { chatMemoryConfigValid } from '../../shared/chat-memory-config.ts';
 
 /** 内置玩法动画的槽位数：`animations.baifan` 必须恰好这么多个（顺序是玩法契约，见 shared/types 的 Animations）。 */
 const ACTIVITY_SLOTS = 5;
@@ -163,6 +164,8 @@ function workStatusTextsValid(value: unknown): boolean {
 /** 顶层标量字段的合法性（非法与缺失同处理：取默认值 + 告警） */
 export function topFieldValid(key: string, value: unknown): boolean {
   switch (key) {
+    case 'chatMemory':
+      return chatMemoryConfigValid(value);
     case 'whisperPrompt':
       return typeof value === 'string' && value.length > 0;
     case 'chatMemoryRounds': {

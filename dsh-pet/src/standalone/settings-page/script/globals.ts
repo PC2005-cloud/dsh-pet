@@ -6,11 +6,14 @@
  * @module dsh-pet/src/standalone/settings-page/script/globals
  */
 
+import { DEFAULT_CHAT_MEMORY } from '../../../shared/chat-memory-config.ts';
+
 /** 生成全局卡片片段。 */
 export function globalsScript(): string {
   return `
+const FALLBACK_CHAT_MEMORY = ${JSON.stringify(DEFAULT_CHAT_MEMORY)};
 function globalCards() {
-  return [globalFlagsCard, voiceCard, fontCard, physicsCard, motionCard, modelCard, advancedCard];
+  return [globalFlagsCard, voiceCard, fontCard, physicsCard, motionCard, modelCard, memoryCard, advancedCard];
 }
 
 function setGlobal(key, value) {
@@ -100,6 +103,45 @@ function modelCard() {
       numberField('g-image-limit', '配图张数上限', g.chatImageLimit, (value) => setGlobal('chatImageLimit', Math.round(clampNumber(value, 0, 50, 0))), { min: 0, max: 50, step: 1, hint: '0 表示不限制。' }),
     ]),
   ]);
+}
+
+function memoryCard() {
+  const memory = state.globals.chatMemory;
+  const pet = currentPet();
+  const status = make('p', { class: 'fieldHint', role: 'status', text: '尚未读取状态。' });
+  let busy = false;
+  async function refresh(method) {
+    if (!pet || busy) return;
+    busy = true;
+    setStatus(status, '正在读取…');
+    try {
+      const body = await callApi(method, '/chat/powercontext?pet=' + encodeURIComponent(pet.id));
+      if (!body || body.ok !== true) throw new Error('记忆状态暂不可用');
+      const recall = { not_run: '尚未运行', ready: '已召回', empty: '暂无相关记忆', unavailable: '暂不可用' };
+      setStatus(status, (body.backend === 'native' ? '原生近期历史' : 'PowerContext') +
+        ' · 待同步 ' + body.pending + ' · 已同步 ' + body.captured + ' · 未采集 ' + body.skipped +
+        ' · 最近召回：' + (recall[body.recall] || '未知') + (body.error ? ' · ' + body.error : ''));
+    } catch { setStatus(status, '记忆状态暂不可用', 'error'); }
+    finally { busy = false; }
+  }
+  const controls = [
+    selectField('g-memory-backend', '长期记忆后端', memory.backend,
+      [{ value: 'native', label: '原生近期历史' }, { value: 'powercontext', label: 'PowerContext' }],
+      (value) => { memory.backend = value; renderPetsPanel(); }),
+    numberField('g-history-bytes', '近期历史正文预算（字节）', memory.maxHistoryBytes,
+      (value) => { memory.maxHistoryBytes = Math.round(clampNumber(value, 0, 131072, 0)); },
+      { min: 0, max: 131072, step: 1, hint: '0 表示只按轮数限制；按完整问答保留。' }),
+  ];
+  if (memory.backend === 'powercontext') {
+    controls.push(textField('g-memory-url', 'PowerContext Server 地址', memory.serverUrl,
+      (value) => { memory.serverUrl = value; }, { maxLength: 2048, hint: '本机 HTTP 或 HTTPS 地址；不要填写密钥。' }));
+    controls.push(numberField('g-recall-bytes', '召回正文预算（字节）', memory.maxRecallBytes,
+      (value) => { memory.maxRecallBytes = Math.round(clampNumber(value, 512, 32768, 4096)); },
+      { min: 512, max: 32768, step: 1 }));
+  }
+  controls.push(make('p', { class: 'fieldHint', text: '当前宠物的已保存配置状态；已同步不代表已提炼成长期记忆。' }), status,
+    make('div', { class: 'testRow' }, [button('刷新状态', () => refresh('GET')), button('重试同步', () => refresh('POST'))]));
+  return card('长期记忆', '启用后，后续成功的双方对话将发送到配置的 PowerContext。需要 Server 开启记忆抽取；删除聊天不会删除远端长期记忆。', controls);
 }
 
 function pathRows() {

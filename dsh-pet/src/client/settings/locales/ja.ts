@@ -4,6 +4,24 @@
 import type { Key } from './zh.ts';
 
 export const ja: Record<Key, string> = {
+  memoryStatusHint: '保存済み設定の現在のペット。同期済みでも記憶の抽出完了とは限りません。',
+  memoryPending: '未同期',
+  memoryCaptured: '同期済み',
+  memorySkipped: '未収集',
+  memoryRecall: '前回の検索',
+  memoryRecall_not_run: '未実行',
+  memoryRecall_empty: '関連記憶なし',
+  memoryRecall_ready: '取得済み',
+  memoryRecall_unavailable: '利用不可',
+  memoryRefresh: '状態を更新',
+  memoryRetry: '同期を再試行',
+  longTermMemory: '長期記憶',
+  memoryNative: '標準の直近履歴',
+  memoryHint:
+    '有効にすると会話を設定済みの PowerContext に送信します。先に記憶抽出を設定してください。履歴の削除ではリモートの記憶は削除されません。',
+  historyBytes: '直近の本文バイト上限（0 は無制限）',
+  recallBytes: '検索結果のバイト上限',
+
   nav: 'デスクトップペット設定',
   intro: '複数のペットを管理できます。ペットごとにサイズと位置を個別に設定できます（保存するとすぐに反映されます）。',
   // 卡片标题与卡片级说明；说明统一进问号气泡。

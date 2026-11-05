@@ -19,6 +19,7 @@ import { defaultLog } from './log-file.ts';
 import { extractChatImage, memeCatalog, type MemeEntry } from './memes.ts';
 import { modelCandidates, modelLabel, type ModelRef } from './model-selection.ts';
 import { historyStampOf } from './time-context.ts';
+import { recalledContextText } from './memory-context.ts';
 
 /** 生成失败原因（与 shared/whisper.ts 的 WhisperState 失败分支同构）。 */
 export type ChatGenerateResult =
@@ -96,6 +97,8 @@ function imageInstruction(pool: MemeEntry[]): string {
 
 /** 一次对话生成的输入。 */
 export interface ChatGenerateInput {
+  /** Exact, bounded historical evidence for this request only. */
+  readonly recalledContext?: string;
   /** 宿主上下文（注入 agentDefaultModel / llm）。 */
   readonly ctx: { agentDefaultModel: { currentSelection(): { provider: string; model: string } }; llm?: unknown };
   /** 人设提示词（whisperPrompt，与碎碎念共用同一人设）。 */
@@ -140,7 +143,17 @@ export async function generateChat(input: ChatGenerateInput): Promise<ChatGenera
   // 兜底文案与失败分支同源，避免两处字面量漂移
   let last: ChatGenerateResult = { ok: false, reason: 'generate-error', message: noTextReason(undefined) };
   for (const [i, sel] of candidates.entries()) {
-    const result = await generateWith(ctx, { llm, sel, system, history, userText, pool, actions, image });
+    const result = await generateWith(ctx, {
+      llm,
+      sel,
+      system,
+      history,
+      userText,
+      pool,
+      actions,
+      image,
+      recalledContext: input.recalledContext,
+    });
     if (result.ok) return result;
     last = result;
     // 回落要留痕：配的模型没生效时能在日志里看到原因（否则「我明明配了 A，怎么还是用 B」没法查）
@@ -156,6 +169,7 @@ export async function generateChat(input: ChatGenerateInput): Promise<ChatGenera
 
 /** 单个候选模型的一次生成请求（候选链的一环）。 */
 interface GenerateOnce {
+  readonly recalledContext?: string;
   readonly llm: { stream(o: unknown): AsyncIterable<unknown> };
   readonly sel: ModelRef;
   readonly system: string;
@@ -196,6 +210,7 @@ async function generateWith(ctx: { llm?: unknown }, once: GenerateOnce): Promise
   const wantAction = actions.length > 0;
   const instruction = (wantImage ? imageInstruction(pool) : '') + (wantAction ? actionInstruction(actions) : '');
   const content: Record<string, unknown>[] = [
+    ...(once.recalledContext ? [{ type: 'text', text: recalledContextText(once.recalledContext) }] : []),
     { type: 'text', text: instruction === '' ? userText : userText + instruction },
   ];
   // 图片块排在文本块之后：提示词先到、像素后到，模型更容易按提示去看图。

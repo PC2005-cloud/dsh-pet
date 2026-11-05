@@ -4,6 +4,25 @@
 import type { Key } from './zh.ts';
 
 export const de: Record<Key, string> = {
+  memoryStatusHint:
+    'Aktuelles Tier, gespeicherte Einstellungen. Synchronisiert bedeutet noch nicht als Erinnerung extrahiert.',
+  memoryPending: 'Ausstehend',
+  memoryCaptured: 'Synchronisiert',
+  memorySkipped: 'Übersprungen',
+  memoryRecall: 'Letzter Abruf',
+  memoryRecall_not_run: 'Nicht ausgeführt',
+  memoryRecall_empty: 'Keine passende Erinnerung',
+  memoryRecall_ready: 'Abgerufen',
+  memoryRecall_unavailable: 'Nicht verfügbar',
+  memoryRefresh: 'Status aktualisieren',
+  memoryRetry: 'Erneut synchronisieren',
+  longTermMemory: 'Langzeitgedächtnis',
+  memoryNative: 'Nativer Gesprächsverlauf',
+  memoryHint:
+    'Dialoge werden an den konfigurierten PowerContext-Server gesendet. Zuerst die Speicherextraktion einrichten. Das Löschen des Verlaufs entfernt keine entfernten Erinnerungen.',
+  historyBytes: 'Byte-Limit für den jüngsten Text (0 = unbegrenzt)',
+  recallBytes: 'Byte-Limit für Erinnerungen',
+
   nav: 'Desktop-Pet-Konfiguration',
   intro: 'Mehrere Pets verwalten: Jedes Pet hat eigene Größe und Position (gilt sofort nach dem Speichern).',
   // 卡片标题与卡片级说明；说明统一进问号气泡。

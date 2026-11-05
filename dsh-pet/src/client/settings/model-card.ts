@@ -11,6 +11,8 @@ import type { ModelCatalogGroup } from './picker/index.ts';
 import type { ModelPickerProps } from './picker/index.ts';
 import type { SettingsRuntime } from './runtime.ts';
 import { makeUiKit, numberInputProps } from './ui.ts';
+import { makeMemoryStatus } from './memory-status.ts';
+import type { ChatMemoryConfig } from '../../shared/chat-memory-config.ts';
 
 /** 两个模型字段的键名。 */
 export type ModelFieldKey = 'whisperModel' | 'chatModel';
@@ -30,6 +32,9 @@ const CHAT_TOGGLES: Array<{ key: ChatFlagKey; label: string }> = [
 
 /** 模型卡的输入。 */
 export interface ModelCardProps {
+  petId?: string;
+  longTermMemory?: ChatMemoryConfig;
+  onLongTermMemoryChange?: (value: ChatMemoryConfig) => void;
   /** 保存中或配置未就绪时禁用全部控件。 */
   busy: boolean;
   /** 候选清单；`null` 表示还在拉取。 */
@@ -68,10 +73,15 @@ export function makeModelCard(
   picker: FunctionComponent<ModelPickerProps>,
 ): FunctionComponent<ModelCardProps> {
   const { h, t } = rt;
+  const MemoryStatus = makeMemoryStatus(rt);
   const { cardHead, field, toggleCell } = makeUiKit({ h, t });
 
   return function ModelCard(props: ModelCardProps) {
     const { busy, catalog, failed } = props;
+    const memory = props.longTermMemory;
+    const changeMemory = (patch: Partial<ChatMemoryConfig>) => {
+      if (memory) props.onLongTermMemoryChange?.({ ...memory, ...patch });
+    };
 
     /** 「全局默认」的数字格：标签与问号在上、数字输入在下。 */
     const numField = (label: string, value: number, setter: (v: number) => void) =>
@@ -126,6 +136,69 @@ export function makeModelCard(
             toggleCell(toggle.label, props.values[toggle.key], busy, (value) => props.onFlagChange(toggle.key, value)),
           ),
         }),
+        memory
+          ? h('div', {
+              children: [
+                field(
+                  t('longTermMemory'),
+                  h('select', {
+                    value: memory.backend,
+                    disabled: busy,
+                    onChange: (event: { target: { value: string } }) =>
+                      changeMemory({
+                        backend: event.target.value === 'powercontext' ? 'powercontext' : 'native',
+                      }),
+                    children: [
+                      h('option', { value: 'native', children: t('memoryNative') }),
+                      h('option', { value: 'powercontext', children: 'PowerContext' }),
+                    ],
+                  }),
+                  t('memoryHint'),
+                ),
+                field(
+                  t('historyBytes'),
+                  h(
+                    'input',
+                    numberInputProps(memory.maxHistoryBytes, (value) => changeMemory({ maxHistoryBytes: value }), {
+                      min: '0',
+                      max: '131072',
+                      step: '1',
+                      disabled: busy,
+                    }),
+                  ),
+                ),
+                memory.backend === 'powercontext'
+                  ? h('div', {
+                      className: 'dsh-pet-cfg__grid2',
+                      children: [
+                        field(
+                          'PowerContext URL',
+                          h('input', {
+                            type: 'url',
+                            value: memory.serverUrl,
+                            disabled: busy,
+                            onChange: (event: { target: { value: string } }) =>
+                              changeMemory({ serverUrl: event.target.value }),
+                          }),
+                        ),
+                        field(
+                          t('recallBytes'),
+                          h(
+                            'input',
+                            numberInputProps(
+                              memory.maxRecallBytes,
+                              (value) => changeMemory({ maxRecallBytes: value }),
+                              { min: '512', max: '32768', step: '1', disabled: busy },
+                            ),
+                          ),
+                        ),
+                      ],
+                    })
+                  : null,
+                props.petId ? h(MemoryStatus, { petId: props.petId }, props.petId) : null,
+              ],
+            })
+          : null,
       ],
     });
   };

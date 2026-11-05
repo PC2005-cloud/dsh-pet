@@ -4,6 +4,24 @@
 import type { Key } from './zh.ts';
 
 export const en: Record<Key, string> = {
+  memoryStatusHint: 'Current pet, saved settings. Synced dialogue does not establish extracted memory.',
+  memoryPending: 'Pending',
+  memoryCaptured: 'Synced',
+  memorySkipped: 'Skipped',
+  memoryRecall: 'Last recall',
+  memoryRecall_not_run: 'Not run',
+  memoryRecall_empty: 'No relevant memory',
+  memoryRecall_ready: 'Recalled',
+  memoryRecall_unavailable: 'Unavailable',
+  memoryRefresh: 'Refresh status',
+  memoryRetry: 'Retry sync',
+  longTermMemory: 'Long-term memory',
+  memoryNative: 'Native recent history',
+  memoryHint:
+    'When enabled, dialogue is sent to the configured PowerContext server. Configure memory extraction first. Deleting chat history does not delete remote memories.',
+  historyBytes: 'Recent text byte limit (0 = unlimited)',
+  recallBytes: 'Recall byte limit',
+
   nav: 'Pet Config',
   intro: 'Manage multiple pets: each pet has its own size and position (applies instantly after saving).',
   // 卡片标题与卡片级说明；说明统一进问号气泡。

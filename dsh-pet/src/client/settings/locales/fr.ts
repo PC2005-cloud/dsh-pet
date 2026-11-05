@@ -4,6 +4,25 @@
 import type { Key } from './zh.ts';
 
 export const fr: Record<Key, string> = {
+  memoryStatusHint:
+    'Animal actuel, réglages enregistrés. La synchronisation ne garantit pas l’extraction des souvenirs.',
+  memoryPending: 'En attente',
+  memoryCaptured: 'Synchronisés',
+  memorySkipped: 'Ignorés',
+  memoryRecall: 'Dernier rappel',
+  memoryRecall_not_run: 'Non exécuté',
+  memoryRecall_empty: 'Aucun souvenir pertinent',
+  memoryRecall_ready: 'Récupéré',
+  memoryRecall_unavailable: 'Indisponible',
+  memoryRefresh: 'Actualiser l’état',
+  memoryRetry: 'Réessayer la synchronisation',
+  longTermMemory: 'Mémoire à long terme',
+  memoryNative: 'Historique récent natif',
+  memoryHint:
+    'Les échanges sont envoyés au serveur PowerContext configuré. Configurez son extraction de mémoire. Effacer l’historique ne supprime pas les souvenirs distants.',
+  historyBytes: 'Limite du texte récent en octets (0 = illimité)',
+  recallBytes: 'Limite du rappel en octets',
+
   nav: 'Configuration des compagnons',
   intro:
     "Gérez plusieurs compagnons : chacun a sa taille et sa position (appliquées immédiatement après l'enregistrement).",

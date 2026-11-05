@@ -1705,7 +1705,8 @@ paths:
 
         - 带 `?ts=`（可重复）：只删这些轮。一轮的两条消息共享同一个 `ts`，命中一条即整轮一起删。
         - 不带 `?ts=`：清空该宠物的全部历史。
-        - 删空的宠物连空叶子一起摘掉，`memory.json` 里不留空对象。
+        - 未使用长期记忆的宠物删空后摘掉空叶子；已绑定 PowerContext 时保留绑定，并取消相应的未发送队列。
+        - 本地删除不撤回已发送或正在发送的数据，也不删除远端长期记忆。
         - 不校验 `surface`：删除是存储管理，不改变渲染端可见状态。
         - 与对话共用同一条写队列，不会与进行中的回复交错。
       parameters:
@@ -1746,6 +1747,46 @@ paths:
                   - $ref: "#/components/schemas/FailureResponse"
         "405":
           $ref: "#/components/responses/MethodNotAllowed"
+
+  /dsh-pet-7340/chat/powercontext:
+    get:
+      tags: [Action]
+      operationId: getPowerContextStatus
+      summary: 查看当前宠物的长期记忆同步与召回状态
+      description: 只返回计数和状态，不返回对话正文。captured 表示 Source 接收成功，不代表已抽取长期记忆。
+      parameters:
+        - name: pet
+          in: query
+          required: true
+          schema: {type: string}
+      responses:
+        "200":
+          description: 当前状态或业务失败
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/PowerContextStatus"
+                  - $ref: "#/components/schemas/FailureResponse"
+    post:
+      tags: [Action]
+      operationId: syncPowerContext
+      summary: 重试当前宠物最多两条待同步对话并返回状态
+      description: 复用已持久化的 Source ID；不会触发模型抽取。409 身份冲突会停止自动补传，需管理员处理。
+      parameters:
+        - name: pet
+          in: query
+          required: true
+          schema: {type: string}
+      responses:
+        "200":
+          description: 同步后的当前状态或业务失败
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/PowerContextStatus"
+                  - $ref: "#/components/schemas/FailureResponse"
 
   /dsh-pet-7340/chat/memory:
     get:
@@ -1869,7 +1910,7 @@ paths:
           `notificationsEnabled`/`clickSoundEnabled`/`whisperImageEnabled`/`chatImageEnabled`/
           `chatAnimationEnabled`/`confineToScreen`/`trayEnabled`/`voiceEnabled`/`voiceName`/`voiceWhisperEnabled`/
           `voiceTodoEnabled`/`physics`/`font`/`whisperModel`/`chatModel`/`chatMemoryRounds`/
-          `chatImageLimit`。
+          `chatImageLimit`/`chatMemory`。
           其余字段会沿用磁盘上用户文件里的原值（透传保留），所以设置页保存
           **不会抹掉**你手写的精调配置（`whisperPrompt`/`memes`/`eventsRefreshSec` 等）。
           白名单字段也只在请求体**真的传了**时才算白名单：没传就走透传，不会被抹成默认值。
@@ -4150,6 +4191,40 @@ components:
         **就靠它判断"变了没有"**：与上次记录的值相同即跳过渲染。
         `0` 表示从未写过。
 
+    ChatMemoryConfig:
+      type: object
+      additionalProperties: false
+      required: [backend, maxHistoryBytes, serverUrl, maxRecallBytes, recallLimit, timeoutMs]
+      properties:
+        backend: {type: string, enum: [native, powercontext], default: native}
+        maxHistoryBytes:
+          type: integer
+          minimum: 0
+          maximum: 131072
+          default: 0
+          description: 近期历史正文的 UTF-8 字节预算；0 只按轮数裁剪。按完整轮次保留，不含人设、时间标记、本轮问题或召回。
+        serverUrl:
+          type: string
+          default: http://127.0.0.1:8000
+          description: HTTPS 或本机 HTTP 地址；禁止内嵌账号、密码、查询参数和片段。鉴权令牌仅从宿主环境读取。
+        maxRecallBytes: {type: integer, minimum: 512, maximum: 32768, default: 4096}
+        recallLimit: {type: integer, minimum: 1, maximum: 8, default: 3}
+        timeoutMs: {type: integer, minimum: 250, maximum: 10000, default: 1500}
+
+    PowerContextStatus:
+      type: object
+      required: [ok, backend, pending, captured, skipped, scopeId, recall, error, processing]
+      properties:
+        ok: {type: boolean, const: true}
+        backend: {type: string, enum: [native, powercontext]}
+        pending: {type: integer, minimum: 0}
+        captured: {type: integer, minimum: 0}
+        skipped: {type: integer, minimum: 0}
+        scopeId: {type: [string, "null"]}
+        recall: {type: string, enum: [not_run, empty, ready, unavailable]}
+        error: {type: [string, "null"]}
+        processing: {type: string, description: Source 接收与 Memory 抽取是不同阶段。}
+
     ChatMemoryMessage:
       type: object
       required: [role, content, ts]
@@ -4331,6 +4406,8 @@ components:
           description: |
             待办提醒要不要念出来（全局默认）。同样受 `voiceEnabled` 总开关约束。
             设置页「语音播报」卡里的「待办播报」开关写的就是它。缺失默认 `false`。
+        chatMemory:
+          $ref: "#/components/schemas/ChatMemoryConfig"
         chatMemoryRounds:
           type: integer
           minimum: 0
@@ -4379,6 +4456,8 @@ components:
         whisperPrompt:
           type: string
           description: 该宠物的人设提示词（碎碎念与对话共用）
+        chatMemory:
+          $ref: "#/components/schemas/ChatMemoryConfig"
         chatMemoryRounds:
           type: integer
           description: 对话记忆轮数（1 轮 = 1 问 1 答）

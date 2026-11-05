@@ -8,6 +8,7 @@ import { DEFAULT_FONT } from '../../../shared/fonts.ts';
 import { DEFAULT_PHYSICS } from '../../../shared/physics.ts';
 import type { FontConfig, ModelSelection, Pet, PhysicsParams, Weights } from '../../../shared/types.ts';
 import { parseWeights } from '../../../shared/weights.ts';
+import { chatMemoryConfigValid, type ChatMemoryConfig } from '../../../shared/chat-memory-config.ts';
 
 /** 宿主返回的成品聚合：`main` 是大配置条目，其余键是文件定义的其他宠物条目。 */
 export type MergedConfig = Record<string, Record<string, unknown>>;
@@ -45,6 +46,7 @@ export interface MainConfigPatch {
   whisperModel?: ModelSelection;
   chatModel?: ModelSelection;
   chatMemoryRounds?: number;
+  chatMemory?: ChatMemoryConfig;
   chatImageLimit?: number;
 }
 
@@ -101,6 +103,7 @@ export function readMainConfig(merged: MergedConfig): MainConfigPatch | null {
   if (chatModel) patch.chatModel = chatModel;
   const rounds = nonNegative(main.chatMemoryRounds);
   if (rounds !== undefined) patch.chatMemoryRounds = rounds;
+  if (chatMemoryConfigValid(main.chatMemory)) patch.chatMemory = { ...main.chatMemory };
   const limit = nonNegative(main.chatImageLimit);
   if (limit !== undefined) patch.chatImageLimit = limit;
   // 上界在宿主侧已经把关，这里补一次跨进程读回的判定：脏值只影响显示，不让它流到播放端

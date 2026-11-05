@@ -11,6 +11,7 @@ import { DEFAULT_FONT } from '../shared/fonts.ts';
 import { DEFAULT_PHYSICS } from '../shared/physics.ts';
 import type { FontConfig, ModelSelection, PhysicsParams, Weights } from '../shared/types.ts';
 import type { FunctionComponent } from 'react';
+import { DEFAULT_CHAT_MEMORY, type ChatMemoryConfig } from '../shared/chat-memory-config.ts';
 import { requestNotificationPermission } from './notify.ts';
 import { injectSettingsCss } from './settings/css.ts';
 import { type Feedback, makeActions } from './settings/actions.ts';
@@ -171,6 +172,7 @@ export function makePetConfigSection(
     const [chatModel, setChatModel] = useState<ModelSelection>({ provider: '', model: '' });
     // 对话历史条数（全局默认）：初值 10 是内置默认，加载效应会用成品 main.chatMemoryRounds 覆盖。
     const [chatMemory, setChatMemory] = useState(10);
+    const [longTermMemory, setLongTermMemory] = useState<ChatMemoryConfig>({ ...DEFAULT_CHAT_MEMORY });
     // 对话配图张数上限（全局默认）：初值 20 是内置默认，加载后由成品值覆盖。
     const [chatImageLimit, setChatImageLimit] = useState(20);
     // 头像预览的破缓存版本号：上传成功后换一个，预览才会重新取图（同一 URL 会被浏览器记住）。
@@ -204,6 +206,7 @@ export function makePetConfigSection(
         if (patch.whisperModel !== undefined) setWhisperModel(patch.whisperModel);
         if (patch.chatModel !== undefined) setChatModel(patch.chatModel);
         if (patch.chatMemoryRounds !== undefined) setChatMemory(patch.chatMemoryRounds);
+        if (patch.chatMemory !== undefined) setLongTermMemory(patch.chatMemory);
         if (patch.chatImageLimit !== undefined) setChatImageLimit(patch.chatImageLimit);
       },
       [replace],
@@ -314,6 +317,7 @@ export function makePetConfigSection(
         whisperModel,
         chatModel,
         chatMemoryRounds: chatMemory,
+        chatMemory: longTermMemory,
         chatImageLimit,
         font,
         animationWeights: weights,
@@ -402,6 +406,7 @@ export function makePetConfigSection(
         }),
         h(FontCard, { busy, font, onChange: patchFont }),
         h(ModelCard, {
+          petId: selId,
           busy,
           catalog,
           failed: catalogFailed,
@@ -409,6 +414,8 @@ export function makePetConfigSection(
           chatModel,
           onModelChange: setModel,
           chatMemory,
+          longTermMemory,
+          onLongTermMemoryChange: setLongTermMemory,
           chatImageLimit,
           onChatMemoryChange: setChatMemory,
           onChatImageLimitChange: setChatImageLimit,

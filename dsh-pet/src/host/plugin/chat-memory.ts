@@ -1,14 +1,15 @@
 /**
  * 对话与记忆：读写记忆文件、串行化对话队列、维护活跃宠物并生成碎碎念与回复。
  *
- * 不拼人设（人设归配置），不发网络请求（归 ./chat、./whisper）。
+ * 人设由 ./persona 拼装，模型与记忆服务请求分别委托给 ./chat、./whisper、./powercontext。
  * 依赖由 apply 显式传入（见输入类型），模块内不读全局、不建单例。
  * @module dsh-pet/src/host/plugin/chat-memory
  */
 import { join } from 'node:path';
 import { generateChat, type ChatMemoryMessage } from '../chat.ts';
 import { chatActionNames } from '../chat-action.ts';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile, rename, rm } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
 import { composeSystemPrompt, petPersona } from '../persona.ts';
 import { findPetInstance, readAllConfig, removeRoundsByTs, sliceMemoryRounds } from '../config.ts';
 import type { PetImageRef } from '../image-attachment.ts';
@@ -20,6 +21,23 @@ import { SLEEP_TALK_INSTRUCTION } from '../whisper.ts';
 import { pickVoiceSurface, type VoiceTarget } from '../surface.ts';
 import type { HostSetup } from './setup.ts';
 import type { HostContext } from './context.ts';
+import { DEFAULT_CHAT_MEMORY, chatMemoryConfigValid, type ChatMemoryConfig } from '../../shared/chat-memory-config.ts';
+import { boundedHistory } from '../memory-context.ts';
+import {
+  PowerContextClient,
+  memoryState,
+  memoryTarget,
+  queueMemoryTurn,
+  memoryErrorCode,
+  type MemoryEntryState,
+} from '../powercontext.ts';
+
+type MemoryEntry = { messages: ChatMemoryMessage[] } & MemoryEntryState;
+type MemoryFile = Record<string, Record<string, MemoryEntry>>;
+
+function memoryConfig(conf: Record<string, unknown>): ChatMemoryConfig {
+  return chatMemoryConfigValid(conf.chatMemory) ? conf.chatMemory : { ...DEFAULT_CHAT_MEMORY };
+}
 
 /** 这一句该由哪一端念：取宠物实例的 display 推导（桌面优先）；两端都不显示时为 `undefined`。 */
 function voiceTargetFor(pet: Record<string, unknown>): VoiceTarget | undefined {
@@ -56,29 +74,39 @@ export function createChatMemory(deps: ChatMemoryInput) {
   // 对话写操作串行队列：read-modify-write 排队执行，防两端同时对话时交错写盘
   let chatQueue: Promise<void> = Promise.resolve();
 
-  /** 读记忆文件：不存在 → 空；解析失败/根不是对象 → 记日志 + 空记忆（不备份、不改写源文件） */
-  const readMemory = async (): Promise<Record<string, Record<string, { messages: ChatMemoryMessage[] }>>> => {
+  /** Refuse to overwrite an unreadable journal: it also owns remote scope and Source identities. */
+  const readMemory = async (): Promise<MemoryFile> => {
     let raw: string;
     try {
       raw = await readFile(memoryPath, 'utf8');
-    } catch {
-      return {}; // 文件不存在 = 尚无记忆
+    } catch (error) {
+      if ((error as { code?: string }).code === 'ENOENT') return {};
+      throw new Error('Chat memory could not be read; existing data was preserved.', { cause: error });
     }
     try {
       const parsed = JSON.parse(raw) as Record<string, unknown>;
       if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('not an object');
-      return parsed as Record<string, Record<string, { messages: ChatMemoryMessage[] }>>;
-    } catch (e) {
-      log.error(
-        `dsh-pet: 记忆文件无法解析（对话将从头开始）：${memoryPath}（${e instanceof Error ? e.message : String(e)}）`,
-      );
-      return {};
+      return parsed as MemoryFile;
+    } catch {
+      log.error('dsh-pet: invalid memory journal; refusing to overwrite it');
+      throw new Error('Chat memory is invalid; restore memory.json from a backup before continuing.');
     }
   };
 
-  const writeMemory = async (mem: Record<string, Record<string, { messages: ChatMemoryMessage[] }>>): Promise<void> => {
+  const writeMemory = async (mem: MemoryFile): Promise<void> => {
     await mkdir(userRoot, { recursive: true });
-    await writeFile(memoryPath, JSON.stringify(mem, null, 2), 'utf8');
+    const temporary = memoryPath + '.' + randomUUID() + '.pending';
+    try {
+      await writeFile(temporary, JSON.stringify(mem, null, 2), {
+        encoding: 'utf8',
+        mode: 0o600,
+        flag: 'wx',
+        flush: true,
+      });
+      await rename(temporary, memoryPath);
+    } finally {
+      await rm(temporary, { force: true });
+    }
   };
 
   /** 把一次读写封进串行队列（同进程内防交错），返回 fn 的结果 */
@@ -89,6 +117,108 @@ export function createChatMemory(deps: ChatMemoryInput) {
       () => undefined,
     );
     return run;
+  };
+
+  // Network delivery must not hold the chat journal lock: a slow Server must not queue every reply behind it.
+  const deliveries = new Map<string, Promise<void>>();
+  let disposed = false;
+  const syncMemory = (petId: string): Promise<void> => {
+    if (disposed) return Promise.resolve();
+    const running = deliveries.get(petId);
+    if (running) return running;
+    const run = (async () => {
+      for (let count = 0; count < 2; count += 1) {
+        const snapshot = await withMemoryLock(async () => {
+          if (disposed) return;
+          const found = findPetInstance(readAllConfig(configPaths), petId);
+          if (!found) return;
+          const config = memoryConfig(found.conf);
+          if (config.backend !== 'powercontext') return;
+          const mem = await readMemory();
+          const entry = mem[found.entry]?.[petId];
+          if (!entry?.powercontext?.[memoryTarget(config)]) return;
+          const sync = memoryState(entry, config);
+          if (sync.deliveryBlocked || !sync.pending.length) return;
+          return { entry: found.entry, config, sync, turn: sync.pending[0] };
+        });
+        if (!snapshot) return;
+        let failure: string | undefined;
+        try {
+          await new PowerContextClient(snapshot.config).capture(snapshot.sync, snapshot.turn);
+        } catch (error) {
+          failure = memoryErrorCode(error);
+        }
+        await withMemoryLock(async () => {
+          if (disposed) return;
+          const mem = await readMemory();
+          const sync = mem[snapshot.entry]?.[petId]?.powercontext?.[memoryTarget(snapshot.config)];
+          // Deletion can cancel pending delivery while HTTP is in flight; never resurrect deleted local data.
+          if (!sync || sync.scopeKey !== snapshot.sync.scopeKey) return;
+          if (snapshot.sync.scopeId) sync.scopeId = snapshot.sync.scopeId;
+          if (failure) {
+            sync.lastError = failure;
+            if (failure === 'http_409') sync.deliveryBlocked = true;
+            log.warn('dsh-pet: memory sync ' + failure);
+          } else {
+            sync.pending = sync.pending.filter((turn) => turn.id !== snapshot.turn.id);
+            sync.captured += 1;
+            delete sync.lastError;
+          }
+          await writeMemory(mem);
+        });
+        if (failure) return;
+      }
+    })().finally(() => {
+      deliveries.delete(petId);
+    });
+    deliveries.set(petId, run);
+    return run;
+  };
+
+  // Scheduling belongs to the host lifecycle. Tests and callers can also explicitly drain a batch.
+  if (typeof ctx.effect === 'function')
+    ctx.effect(() => {
+      let active = false;
+      const tick = async () => {
+        if (active || disposed) return;
+        active = true;
+        try {
+          const cfg = readAllConfig(configPaths);
+          for (const conf of Object.values(cfg)) {
+            if (memoryConfig(conf).backend !== 'powercontext' || !Array.isArray(conf.pets)) continue;
+            for (const pet of conf.pets) if (typeof pet.id === 'string') await syncMemory(pet.id);
+          }
+        } catch {
+          log.warn('dsh-pet: memory background sync unavailable');
+        } finally {
+          active = false;
+        }
+      };
+      const timer = setInterval(() => void tick(), 15000);
+      timer.unref();
+      return () => {
+        disposed = true;
+        clearInterval(timer);
+      };
+    });
+
+  const memoryStatus = async (petId: string) => {
+    const found = findPetInstance(readAllConfig(configPaths), petId);
+    if (!found) return { ok: false as const, reason: 'unknown-pet' as const };
+    const config = memoryConfig(found.conf);
+    const mem = await readMemory();
+    const sync = mem[found.entry]?.[petId]?.powercontext?.[memoryTarget(config)];
+    return {
+      ok: true as const,
+      backend: config.backend,
+      pending: sync?.pending.length ?? 0,
+      captured: sync?.captured ?? 0,
+      skipped: sync?.skipped ?? 0,
+      scopeId: sync?.scopeId ?? null,
+      recall: sync?.lastRecall ?? 'not_run',
+      error: sync?.deliveryBlocked ? 'http_409' : (sync?.lastError ?? null),
+      processing: 'Source capture does not establish Memory extraction.',
+    };
   };
 
   /** 某宠物的最终人设 system：实例级 `pets[].whisperPrompt` 优先，没写回落到所属条目的那份。
@@ -253,10 +383,32 @@ export function createChatMemory(deps: ChatMemoryInput) {
       if (existing !== undefined && (!existing || !Array.isArray(existing.messages))) {
         log.error(`[dsh-pet] 记忆结构异常（messages 不是数组）pet=${petId}，按新会话处理：${memoryPath}`);
       }
-      const entry = existing && Array.isArray(existing.messages) ? existing : (bucket[petId] = { messages: [] });
+      const entry =
+        existing && typeof existing === 'object' && !Array.isArray(existing)
+          ? existing
+          : (bucket[petId] = { messages: [] });
+      if (!Array.isArray(entry.messages)) entry.messages = [];
       // rounds = 0（用户关掉历史）→ 空历史；否则截尾部 rounds 轮（1 轮 = 1 问 1 答）。
       // 不能写 slice(-rounds * 2)：-0 在 JS 里 === 0，slice(-0) 返回整个数组而不是空。
-      const list = sliceMemoryRounds(entry.messages, rounds);
+      const config = memoryConfig(found.conf);
+      const list =
+        config.maxHistoryBytes > 0
+          ? boundedHistory(entry.messages, rounds, config.maxHistoryBytes)
+          : sliceMemoryRounds(entry.messages, rounds);
+      let recalledContext: string | undefined;
+      if (config.backend === 'powercontext') {
+        const sync = memoryState(entry, config);
+        // Persist the scope idempotency key before the first external call.
+        await writeMemory(mem);
+        try {
+          recalledContext = await new PowerContextClient(config).prepare(sync, text);
+        } catch (error) {
+          sync.lastRecall = 'unavailable';
+          sync.lastError = memoryErrorCode(error);
+          log.warn('dsh-pet: memory recall ' + sync.lastError);
+        }
+        await writeMemory(mem);
+      }
       // 人设：实例级 whisperPrompt 优先，没写回落所属条目（与碎碎念同一拼装）。
       // 有历史才追加【历史】段：没有历史时那段话在描述不存在的前缀，只会误导模型。
       const system = petSystemPrompt(found, { historyTimes: list.length > 0 });
@@ -272,6 +424,7 @@ export function createChatMemory(deps: ChatMemoryInput) {
         ctx,
         system,
         history: list,
+        recalledContext,
         userText: text,
         pool,
         actions,
@@ -292,7 +445,12 @@ export function createChatMemory(deps: ChatMemoryInput) {
         // 否则模型记不得自己演过什么，用户说「换一个」它无从判断
         ...(generated.action ? { action: generated.action } : {}),
       });
+      if (config.backend === 'powercontext') queueMemoryTurn(memoryState(entry, config), text, generated.text, now);
       await writeMemory(mem);
+      if (config.backend === 'powercontext') {
+        // It queues behind the current write lock; the reply does not await remote ingestion.
+        void syncMemory(petId).catch(() => log.warn('dsh-pet: memory sync persistence unavailable'));
+      }
       // 动作先写：与 POST /anim 同一条写回链路（记录 + anim 叶子），渲染端据此播放并回报执。
       if (generated.action !== undefined) {
         const record = playback.create(petId, generated.action);
@@ -317,7 +475,7 @@ export function createChatMemory(deps: ChatMemoryInput) {
 
   /** 删除某只宠物的对话记忆：`ts` 缺省 = 清空全部，给了 ts = 只删命中的轮（一轮两条共享 ts，成对删）。
    *  与对话共用同一条串行队列——删除不会插进一次回复的读-改-写中间，也不会被它覆盖写回。
-   *  删空的宠物连叶子与空条目一起摘掉：否则 memory.json 里会永久堆着空对象，看不出这里曾有历史。 */
+   *  原生宠物删空后摘掉空条目；已绑定长期记忆的宠物保留绑定，只取消尚未发送的证据。 */
   const deleteHistory = async (
     petId: string,
     ts?: readonly number[],
@@ -335,7 +493,13 @@ export function createChatMemory(deps: ChatMemoryInput) {
       const removed = list.length - kept.length;
       if (removed > 0) {
         const leaf = byPet?.[petId];
-        if (kept.length > 0 && leaf !== undefined) {
+        if (leaf?.powercontext) {
+          leaf.messages = kept;
+          // Local history deletion cancels unsent evidence but does not pretend to erase remote Memory.
+          for (const sync of Object.values(leaf.powercontext)) {
+            sync.pending = ts === undefined ? [] : sync.pending.filter((turn) => !ts.includes(turn.at));
+          }
+        } else if (kept.length > 0 && leaf !== undefined) {
           leaf.messages = kept;
         } else if (byPet !== undefined) {
           // 清空（或本来就只剩坏数据）：摘掉宠物叶子；条目空了连条目一起摘
@@ -366,6 +530,8 @@ export function createChatMemory(deps: ChatMemoryInput) {
     activePetId = id;
   };
   return {
+    syncMemory,
+    memoryStatus,
     lastWhisperAt,
     memoryPath,
     readMemory,

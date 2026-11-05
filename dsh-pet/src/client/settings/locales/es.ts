@@ -4,6 +4,24 @@
 import type { Key } from './zh.ts';
 
 export const es: Record<Key, string> = {
+  memoryStatusHint: 'Mascota actual, configuración guardada. Sincronizar no implica haber extraído recuerdos.',
+  memoryPending: 'Pendientes',
+  memoryCaptured: 'Sincronizados',
+  memorySkipped: 'Omitidos',
+  memoryRecall: 'Última consulta',
+  memoryRecall_not_run: 'Sin ejecutar',
+  memoryRecall_empty: 'Sin recuerdos relevantes',
+  memoryRecall_ready: 'Recuperado',
+  memoryRecall_unavailable: 'No disponible',
+  memoryRefresh: 'Actualizar estado',
+  memoryRetry: 'Reintentar sincronización',
+  longTermMemory: 'Memoria a largo plazo',
+  memoryNative: 'Historial reciente nativo',
+  memoryHint:
+    'Al activarla, el diálogo se envía a PowerContext. Configure primero la extracción de memoria. Borrar el historial no borra la memoria remota.',
+  historyBytes: 'Límite de bytes recientes (0 = sin límite)',
+  recallBytes: 'Límite de bytes recuperados',
+
   nav: 'Configuración de mascotas',
   intro:
     'Gestiona varias mascotas: cada una tiene su propio tamaño y posición (se aplica al instante después de guardar).',

@@ -4,6 +4,24 @@
 import type { Key } from './zh.ts';
 
 export const pt: Record<Key, string> = {
+  memoryStatusHint: 'Animal atual, configurações salvas. Sincronizar não significa ter extraído memórias.',
+  memoryPending: 'Pendentes',
+  memoryCaptured: 'Sincronizados',
+  memorySkipped: 'Ignorados',
+  memoryRecall: 'Última consulta',
+  memoryRecall_not_run: 'Não executada',
+  memoryRecall_empty: 'Sem memória relevante',
+  memoryRecall_ready: 'Recuperada',
+  memoryRecall_unavailable: 'Indisponível',
+  memoryRefresh: 'Atualizar estado',
+  memoryRetry: 'Tentar sincronizar',
+  longTermMemory: 'Memória de longo prazo',
+  memoryNative: 'Histórico recente nativo',
+  memoryHint:
+    'Os diálogos são enviados ao PowerContext configurado. Configure primeiro a extração de memória. Apagar o histórico não elimina memórias remotas.',
+  historyBytes: 'Limite de bytes recentes (0 = sem limite)',
+  recallBytes: 'Limite de bytes recuperados',
+
   nav: 'Configuração do pet',
   intro: 'Gerencie vários pets: cada um tem tamanho e posição próprios (aplicado na hora após salvar).',
   // 卡片标题与卡片级说明；说明统一进问号气泡。

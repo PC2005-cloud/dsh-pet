@@ -147,6 +147,8 @@ export function saveUserConfig(
   // 校验直接复用读取侧的 topFieldValid（有限且 ≥ 0），读写同一份规则，不另写一套。
   const cmr = o.chatMemoryRounds;
   if (cmr !== undefined && !topFieldValid('chatMemoryRounds', cmr)) return null;
+  const memory = o.chatMemory;
+  if (memory !== undefined && !topFieldValid('chatMemory', memory)) return null;
   // chatImageLimit（对话配图张数上限；设置页「AI 模型与对话上下文」区的数字输入框写的就是它）：
   // 与 chatMemoryRounds 同一套语义——传了就校验后进白名单，没传则走下面的透传保留。
   const cil = o.chatImageLimit;
@@ -182,6 +184,7 @@ export function saveUserConfig(
   if (cm !== undefined) outConfig.chatModel = cleanModel(cm as Record<string, unknown>);
   // 数值归一化落盘：请求体传 "9" 也存成 9（与读取侧 topFieldValid 的 Number() 口径一致）
   if (cmr !== undefined) outConfig.chatMemoryRounds = Number(cmr);
+  if (memory !== undefined) outConfig.chatMemory = memory;
   if (cil !== undefined) outConfig.chatImageLimit = Number(cil);
   // 透传保留：请求体未携带的顶层字段，从 existing（磁盘现有用户文件）原样带回——
   // 设置页只提交 pets(+全局开关+physics+模型+对话历史条数)，手改的 whisperPrompt/memes/... 借此保住。
@@ -206,6 +209,7 @@ export function saveUserConfig(
   if (wm !== undefined) bodyOwned.add('whisperModel');
   if (cm !== undefined) bodyOwned.add('chatModel');
   if (cmr !== undefined) bodyOwned.add('chatMemoryRounds');
+  if (memory !== undefined) bodyOwned.add('chatMemory');
   if (cil !== undefined) bodyOwned.add('chatImageLimit');
   if (existing && typeof existing === 'object') {
     for (const key of Object.keys(existing)) {

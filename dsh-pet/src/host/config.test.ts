@@ -10,6 +10,7 @@
  */
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
+import { DEFAULT_CHAT_MEMORY } from '../shared/chat-memory-config.ts';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -1040,6 +1041,22 @@ describe('saveUserConfig —— 语音细分开关（白名单 + 透传保留）
       );
     }
   });
+});
+
+test('长期记忆可直接用于旧配置；设置往返保存且拒绝内嵌凭据', () => {
+  const { paths, dir } = pathsWithUser('{}');
+  try {
+    const main = readAllConfig(paths).main;
+    assert.deepEqual(main.chatMemory, DEFAULT_CHAT_MEMORY);
+    const chatMemory = { ...DEFAULT_CHAT_MEMORY, backend: 'powercontext', maxHistoryBytes: 6000 };
+    const saved = saveUserConfig({ pets: main.pets, chatMemory });
+    assert.ok(saved);
+    writeFileSync(paths.userFile, JSON.stringify(saved));
+    assert.deepEqual(readAllConfig(paths).main.chatMemory, chatMemory);
+    assert.equal(saveUserConfig({ pets: main.pets, chatMemory: { ...chatMemory, token: 'fixture' } }), null);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 describe('saveUserConfig —— 对话历史条数 chatMemoryRounds（白名单 + 透传保留）', () => {

@@ -11,6 +11,7 @@ import { warnOnce } from './constants.ts';
 import type { ConfigPaths } from './constants.ts';
 import { effectiveUserFile, readJsonc } from './jsonc.ts';
 import { mergeEntry, packBase } from './merge.ts';
+import { DEFAULT_CHAT_MEMORY } from '../../shared/chat-memory-config.ts';
 
 /**
  * 老用户一次性迁移：main-config.json → main-config.jsonc（重命名，内容一字不动）。
@@ -72,6 +73,8 @@ export function readPetConfigEntry(
 export function readAllConfig(paths: ConfigPaths): Record<string, Record<string, unknown>> {
   const base = readJsonc(paths.defaultFile);
   if (!base) throw new Error('dsh-pet: 内置默认配置缺失或解析失败（安装损坏）：' + paths.defaultFile);
+  // Keep optional memory defaults in code so existing packaged configuration files need no migration.
+  base.chatMemory ??= { ...DEFAULT_CHAT_MEMORY };
   const basePets = Array.isArray(base.pets) ? (base.pets as Record<string, unknown>[]) : [];
   const seenIds = new Set<string>();
   const out: Record<string, Record<string, unknown>> = {};
