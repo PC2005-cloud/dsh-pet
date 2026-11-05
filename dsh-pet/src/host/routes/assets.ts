@@ -9,6 +9,7 @@ import { join } from 'node:path';
 import { PACKAGE_ROOT } from '../paths.ts';
 import { MIME, resolveAsset, resolveExisting } from '../http.ts';
 import { isValidPetId } from '../config.ts';
+import { textFrameOriginal } from '../../locale/text-frames.ts';
 import { petAvatarFile } from '../pet-avatar.ts';
 import { existsSync } from 'node:fs';
 import type { PetRouteDeps, RouteInput } from './types.ts';
@@ -70,10 +71,17 @@ export async function handleAssetsRoutes(deps: PetRouteDeps, input: RouteInput):
         return { kind: 'text', status: 400, body: 'dsh-pet: invalid asset root' };
       }
       const rel = (scoped ? segs.slice(1) : segs).join('/');
+      const original = textFrameOriginal(rel);
       let picFile: string | undefined;
       for (const dir of memeDirsFor(assetRoot)) {
         picFile = resolveExisting(dir, rel);
         if (picFile !== undefined) break;
+      }
+      if (picFile === undefined && original !== undefined) {
+        for (const dir of memeDirsFor(assetRoot)) {
+          picFile = resolveExisting(dir, original);
+          if (picFile !== undefined) break;
+        }
       }
       if (picFile === undefined) return { kind: 'text', status: 404, body: 'dsh-pet: pic not found' };
       const ext = picFile.slice(picFile.lastIndexOf('.')).toLowerCase();
@@ -129,25 +137,29 @@ export async function handleAssetsRoutes(deps: PetRouteDeps, input: RouteInput):
   const extraAnimDir = resolveAsset(petConfigDir, petId + '-animation');
 
   /** 按扩展名查同名素材（专属目录优先；否则用户根 → 包内根） */
-  const findAnim = (e: string): string | undefined => {
-    const name = fileName.replace(/\.(webm|mov)$/i, '') + e;
+  const findNamed = (rel: string, e: string): string | undefined => {
+    const name = rel.replace(/\.(webm|mov)$/i, '') + e;
     return extraAnimDir !== undefined && existsSync(extraAnimDir)
       ? resolveExisting(extraAnimDir, name)
       : (resolveExisting(userRootFor(e), name) ?? resolveExisting(assetRootFor(e), name));
   };
 
-  let file = findAnim(ext);
+  const names = [fileName];
+  const original = textFrameOriginal(fileName);
+  if (original !== undefined) names.push(original);
 
+  let file: string | undefined;
   let servedExt = ext;
-
-  // mov（HEVC-with-Alpha，macOS 定制）不随包发布：缺失时退回同名 webm。
-  // 宿主是唯一知道素材在不在的一方——宁可让 Safari 播黑底（webm 的 alpha 被丢弃），
-  // 也不能让整段动画 404（表现就是宠物完全不显示）。
-  if (file === undefined && ext === '.mov') {
-    const fb = findAnim('.webm');
-    if (fb !== undefined) {
-      file = fb;
-      servedExt = '.webm';
+  for (const rel of names) {
+    file = findNamed(rel, ext);
+    if (file !== undefined) break;
+    if (ext === '.mov') {
+      const fb = findNamed(rel, '.webm');
+      if (fb !== undefined) {
+        file = fb;
+        servedExt = '.webm';
+        break;
+      }
     }
   }
 

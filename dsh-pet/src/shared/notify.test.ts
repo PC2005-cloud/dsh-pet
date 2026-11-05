@@ -8,6 +8,7 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { frameToToast, MAX_BODY } from './notify.ts';
+import { chromeText } from '../locale/chrome.ts';
 
 /** 审批帧：标题固定是「正在申请权限」，用它观察会话名怎么拼进标题。 */
 const approvalFrame = { type: 'approval/requested', sessionId: 's1', toolName: 'bash', reason: '要写 /tmp' };
@@ -21,6 +22,8 @@ describe('frameToToast：会话名进标题', () => {
     assert.equal(frameToToast(approvalFrame)?.title, '正在申请权限');
     assert.equal(frameToToast(approvalFrame, '')?.title, '正在申请权限');
     assert.equal(frameToToast(approvalFrame, '   ')?.title, '正在申请权限');
+    assert.equal(frameToToast(approvalFrame, undefined, 'ru')?.title, chromeText('ru', 'notify.approval'));
+    assert.equal(frameToToast(approvalFrame, undefined, 'en')?.title, '正在申请权限');
   });
 
   test('会话名超长按 30 字符截断，事件类型不被截掉', () => {

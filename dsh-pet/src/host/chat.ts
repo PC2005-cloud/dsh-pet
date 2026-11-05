@@ -55,11 +55,11 @@ const HISTORY_STAMP_GAP_MS = 30 * 60 * 1000;
  * @param nowMs - 本次生成时刻（毫秒），整批历史共用一个，避免逐条取时钟导致同批时间不一致。
  * @returns 需要前缀时返回 `[时:分] 原文`，否则原样返回 `content`。
  */
-function userHistoryTextOf(message: ChatMemoryMessage, nowMs: number): string {
+function userHistoryTextOf(message: ChatMemoryMessage, nowMs: number, localeId?: string): string {
   if (!Number.isFinite(message.ts)) return message.content;
   // 用 > 而不是 >=：恰好 30 分钟仍算连续对话；ts 在未来（时钟回拨）时差为负，自然不加
   if (!(nowMs - message.ts > HISTORY_STAMP_GAP_MS)) return message.content;
-  const stamp = historyStampOf(message.ts, new Date(nowMs));
+  const stamp = historyStampOf(message.ts, new Date(nowMs), localeId);
   return stamp === '' ? message.content : '[' + stamp + '] ' + message.content;
 }
 
@@ -82,12 +82,28 @@ function historyMarkersOf(message: ChatMemoryMessage): string {
   return lines.length === 0 ? '' : '\n' + lines.join('\n');
 }
 
+/** ru 时把历史里带汉字的 assistant 正文换成占位，避免模型照抄中文；记忆文件不改。 */
+function assistantHistoryTextOf(message: ChatMemoryMessage, localeId?: string): string {
+  if (message.role !== 'assistant') return message.content;
+  if (localeId !== 'ru') return message.content;
+  if (!/[\u4e00-\u9fff]/.test(message.content)) return message.content;
+  return '(прошлый ответ был на другом языке)';
+}
+
 /** 配图指令：附在 user 正文之后（紧邻回答位置，模型更容易遵守）。
  *  交给模型选而不是随机抽：对话有真实上下文（用户输入 + 历史），按语境挑才贴合。 */
-function imageInstruction(pool: MemeEntry[]): string {
+function imageInstruction(pool: MemeEntry[], localeId?: string | null): string {
+  const catalog = memeCatalog(pool);
+  if (localeId === 'ru') {
+    return (
+      '\n\n[配图] В конце ответа можно приложить одну картинку. Выбери самую подходящую и скопируй имя как есть:\n' +
+      catalog +
+      '\nЕсли выбрала, последней строкой напиши [图:имя] — имя из списка, без перевода. Если ничего не подходит, маркер не пиши.'
+    );
+  }
   return (
     '\n\n[配图] 回复结尾可选附一张表情包给用户看，从下列清单里挑最贴合当前语境的：\n' +
-    memeCatalog(pool) +
+    catalog +
     '\n挑中就在回复最后另起一行写 [图:名称]（名称原样照抄）；没有合适的就完全不要写这个标记。'
   );
 }
@@ -112,6 +128,8 @@ export interface ChatGenerateInput {
   readonly preferred?: ModelRef;
   /** 本轮附带的图片；缺省 = 纯文本请求，数据路径与加入图片前一致。 */
   readonly image?: PetImageRef;
+  /** 宿主语言 id。只有 `ru` 时历史时间前缀用俄语格式。 */
+  readonly localeId?: string;
 }
 
 /**
@@ -140,7 +158,17 @@ export async function generateChat(input: ChatGenerateInput): Promise<ChatGenera
   // 兜底文案与失败分支同源，避免两处字面量漂移
   let last: ChatGenerateResult = { ok: false, reason: 'generate-error', message: noTextReason(undefined) };
   for (const [i, sel] of candidates.entries()) {
-    const result = await generateWith(ctx, { llm, sel, system, history, userText, pool, actions, image });
+    const result = await generateWith(ctx, {
+      llm,
+      sel,
+      system,
+      history,
+      userText,
+      pool,
+      actions,
+      image,
+      localeId: input.localeId,
+    });
     if (result.ok) return result;
     last = result;
     // 回落要留痕：配的模型没生效时能在日志里看到原因（否则「我明明配了 A，怎么还是用 B」没法查）
@@ -164,11 +192,12 @@ interface GenerateOnce {
   readonly pool: MemeEntry[];
   readonly actions: string[];
   readonly image?: PetImageRef;
+  readonly localeId?: string;
 }
 
 /** 用一个确定的 provider/model 跑一次对话生成（失败原样返回结构化原因，不吞）。 */
 async function generateWith(ctx: { llm?: unknown }, once: GenerateOnce): Promise<ChatGenerateResult> {
-  const { llm, sel, system, history, userText, pool, actions, image } = once;
+  const { llm, sel, system, history, userText, pool, actions, image, localeId } = once;
   // 历史 → dsh-llm 消息：user 经 createUserMessage（plugin 来源），assistant 经 createAssistantMessage
   // （provider/model 只是消息的角色载体，不涉及适配器回放）。
   // 时间前缀只加在 user 上（模型会照抄 assistant 自己那侧的格式）；配图/动作标记只加在 assistant 上。
@@ -176,11 +205,11 @@ async function generateWith(ctx: { llm?: unknown }, once: GenerateOnce): Promise
   const historyMessages = history.map((m) =>
     m.role === 'user'
       ? createUserMessage({
-          content: [{ type: 'text', text: userHistoryTextOf(m, nowMs) }],
+          content: [{ type: 'text', text: userHistoryTextOf(m, nowMs, localeId) }],
           source: { kind: 'user' },
         })
       : createAssistantMessage({
-          content: [{ type: 'text', text: m.content + historyMarkersOf(m) }],
+          content: [{ type: 'text', text: assistantHistoryTextOf(m, localeId) + historyMarkersOf(m) }],
           source: { provider: sel.provider, model: sel.model },
         }),
   );
@@ -194,9 +223,12 @@ async function generateWith(ctx: { llm?: unknown }, once: GenerateOnce): Promise
   // 顺序固定「配图在前、动作在后」：配图是既有行为，新增的动作排在它后面，不改既有提示词的位置。
   const wantImage = pool.length > 0;
   const wantAction = actions.length > 0;
-  const instruction = (wantImage ? imageInstruction(pool) : '') + (wantAction ? actionInstruction(actions) : '');
+  const instruction =
+    (wantImage ? imageInstruction(pool, localeId) : '') + (wantAction ? actionInstruction(actions, localeId) : '');
+  // 紧挨着用户这句话：系统提示里的一句会被中文历史和清单盖过去。
+  const reply = localeId === 'ru' ? '\n\nОтвечай по-русски. Язык прошлых реплик не задаёт язык этого ответа.' : '';
   const content: Record<string, unknown>[] = [
-    { type: 'text', text: instruction === '' ? userText : userText + instruction },
+    { type: 'text', text: (instruction === '' ? userText : userText + instruction) + reply },
   ];
   // 图片块排在文本块之后：提示词先到、像素后到，模型更容易按提示去看图。
   if (image !== undefined) content.push({ type: 'image', attachment: image });

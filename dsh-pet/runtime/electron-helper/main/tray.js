@@ -44,6 +44,7 @@ function createTray({
     display === 'both' ? 'web' : display === 'web' ? 'both' : display === 'desktop' ? 'none' : 'desktop';
 
   let tray = null;
+  let hostLocaleId = '';
 
   /** 写回某只宠物的 display：宿主写完配置会重启本进程，响应可能永远不回（同 sprite.js 的 setPetDisplay） */
   function traySetPetDisplay(id, display) {
@@ -107,6 +108,17 @@ function createTray({
       .filter((pet) => pet.id);
     if (!pets.length) return null; // 配置里没有任何宠物：没有可切换的对象，不建托盘
     const canQuit = await canQuitSelf();
+    let quitLabel = '退出';
+    hostLocaleId = '';
+    try {
+      const snap = JSON.parse((await hostRequest('GET', petRoute + '/state')).body || '{}');
+      const id =
+        snap && snap.sections && snap.sections.locale && snap.sections.locale.data && snap.sections.locale.data.id;
+      if (typeof id === 'string') hostLocaleId = id.trim();
+      if (hostLocaleId === 'ru') quitLabel = 'Выход';
+    } catch (e) {
+      console.error('[dsh-pet-desktop-helper] tray locale read failed:', String(e && e.message ? e.message : e));
+    }
     const quitApp = () => {
       if (!isBridge || appMode) {
         app.quit();
@@ -124,7 +136,7 @@ function createTray({
         checked: isDesktopDisplay(pet.display),
         click: () => traySetPetDisplay(pet.id, toggleDisplay(pet.display)),
       })),
-      ...(canQuit ? [{ type: 'separator' }, { label: '退出', click: quitApp }] : []),
+      ...(canQuit ? [{ type: 'separator' }, { label: quitLabel, click: quitApp }] : []),
     ]);
   }
 
@@ -141,7 +153,7 @@ function createTray({
       const menu = await buildMenu();
       if (menu === null) return;
       tray = new Tray(trayIcon());
-      tray.setToolTip('dsh-pet 桌面宠物');
+      tray.setToolTip(hostLocaleId === 'ru' ? 'dsh-pet на рабочем столе' : 'dsh-pet 桌面宠物');
       tray.setContextMenu(menu);
       // Windows 上 setContextMenu 只接管右键，左键默认什么都不做（macOS 相反：左键即弹菜单）
       if (platform.leftClickPopsMenu) tray.on('click', () => tray.popUpContextMenu());

@@ -5,6 +5,7 @@
  * 到期越近提醒越密是这份模块的核心契约：调整档位只改下面的两张表，`nextReminderAt` 自动跟随。
  * @module dsh-pet/src/host/todo/policy
  */
+import { fillChrome } from '../../locale/chrome.ts';
 import type { TodoRecord } from './types.ts';
 
 const MINUTE_MS = 60 * 1000;
@@ -132,16 +133,32 @@ export function truncateTodoText(text: string, max: number): string {
   return chars.length <= max ? text : chars.slice(0, max).join('') + '…';
 }
 
+function spanRu(ms: number): string {
+  const minutes = Math.max(1, Math.round(Math.abs(ms) / MINUTE_MS));
+  if (minutes < 60) return fillChrome('ru', 'todo.span.minutes', { n: minutes });
+  const hours = Math.max(1, Math.round(minutes / 60));
+  if (hours < 24) return fillChrome('ru', 'todo.span.hours', { n: hours });
+  return fillChrome('ru', 'todo.span.days', { n: Math.max(1, Math.round(hours / 24)) });
+}
+
 /**
  * 一条提醒的气泡文案。
  *
  * @param todo - 有期限且未完成的待办。
  * @param now - 当前时刻（epoch ms），用于判断还剩多久。
+ * @param localeId - 宿主语言；只有 `ru` 换成俄语套话，待办正文原样保留。
  * @returns 一句可以直接说出口的提醒。
  */
-export function reminderText(todo: TodoRecord, now: number): string {
+export function reminderText(todo: TodoRecord, now: number, localeId?: string | null): string {
   const label = truncateTodoText(todo.text, REMINDER_TEXT_MAX);
   const dueAt = todo.dueAt ?? now;
+  if (localeId === 'ru') {
+    if (dueAt <= now) {
+      if (now - dueAt < MINUTE_MS) return fillChrome('ru', 'todo.remind.now', { text: label });
+      return fillChrome('ru', 'todo.remind.overdue', { text: label, span: spanRu(now - dueAt) });
+    }
+    return fillChrome('ru', 'todo.remind.soon', { text: label, span: spanRu(dueAt - now) });
+  }
   if (dueAt <= now) {
     // 刚过点不到一分钟不说「逾期 1 分钟」——那只是四舍五入，读起来像迟到了很久。
     if (now - dueAt < MINUTE_MS) return `「${label}」到点啦，记得处理`;

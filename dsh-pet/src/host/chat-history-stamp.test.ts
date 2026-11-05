@@ -93,4 +93,21 @@ describe('generateChat —— 历史消息的时间前缀', () => {
       `实际：${JSON.stringify(textOf(sent, 0))}`,
     );
   });
+
+  test('ru：带汉字的 assistant 历史正文换成占位，记忆语义不进模型', async () => {
+    const { ctx, options } = fakeCtx();
+    const ts = Date.now() - 60 * 60 * 1000;
+    const result = await generateChat({
+      ctx,
+      system: '人设',
+      history: [
+        { role: 'user', content: 'как дела', ts },
+        { role: 'assistant', content: '挺好的呀', ts },
+      ],
+      userText: 'Привет',
+      localeId: 'ru',
+    });
+    assert.equal(result.ok, true);
+    assert.equal(textOf(options[0], 1), '(прошлый ответ был на другом языке)');
+  });
 });

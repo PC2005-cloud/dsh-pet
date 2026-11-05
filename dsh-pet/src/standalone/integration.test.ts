@@ -151,6 +151,7 @@ describe('插件宿主半边在独立模式下跑起来了', () => {
       'balance',
       'config',
       'focusSession',
+      'locale',
       'menu',
       'notify',
       'workStatus',

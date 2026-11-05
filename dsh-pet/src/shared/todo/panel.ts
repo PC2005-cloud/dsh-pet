@@ -8,6 +8,8 @@ import { TODOS_PATH, addTodo, loadTodos, patchTodo, removeTodo, type TodoResult 
 import { parseDateTimeLocal } from './format.ts';
 import { createTodoPanelParts, renderTodoList, setTodoBusy, setTodoError, type TodoListHandlers } from './render.ts';
 import { injectTodoCss } from './styles.ts';
+import { chromeText } from '../../locale/chrome.ts';
+import { getHostLocale } from '../../locale/current.ts';
 import type { TodoItem } from './types.ts';
 
 /** 面板挂载参数。 */
@@ -56,7 +58,7 @@ export function createTodoPanel(options: TodoPanelOptions = {}): TodoPanel {
     if (!result.ok) {
       setTodoError(parts, result.message);
       // 加载失败时别让空态一直停在「加载中…」。
-      parts.empty.textContent = '清单加载失败，关掉面板再开一次试试';
+      parts.empty.textContent = chromeText(getHostLocale(), 'todo.loading');
       parts.empty.hidden = false;
       return;
     }
@@ -96,7 +98,7 @@ export function createTodoPanel(options: TodoPanelOptions = {}): TodoPanel {
     parts.duePicker.close();
     // 过去的时刻建出来就是逾期，提醒一上线就会喊，等于让用户先错一次再改。
     if (dueAt !== null && dueAt < Date.now()) {
-      setTodoError(parts, '这个时间已经过去了，换一个吧');
+      setTodoError(parts, chromeText(getHostLocale(), 'todo.past'));
       return;
     }
     void mutate(async () => {
@@ -127,7 +129,7 @@ export function createTodoPanel(options: TodoPanelOptions = {}): TodoPanel {
   };
   document.addEventListener('mousedown', onDocMouseDown, true);
   parts.closeButton.addEventListener('click', () => options.onClose?.());
-  parts.empty.textContent = '加载中…';
+  parts.empty.textContent = chromeText(getHostLocale(), 'todo.loadingShort');
   parts.empty.hidden = false;
   // 不自动聚焦输入框：面板挂在宠物头顶，抢走 DSH 输入框的焦点比少一次点击更烦。
   void reload();

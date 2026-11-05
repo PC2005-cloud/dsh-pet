@@ -110,11 +110,14 @@ async function boot() {
 function injectAssets() {
   const style = document.createElement('style');
   style.textContent =
+    S.CANDY_CYRILLIC_FACE +
     '@font-face{font-family:"ShangshouSoftCandy";src:url("' +
     BASE +
     '/font/' +
     encodeURIComponent('上首软糖体') +
-    '.ttf") format("truetype");font-display:swap;font-weight:400}' +
+    '.ttf") format("truetype");font-display:swap;font-weight:400;unicode-range:' +
+    S.CANDY_BODY_UNICODE_RANGE +
+    '}' +
     '.pet-hit{cursor:url("' +
     BASE +
     '/pic/cursor-grab.png") 16 16, grab}' +

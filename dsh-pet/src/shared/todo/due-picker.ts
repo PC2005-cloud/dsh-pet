@@ -9,9 +9,23 @@
  */
 import { monthCells } from './calendar.ts';
 import { dueLabel, formatDateTimeLocal } from './format.ts';
+import { chromeText, fillChrome, type ChromeKey } from '../../locale/chrome.ts';
+import { getHostLocale } from '../../locale/current.ts';
 
-/** 周一为一周首日，与国内日历习惯一致。 */
-const WEEK_HEAD = ['一', '二', '三', '四', '五', '六', '日'] as const;
+/** 周一为一周首日，与国内日历习惯一致。文案键按这个顺序。 */
+const WEEK_HEAD: readonly ChromeKey[] = [
+  'todo.head.1',
+  'todo.head.2',
+  'todo.head.3',
+  'todo.head.4',
+  'todo.head.5',
+  'todo.head.6',
+  'todo.head.7',
+];
+
+function t(key: ChromeKey): string {
+  return chromeText(getHostLocale(), key);
+}
 
 /** 分钟档位：与提醒的最短间隔一致，避免选出提醒策略分辨不出的时刻。 */
 const MINUTE_STEP = 5;
@@ -91,48 +105,48 @@ function makeButton(className: string, text?: string): HTMLButtonElement {
 
 /** 建整个选择器的 DOM（尚未挂进文档）。 */
 function buildPickerDom(): PickerDom {
-  const el = makeButton('dsh-pet-todo-due', '无期限');
+  const el = makeButton('dsh-pet-todo-due', t('todo.dueButton'));
   el.setAttribute('aria-haspopup', 'dialog');
   el.setAttribute('aria-expanded', 'false');
-  el.setAttribute('aria-label', '提醒时间（可选）');
+  el.setAttribute('aria-label', t('todo.dueAria'));
 
   const calendar = make('div', 'dsh-pet-todo-cal');
   calendar.setAttribute('role', 'dialog');
-  calendar.setAttribute('aria-label', '选择提醒时间');
+  calendar.setAttribute('aria-label', t('todo.calAria'));
 
   const head = make('div', 'dsh-pet-todo-cal-head');
   const prev = makeButton('dsh-pet-todo-cal-nav', '‹');
   prev.dataset.act = 'prev';
-  prev.setAttribute('aria-label', '上个月');
+  prev.setAttribute('aria-label', t('todo.prevMonth'));
   const title = make('span', 'dsh-pet-todo-cal-title');
   const next = makeButton('dsh-pet-todo-cal-nav', '›');
   next.dataset.act = 'next';
-  next.setAttribute('aria-label', '下个月');
+  next.setAttribute('aria-label', t('todo.nextMonth'));
   head.append(prev, title, next);
 
   const week = make('div', 'dsh-pet-todo-cal-week');
   for (const name of WEEK_HEAD) {
     const cell = make('span', '');
-    cell.textContent = name;
+    cell.textContent = t(name);
     week.appendChild(cell);
   }
   const grid = make('div', 'dsh-pet-todo-cal-grid');
 
   const foot = make('div', 'dsh-pet-todo-cal-foot');
-  const today = makeButton('dsh-pet-todo-cal-act', '今天');
+  const today = makeButton('dsh-pet-todo-cal-act', t('todo.today'));
   today.dataset.act = 'today';
-  const clear = makeButton('dsh-pet-todo-cal-act', '清除');
+  const clear = makeButton('dsh-pet-todo-cal-act', t('todo.clear'));
   clear.dataset.act = 'clear';
   const grow = make('span', 'dsh-pet-todo-cal-grow');
   const hourChip = makeButton('dsh-pet-todo-cal-chip', '09');
   hourChip.dataset.act = 'hour';
-  hourChip.setAttribute('aria-label', '选择小时');
+  hourChip.setAttribute('aria-label', t('todo.hour'));
   const colon = make('span', 'dsh-pet-todo-cal-colon');
   colon.textContent = ':';
   const minuteChip = makeButton('dsh-pet-todo-cal-chip', '00');
   minuteChip.dataset.act = 'minute';
-  minuteChip.setAttribute('aria-label', '选择分钟');
-  const done = makeButton('dsh-pet-todo-cal-act', '完成');
+  minuteChip.setAttribute('aria-label', t('todo.minute'));
+  const done = makeButton('dsh-pet-todo-cal-act', t('todo.donePick'));
   done.dataset.act = 'done';
   foot.append(today, clear, grow, hourChip, colon, minuteChip, done);
 
@@ -169,7 +183,10 @@ function renderDays(dom: PickerDom, state: PickerState): void {
     button.classList.toggle('is-out', cell.out);
     button.classList.toggle('is-today', sameDay(today, date));
     button.dataset.ts = String(date.getTime());
-    button.setAttribute('aria-label', `${date.getMonth() + 1}月${date.getDate()}日`);
+    button.setAttribute(
+      'aria-label',
+      fillChrome(getHostLocale(), 'todo.dayAria', { month: date.getMonth() + 1, day: date.getDate() }),
+    );
     dom.grid.appendChild(button);
   }
 }
@@ -182,7 +199,10 @@ function renderNumbers(dom: PickerDom, state: PickerState): void {
   for (let value = 0; value < count; value += step) {
     const button = cellButton(pad2(value), (isHour ? state.hour : state.minute) === value);
     button.dataset.num = String(value);
-    button.setAttribute('aria-label', `${value} ${isHour ? '时' : '分'}`);
+    button.setAttribute(
+      'aria-label',
+      fillChrome(getHostLocale(), isHour ? 'todo.unitHour' : 'todo.unitMinute', { value }),
+    );
     dom.grid.appendChild(button);
   }
 }
@@ -190,7 +210,8 @@ function renderNumbers(dom: PickerDom, state: PickerState): void {
 /** 同步按钮文案、时分标签与当前网格的标题。 */
 function syncPicker(dom: PickerDom, state: PickerState): void {
   const ms = dueMs(state);
-  dom.el.textContent = ms === null ? '无期限' : dueLabel(ms, Date.now());
+  const id = getHostLocale();
+  dom.el.textContent = ms === null ? chromeText(id, 'todo.undated') : dueLabel(ms, Date.now(), id);
   dom.el.classList.toggle('is-set', ms !== null);
   dom.hourChip.textContent = pad2(state.hour);
   dom.minuteChip.textContent = pad2(state.minute);
@@ -201,11 +222,12 @@ function syncPicker(dom: PickerDom, state: PickerState): void {
 /** 整块重画：标题、翻月按钮、网格与文案一次到位。 */
 function renderPicker(dom: PickerDom, state: PickerState): void {
   const day = state.mode === 'day';
+  const id = getHostLocale();
   dom.title.textContent = day
-    ? `${state.view.getFullYear()}年${state.view.getMonth() + 1}月`
+    ? fillChrome(id, 'todo.monthTitle', { year: state.view.getFullYear(), month: state.view.getMonth() + 1 })
     : state.mode === 'hour'
-      ? '选择小时'
-      : '选择分钟';
+      ? chromeText(id, 'todo.hour')
+      : chromeText(id, 'todo.minute');
   dom.prev.hidden = !day;
   dom.next.hidden = !day;
   dom.grid.className = 'dsh-pet-todo-cal-grid is-' + state.mode;

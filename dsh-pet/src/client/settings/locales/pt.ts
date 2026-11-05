@@ -280,4 +280,5 @@ export const pt: Record<Key, string> = {
   uninstallStep3:
     '3. Apague os locais acima conforme a necessidade: caches não fazem falta; apagar "dados do usuário do plugin" perde a configuração e a memória da conversa (faça backup do main-config.jsonc antes, se quiser manter).',
   uninstallCmd: 'dsh plugin --profile {profile} remove dsh-pet',
+  localeId: 'pt',
 };

@@ -285,4 +285,5 @@ export const fr: Record<Key, string> = {
   uninstallStep3:
     '3. Supprimez les emplacements ci-dessus selon vos besoins : les caches sont sans risque ; supprimer les « données utilisateur du plugin » fait perdre la configuration et la mémoire de discussion (sauvegardez main-config.jsonc si vous voulez le garder).',
   uninstallCmd: 'dsh plugin --profile {profile} remove dsh-pet',
+  localeId: 'fr',
 };

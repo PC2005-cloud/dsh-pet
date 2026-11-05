@@ -10,6 +10,7 @@
 
 import { frameToToast, truncate, NOTIFY_ICONS as ICON_NAMES, type NotifyFrame } from '../shared/notify.ts';
 import { ROUTE_PATH } from '../shared/constants.ts';
+import { getHostLocale } from '../locale/current.ts';
 
 let pageVisible = typeof document !== 'undefined' && !document.hidden;
 let pageFocused = typeof document !== 'undefined' && document.hasFocus();
@@ -144,7 +145,7 @@ function toast(title: string, body?: string, icon?: string, sessionId?: string):
  */
 function toastFrame(frame: NotifyFrame): void {
   const sessionId = typeof frame.sessionId === 'string' ? frame.sessionId : undefined;
-  const t = frameToToast(frame, sessionTitleFrom(sessionNavigator, sessionId));
+  const t = frameToToast(frame, sessionTitleFrom(sessionNavigator, sessionId), getHostLocale());
   if (!t) return;
   toast(t.title, t.body, PIC(t.icon), sessionId);
 }

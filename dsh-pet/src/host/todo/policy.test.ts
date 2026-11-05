@@ -172,6 +172,10 @@ describe('spanText / truncateTodoText / reminderText', () => {
     const dueAt = 10 * HOUR;
     assert.equal(reminderText(todo({ dueAt }), dueAt - 2 * HOUR), '「交周报」还有2小时就到点啦');
     assert.equal(reminderText(todo({ dueAt }), dueAt + 2 * HOUR), '「交周报」已经逾期2小时啦，记得处理');
+    const ru = reminderText(todo({ dueAt }), dueAt - 2 * HOUR, 'ru');
+    assert.equal(ru.includes('交周报'), true);
+    assert.equal(ru.includes('还有'), false);
+    assert.equal(reminderText(todo({ dueAt }), dueAt - 2 * HOUR, 'en'), '「交周报」还有2小时就到点啦');
   });
 
   test('刚过点不到一分钟：说「到点啦」，不说逾期', () => {

@@ -6,6 +6,8 @@
  */
 import { createDuePicker, type DuePicker } from './due-picker.ts';
 import { metaLabel, todoUrgency } from './format.ts';
+import { chromeText, fillChrome } from '../../locale/chrome.ts';
+import { getHostLocale } from '../../locale/current.ts';
 import type { TodoItem } from './types.ts';
 
 /** 面板里需要被面板逻辑持有的元素。 */
@@ -44,7 +46,9 @@ export interface TodoListHandlers {
 const DELETE_ARM_MS = 2500;
 
 /** 空态文案：加载中会临时替换它，重渲染时再写回来。 */
-const EMPTY_TEXT = '还没有待办。记一件要做的事，到点我会提醒你～';
+function emptyText(): string {
+  return chromeText(getHostLocale(), 'todo.empty');
+}
 
 /** 清单最多露出几行，其余靠滚动。 */
 const LIST_ROWS = 2;
@@ -78,27 +82,28 @@ function fold(className: string, children: HTMLElement[]): HTMLDivElement {
 export function createTodoPanelParts(): TodoPanelParts {
   const root = element('div', 'dsh-pet-todo');
   root.setAttribute('role', 'dialog');
-  root.setAttribute('aria-label', '待办事项');
+  const id = getHostLocale();
+  root.setAttribute('aria-label', chromeText(id, 'todo.title'));
 
   const head = element('div', 'dsh-pet-todo-head');
-  const title = element('span', 'dsh-pet-todo-title', '待办事项');
-  const count = element('span', 'dsh-pet-todo-count', '0 项未完成');
+  const title = element('span', 'dsh-pet-todo-title', chromeText(id, 'todo.title'));
+  const count = element('span', 'dsh-pet-todo-count', fillChrome(id, 'todo.count', { n: 0 }));
   count.setAttribute('aria-live', 'polite');
   const closeButton = element('button', 'dsh-pet-todo-close', '✕');
   closeButton.type = 'button';
-  closeButton.setAttribute('aria-label', '关闭待办面板');
+  closeButton.setAttribute('aria-label', chromeText(id, 'todo.close'));
   head.append(title, count, closeButton);
 
   const form = element('form', 'dsh-pet-todo-form');
   const input = element('input', 'dsh-pet-todo-input');
   input.type = 'text';
   input.maxLength = 200;
-  input.placeholder = '记一件要做的事…';
+  input.placeholder = chromeText(id, 'todo.placeholder');
   input.autocomplete = 'off';
-  input.setAttribute('aria-label', '待办内容');
+  input.setAttribute('aria-label', chromeText(id, 'todo.input'));
   const row = element('div', 'dsh-pet-todo-row');
   const duePicker = createDuePicker({ onOpenChange: (open) => root.classList.toggle('is-picking', open) });
-  const addButton = element('button', 'dsh-pet-todo-add', '添加');
+  const addButton = element('button', 'dsh-pet-todo-add', chromeText(id, 'todo.add'));
   addButton.type = 'submit';
   row.append(duePicker.el, addButton);
   form.append(input, row);
@@ -106,11 +111,11 @@ export function createTodoPanelParts(): TodoPanelParts {
   const error = element('div', 'dsh-pet-todo-err');
   error.hidden = true;
 
-  const empty = element('div', 'dsh-pet-todo-empty', EMPTY_TEXT);
+  const empty = element('div', 'dsh-pet-todo-empty', emptyText());
   empty.hidden = true;
 
   const list = element('ul', 'dsh-pet-todo-list');
-  const hint = element('div', 'dsh-pet-todo-hint', '离到期越近，我会提醒得越勤快～');
+  const hint = element('div', 'dsh-pet-todo-hint', chromeText(id, 'todo.hint'));
 
   // 下半区两块内容轮流出现：清单态与日历态各是一个折叠区，展开收起走同一条过渡。
   // 面板高度因此跟着内容走（不留空白），切换时也是滑过去而不是硬跳。
@@ -157,8 +162,9 @@ export function renderTodoList(
 ): void {
   parts.list.textContent = '';
   const pending = todos.filter((todo) => !todo.done).length;
-  parts.count.textContent = `${pending} 项未完成`;
-  parts.empty.textContent = EMPTY_TEXT;
+  const id = getHostLocale();
+  parts.count.textContent = fillChrome(id, 'todo.count', { n: pending });
+  parts.empty.textContent = emptyText();
   parts.empty.hidden = todos.length > 0;
   for (const todo of todos) parts.list.appendChild(renderItem(todo, handlers, now));
   capListHeight(parts.list);
@@ -172,23 +178,27 @@ function renderItem(todo: TodoItem, handlers: TodoListHandlers, now: number): HT
   const check = element('input', 'dsh-pet-todo-check');
   check.type = 'checkbox';
   check.checked = todo.done;
-  check.setAttribute('aria-label', (todo.done ? '标记未完成：' : '标记完成：') + todo.text);
+  const id = getHostLocale();
+  check.setAttribute(
+    'aria-label',
+    fillChrome(id, todo.done ? 'todo.markUndone' : 'todo.markDone', { text: todo.text }),
+  );
   check.addEventListener('change', () => handlers.onToggle(todo, check.checked));
 
   const main = element('div', 'dsh-pet-todo-main');
   const text = element('div', 'dsh-pet-todo-text', todo.text);
-  const meta = element('div', 'dsh-pet-todo-meta', metaLabel(todo, now));
+  const meta = element('div', 'dsh-pet-todo-meta', metaLabel(todo, now, id));
   main.append(text, meta);
 
   const remove = element('button', 'dsh-pet-todo-del', '✕');
   remove.type = 'button';
-  remove.setAttribute('aria-label', '删除：' + todo.text);
+  remove.setAttribute('aria-label', fillChrome(id, 'todo.delete', { text: todo.text }));
   remove.addEventListener('click', () => {
     // 第一次点击只进入确认态；再点一次才真的删。
     if (remove.dataset.armed !== '1') {
       remove.dataset.armed = '1';
       remove.classList.add('is-armed');
-      remove.textContent = '确认';
+      remove.textContent = chromeText(id, 'todo.confirm');
       window.setTimeout(() => {
         // 面板已关闭 / 已重渲染时元素不再在文档里：静默复原即可。
         if (!remove.isConnected) return;

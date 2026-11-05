@@ -113,7 +113,8 @@ paths:
             "balance":    { "counter": 1755000000000, "data": { /* BalanceState */ } },
             "workStatus": { "counter": 1755000000001, "data": { /* WorkStatusSnapshot */ } },
             "notify":     { "counter": 1755000000002, "data": { /* NotifyFrame */ } },
-            "config":     { "counter": 1755000000007, "data": {} }
+            "config":     { "counter": 1755000000007, "data": {} },
+            "locale":     { "counter": 1755000000008, "data": { "id": "ru" } }
           },
           "pets": {
             "main": {
@@ -165,6 +166,9 @@ paths:
           **不要按 `.` 切分**：宠物 id 允许包含点号（例如 `a.b`），切分必然出错。
           要提取 id 请用固定前缀/后缀做切片。
         - 宠物 id 是配置里 `pets[].id`，默认是 `main`。要拿到全部 id 请看 `GET /config`。
+        - **`sections.locale` 是宿主界面语言**（`data` 为 `{ id }`，由 `POST /locale` 写入）。
+          缺这片叶子、`id` 为空或不认识时，固定文案保持中文；只有 `id` 恰好是 `ru` 才换成俄文。
+          旧快照没有这一片仍然合法。
 
         **长轮询（推荐用法）**
 
@@ -219,6 +223,62 @@ paths:
                   - $ref: "#/components/schemas/FailureResponse"
         "405":
           $ref: "#/components/responses/MethodNotAllowed"
+
+  /dsh-pet-7340/locale:
+    post:
+      tags: [Action]
+      operationId: setHostLocale
+      summary: 写入宿主界面语言
+      description: |
+        把宿主当前的语言 id 写进 `sections.locale`。只接受 `{ id }`。
+
+        - `id` 必须是 1–32 位，字符限于字母、数字、`_`、`.`、`-`。
+        - 只有 `id` 恰好是 `ru` 时，插件的固定文案才换成俄文；其它 id 保持中文。
+        - 不写宠物配置，也不提供插件自己的语言开关。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [id]
+              properties:
+                id:
+                  type: string
+                  pattern: "^[\\w.-]{1,32}$"
+                  example: ru
+      responses:
+        "200":
+          description: |
+            写入被接受时返回 `{ id }`。
+
+            `id` 缺失或形状不对同样是 `200` +
+            `{ "ok": false, "reason": "bad-request", "message": "..." }`。
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - type: object
+                    required: [id]
+                    properties:
+                      id:
+                        type: string
+                  - $ref: "#/components/schemas/FailureResponse"
+        "400":
+          description: "请求体不是合法 JSON（`reason: invalid-json`）。"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FailureResponse"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+        "413":
+          description: "请求体超过 1 KiB（`reason: payload-too-large`）。"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FailureResponse"
 
   /dsh-pet-7340/work-status:
     post:
@@ -3392,6 +3452,8 @@ components:
               $ref: "#/components/schemas/ConfigLeaf"
             focusSession:
               $ref: "#/components/schemas/FocusSessionLeaf"
+            locale:
+              $ref: "#/components/schemas/LocaleLeaf"
         pets:
           type: object
           description: 每只宠物各自一份；键是宠物 id（**可含点号，勿切分**）
@@ -3710,6 +3772,29 @@ components:
           type: object
           description: 恒为 `{}`（空对象）。不要从这里读配置内容——去 `GET /config`。
           maxProperties: 0
+
+    LocaleLeaf:
+      type: object
+      required: [counter, data]
+      description: |
+        **宿主界面语言**。`data` 为 `{ id }`，由 `POST /locale` 写入。
+        `data` 为 `null`，或整片叶子缺失时，固定文案保持中文。
+        只有 `id` 恰好是 `ru` 才使用俄文。旧快照可以没有这一片。
+      properties:
+        counter:
+          $ref: "#/components/schemas/Counter"
+        data:
+          oneOf:
+            - type: "null"
+            - type: object
+              additionalProperties: false
+              required: [id]
+              properties:
+                id:
+                  type: string
+                  description: 宿主语言 id，1–32 位，字符限于字母、数字、`_`、`.`、`-`。
+                  pattern: "^[\\w.-]{1,32}$"
+                  example: ru
 
     FocusSessionLeaf:
       type: object

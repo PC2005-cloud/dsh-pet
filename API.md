@@ -111,7 +111,7 @@ dsh-pet 的宿主半侧向 DSH 自己的 Web 服务注册了**一条前缀路由
 | 接口                             | 功能                                                                         |
 | -------------------------------- | ---------------------------------------------------------------------------- |
 | `POST /dsh-pet-7340/voice/speak` | 合成并返回 mp3：`{ text, voice?, rate? }`；同一输入命中缓存，队列最多排 3 个 |
-| `POST /dsh-pet-7340/voice/hear`  | 识别音频回文字：`{ audio }`，16kHz/单声道/PCM16 WAV 的 base64                |
+| `POST /dsh-pet-7340/voice/hear`  | 识别音频回文字：`{ audio, language? }`，16kHz/单声道/PCM16 WAV 的 base64     |
 | `GET /dsh-pet-7340/voice/voices` | 可用音色列表；前端拿它渲染选择器，不要硬编码 id                              |
 
 ## 十、待办事项
@@ -133,7 +133,7 @@ dsh-pet 的宿主半侧向 DSH 自己的 Web 服务注册了**一条前缀路由
 {
   "counter": 1755000000007,   // 整份 S 的版本号 = 最后一次写入的编号（顶层，不是叶子）
   "sections": {               // 全局段：所有端共享一份
-    "balance": {…}, "workStatus": {…}, "notify": {…}, "config": {…}, "menu": {…}, "focusSession": {…}
+    "balance": {…}, "workStatus": {…}, "notify": {…}, "config": {…}, "menu": {…}, "focusSession": {…}, "locale": {…}
   },
   "pets": {                   // 每只宠物各自一份；键是宠物 id（可含点号，勿切分）
     "main": { "say": {…}, "anim": {…}, "position": {…}, "throw": {…}, "lock": {…}, "sleep": {…} }
@@ -142,6 +142,9 @@ dsh-pet 的宿主半侧向 DSH 自己的 Web 服务注册了**一条前缀路由
 ```
 
 每个 `{…}` 是一个叶子 `{ counter, data }`：**`counter` 变了就表示它更新了**（唯一判据）。
+
+`sections.locale` 是宿主界面语言：`data` 为 `{ id }`，由 `POST /dsh-pet-7340/locale` 写入。
+缺这片叶子、`id` 为空或不认识时，固定文案保持中文；只有 `id` 恰好是 `ru` 才换成俄文。旧快照没有这一片仍然合法。
 
 `pets.<id>.anim` 是动作指令：`{ name }` 或 `{ url }` 二选一，可选 `playbackId` / `facing`；
 对话动作联动写的也是它，形状与 `POST /anim` 完全一致。

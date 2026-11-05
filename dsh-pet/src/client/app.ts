@@ -17,6 +17,7 @@ import { installSectionNavIcon } from './nav-icon.ts';
 import { registerPetChatTab, openPetChatTab } from './chat/register.ts';
 import { PET_CHAT_COMMAND_ID, registerPetChatShortcut } from './chat/shortcut.ts';
 import { registerPetCardShortcuts } from './pet/card/shortcut.ts';
+import { postHostLocale, watchHostLocale } from './host-locale.ts';
 import type * as ReactNS from 'react';
 import type * as PrimitivesNS from '@deepseek-ai/dsh-client-ui-primitives';
 
@@ -71,6 +72,24 @@ export function makeFactory(): (require: (mod: string) => any) => any {
     function apply(ctx: any) {
       // 设置页文案字典。
       ctx.effect(() => ctx.locale.register(NS, dicts), 'dsh-pet: dictionaries');
+      ctx.effect(() => {
+        try {
+          return watchHostLocale(ctx.locale, (id) => {
+            void postHostLocale(id).catch((error: unknown) => {
+              console.error(
+                '[dsh-pet] 上报宿主语言失败（已忽略）：',
+                error instanceof Error ? error.message : String(error),
+              );
+            });
+          });
+        } catch (error) {
+          console.error(
+            '[dsh-pet] 宿主语言监听失败（已忽略，界面保持中文）：',
+            error instanceof Error ? error.message : String(error),
+          );
+          return () => {};
+        }
+      }, 'dsh-pet: host locale');
       const t = ctx.locale.bind(NS);
 
       // 同页第三方插件可通过 Cordis 服务 petApi7340 读取本页宠物的实况、播放进度、最近一拍状态与菜单点击。

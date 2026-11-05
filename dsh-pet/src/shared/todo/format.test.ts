@@ -90,6 +90,14 @@ describe('metaLabel —— 列表副标题', () => {
     assert.equal(metaLabel(todo({ dueAt, done: true }), NOW), '已完成 · 今天 17:30');
     assert.equal(metaLabel(todo({ done: true }), NOW), '已完成');
   });
+
+  test('ru 换成俄语，其它语言保持原来的中文', () => {
+    assert.equal(spanText(25 * 60 * 1000, 'ru'), '25 мин');
+    assert.equal(spanText(25 * 60 * 1000, 'en'), '25分钟');
+    assert.equal(dueLabel(null, NOW, 'ru'), 'Без срока');
+    assert.equal(remainingLabel(NOW - 2 * 60 * 60 * 1000, NOW, 'ru').includes('2'), true);
+    assert.equal(/[\u4e00-\u9fff]/.test(remainingLabel(NOW - 2 * 60 * 60 * 1000, NOW, 'ru')), false);
+  });
 });
 
 describe('datetime-local 互转', () => {

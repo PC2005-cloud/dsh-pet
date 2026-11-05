@@ -27,6 +27,8 @@ const TIMEOUT_MS = 30_000;
 /** 碎碎念指令：纯文本（没有配图时的原样请求）。 */
 const USER_TEXT = '随便说一句日常碎碎念，一句就好，20 字以内。';
 
+const USER_TEXT_RU = 'Скажи одну короткую бытовую фразу.';
+
 /** 梦话指令：睡觉期间嘟囔一句。与碎碎念指令同属「功能指令」，不进配置（配置里只有人设）。 */
 const SLEEP_TALK_TEXT = '你正在睡觉，随便嘟囔一句梦话，一句就好，20 字以内；含糊、半梦半醒，不要清醒地回应任何人。';
 
@@ -52,6 +54,27 @@ function userTextWithMeme(meme: { name: string; desc: string }): string {
   );
 }
 
+/** 碎碎念的用户指令。只有 `ru` 时换成俄语；缺省保持原来的中文短句。 */
+export function whisperUserText(localeId: string | undefined | null, meme?: { name: string; desc: string }): string {
+  if (localeId !== 'ru') return meme ? userTextWithMeme(meme) : USER_TEXT;
+  if (!meme) return USER_TEXT_RU;
+  return (
+    USER_TEXT_RU +
+    '\nРядом будет картинка: ' +
+    meme.name +
+    ' (' +
+    meme.desc +
+    ').\nФраза в том же настроении. Саму картинку не описывай.'
+  );
+}
+
+/** 梦话指令。只有 `ru` 时换成俄语。 */
+export function sleepTalkText(localeId: string | undefined | null): string {
+  return localeId === 'ru'
+    ? 'Ты спишь. Пробормочи одну сонную фразу, полусонно, ни к кому не обращаясь.'
+    : SLEEP_TALK_TEXT;
+}
+
 /** 一次生成请求：人设必填，其余可选。参数改对象是为了不再往函数签名上挂第 5 个参数。 */
 export interface WhisperRequest {
   /** 人设 system 提示词（whisperPrompt）。 */
@@ -62,6 +85,8 @@ export interface WhisperRequest {
   preferred?: ModelRef;
   /** 功能指令（梦话传 SLEEP_TALK_INSTRUCTION）；缺省 = 碎碎念指令。 */
   instruction?: string;
+  /** 宿主语言。只有 `ru` 时默认碎碎念指令用俄语；显式 `instruction` 优先。 */
+  localeId?: string;
 }
 
 /**
@@ -122,9 +147,7 @@ async function generateWith(
     sessionId: PET_CALL_IDENTITY,
     messages: [
       createUserMessage({
-        content: [
-          { type: 'text', text: request.instruction ?? (request.meme ? userTextWithMeme(request.meme) : USER_TEXT) },
-        ],
+        content: [{ type: 'text', text: request.instruction ?? whisperUserText(request.localeId, request.meme) }],
         source: { kind: 'user' },
       }),
     ],

@@ -157,15 +157,23 @@ function reasonOf(raw: unknown): 'unsupported' | 'bad-request' | 'generate-error
  *
  * @param url - 已含挂载前缀的识别地址。
  * @param audio - 规范 base64（不带 data: 前缀）。
- * @returns 文字或失败分类；网络异常也收敛成 outcome，不向上抛。
+ * @param signal - 调用方取消。
+ * @param language - 识别语言。缺省时请求体里不带这个字段。
  */
-export async function hearAudio(url: string, audio: string, signal?: AbortSignal): Promise<HearOutcome> {
+export async function hearAudio(
+  url: string,
+  audio: string,
+  signal?: AbortSignal,
+  language?: string,
+): Promise<HearOutcome> {
   const timeout = AbortSignal.timeout(HEAR_TIMEOUT_MS);
+  const payload: { audio: string; language?: string } = { audio };
+  if (language !== undefined && language !== '') payload.language = language;
   try {
     const res = await fetch(url, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ audio }),
+      body: JSON.stringify(payload),
       signal: signal === undefined ? timeout : AbortSignal.any([signal, timeout]),
     });
     const raw: unknown = await res.json().catch(() => null);

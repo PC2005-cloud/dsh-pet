@@ -5,6 +5,8 @@
  * 必须在渲染期填池：迟绑槽里的驱动实例只在本次渲染内赋值，别处不得写入。
  * @module dsh-pet/src/client/pet/card/runtime
  */
+import { getHostLocale } from '../../../locale/current.ts';
+import { localizedPetName } from '../../../locale/packaged.ts';
 import { pick } from '../../../shared/pickers.ts';
 import { postAction } from '../../../shared/state.ts';
 import { ROUTE_PATH } from '../../../shared/constants.ts';
@@ -295,7 +297,7 @@ export function createCardRuntime(rt: PetRuntime) {
       fontTipPx: fontPx.tip,
       marginX: margin.x,
       marginY: margin.y,
-      name: cfg.name,
+      name: localizedPetName(getHostLocale(), cfg.name),
       onClick: () => {
         // 拖拽守卫必须在睡觉分支之前：指针捕获后浏览器一定会在松手时补发一次 click，
         // 它不是点击（拖了多久都一样）。醒着时这条由 drag.onClick 内部判，睡觉分支绕过了那里。

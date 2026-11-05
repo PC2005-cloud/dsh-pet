@@ -10,13 +10,14 @@ import { generateChat, type ChatMemoryMessage } from '../chat.ts';
 import { chatActionNames } from '../chat-action.ts';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { composeSystemPrompt, petPersona } from '../persona.ts';
+import { readLocaleId } from '../../locale/read.ts';
+import { localizeMemeDescription, localizedPetName, localizedWhisperPrompt } from '../../locale/packaged.ts';
 import { findPetInstance, readAllConfig, removeRoundsByTs, sliceMemoryRounds } from '../config.ts';
 import type { PetImageRef } from '../image-attachment.ts';
 import { limitPool, matchMeme, pickMeme, readMemePool } from '../memes.ts';
-import { generateWhisper } from '../whisper.ts';
+import { generateWhisper, sleepTalkText } from '../whisper.ts';
 import { createMemoryOrphans } from './memory-orphans.ts';
 import { configuredModel } from '../model-selection.ts';
-import { SLEEP_TALK_INSTRUCTION } from '../whisper.ts';
 import { pickVoiceSurface, type VoiceTarget } from '../surface.ts';
 import type { HostSetup } from './setup.ts';
 import type { HostContext } from './context.ts';
@@ -92,21 +93,31 @@ export function createChatMemory(deps: ChatMemoryInput) {
   };
 
   /** 某宠物的最终人设 system：实例级 `pets[].whisperPrompt` 优先，没写回落到所属条目的那份。
-   *  拼装在 ./persona（纯函数）：人设正文 + 名字声明 + 一行时间背景，时间每次现算；
+   *  包内默认人设在 ru 时换成俄文，改过的原文不改。拼装在 ./persona（纯函数）：人设正文 + 名字声明 + 一行时间背景，时间每次现算；
    *  对话路径传 `{ historyTimes: true }` 追加【历史】说明，碎碎念没有历史，不传。
    *  收 `findPetInstance` 的命中结果而不是 (petId, cfg)：调用方都已解析过，再查只会多一处
    *  「查不到就兜底 main」的不可达分支。 */
   const petSystemPrompt = (
     found: { conf: Record<string, unknown>; pet: Record<string, unknown> },
     options: { historyTimes?: boolean } = {},
-  ): string =>
-    composeSystemPrompt({
-      prompt: petPersona(found.conf, found.pet),
-      name: String(found.pet.name ?? ''),
+  ): string => {
+    const localeId = readLocaleId(state.read?.()?.sections.locale?.data);
+    return composeSystemPrompt({
+      prompt: localizedWhisperPrompt(localeId, petPersona(found.conf, found.pet)),
+      name: localizedPetName(localeId, String(found.pet.name ?? '')),
       id: String(found.pet.id ?? ''),
       now: new Date(),
+      localeId,
       ...(options.historyTimes === true ? { historyTimes: true } : {}),
     });
+  };
+
+  /** 包内描述与生效值完全一致时换成俄文；改过的句子留下。 */
+  const localizePool = <T extends { name: string; desc: string }>(pool: readonly T[]): T[] => {
+    const localeId = readLocaleId(state.read?.()?.sections.locale?.data);
+    if (localeId !== 'ru') return [...pool];
+    return pool.map((entry) => ({ ...entry, desc: localizeMemeDescription(localeId, entry.name, entry.desc) }));
+  };
 
   /** 对话记忆轮数（1 轮 = 1 问 1 答）：该宠物所属条目的 chatMemoryRounds（合并器已填默认）。
    *  收已解析的条目配置：调用方都已拿到 `findPetInstance` 的结果。 */
@@ -147,9 +158,10 @@ export function createChatMemory(deps: ChatMemoryInput) {
     // 关掉就不写 voiceTo（叶子不带这个键 = 谁都不念），气泡照旧弹。
     const whisperVoiceOn = cfg.main?.voiceWhisperEnabled === true;
     const target = kind === 'whisper' && !whisperVoiceOn ? undefined : (voiceTo ?? voiceTargetFor(found.pet));
+    const localeId = readLocaleId(state.read?.()?.sections.locale?.data);
     const system = petSystemPrompt(found);
     // 池只算一次：点名的图与随机抽图共用同一份（含文件存在性判定）。
-    const pool = readMemePool(found.conf.memes, memeDirsFor(found.entry));
+    const pool = localizePool(readMemePool(found.conf.memes, memeDirsFor(found.entry)));
     // 点名了却没命中 = 配置写错或图已被删：明确失败，不静默换成另一张（点了 A 却看到 B 会以为坏了）。
     const forced = image === undefined ? undefined : matchMeme(pool, image);
     if (image !== undefined && forced === undefined) {
@@ -161,6 +173,7 @@ export function createChatMemory(deps: ChatMemoryInput) {
       system,
       meme,
       preferred: configuredModel(found.conf, 'whisperModel'),
+      localeId,
     });
     if (!result.ok) {
       // 失败不写 S：静默跳过 + warn，不伪造文案、不弹错误气泡
@@ -196,11 +209,12 @@ export function createChatMemory(deps: ChatMemoryInput) {
     const cfg = readAllConfig(configPaths);
     const found = findPetInstance(cfg, petId);
     if (!found) return false;
+    const localeId = readLocaleId(state.read?.()?.sections.locale?.data);
     const system = petSystemPrompt(found);
     const result = await generateWhisper(ctx, {
       system,
       preferred: configuredModel(found.conf, 'whisperModel'),
-      instruction: SLEEP_TALK_INSTRUCTION,
+      instruction: sleepTalkText(localeId),
     });
     if (!result.ok) {
       log.warn(
@@ -239,7 +253,10 @@ export function createChatMemory(deps: ChatMemoryInput) {
       // 张数上限（chatImageLimit，0 = 不限制）：整张清单每条消息都要附，截断后费用上限可控。
       const pool =
         found.conf.chatImageEnabled === true
-          ? limitPool(readMemePool(found.conf.memes, memeDirsFor(found.entry)), Number(found.conf.chatImageLimit))
+          ? limitPool(
+              localizePool(readMemePool(found.conf.memes, memeDirsFor(found.entry))),
+              Number(found.conf.chatImageLimit),
+            )
           : [];
       // 动作名单：开关开启才取（关掉 = 不注入也不解析）；名单本身为空（没配 categories）同样等于关闭。
       const actions = found.conf.chatAnimationEnabled === true ? chatActionNames(found.conf.animations) : [];
@@ -277,6 +294,7 @@ export function createChatMemory(deps: ChatMemoryInput) {
         actions,
         preferred: configuredModel(found.conf, 'chatModel'),
         image,
+        localeId: readLocaleId(state.read?.()?.sections.locale?.data),
       });
       if (!generated.ok) return generated;
       const now = Date.now();

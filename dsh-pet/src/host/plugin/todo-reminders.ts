@@ -6,6 +6,7 @@
  * 没有可见宠物或被第三方占用时跳过且不推进——条件满足后的下一拍立刻补上，这次提醒不会丢。
  * @module dsh-pet/src/host/plugin/todo-reminders
  */
+import { readLocaleId } from '../../locale/read.ts';
 import { pickVoiceSurface } from '../surface.ts';
 import { pickReminder, reminderText } from '../todo/policy.ts';
 import type { TodoStore } from '../todo/store.ts';
@@ -32,8 +33,8 @@ export interface TodoReminderTickDeps {
   /** 睡着的宠物不打扰：提醒是「跟它说话」，睡着时说了它也听不见，换一只醒着的。
    *  缺省视为都不睡（老调用方与测试替身不必改）。 */
   isSleeping?: (petId: string) => boolean;
-  /** 轮询状态：提醒写进 `pets.<id>.say`。 */
-  state: Pick<PollStateStore, 'writePet'>;
+  /** 轮询状态：提醒写进 `pets.<id>.say`。`read` 缺省时套话保持中文（老测试替身只写不读）。 */
+  state: Pick<PollStateStore, 'writePet'> & Partial<Pick<PollStateStore, 'read'>>;
   /** 日志出口。 */
   log: Pick<HostSetup['log'], 'info' | 'warn'>;
   /** 时间源；测试注入固定时钟。 */
@@ -103,7 +104,7 @@ export async function tickTodoReminders(deps: TodoReminderTickDeps): Promise<voi
   const display = String(pets.find((pet) => String(pet.id ?? '') === speaker)?.display ?? '');
   const voiceTo = deps.isVoiceTodoEnabled() ? pickVoiceSurface(display) : null;
   deps.state.writePet(speaker, 'say', {
-    text: reminderText(due.todo, now),
+    text: reminderText(due.todo, now, readLocaleId(deps.state.read?.()?.sections.locale?.data)),
     duration: BUBBLE_DURATION_MS,
     ...(voiceTo ? { voiceTo } : {}),
   });

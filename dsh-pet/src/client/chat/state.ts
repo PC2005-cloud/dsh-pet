@@ -17,6 +17,7 @@ import {
   roundsToRevealMemory,
 } from './api.ts';
 import { createHistoryActions, createSendActions, createShellActions } from './actions.ts';
+import { subscribeHostLocale } from '../../locale/current.ts';
 import { createChatEffects } from './effects.ts';
 import type { ChatPanelRuntime } from './runtime.ts';
 import type { ChatPanelState, DraftKeyEvent, PanelData } from './types.ts';
@@ -54,12 +55,14 @@ const INITIAL: PanelData = {
  * @returns 无参 hook：每次渲染返回当前状态、派生值与动作。
  */
 export function createPetChatState(rt: ChatPanelRuntime): () => ChatPanelState {
-  const { useRef, useState } = rt;
+  const { useRef, useState, useEffect } = rt;
   const useChatEffects = createChatEffects(rt);
 
   return function usePetChatState(): ChatPanelState {
     // 版本号在面板挂载时生成：每次打开面板都重新挂载，换过头像后重开一定拿到新图。
     const [data, setData] = useState<PanelData>({ ...INITIAL, avatarVersion: Date.now() });
+    const [, setLocaleTick] = useState(0);
+    useEffect(() => subscribeHostLocale(() => setLocaleTick((tick) => tick + 1)), []);
     const listRef = useRef<HTMLDivElement | null>(null);
     const draftRef = useRef<HTMLTextAreaElement | null>(null);
     /** 输入法组合态：必须跨渲染存活，重建一次就会把「正在组合」忘掉。 */

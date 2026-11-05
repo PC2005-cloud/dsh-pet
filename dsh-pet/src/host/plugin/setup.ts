@@ -18,6 +18,7 @@ import { MenuRegistry } from '../menu.ts';
 import { PACKAGE_MEMES_DIR, PACKAGE_ROOT } from '../paths.ts';
 import { PlaybackStore } from '../playback.ts';
 import { resolveAsset } from '../http.ts';
+import { hydrateHostLocale } from '../locale-cache.ts';
 import { PollStateStore } from '../state.ts';
 import { WorkStatusStore } from '../work-status.ts';
 import type { StandaloneWhisperPolicy } from '../whisper-policy.ts';
@@ -182,6 +183,7 @@ export function createHostSetup(ctx: HostSetupContext): HostSetup {
   // 轮询状态（/state）：前端 1s 轮询的唯一数据源（余额 / 工作状态 / 通知 / 宠物说话）。
   // 所有写入走 state.writeSection / writePet（统一更新 counter）。
   const state = new PollStateStore();
+  hydrateHostLocale(state, userRoot);
 
   // 第三方右键菜单注册表：进程内存态，不落盘，重启即空。
   // 注册表写进 S 的 sections.menu；点击事件不进 S——它是触发不是状态，走 /menu/events 读取即消费。

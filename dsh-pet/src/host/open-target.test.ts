@@ -111,8 +111,8 @@ describe('装配接线：宿主注入 → helper 解析 → 渲染端文案', ()
       '三种形态必须有三种文案，web 不得再显示「打开 AI 设置」',
     );
     assert.ok(
-      /label: OPEN_LABEL\[OPEN_TARGET\],\s*action: 'open-site'/.test(sprite),
-      '文案由查表决定，但 action 仍是 open-site（另一端只认这个动作名；hint 只是视觉提示，允许夹在中间换行）',
+      /OPEN_LABEL\[OPEN_TARGET\]/.test(sprite) && /action: 'open-site'/.test(sprite),
+      '非俄语仍查中文表，action 仍是 open-site',
     );
   });
 

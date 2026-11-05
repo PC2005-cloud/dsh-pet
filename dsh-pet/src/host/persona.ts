@@ -19,6 +19,17 @@ import { timeContextOf } from './time-context.ts';
 const HISTORY_TIMES_LINE =
   '【历史】对话记录里，主人的话前面标着 [月日 时:分]，那是那句话发生的时刻；它只是记录里的时间标注，不是你的说话格式。判断“多久以前”“隔了几天”时按它换算，别把隔了很久的话当成刚说过的。你的回复直接从正文开始，不要写时间、不要加方括号前缀。';
 
+/** 同一段说明的俄文。只在宿主语言是 ru 时替换，不改人设正文。 */
+const HISTORY_TIMES_LINE_RU =
+  'В истории перед репликами хозяина стоит [дата время] — это момент той фразы, а не формат твоих ответов. По нему считай, как давно это было. Ответ начинай сразу с текста, без времени и без скобок.';
+
+/** 有历史且 язык ru 时追加：旧 assistant 回复可能是中文，不要照抄语言。 */
+const HISTORY_PRIOR_LANGUAGE_RU =
+  'Старые ответы ассистента в истории могли быть на другом языке — не копируй их язык, отвечай по-русски.';
+
+/** 放在 system 最前，减弱长段中文历史对模型语言的影响。 */
+const RU_REPLY_GUARD = 'Отвечай только по-русски. Не используй китайский и другие языки.';
+
 /**
  * 某宠物最终生效的人设正文（不含名字与时间）：实例 whisperPrompt → 条目 whisperPrompt → 空串。
  *
@@ -44,6 +55,8 @@ export interface SystemPromptParts {
   now: Date;
   /** 历史消息是否带时间前缀；缺省 false（碎碎念没有历史，不该出现【历史】段） */
   historyTimes?: boolean;
+  /** 宿主语言 id。只有精确的 `ru` 才把名字、时间和历史说明换成俄语，并要求用俄语回答。 */
+  localeId?: string;
 }
 
 /**
@@ -54,14 +67,20 @@ export interface SystemPromptParts {
  * （宁缺，也不把 NaN 拼进提示词；没有时间背景时【历史】的“现在”无从对照，留着只会自相矛盾）。
  */
 export function composeSystemPrompt(parts: SystemPromptParts): string {
+  const ru = parts.localeId === 'ru';
   const name = String(parts.name || parts.id);
-  const nameLine = name ? '你的名字是“' + name + '”。' : '';
+  const nameLine = name ? (ru ? 'Тебя зовут «' + name + '».' : '你的名字是“' + name + '”。') : '';
   const lines = [parts.prompt, nameLine].filter((line) => line !== '');
-  const time = timeContextOf(parts.now);
+  if (ru) lines.unshift(RU_REPLY_GUARD);
+  const time = timeContextOf(parts.now, parts.localeId);
   if (time) {
     lines.push(time);
     // 【历史】跟着时间背景走：它整句都在引用“现在”，没有时间背景时不成立
-    if (parts.historyTimes === true) lines.push(HISTORY_TIMES_LINE);
+    if (parts.historyTimes === true) {
+      if (ru) lines.push(HISTORY_PRIOR_LANGUAGE_RU);
+      lines.push(ru ? HISTORY_TIMES_LINE_RU : HISTORY_TIMES_LINE);
+    }
   }
+  if (ru) lines.push('Отвечай по-русски.');
   return lines.join('\n');
 }

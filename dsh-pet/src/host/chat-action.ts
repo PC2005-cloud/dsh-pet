@@ -37,11 +37,20 @@ export function chatActionNames(animations: unknown): string[] {
  * 句式照配图那句写（省略主语、说「做」而不是「让宠物表演」）：模型自己就是宠物，旁白口吻它不会照做。
  *
  * @param names - 可表演的动作名（{@link chatActionNames} 的结果）；空名单由调用方直接跳过。
+ * @param localeId - 宿主语言；只有 `ru` 时说明用俄语。标记 `[动作:名称]` 保持原样，解析靠它。
  */
-export function actionInstruction(names: readonly string[]): string {
+export function actionInstruction(names: readonly string[], localeId?: string | null): string {
+  const list = names.map((name) => '- ' + name).join('\n');
+  if (localeId === 'ru') {
+    return (
+      '\n\n[动作] В конце ответа можно показать одно действие. Выбери самое подходящее и скопируй имя как есть:\n' +
+      list +
+      '\nЕсли выбрала, последней строкой напиши [动作:имя] — имя из списка, без перевода. Если ничего не подходит, маркер не пиши.'
+    );
+  }
   return (
     '\n\n[动作] 回复结尾可选做一个动作给用户看，从下列清单里挑最贴合当前语境的：\n' +
-    names.map((name) => '- ' + name).join('\n') +
+    list +
     '\n挑中就在回复最后另起一行写 [动作:名称]（名称原样照抄）；没有合适的就完全不要写这个标记。'
   );
 }

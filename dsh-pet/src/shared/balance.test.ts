@@ -790,3 +790,28 @@ describe('custom 形态 —— 第三方自定义气泡（节点树）', () => {
     );
   });
 });
+
+describe('balanceBubbleView —— ru 走固定文案目录', () => {
+  test('windows 收起态与不可用说明为俄文', async () => {
+    const { setHostLocale, resetHostLocale } = await import('../locale/current.ts');
+    setHostLocale('ru');
+    try {
+      assert.deepEqual(balanceBubbleView(unsupported), [
+        { role: 'error', text: 'Этот провайдер не поддерживает запрос баланса' },
+        { role: 'sub', text: 'Провайдер: unregistered-provider' },
+      ]);
+      const rows = balanceBubbleView({
+        provider: 'opencode-go',
+        shape: 'windows',
+        ok: true,
+        weekly: 75,
+        weeklyCapUsd: 30,
+        monthly: 10,
+        monthlyCapUsd: 70,
+      });
+      assert.match(rows[0]?.text ?? '', /^нед\.: использовано 75%$/);
+    } finally {
+      resetHostLocale();
+    }
+  });
+});

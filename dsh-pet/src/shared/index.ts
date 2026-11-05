@@ -30,3 +30,8 @@ export * from './sleep-hotkey.ts';
 export * from './todo/index.ts';
 export * from './tooltip.ts';
 export * from './voice.ts';
+export { chromeText, fillChrome, type ChromeKey } from '../locale/chrome.ts';
+export { getHostLocale, setHostLocale, subscribeHostLocale } from '../locale/current.ts';
+export { builtinLabel } from '../locale/actions.ts';
+export { encodeFrameRel, textFrameRel } from '../locale/text-frames.ts';
+export { localizedPetName, localizedWorkStatusTexts } from '../locale/packaged.ts';

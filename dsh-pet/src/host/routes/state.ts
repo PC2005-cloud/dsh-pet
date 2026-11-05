@@ -5,15 +5,19 @@
  * 依赖（PetRouteDeps）显式传入，模块内不读全局、不建状态。
  * @module dsh-pet/src/host/routes/state
  */
+import { writeCachedHostLocale } from '../locale-cache.ts';
 import { parseStateWaitQuery } from '../state.ts';
 import { type RouteResult } from '../http.ts';
 import { HOST_WORK_STATUS_STATES, TASK_TEXT_MAX, type HostWorkStatusState } from '../work-status.ts';
 import type { PetRouteDeps, RouteInput } from './types.ts';
 import { failResult, invalidJson, methodNotAllowed, okResult, payloadTooLarge } from './result.ts';
 
+/** 宿主语言 id：短标识，不含空白和斜杠。 */
+const LOCALE_ID = /^[\w.-]{1,32}$/;
+
 /** 轮询状态领域：未命中返回 undefined，命中返回应答。 */
 export async function handleStateRoutes(deps: PetRouteDeps, input: RouteInput): Promise<RouteResult | undefined> {
-  const { EXTERNAL_WORK_SESSION, ctx, nextExternalWorkSeq, publishWorkStatus, state, workStatus } = deps;
+  const { EXTERNAL_WORK_SESSION, ctx, nextExternalWorkSeq, publishWorkStatus, state, userRoot, workStatus } = deps;
   const { body, method, rest, signal, url } = input;
 
   // 可选模型清单（设置页「AI 模型」下拉框数据源）：与 DSH 模型选择器同源，都来自宿主 llm 服务。
@@ -149,6 +153,25 @@ export async function handleStateRoutes(deps: PetRouteDeps, input: RouteInput): 
       state: workStatus.stateOf(EXTERNAL_WORK_SESSION) ?? state,
       task: workStatus.taskOf(EXTERNAL_WORK_SESSION),
     });
+  }
+
+  // 浏览器把宿主语言 id 交上来。叶子缺着、id 空或不是 ru 时，界面保持中文。
+  if (rest === 'locale') {
+    if (method !== 'POST') return methodNotAllowed();
+    if (Buffer.byteLength(body ?? '', 'utf8') > 1024) return payloadTooLarge('body too large');
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(body ?? '');
+    } catch {
+      return invalidJson();
+    }
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return invalidJson();
+    const raw = (parsed as { id?: unknown }).id;
+    const id = typeof raw === 'string' ? raw.trim() : '';
+    if (!LOCALE_ID.test(id)) return failResult('bad-request', 'id 必须是 1–32 位的语言标识');
+    state.writeSection('locale', { id });
+    writeCachedHostLocale(userRoot, id);
+    return okResult({ id });
   }
 
   return undefined;

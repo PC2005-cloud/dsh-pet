@@ -6,6 +6,7 @@
  * @module dsh-pet/src/shared/balance/handlers/windows
  */
 
+import { balanceFill, balanceText } from '../copy.ts';
 import { quotaTone } from '../tone.ts';
 import type { BalanceBubbleRow, BalanceView, WindowKey, WindowUsage } from '../types.ts';
 import type { ShapeHandler } from './shape.ts';
@@ -30,7 +31,8 @@ export const DEFAULT_ROLLING_LABEL = '5h';
 /** 取窗口展示名：滚动窗用服务商自报值，周与月走固定表 */
 function windowLabel(v: BalanceView, w: WindowKey): string {
   if (w === 'rolling') return v.rollingLabel ?? DEFAULT_ROLLING_LABEL;
-  return WINDOW_LABELS[w];
+  if (w === 'weekly') return balanceText('balance.window.weekly');
+  return balanceText('balance.window.monthly');
 }
 
 /** 各窗口的满额度，全部来自数据 */
@@ -93,10 +95,14 @@ export function resetInText(iso?: string): string {
   const t = new Date(iso).getTime();
   if (!Number.isFinite(t)) return '';
   const delta = t - Date.now();
-  if (delta <= 0) return '已重置';
+  if (delta <= 0) return balanceText('balance.reset.done');
   const hoursF = delta / 3_600_000;
-  if (hoursF >= 96) return (Math.round((hoursF / 24) * 10) / 10).toFixed(1) + ' 天';
-  return Math.max(0.1, Math.round(hoursF * 10) / 10).toFixed(1) + ' 小时';
+  if (hoursF >= 96) {
+    const value = (Math.round((hoursF / 24) * 10) / 10).toFixed(1);
+    return balanceFill('balance.time.days', { value });
+  }
+  const value = Math.max(0.1, Math.round(hoursF * 10) / 10).toFixed(1);
+  return balanceFill('balance.time.hours', { value });
 }
 
 /** 三窗口取最大值，只有月窗口时就是它本身 */
@@ -106,17 +112,22 @@ function windowsPercent(v: BalanceView): number | undefined {
 
 /** 把 resetInText 的三种返回翻成一句提示：空串 = 时间未知，'已重置' = 已经过点，其余 = 倒计时。 */
 function resetPhrase(reset: string): string {
-  if (reset === '') return '重置时间未知';
-  return reset === '已重置' ? reset : reset + '重置';
+  if (reset === '') return balanceText('balance.reset.unknown');
+  const done = balanceText('balance.reset.done');
+  if (reset === done) return done;
+  return balanceFill('balance.reset.countdown', { time: reset });
 }
 
 /** 两行：最紧迫窗口的已用百分比与重置倒计时 */
 function windowsRows(v: BalanceView): BalanceBubbleRow[] {
   const w = urgentWindow(v);
-  if (!w) return [{ role: 'label', text: '额度数据不可用' }];
+  if (!w) return [{ role: 'label', text: balanceText('balance.quota.unavailable') }];
   const reset = resetInText(w.resetsAt);
   return [
-    { role: 'label', text: w.label + '额度已用 ' + Math.round(w.percent) + '%' },
+    {
+      role: 'label',
+      text: balanceFill('balance.window.used', { label: w.label, percent: Math.round(w.percent) }),
+    },
     { role: 'sub', text: resetPhrase(reset) },
   ];
 }
@@ -171,18 +182,19 @@ function windowsUsage(v: BalanceView): BalanceBubbleRow[] | undefined {
   const u = v.usage;
   if (!u) return undefined;
   const total = compactCount(u.totalTokens);
-  const input = compactCount(u.inputTokens) + ' 入';
-  const output = compactCount(u.outputTokens) + ' 出';
-  const period = '本期 ' + u.requests + ' 次';
+  const input = balanceFill('balance.usage.input', { value: compactCount(u.inputTokens) });
+  const output = balanceFill('balance.usage.output', { value: compactCount(u.outputTokens) });
+  const period = balanceFill('balance.usage.period', { count: u.requests });
   const spend = '$' + u.spentUsd.toFixed(2);
+  const title = balanceText('balance.usage.title');
   // 比例条用真实占比：输入通常占绝对多数，条看起来几乎单色是事实，不做最小宽度放大。
   const sum = u.inputTokens + u.outputTokens;
   const inputPercent = sum > 0 ? (u.inputTokens / sum) * 100 : undefined;
   return [
     {
       role: 'usage',
-      text: 'Token ' + total + ' · ' + input + ' / ' + output + ' · ' + period + ' · ' + spend,
-      title: 'Token',
+      text: balanceFill('balance.usage.summary', { title, total, input, output, period, spend }),
+      title,
       total,
       input,
       output,

@@ -29,6 +29,8 @@ import {
   type MenuNode,
 } from '../../../shared/menu.ts';
 import { ROUTE_PATH } from '../../../shared/constants.ts';
+import { chromeText } from '../../../locale/chrome.ts';
+import { getHostLocale } from '../../../locale/current.ts';
 import { TOOLTIP_GAP_RATIO, tooltipPlacement } from '../../../shared/tooltip.ts';
 import type { MenuMoreItem } from '../../../shared/menu.ts';
 import type { CardLive } from './live.ts';
@@ -338,37 +340,27 @@ export function createCardEntry(rt: CardEntryRuntime) {
     const handleContextMenu = (e: ReactNS.MouseEvent<HTMLDivElement>): void => {
       // 工具项与动作树；「查看余额」无条件显示，手动请求不受开关限制。
       // 第三方菜单项收在「更多」下，0 项不出现，单 owner 单条时平铺（见 buildMoreBranch）。
-      const more = buildMoreBranch(menuItemsRef.current);
-      // 「配图」：按配置里的清单分成「纳入对话的配图 / 其他」，点一张就用它说一句。
-      // 没有可用图时返回 null，整项不出现（不占一个点开是空的菜单）。
-      // 缩略图靠 /pic/memes/<素材根>/<名称>.png：素材根就是拍平时写入的条目 key。
+      const id = getHostLocale();
+      const more = buildMoreBranch(menuItemsRef.current, id);
       const pic = cfgRef.current;
-      const memes = buildMemeBranch(pic, (name) => memeThumbUrl(ROUTE_PATH, pic.assetRoot, name));
-      // 睡觉/起来是同一个入口的两种文案：睡着时点它等于叫醒（与「点击宠物」同义）。
-      // 该条目没配 animations.sleep 就整项不出现——与配置注释「不写 = 没有睡觉功能」一致。
+      const memes = buildMemeBranch(pic, (name) => memeThumbUrl(ROUTE_PATH, pic.assetRoot, name, id), id);
       const asleep = live.current.flow?.sleeping() ?? false;
       const canSleep = (cfgRef.current.animations.sleep ?? []).length > 0;
       const sleepItem: MenuNode = asleep
-        ? { label: '起来', action: 'wake', hint: SLEEP_HOTKEY_HINT }
-        : { label: '睡觉', action: 'sleep', hint: SLEEP_HOTKEY_HINT };
-      // 顺序与桌面端同一排法：余额 / 待办 / 碎碎念 / 对话 / 配图 / 睡觉 → 动作树 → 显示位置 / 回到初始位置。
-      // 桌面专属的两项（打开软件、重载配置）在网页端没有对应动作，不出现。
+        ? { label: chromeText(id, 'menu.wake'), action: 'wake', hint: SLEEP_HOTKEY_HINT }
+        : { label: chromeText(id, 'menu.sleep'), action: 'sleep', hint: SLEEP_HOTKEY_HINT };
       const tools: MenuNode[] = [
-        { label: '查看余额', action: 'show-balance' },
-        { label: '待办事项', action: 'todo', hint: TODO_HOTKEY_HINT },
-        { label: '碎碎念', action: 'whisper' },
-        { label: '对话', action: 'chat', hint: CHAT_HOTKEY_HINT },
+        { label: chromeText(id, 'menu.balance'), action: 'show-balance' },
+        { label: chromeText(id, 'menu.todo'), action: 'todo', hint: TODO_HOTKEY_HINT },
+        { label: chromeText(id, 'menu.whisper'), action: 'whisper' },
+        { label: chromeText(id, 'menu.chat'), action: 'chat', hint: CHAT_HOTKEY_HINT },
         ...(memes ? [memes] : []),
         ...(canSleep ? [sleepItem] : []),
       ];
-      const tail: MenuNode[] = [
-        // 显示位置子菜单与桌面端同一份；改成不含 web 的值后本宠物会从页面消失。
-        displayMenuBranch(),
-        { label: '回到初始位置', action: 'home' },
-      ];
+      const tail: MenuNode[] = [displayMenuBranch(id), { label: chromeText(id, 'menu.home'), action: 'home' }];
       const tree: MenuNode[] = [
         ...tools,
-        ...buildMenuTree(cfgRef.current.animations),
+        ...buildMenuTree(cfgRef.current.animations, id),
         ...tail,
         ...(more ? [more] : []),
       ];

@@ -284,4 +284,5 @@ export const es: Record<Key, string> = {
   uninstallStep3:
     '3. Borra las ubicaciones de arriba según necesites: las cachés no hacen daño; borrar los «datos de usuario del plugin» pierde la configuración y la memoria del chat (haz una copia de main-config.jsonc si quieres conservarla).',
   uninstallCmd: 'dsh plugin --profile {profile} remove dsh-pet',
+  localeId: 'es',
 };

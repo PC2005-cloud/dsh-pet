@@ -126,8 +126,10 @@ function boot() {
     event.preventDefault();
     event.returnValue = '';
   });
-  loadPets();
-  loadAi();
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') refreshHostLocale();
+  });
+  void Promise.all([loadPets(), loadAi()]).then(() => refreshHostLocale());
 }
 `;
 }

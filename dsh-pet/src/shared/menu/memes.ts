@@ -3,6 +3,9 @@
  * 不读磁盘、不判断文件是否仍在——那是宿主的池判定；这里只按配置分组，客户端因此不必联网取清单。
  * @module dsh-pet/src/shared/menu/memes
  */
+import { builtinLabel } from '../../locale/actions.ts';
+import { chromeText } from '../../locale/chrome.ts';
+import { encodeFrameRel, textFrameRel } from '../../locale/text-frames.ts';
 import type { MenuBranch, MenuLeaf, MenuNode } from './types.ts';
 
 /** 分组依据：条目级的三项配置，合并器已吹进每只宠物。 */
@@ -54,8 +57,8 @@ export function groupMemes(source: MemeGroupSource): MemeGroups {
 }
 
 /** 单张图 → 菜单叶子：点它就是「用这张图说一句」；给了缩略图地址就带上，菜单据此画小图。 */
-function memeLeaf(name: string, thumbOf?: (name: string) => string): MenuLeaf {
-  const leaf: MenuLeaf = { label: name, action: 'whisper', image: name };
+function memeLeaf(name: string, localeId?: string | null, thumbOf?: (name: string) => string): MenuLeaf {
+  const leaf: MenuLeaf = { label: builtinLabel(localeId, name), action: 'whisper', image: name };
   if (thumbOf) leaf.thumb = thumbOf(name);
   return leaf;
 }
@@ -71,9 +74,15 @@ function memeLeaf(name: string, thumbOf?: (name: string) => string): MenuLeaf {
  * @param name - 表情包名称（配置里的键，不含扩展名）。
  * @returns 可直接用作 img src 的完整地址。
  */
-export function memeThumbUrl(baseUrl: string, assetRoot: string | undefined, name: string): string {
+export function memeThumbUrl(
+  baseUrl: string,
+  assetRoot: string | undefined,
+  name: string,
+  localeId?: string | null,
+): string {
   const root = assetRoot && assetRoot.trim() !== '' ? assetRoot : 'main';
-  return baseUrl + '/pic/memes/' + encodeURIComponent(root) + '/' + encodeURIComponent(name) + '.png';
+  const rel = textFrameRel(localeId, name);
+  return baseUrl + '/pic/memes/' + encodeURIComponent(root) + '/' + encodeFrameRel(rel) + '.png';
 }
 
 /**
@@ -86,12 +95,16 @@ export function memeThumbUrl(baseUrl: string, assetRoot: string | undefined, nam
  * @param thumbOf - 可选：名称 → 缩略图地址。给了菜单每项就带小图，缺省只有文字。
  * @returns 「配图 →（纳入对话的配图 / 其他）」两级分支。
  */
-export function buildMemeBranch(source: MemeGroupSource, thumbOf?: (name: string) => string): MenuBranch | null {
+export function buildMemeBranch(
+  source: MemeGroupSource,
+  thumbOf?: (name: string) => string,
+  localeId?: string | null,
+): MenuBranch | null {
   const { chat, other } = groupMemes(source);
-  const leaf = (name: string): MenuLeaf => memeLeaf(name, thumbOf);
+  const leaf = (name: string): MenuLeaf => memeLeaf(name, localeId, thumbOf);
   const groups: MenuNode[] = [];
-  if (chat.length > 0) groups.push({ label: '纳入对话的配图', children: chat.map(leaf) });
-  if (other.length > 0) groups.push({ label: '其他', children: other.map(leaf) });
+  if (chat.length > 0) groups.push({ label: chromeText(localeId, 'menu.memes.chat'), children: chat.map(leaf) });
+  if (other.length > 0) groups.push({ label: chromeText(localeId, 'menu.memes.other'), children: other.map(leaf) });
   if (groups.length === 0) return null;
-  return { label: '配图', children: groups };
+  return { label: chromeText(localeId, 'menu.memes'), children: groups };
 }

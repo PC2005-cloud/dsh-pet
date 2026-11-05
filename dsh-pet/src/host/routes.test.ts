@@ -210,6 +210,7 @@ describe('/state + /balance —— 轮询统一状态与余额动作端点', () 
       'balance',
       'config',
       'focusSession',
+      'locale',
       'menu',
       'notify',
       'workStatus',
@@ -222,6 +223,18 @@ describe('/state + /balance —— 轮询统一状态与余额动作端点', () 
 
   test('非 GET → 405（只读端点）', async () => {
     assert.equal((await call('/dsh-pet-7340/state', 'POST')).status, 405);
+  });
+
+  test('POST /locale 写入语言 id，其它叶子保持原样', async () => {
+    const posted = await call('/dsh-pet-7340/locale', 'POST', JSON.stringify({ id: 'ru' }));
+    assert.equal(posted.status, 200);
+    const r = await call('/dsh-pet-7340/state');
+    const body = JSON.parse(r.body) as {
+      sections: Record<string, { counter: number; data: { id?: string } | null }>;
+    };
+    assert.equal(body.sections.locale?.data?.id, 'ru');
+    assert.equal(body.sections.balance?.data, null);
+    assert.equal(body.sections.config?.data, null);
   });
 
   test('只传 since / 只传 timeout → 200 + bad-request（成对必填，与 /playback 的 wait/timeout 同一套约定）', async () => {
@@ -483,6 +496,28 @@ describe('thumb 路由 —— 合法路径照常（修复不得误杀）', () =>
     const r = await call('/dsh-pet-7340/thumb/main/mainidle.webm');
     assert.equal(r.status, 200);
     assert.equal(r.body, MAIN);
+  });
+
+  test('ru/ 只给名单里的画面；缺俄语文件回落原片；普通地址不进 ru/', async () => {
+    const webm = join(dir, 'home', 'dsh-pet', 'main-animation', 'webm');
+    const name = '是啊，吃什么';
+    writeFileSync(join(webm, name + '.webm'), 'ORIG');
+    mkdirSync(join(webm, 'ru'), { recursive: true });
+    writeFileSync(join(webm, 'ru', name + '.webm'), 'RU');
+    const ruUrl = '/dsh-pet-7340/thumb/main/ru/' + encodeURIComponent(name) + '.webm';
+    const plainUrl = '/dsh-pet-7340/thumb/main/' + encodeURIComponent(name) + '.webm';
+    const hit = await call(ruUrl);
+    assert.equal(hit.status, 200);
+    assert.equal(hit.body, 'RU');
+    const plain = await call(plainUrl);
+    assert.equal(plain.status, 200);
+    assert.equal(plain.body, 'ORIG');
+    rmSync(join(webm, 'ru', name + '.webm'));
+    const fallback = await call(ruUrl);
+    assert.equal(fallback.status, 200);
+    assert.equal(fallback.body, 'ORIG');
+    const other = await call('/dsh-pet-7340/thumb/main/ru/mainidle.webm');
+    assert.equal(other.status, 404);
   });
 
   test('不存在的素材根 → 404（行为与"没有独立素材目录"一致）', async () => {

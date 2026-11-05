@@ -276,4 +276,5 @@ export const ja: Record<Key, string> = {
   uninstallStep3:
     '3. 上記の場所を必要に応じて削除します：キャッシュは削除しても影響ありません。「プラグインのユーザーデータ」を削除すると設定と会話メモリが失われます（残したい場合は中の main-config.jsonc を先にバックアップしてください）。',
   uninstallCmd: 'dsh plugin --profile {profile} remove dsh-pet',
+  localeId: 'ja',
 };

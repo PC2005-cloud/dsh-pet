@@ -132,6 +132,16 @@ describe('hearAudio', () => {
     }
   });
 
+  test('传入语言时才把 language 放进请求体', async () => {
+    const stub = stubFetch(() => json({ ok: true, text: 'да' }));
+    try {
+      await hearAudio('http://x/voice/hear', 'AAAA', undefined, 'ru');
+      assert.deepEqual(JSON.parse(stub.bodies[0] ?? '{}'), { audio: 'AAAA', language: 'ru' });
+    } finally {
+      stub.restore();
+    }
+  });
+
   test('空串也算成功（这段里没人说话是合法结论，不是错误）', async () => {
     const stub = stubFetch(() => json({ ok: true, text: '' }));
     try {

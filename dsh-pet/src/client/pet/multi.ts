@@ -25,6 +25,8 @@ import {
   resolveLeafPath,
   takeChanged,
 } from '../../shared/state.ts';
+import { readLocaleId } from '../../locale/read.ts';
+import { setHostLocale } from '../../locale/current.ts';
 import { fontStackOf } from '../../shared/fonts.ts';
 import type { Pet } from '../../shared/types.ts';
 import type { BalanceState } from '../../shared/balance/index.ts';
@@ -239,6 +241,9 @@ export function createPetMulti(
             // 桌面宠物点了会话气泡：宿主把意图写在这个叶子里，页面据此切会话。
             applyFocusSession(leaf.data);
             return;
+          case 'locale':
+            setHostLocale(readLocaleId(leaf.data));
+            return;
         }
       };
 
@@ -310,6 +315,7 @@ export function createPetMulti(
           // 菜单项是当前状态而不是事件，首拉也必须装上，否则刷新后第三方菜单会一直为空。
           menuItemsRef.current = readMenuItems(s.sections.menu?.data, 'web');
           setMenuItems(menuItemsRef.current);
+          setHostLocale(readLocaleId(s.sections.locale?.data));
           // 睡觉同样是状态而不是事件：刷新页面时宿主仍记着它在睡，首拉必须补一次；
           // 否则页面显示醒着，而宿主对「已在睡」不回写叶子，只能等宿主重启才恢复。
           for (const [petId, entry] of Object.entries(s.pets)) {

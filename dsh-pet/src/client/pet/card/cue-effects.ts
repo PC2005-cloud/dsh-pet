@@ -8,6 +8,8 @@
 import { balanceEventIndex, balancePercent } from '../../../shared/balance/index.ts';
 import { pickSlot, poolIncludes } from '../../../shared/pickers.ts';
 import { WORK_STATUS_INDEX } from '../../../shared/work-status.ts';
+import { localizedWorkStatusTexts } from '../../../locale/packaged.ts';
+import { getHostLocale } from '../../../locale/current.ts';
 import { playSayVoice } from '../../../shared/voice.ts';
 import type { CardHub } from './hub.ts';
 import type { PetCardProps } from './props.ts';
@@ -141,7 +143,8 @@ export function createCueEffects(rt: CueEffectsRuntime) {
       prevWorkStateRef.current = workStatus.state;
       hub.stopMotion();
       // 气泡文本：任务详情优先，否则从 workStatusTexts[档位] 随机抽一句。
-      const textGroup = Array.isArray(cfg.workStatusTexts) ? cfg.workStatusTexts[idx] : undefined;
+      const texts = localizedWorkStatusTexts(getHostLocale(), cfg.workStatusTexts);
+      const textGroup = Array.isArray(texts) ? texts[idx] : undefined;
       const configuredText =
         Array.isArray(textGroup) && textGroup.length > 0
           ? textGroup[Math.floor(Math.random() * textGroup.length)]

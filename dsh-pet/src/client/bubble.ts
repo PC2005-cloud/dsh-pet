@@ -24,6 +24,7 @@ import type { Dispatch, ReactNode, SetStateAction } from 'react';
 import type * as ReactNS from 'react';
 import type { jsx } from 'react/jsx-runtime';
 import { ROUTE_PATH } from '../shared/constants.ts';
+import { CANDY_BODY_UNICODE_RANGE, CANDY_CYRILLIC_FACE } from '../shared/fonts.ts';
 
 /** 气泡内联样式：白色半透明圆泡加底部小尾巴，盒子尺寸锚字号 `--f`，位置锚宠物尺寸。
  *  width:max-content 不可省：left:50% 的绝对定位盒可用宽度只有包含块一半，shrink-to-fit
@@ -32,7 +33,8 @@ import { ROUTE_PATH } from '../shared/constants.ts';
  */
 const bubbleCss = [
   // 本地字体：由 host 从 assets/fonts 提供；font-display:swap 先回退后切换。
-  `@font-face{font-family:"ShangshouSoftCandy";src:url("${ROUTE_PATH}/font/上首软糖体.ttf") format("truetype");font-display:swap;font-weight:400}`,
+  CANDY_CYRILLIC_FACE +
+    `@font-face{font-family:"ShangshouSoftCandy";src:url("${ROUTE_PATH}/font/上首软糖体.ttf") format("truetype");font-display:swap;font-weight:400;unicode-range:${CANDY_BODY_UNICODE_RANGE}}`,
   '.dsh-pet-bubble{position:absolute;left:50%;transform:translateX(-50%);' +
     'bottom:calc(100% - var(--dsh-pet-size)*0.108);' +
     'width:max-content;min-width:calc(var(--f)*5.7143);max-width:min(calc(var(--f)*16),100%);' +

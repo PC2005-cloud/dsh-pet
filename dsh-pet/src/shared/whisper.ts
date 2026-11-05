@@ -1,4 +1,7 @@
 import { ROUTE_PATH } from './constants.ts';
+import { chromeText, fillChrome } from '../locale/chrome.ts';
+import { getHostLocale } from '../locale/current.ts';
+import { encodeFrameRel, textFrameRel } from '../locale/text-frames.ts';
 /**
  * 碎碎念的展示视图：文本 → 气泡行数据，以及配图节点与样式。
  * 不负责取数、生成与失败判定——宿主半侧生成后写进 /state 的 pets.<id>.say，两端只从轮询状态读。
@@ -18,10 +21,13 @@ export type WhisperBubbleRow = { role: 'label'; text: string };
 /** 碎碎念文本 → 气泡行（两端共用同一份行数据）。 */
 export function whisperBubbleView(state: WhisperState): WhisperBubbleRow[] {
   if (state.ok) return [{ role: 'label', text: state.text }];
+  const id = getHostLocale();
   const msg =
     state.reason === 'provider-missing'
-      ? '当前对话未配置模型，碎碎念不可用'
-      : '碎碎念生成失败' + (state.message ? '：' + state.message : '');
+      ? chromeText(id, 'whisper.noModel')
+      : state.message
+        ? fillChrome(id, 'whisper.failedDetail', { message: state.message })
+        : chromeText(id, 'whisper.failed');
   return [{ role: 'label', text: msg }];
 }
 
@@ -30,10 +36,15 @@ export function whisperBubbleView(state: WhisperState): WhisperBubbleRow[] {
  *  否则走用户目录与包内 assets/memes；assetRoot 为空则退回两段形式，未打标的宠物与老宿主仍能取到图。
  *  base 已含 /dsh-pet-7340 前缀（与视频的 assetBase 一致），函数内不得再拼一次，否则桌面端图裂。
  *  桌面页面是 file:// 加载的，相对路径会解析成 file:/// 而必然失败，所以桌面传绝对基址。 */
-export function memeImageUrl(name: string, base = ROUTE_PATH, assetRoot = ''): string {
+export function memeImageUrl(name: string, base = ROUTE_PATH, assetRoot = '', localeId?: string | null): string {
+  const rel = textFrameRel(localeId ?? getHostLocale(), name);
   const root = String(assetRoot ?? '').trim();
-  const prefix = root ? '/pic/memes/' + encodeURIComponent(root) : '/pic/memes';
-  return base + prefix + '/' + encodeURIComponent(name) + '.png';
+  if (!rel.includes('/')) {
+    const prefix = root ? '/pic/memes/' + encodeURIComponent(root) : '/pic/memes';
+    return base + prefix + '/' + encodeURIComponent(name) + '.png';
+  }
+  const scoped = root || 'main';
+  return base + '/pic/memes/' + encodeURIComponent(scoped) + '/' + encodeFrameRel(rel) + '.png';
 }
 
 /** 气泡配图 class（两端共用，样式见 MEME_BUBBLE_CSS）。 */

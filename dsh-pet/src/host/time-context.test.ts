@@ -129,6 +129,21 @@ describe('timeContextOf —— 整行格式（无节日）', () => {
   test('非法 Date → 空串（整行不加，不产出 NaN 乱码）', () => {
     assert.equal(timeContextOf(new Date('not a date')), '');
   });
+
+  test('ru 只翻译套话，国庆节这个名字仍来自同一张表', () => {
+    const date = new Date(2026, 9, 1, 12, 0);
+    const ru = timeContextOf(date, 'ru');
+    const zh = timeContextOf(date);
+    assert.ok(zh.includes('今天是国庆节'));
+    assert.ok(ru.includes('国庆节'));
+    assert.equal(ru.split('国庆节').length - 1, 1);
+    assert.ok(ru.startsWith('Сейчас '));
+    assert.equal(ru.includes('【当下】'), false);
+    const plainNow = new Date(2026, 5, 15, 14, 15);
+    const plain = timeContextOf(plainNow, 'ru');
+    assert.equal(/[\u4e00-\u9fff]/.test(plain), false);
+    assert.equal(historyStampOf(new Date(2025, 11, 31, 23, 59).getTime(), plainNow, 'ru').includes('年'), false);
+  });
 });
 
 describe('节日 —— 单日节日（span = 1）', () => {

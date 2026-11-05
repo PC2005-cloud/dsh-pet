@@ -24,6 +24,7 @@ import {
   readThrow,
   resolveLeafPath,
   takeChanged,
+  fetchState,
   type PollState,
 } from './state.ts';
 
@@ -105,8 +106,8 @@ describe('takeChanged —— counter 变了才算变化', () => {
 });
 
 describe('resolveLeafPath —— 路径解析成落点（分发规则的唯一口径）', () => {
-  test('sections 的六个叶子各自解析成落点', () => {
-    for (const name of ['config', 'balance', 'workStatus', 'notify', 'menu', 'focusSession'] as const) {
+  test('sections 的七个叶子各自解析成落点', () => {
+    for (const name of ['config', 'balance', 'workStatus', 'notify', 'menu', 'focusSession', 'locale'] as const) {
       assert.deepEqual(resolveLeafPath('sections.' + name), { where: 'section', name });
     }
   });
@@ -469,5 +470,40 @@ describe('readSleep —— 睡觉叶子解析（状态不是指令）', () => {
     assert.equal(readSleep({ counter: 1, data: { sleeping: true, start: 's', loop: 'l', end: '' } }), null);
     assert.equal(readSleep({ counter: 1, data: { sleeping: 'yes' } }), null);
     assert.equal(readSleep({ counter: 1, data: 'sleeping' }), null);
+  });
+});
+
+describe('fetchState —— 旧快照与 locale 叶子', () => {
+  test('没有 locale 的旧快照仍能解析，新叶子不挤掉别的', async () => {
+    const original = globalThis.fetch;
+    const respond = (body: unknown): void => {
+      globalThis.fetch = (async () => new Response(JSON.stringify(body), { status: 200 })) as typeof fetch;
+    };
+    try {
+      respond({
+        sections: { balance: { counter: 1, data: { state: 'ok' } } },
+        pets: { main: { say: { counter: 4, data: { text: 'hi' } } } },
+      });
+      const old = await fetchState('http://example.test/state');
+      assert.ok(old);
+      assert.equal(old.sections.locale, undefined);
+      assert.equal(old.sections.balance?.counter, 1);
+      assert.equal(old.pets.main?.say?.counter, 4);
+
+      respond({
+        sections: {
+          balance: { counter: 1, data: { state: 'ok' } },
+          locale: { counter: 2, data: { id: 'ru' } },
+        },
+        pets: { main: { say: { counter: 4, data: { text: 'hi' } } } },
+      });
+      const next = await fetchState('http://example.test/state');
+      assert.ok(next);
+      assert.deepEqual(next.sections.locale, { counter: 2, data: { id: 'ru' } });
+      assert.equal(next.sections.balance?.counter, 1);
+      assert.equal(next.pets.main?.say?.counter, 4);
+    } finally {
+      globalThis.fetch = original;
+    }
   });
 });

@@ -252,6 +252,8 @@ export const zh = {
   uninstallStep3:
     '3. 按需删除上面的位置：缓存类删了无影响；「插件用户数据」删了会丢配置与对话记忆（想保留就先备份其中的 main-config.jsonc）。',
   uninstallCmd: 'dsh plugin --profile {profile} remove dsh-pet',
+  // 值等于本字典的语言 id。设置页不渲染这一键，bind 读它得到宿主当前语言。
+  localeId: 'zh',
 };
 
 /** 文案键；zh 的键集即全集。 */

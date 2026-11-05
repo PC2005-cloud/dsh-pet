@@ -8,6 +8,8 @@ import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 
+import { chromeText } from '../locale/chrome.ts';
+
 /** 托盘模块是给 Helper 用的 CJS，没有类型声明：这里按用到的形状窄化。 */
 interface TrayModule {
   createTray(deps: Record<string, unknown>): {
@@ -33,6 +35,7 @@ function harness(options: {
   appMode?: boolean;
   isBridge?: boolean;
   canQuit?: boolean;
+  localeId?: string;
   pets?: Array<Record<string, unknown>>;
 }) {
   const requests: string[] = [];
@@ -65,6 +68,12 @@ function harness(options: {
       }
       if (url.endsWith('/quit')) {
         return { status: 200, body: JSON.stringify({ canQuit: options.canQuit === true }) };
+      }
+      if (url.endsWith('/state') && options.localeId) {
+        return {
+          status: 200,
+          body: JSON.stringify({ sections: { locale: { counter: 1, data: { id: options.localeId } } } }),
+        };
       }
       return { status: 200, body: '{}' };
     },
@@ -168,6 +177,36 @@ describe('createTray —— 退出项的分支', () => {
     assert.equal(
       lastMenu(menus).some((item) => item.label === '退出'),
       false,
+    );
+  });
+
+  test('没有 locale 时退出是中文；ru 时是目录里的俄语，显示开关仍在', async () => {
+    const pets = [{ label: 'a', id: 'a', display: 'both' }];
+    const zh = harness({ appMode: true, pets });
+    await zh.tray.start();
+    const zhMenu = lastMenu(zh.menus);
+    assert.equal(
+      zhMenu.some((item) => item.label === '退出'),
+      true,
+    );
+    assert.equal(
+      zhMenu.some((item) => item.type === 'checkbox' && item.checked === true),
+      true,
+    );
+    const ru = harness({ appMode: true, localeId: 'ru', pets });
+    await ru.tray.start();
+    const ruMenu = lastMenu(ru.menus);
+    assert.equal(
+      ruMenu.some((item) => item.label === chromeText('ru', 'tray.quit')),
+      true,
+    );
+    assert.equal(
+      ruMenu.some((item) => item.label === '退出'),
+      false,
+    );
+    assert.equal(
+      ruMenu.some((item) => item.type === 'checkbox'),
+      true,
     );
   });
 });

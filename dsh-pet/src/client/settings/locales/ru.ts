@@ -280,4 +280,5 @@ export const ru: Record<Key, string> = {
   uninstallStep3:
     '3. Удалите нужные места из списка выше: кеш удалять безопасно; удаление «пользовательских данных плагина» стирает конфиг и память чата (если нужно сохранить — сначала сделайте резервную копию main-config.jsonc).',
   uninstallCmd: 'dsh plugin --profile {profile} remove dsh-pet',
+  localeId: 'ru',
 };

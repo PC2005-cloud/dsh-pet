@@ -5,6 +5,8 @@
  * 必须始终成立：同一份输入必得同一棵树，层级顺序稳定。
  * @module dsh-pet/src/shared/menu/tree
  */
+import { builtinLabel } from '../../locale/actions.ts';
+import { chromeText, type ChromeKey } from '../../locale/chrome.ts';
 import { DISPLAY_HOTKEY_HINTS, DISPLAY_ORDER } from '../display-hotkey.ts';
 import { type Animations, type Category, type PetDisplay } from '../types.ts';
 import type { MenuBranch, MenuLeaf, MenuMoreItem, MenuNode } from './types.ts';
@@ -18,22 +20,23 @@ const SLEEP_ALLOWED_ACTIONS: readonly string[] = ['sleep', 'wake', 'home', 'set-
 export const isSleepAllowedAction = (action: string | undefined): boolean =>
   action !== undefined && SLEEP_ALLOWED_ACTIONS.includes(action);
 
-/** 四个显示位置的菜单文案；键是 {@link DISPLAY_ORDER} 的元素，顺序以那边为准。 */
-const DISPLAY_LABELS: Readonly<Record<PetDisplay, string>> = {
-  web: '仅网页',
-  desktop: '仅桌面',
-  both: '两者',
-  none: '都不',
+/** 四个显示位置的文案键；键是 {@link DISPLAY_ORDER} 的元素，顺序以那边为准。 */
+const DISPLAY_KEYS: Readonly<Record<PetDisplay, ChromeKey>> = {
+  web: 'menu.display.web',
+  desktop: 'menu.display.desktop',
+  both: 'menu.display.both',
+  none: 'menu.display.none',
 };
 
 /** 「显示位置」子菜单：两端注入同一份，文案与设置页的显示位置下拉框一致。
  *  两端各写一份必然漂移，而这一项语义对称：桌面端用它把宠物送走，浏览器端用它送到桌面。
  *  「都不」是单向门（恢复入口是设置页），其余三个值都能从某一端改回来。
- *  右侧键帽由 `1`-`4` 数字键的同一份顺序派生，改顺序只改 {@link DISPLAY_ORDER}。 */
-export const displayMenuBranch = (): MenuBranch => ({
-  label: '显示位置',
+ *  右侧键帽由 `1`-`4` 数字键的同一份顺序派生，改顺序只改 {@link DISPLAY_ORDER}。
+ *  `localeId` 缺省时保持中文，已有调用点不用改签名也能出原来的菜单。 */
+export const displayMenuBranch = (localeId?: string | null): MenuBranch => ({
+  label: chromeText(localeId, 'menu.display'),
   children: DISPLAY_ORDER.map((display, index): MenuLeaf => ({
-    label: DISPLAY_LABELS[display],
+    label: chromeText(localeId, DISPLAY_KEYS[display]),
     action: 'set-display',
     display,
     hint: DISPLAY_HOTKEY_HINTS[index],
@@ -70,8 +73,9 @@ export function readMenuItems(data: unknown, surface: 'web' | 'desktop'): MenuMo
 
 /** 「更多」一级菜单：把第三方菜单项拼成菜单树的一枝；没有第三方项时返回 null，菜单里不会出现空的「更多」。
  *  层级只按项数决定：某 owner 只有 1 项就直接平铺（少一次点击），2 项及以上才加 owner 这一层。
- *  同名不同 owner 的项允许共存，不做去重、编号或来源标注——文案由注册方负责。 */
-export function buildMoreBranch(items: readonly MenuMoreItem[]): MenuBranch | null {
+ *  同名不同 owner 的项允许共存，不做去重、编号或来源标注——第三方写的 label 原样保留。
+ *  只有「更多」这一层标题随宿主语言变。 */
+export function buildMoreBranch(items: readonly MenuMoreItem[], localeId?: string | null): MenuBranch | null {
   // owner → 项名（Map 保序：注册顺序 = 分组顺序 = 组内顺序）
   const groups = new Map<string, string[]>();
   for (const item of items) {
@@ -90,36 +94,40 @@ export function buildMoreBranch(items: readonly MenuMoreItem[]): MenuBranch | nu
       });
     }
   }
-  return children.length > 0 ? { label: MORE_MENU_LABEL, children } : null;
+  return children.length > 0 ? { label: chromeText(localeId, 'menu.more'), children } : null;
 }
 
-/** 事件名 → 分类标签（无映射时用事件名本身）。 */
-const EVENT_LABELS: Record<string, string> = {
-  balance: '余额档位',
-  whisper: '碎碎念',
-  workStatus: '工作状态',
+/** 把动画名包成叶子。`anim` 始终是配置里的名字；可见标题在 ru 时才换成译文。 */
+export const leaf = (anim: string, localeId?: string | null): MenuLeaf => ({
+  label: builtinLabel(localeId, anim),
+  anim,
+});
+
+/** 事件名 → 文案键。没有键的事件在 ru 时直接显示事件名。 */
+const EVENT_KEYS: Readonly<Record<string, ChromeKey>> = {
+  balance: 'menu.event.balance',
+  whisper: 'menu.event.whisper',
+  workStatus: 'menu.event.workStatus',
 };
 
-/** 把动画名包成叶子。 */
-export const leaf = (anim: string): MenuLeaf => ({ label: anim, anim });
-
 /** 由成品 animations 配置推导菜单树：一级「动作」→ 二级分类 → 三级动画名；空池与空分类自动省略。 */
-export function buildMenuTree(animations: Animations): MenuNode[] {
+export function buildMenuTree(animations: Animations, localeId?: string | null): MenuNode[] {
   const groups: MenuNode[] = [];
-  const pools: Array<[string, string[]]> = [
-    ['待机', animations.idle],
-    ['转向', animations.turn],
-    ['拖拽', animations.drag],
-    ['点击回应', animations.clicks],
-    ['移动', animations.moves.actions.map((m) => m.name)],
+  const pools: Array<[ChromeKey, string[]]> = [
+    ['menu.pool.idle', animations.idle],
+    ['menu.pool.turn', animations.turn],
+    ['menu.pool.drag', animations.drag],
+    ['menu.pool.clicks', animations.clicks],
+    ['menu.pool.moves', animations.moves.actions.map((m) => m.name)],
   ];
-  for (const [label, pool] of pools) {
-    if (pool.length) groups.push({ label, children: pool.map(leaf) });
+  for (const [key, pool] of pools) {
+    if (pool.length)
+      groups.push({ label: chromeText(localeId, key), children: pool.map((name) => leaf(name, localeId)) });
   }
   // 随机动作分类：noMirror 分类照样可点播，播放端朝右时强制朝左（见 isNoMirrorAnimation）
   const cats = (animations.categories ?? []).filter((c) => c.actions.length > 0);
   for (const c of cats) {
-    groups.push({ label: c.id, children: c.actions.map(leaf) });
+    groups.push({ label: builtinLabel(localeId, c.id), children: c.actions.map((name) => leaf(name, localeId)) });
   }
   // 事件动画：每个事件一个分类，不来自随机链；数组槽位展平为逐个叶子，候选都可点播预览。
   const events = animations.events ?? {};
@@ -130,10 +138,13 @@ export function buildMenuTree(animations: Animations): MenuNode[] {
       if (typeof slot === 'string') names.push(slot);
       else names.push(...slot);
     }
-    if (names.length) groups.push({ label: EVENT_LABELS[key] ?? key, children: names.map(leaf) });
+    if (!names.length) continue;
+    const eventKey = EVENT_KEYS[key];
+    const label = eventKey ? chromeText(localeId, eventKey) : key;
+    groups.push({ label, children: names.map((name) => leaf(name, localeId)) });
   }
   if (!groups.length) return [];
-  return [{ label: '动作', children: groups }];
+  return [{ label: chromeText(localeId, 'menu.actions'), children: groups }];
 }
 
 /** 该动画是否属于 noMirror 分类（文字类）：朝右镜像时点播前强制朝左，避免文字镜像。 */

@@ -9,6 +9,8 @@ import type { ChatPanelRuntime } from './runtime.ts';
 import type { ChatPanelState } from './types.ts';
 import { composerNode, confirmNode, orphansNode, personaNode, toolsNode } from './view-node.ts';
 import { roundNode } from './view-message.ts';
+import { chromeText } from '../../locale/chrome.ts';
+import { getHostLocale } from '../../locale/current.ts';
 
 /** 宠物标签条：点击切换对话。 */
 function tabsNode(h: ChatPanelRuntime['h'], state: ChatPanelState): unknown {
@@ -42,7 +44,7 @@ function olderNode(h: ChatPanelRuntime['h'], state: ChatPanelState): unknown {
           type: 'button',
           className: 'pet-chat-older-btn',
           onClick: () => state.showOlder(),
-          children: '加载更早',
+          children: chromeText(getHostLocale(), 'chat.loadOlder'),
         }),
       ],
     });

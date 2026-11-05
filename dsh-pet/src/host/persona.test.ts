@@ -120,4 +120,27 @@ describe('composeSystemPrompt —— 分段拼装', () => {
     assert.match(b, /晚上/);
     assert.notEqual(a, b);
   });
+
+  test('ru：人设原文不动，套话是俄语，并要求用俄语回答', () => {
+    const prompt = '你是小女仆，这段不要改。';
+    const out = composeSystemPrompt({
+      prompt,
+      name: '蓝毛',
+      id: 'main',
+      now: new Date(2026, 5, 15, 14, 15),
+      historyTimes: true,
+      localeId: 'ru',
+    });
+    assert.ok(out.includes(prompt));
+    assert.ok(out.startsWith('Отвечай только по-русски'));
+    assert.ok(out.includes('Тебя зовут «蓝毛».'));
+    assert.ok(out.includes('Старые ответы ассистента'));
+    assert.ok(out.includes('Отвечай по-русски.'));
+    assert.equal(out.includes('【当下】'), false);
+    assert.equal(out.includes('【历史】'), false);
+    assert.equal(out.includes('你的名字是'), false);
+    const time = out.split('\n').find((line) => line.startsWith('Сейчас '));
+    assert.ok(time);
+    assert.equal(/[\u4e00-\u9fff]/.test(time), false);
+  });
 });

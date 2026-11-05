@@ -93,6 +93,14 @@ describe('actionInstruction —— 注入 user 正文的动作指令', () => {
     assert.equal(text.split('\n').filter((line) => line.startsWith('- ')).length, names.length);
   });
 
+  test('ru：说明是俄语，标记格式仍是 [动作:…]，动作名不翻译', () => {
+    const text = actionInstruction(['优雅女仆舞'], 'ru');
+    assert.ok(text.includes('В конце ответа можно показать одно действие'));
+    assert.ok(text.includes('[动作:имя]'));
+    assert.ok(text.includes('- 优雅女仆舞'));
+    assert.equal(text.includes('回复结尾'), false);
+  });
+
   test('标记格式与解析一致：另起一行写 [动作:名称]', () => {
     const text = actionInstruction(['优雅女仆舞']);
     assert.ok(text.includes('[动作:名称]'));

@@ -23,7 +23,9 @@ Object.assign(PetSprite.prototype, {
    * 存视口坐标而非窗口坐标，是因为窗口会随宠物移动：只在这里按当前原点重算一次，贴光标不会漂。
    */
   renderTip() {
-    if (this.tip.textContent !== this.pet.name) this.tip.textContent = this.pet.name;
+    const label = S.localizedPetName(S.getHostLocale(), this.pet.name);
+    if (this.tip.textContent !== label) this.tip.textContent = label;
+    if (this.hit.getAttribute('aria-label') !== label) this.hit.setAttribute('aria-label', label);
     const cursor = this.tipCursor;
     if (cursor) {
       const winX = this.pos.x - this.margin.l;

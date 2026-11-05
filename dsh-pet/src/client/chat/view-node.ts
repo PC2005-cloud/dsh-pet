@@ -7,6 +7,8 @@
 import { claimFileDragOver, claimFileDrop, markDropTarget, unmarkDropTarget } from '../file-drop.ts';
 import type { DragLike, DropTargetLike } from '../file-drop.ts';
 import type { ChatPanelRuntime } from './runtime.ts';
+import { chromeText, fillChrome } from '../../locale/chrome.ts';
+import { getHostLocale } from '../../locale/current.ts';
 import type { ChatPanelState, ConfirmKind, DraftKeyEvent } from './types.ts';
 
 /**
@@ -20,13 +22,15 @@ export function orphansNode(h: ChatPanelRuntime['h'], state: ChatPanelState): un
   return h('div', {
     className: 'pet-chat-orphans',
     children: [
-      h('span', { children: `有 ${state.orphans.length} 只已删除宠物的历史（${messages} 条）` }),
+      h('span', {
+        children: fillChrome(getHostLocale(), 'chat.orphans', { pets: state.orphans.length, messages }),
+      }),
       h('span', { className: 'pet-chat-composer-spacer' }),
       h('button', {
         type: 'button',
         className: 'pet-chat-tool',
         onClick: () => state.ask('clear-orphans'),
-        children: '清理',
+        children: chromeText(getHostLocale(), 'chat.clearOrphans'),
       }),
     ],
   });
@@ -43,7 +47,7 @@ function personaButton(h: ChatPanelRuntime['h'], state: ChatPanelState): unknown
     'aria-expanded': String(state.personaOpen),
     'aria-controls': PERSONA_PANEL_ID,
     onClick: () => state.togglePersona(),
-    children: '人设',
+    children: chromeText(getHostLocale(), 'chat.persona'),
   });
 }
 
@@ -78,7 +82,9 @@ export function toolsNode(h: ChatPanelRuntime['h'], state: ChatPanelState): unkn
         className: 'pet-chat-tool',
         'aria-pressed': String(state.selecting),
         onClick: () => state.toggleSelecting(),
-        children: state.selecting ? '取消选择' : '选择',
+        children: state.selecting
+          ? chromeText(getHostLocale(), 'chat.cancelSelect')
+          : chromeText(getHostLocale(), 'chat.select'),
       }),
       state.selecting
         ? h('button', {
@@ -86,7 +92,10 @@ export function toolsNode(h: ChatPanelRuntime['h'], state: ChatPanelState): unkn
             className: 'pet-chat-tool',
             disabled: state.selected.length === 0,
             onClick: () => state.ask('delete-selected'),
-            children: state.selected.length === 0 ? '删除选中' : '删除选中 ' + state.selected.length,
+            children:
+              state.selected.length === 0
+                ? chromeText(getHostLocale(), 'chat.deleteSelected')
+                : fillChrome(getHostLocale(), 'chat.deleteSelectedCount', { n: state.selected.length }),
           })
         : null,
       // 配置里没有 chatMemoryRounds 时不画线，这个入口也就不该出现
@@ -97,31 +106,34 @@ export function toolsNode(h: ChatPanelRuntime['h'], state: ChatPanelState): unkn
             className: 'pet-chat-tool',
             disabled: !state.hasMemoryLine,
             // 置灰时的原因只给读屏：可见文案与其它工具栏按钮一样保持干净
-            ...(state.hasMemoryLine ? {} : { 'aria-label': '记忆线（历史还没超过记忆轮数，没有分界线）' }),
+            ...(state.hasMemoryLine ? {} : { 'aria-label': chromeText(getHostLocale(), 'chat.memoryLineEmpty') }),
             onClick: () => state.jumpToMemory(),
-            children: '记忆线',
+            children: chromeText(getHostLocale(), 'chat.memoryLine'),
           }),
       h('button', {
         type: 'button',
         className: 'pet-chat-tool',
         onClick: () => state.refresh(),
-        children: '刷新',
+        children: chromeText(getHostLocale(), 'chat.refresh'),
       }),
       h('button', {
         type: 'button',
         className: 'pet-chat-tool',
         onClick: () => state.ask('clear-all'),
-        children: '清空历史',
+        children: chromeText(getHostLocale(), 'chat.clearAll'),
       }),
     ],
   });
 }
 
 /** 待确认操作的文案：每条都说清「删什么、不可恢复」。 */
-const CONFIRM_TEXT: Record<ConfirmKind, string> = {
-  'delete-selected': '删除选中的这几轮对话？',
-  'clear-all': '清空这只宠物的全部对话历史？',
-  'clear-orphans': '清理已删除宠物的残留历史？',
+const CONFIRM_KEY: Record<
+  ConfirmKind,
+  'chat.confirm.deleteSelected' | 'chat.confirm.clearAll' | 'chat.confirm.clearOrphans'
+> = {
+  'delete-selected': 'chat.confirm.deleteSelected',
+  'clear-all': 'chat.confirm.clearAll',
+  'clear-orphans': 'chat.confirm.clearOrphans',
 };
 
 /**
@@ -132,13 +144,14 @@ const CONFIRM_TEXT: Record<ConfirmKind, string> = {
 export function confirmNode(rt: ChatPanelRuntime, state: ChatPanelState): unknown {
   if (state.pending === null) return null;
   const { h, ui } = rt;
+  const id = getHostLocale();
   const count =
     state.pending === 'delete-selected'
-      ? `（${state.selected.length} 轮）`
+      ? fillChrome(id, 'chat.confirm.rounds', { n: state.selected.length })
       : state.pending === 'clear-orphans'
-        ? `（${state.orphans.length} 只）`
+        ? fillChrome(id, 'chat.confirm.pets', { n: state.orphans.length })
         : '';
-  const description = CONFIRM_TEXT[state.pending] + count + '删了找不回来。';
+  const description = chromeText(id, CONFIRM_KEY[state.pending]) + count + chromeText(id, 'chat.confirm.tail');
   // 平台原语缺失（旧宿主）时退化为内联确认条，功能不丢、样式差一点
   if (ui === undefined) {
     return h('div', {
@@ -151,13 +164,13 @@ export function confirmNode(rt: ChatPanelRuntime, state: ChatPanelState): unknow
           type: 'button',
           className: 'pet-chat-danger',
           onClick: () => state.confirmAsk(),
-          children: '删除',
+          children: chromeText(id, 'chat.delete'),
         }),
         h('button', {
           type: 'button',
           className: 'pet-chat-tool',
           onClick: () => state.cancelAsk(),
-          children: '取消',
+          children: chromeText(id, 'chat.cancel'),
         }),
       ],
     });
@@ -165,15 +178,25 @@ export function confirmNode(rt: ChatPanelRuntime, state: ChatPanelState): unknow
   const { Button, Modal } = ui;
   return h(Modal, {
     open: true,
-    title: '删除对话历史',
-    closeLabel: '关闭',
+    title: chromeText(id, 'chat.confirmTitle'),
+    closeLabel: chromeText(id, 'chat.close'),
     description,
     onClose: () => state.cancelAsk(),
     footer: h('div', {
       className: 'pet-chat-confirm-actions',
       children: [
-        h(Button, { variant: 'ghost', type: 'button', onClick: () => state.cancelAsk(), children: '取消' }),
-        h(Button, { variant: 'primary', type: 'button', onClick: () => state.confirmAsk(), children: '删除' }),
+        h(Button, {
+          variant: 'ghost',
+          type: 'button',
+          onClick: () => state.cancelAsk(),
+          children: chromeText(id, 'chat.cancel'),
+        }),
+        h(Button, {
+          variant: 'primary',
+          type: 'button',
+          onClick: () => state.confirmAsk(),
+          children: chromeText(id, 'chat.delete'),
+        }),
       ],
     }),
   });
@@ -185,7 +208,11 @@ function previewNode(h: ChatPanelRuntime['h'], state: ChatPanelState): unknown {
   return h('div', {
     className: 'pet-chat-preview',
     children: [
-      h('img', { className: 'pet-chat-preview-img', src: state.attachment.previewUrl, alt: '待发送的图片' }),
+      h('img', {
+        className: 'pet-chat-preview-img',
+        src: state.attachment.previewUrl,
+        alt: chromeText(getHostLocale(), 'chat.previewAlt'),
+      }),
       h('span', {
         className: 'pet-chat-preview-meta',
         children: state.attachment.width + '×' + state.attachment.height,
@@ -194,7 +221,7 @@ function previewNode(h: ChatPanelRuntime['h'], state: ChatPanelState): unknown {
         type: 'button',
         className: 'pet-chat-tool',
         onClick: () => state.clearAttachment(),
-        children: '移除',
+        children: chromeText(getHostLocale(), 'chat.remove'),
       }),
     ],
   });
@@ -249,7 +276,7 @@ export function composerNode(h: ChatPanelRuntime['h'], state: ChatPanelState): u
         ref: state.draftRef,
         value: state.draft,
         rows: 2,
-        placeholder: '说点什么…（Enter 发送，Shift+Enter 换行）',
+        placeholder: chromeText(getHostLocale(), 'chat.placeholder'),
         onChange: (event: { target: { value: string } }) => state.setDraft(event.target.value),
         onPaste: (event: { clipboardData: DataTransfer | null; preventDefault: () => void }) => {
           const file = event.clipboardData?.files?.[0];
@@ -266,9 +293,9 @@ export function composerNode(h: ChatPanelRuntime['h'], state: ChatPanelState): u
         children: [
           h('label', {
             className: 'pet-chat-attach',
-            title: '附一张图（也可以直接粘贴）',
+            title: chromeText(getHostLocale(), 'chat.attach'),
             children: [
-              '附图',
+              chromeText(getHostLocale(), 'chat.attachShort'),
               h('input', {
                 className: 'pet-chat-file',
                 type: 'file',
@@ -285,7 +312,9 @@ export function composerNode(h: ChatPanelRuntime['h'], state: ChatPanelState): u
           h('button', {
             type: 'button',
             className: 'pet-chat-send' + (state.busy ? ' is-busy' : ''),
-            'aria-label': state.busy ? '生成中' : '发送',
+            'aria-label': state.busy
+              ? chromeText(getHostLocale(), 'chat.sending')
+              : chromeText(getHostLocale(), 'chat.send'),
             onClick: () => state.send(),
             disabled: state.busy,
             // 生成中换转圈：箭头留着会让人以为还能点（按钮此时是 disabled）

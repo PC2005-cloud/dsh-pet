@@ -9,6 +9,15 @@
 
 // 菜单首项文案随宿主形态变：桌面应用唤起主窗口，独立模式打开本机 AI 设置页，web 宿主打开站点。
 const OPEN_LABEL = { desktop: '打开软件', standalone: '打开 AI 设置', web: '打开网站' };
+const OPEN_CHROME = { desktop: 'menu.open.desktop', standalone: 'menu.open.standalone', web: 'menu.open.web' };
+
+function hostLocale() {
+  return S.getHostLocale ? S.getHostLocale() : '';
+}
+
+function chrome(key) {
+  return S.chromeText(hostLocale(), key);
+}
 
 /** 睡觉拒绝台词的气泡时长（ms）：比默认 10s 略短，它只是「被打扰了」的一句回绝。 */
 const SLEEP_REFUSE_BUBBLE_MS = 8000;
@@ -23,46 +32,42 @@ Object.assign(PetSprite.prototype, {
     // 桌面专属工具根项 + 共享菜单树（动作 → 分类 → 具体动画）。碎碎念/对话无条件显示：手动触发
     // 不受 whisperEnabled 限制（该字段只影响自动轮询）。首项文案与去向随宿主形态变，见 OPEN_LABEL。
     // 顺序：打开软件 / 余额 / 待办 / 碎碎念 / 对话 / 配图 / 睡觉 → 动作树 → 显示位置 / 重载配置 / 回到初始位置。
+    const id = hostLocale();
     const tools = [
       {
-        label: OPEN_LABEL[OPEN_TARGET],
+        label: id === 'ru' ? S.chromeText('ru', OPEN_CHROME[OPEN_TARGET]) : OPEN_LABEL[OPEN_TARGET],
         action: 'open-site',
         hint: OPEN_SHORTCUT_HINT,
       },
-      // 「查看余额」无条件显示：关了 balanceEnabled 的宠物也能点，手动请求不受开关限制，点了一定给答复。
-      { label: '查看余额', action: 'show-balance' },
-      // 「待办事项」是待办面板的唯一入口（单击宠物不再弹面板），排在余额之后。
-      { label: '待办事项', action: 'todo', hint: S.TODO_HOTKEY_HINT },
-      { label: '碎碎念', action: 'whisper' },
-      { label: '对话', action: 'chat', hint: S.CHAT_HOTKEY_HINT },
+      { label: chrome('menu.balance'), action: 'show-balance' },
+      { label: chrome('menu.todo'), action: 'todo', hint: S.TODO_HOTKEY_HINT },
+      { label: chrome('menu.whisper'), action: 'whisper' },
+      { label: chrome('menu.chat'), action: 'chat', hint: S.CHAT_HOTKEY_HINT },
     ];
-    // 「配图」：与浏览器端同一份分支（纳入对话的配图 / 其他），点一张就用它说一句；没有可用图时
-    // 返回 null，整项不出现。数据来自拍平层吹入的条目级字段（this.pet.memes / chatImageEnabled /
-    // chatImageLimit），与网页端同一个 flattenConfigPets；缩略图走 BASE 的 /pic/memes 绝对地址
-    // （桌面窗口是 file://，相对路径取不到图）。
-    const memeBranch = S.buildMemeBranch(this.pet, (name) => S.memeThumbUrl(BASE, this.pet.assetRoot, name));
+    const memeBranch = S.buildMemeBranch(this.pet, (name) => S.memeThumbUrl(BASE, this.pet.assetRoot, name, id), id);
     if (memeBranch) tools.push(memeBranch);
     // 睡觉/起来：睡着时这一项是「起来」（点它等于叫醒），醒着时是「睡觉」。两种文案共用一个位置，
     // 排在「配图」之后、动作树之前（与浏览器端的菜单同一排法）。
     // 该条目没配 animations.sleep 就整项不出现——与配置注释「不写 = 没有睡觉功能」一致。
     if (Array.isArray(this.animations.sleep) && this.animations.sleep.length > 0) {
-      if (this.sleeping) tools.push({ label: '起来', action: 'wake', hint: S.SLEEP_HOTKEY_HINT });
-      else tools.push({ label: '睡觉', action: 'sleep', hint: S.SLEEP_HOTKEY_HINT });
+      if (this.sleeping) tools.push({ label: chrome('menu.wake'), action: 'wake', hint: S.SLEEP_HOTKEY_HINT });
+      else tools.push({ label: chrome('menu.sleep'), action: 'sleep', hint: S.SLEEP_HOTKEY_HINT });
     }
     // 动作树之后是维护类：显示位置 → 重载配置 → 回到初始位置。
+    const reloadItem = { label: '重载配置', action: 'reload' };
+    if (id === 'ru') reloadItem.label = chrome('menu.reload');
     const tail = [
       // 显示位置（仅网页/仅桌面/两者/都不）：改这只宠物的 display 配置，由宿主重载生效。
       // 与浏览器端注入同一份子菜单，两端文案与取值不会漂移。不就地开关窗：窗口是进程启动时按
       // DSH_PET_PETS 一次性建的，就地增删既改不了磁盘配置也改不了窗口数量。
-      S.displayMenuBranch(),
-      // 重载配置：请宿主重启桌面 Helper，全部窗口按最新配置重建。维护动作，排在回到初始位置之前。
-      { label: '重载配置', action: 'reload' },
-      { label: '回到初始位置', action: 'home' },
+      S.displayMenuBranch(id),
+      reloadItem,
+      { label: chrome('menu.home'), action: 'home' },
     ];
     // 第三方菜单项统一收在「更多」下：0 项不出现；某个 owner 只有 1 项时跳过 owner 那层直接平铺。
     // 放在最后——「更多」不插在工具项与动作之间。
-    const more = S.buildMoreBranch(this.menuItems);
-    const tree = tools.concat(S.buildMenuTree(this.animations), tail, more ? [more] : []);
+    const more = S.buildMoreBranch(this.menuItems, id);
+    const tree = tools.concat(S.buildMenuTree(this.animations, id), tail, more ? [more] : []);
     if (!tree.length) return;
     this.menuOpen = true;
     this.setInteractive(true); // 菜单是窗口内 DOM：悬停期间整窗保持可交互，关闭后恢复命中区穿透

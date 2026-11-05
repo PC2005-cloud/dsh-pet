@@ -43,6 +43,14 @@ export const DEFAULT_FONT: FontConfig = {
   followPet: true,
 };
 
+/** 软糖体把每个西里尔字母做成和汉字一样的全角字宽，俄文状态会稀成一排。
+ *  同名的这段只覆盖西里尔，浏览器改用系统比例字体；汉字仍走包内那份。两端的 @font-face 必须先插它。 */
+export const CANDY_CYRILLIC_FACE =
+  '@font-face{font-family:"ShangshouSoftCandy";src:local("Segoe UI"),local("PingFang SC"),local("Microsoft YaHei");unicode-range:U+0400-04FF,U+0500-052F,U+2DE0-2DFF,U+A640-A69F,U+1C80-1C8F;font-weight:400}';
+
+/** 包内软糖体声明用的码位：挖掉上面那段西里尔，避免全角字宽再盖住俄文。 */
+export const CANDY_BODY_UNICODE_RANGE = 'U+0000-03FF,U+0530-1C7F,U+1C90-2DDF,U+2E00-A63F,U+A6A0-10FFFF';
+
 /** 按 id 取字体栈；id 非法或缺失回退清单首项（软糖体），渲染层不再自行兜底。 */
 export function fontStackOf(id: string): string {
   return (FONT_PRESETS.find((p) => p.id === id) ?? FONT_PRESETS[0]).stack;

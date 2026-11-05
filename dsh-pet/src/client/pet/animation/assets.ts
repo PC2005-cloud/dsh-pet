@@ -5,6 +5,8 @@
  * @module dsh-pet/src/client/pet/animation/assets
  */
 import { ROUTE_PATH } from '../../../shared/constants.ts';
+import { encodeFrameRel, textFrameRel } from '../../../locale/text-frames.ts';
+import { getHostLocale } from '../../../locale/current.ts';
 
 /** 素材地址的输入。 */
 export interface AssetSource {
@@ -29,5 +31,6 @@ export interface AssetSource {
 export function animationAssetUrl(source: AssetSource): string {
   if (source.cueUrl) return source.cueUrl;
   const root = source.assetRoot === '' ? source.id : source.assetRoot;
-  return ROUTE_PATH + '/thumb/' + encodeURIComponent(root) + '/' + encodeURIComponent(source.anim) + source.ext;
+  const rel = textFrameRel(getHostLocale(), source.anim);
+  return ROUTE_PATH + '/thumb/' + encodeURIComponent(root) + '/' + encodeFrameRel(rel) + source.ext;
 }
