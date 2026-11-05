@@ -9,7 +9,7 @@ import { mkdirSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 import { BRIDGE_PREFIX } from './bridge.ts';
 import type { BridgeHandler, BridgeRequest, BridgeResponse } from './bridge.ts';
-import { defaultHelperMain, defaultLaunch, dshHomeDir, readElectronVersion } from './electron.ts';
+import { defaultHelperMain, defaultLaunch, dshHomeDir, readElectronVersion, shouldForceXWayland } from './electron.ts';
 import {
   HELPER_STABLE_MS,
   HELPER_STOP_TIMEOUT_MS,
@@ -131,6 +131,14 @@ export class HelperProcess {
       sandboxFallback: this.hasSandboxFallbackApplied,
       customCommand: Boolean(this.options.command),
     });
+    // Wayland 原生下窗口无法定位/置顶/穿透，只有 XWayland 能救；纯 Wayland 时明说不可用，别让用户猜。
+    if (!this.options.command && shouldForceXWayland()) {
+      this.logger.info?.('dsh-pet desktop helper: Wayland 会话，强制 XWayland（--ozone-platform=x11）');
+    } else if (!this.options.command && process.platform === 'linux' && process.env.WAYLAND_DISPLAY) {
+      this.logger.warn?.(
+        'dsh-pet desktop helper: 纯 Wayland 无 XWayland，桌面模式的定位/置顶/穿透不可用；请改用 X11 会话',
+      );
+    }
     this.hasChildOutput = false;
     // 版本只在这里读一次：崩溃时退出码能说明「怎么死的」，说明不了「死的哪个版本」，而那才是排障入口
     this.launchIdentity = electronIdentity(command);

@@ -25,16 +25,41 @@ export const defaultHelperMain = resolve(packageRoot, 'runtime', 'electron-helpe
 /** 桌面 Helper 的远程调试端口：0 = 不开。排障时本地改成 9222，重启 Helper 后用 chrome://inspect 连。 */
 export const DESKTOP_DEBUG_PORT = 0;
 
+/** 强制 XWayland 的 Chromium 开关：Wayland 原生下小窗的定位/置顶/穿透都不可用。 */
+const OZONE_X11_SWITCH = '--ozone-platform=x11';
+
+/**
+ * Linux Wayland 会话是否应强制走 XWayland。
+ *
+ * 只在有 XWayland（`DISPLAY` 存在）时可强制；纯 Wayland 只能提示用户切 X11 会话。
+ * @param env - 读取显示环境变量；默认进程环境。
+ * @param platform - 运行平台；默认 `process.platform`。
+ * @returns 需要且能够强制 XWayland 时为 true。
+ */
+export function shouldForceXWayland(
+  env: NodeJS.ProcessEnv = process.env,
+  platform: NodeJS.Platform = process.platform,
+): boolean {
+  return platform === 'linux' && Boolean(env.WAYLAND_DISPLAY) && Boolean(env.DISPLAY);
+}
+
 /**
  * 桌面 Helper 的启动参数。
  *
+ * 开关必须排在 Helper 入口脚本之前：Electron 把脚本路径之后的参数当作应用参数。
  * @param helperPath - Helper 入口脚本的绝对路径。
- * @param debugPort - 远程调试端口；0 表示不挂 Chromium 的调试开关。
+ * @param options - `debugPort` 远程调试端口（0 关闭）；`forceX11` 是否加 `--ozone-platform=x11`。
  * @returns 可直接交给 spawn 的参数数组。
  */
-export function helperLaunchArgs(helperPath: string, debugPort = DESKTOP_DEBUG_PORT): string[] {
-  // 开关排在脚本路径之前：与 Electron 文档的启动写法一致，不会被当成业务参数。
-  return debugPort > 0 ? ['--remote-debugging-port=' + debugPort, helperPath] : [helperPath];
+export function helperLaunchArgs(
+  helperPath: string,
+  options: { debugPort?: number; forceX11?: boolean } = {},
+): string[] {
+  const debugPort = options.debugPort ?? DESKTOP_DEBUG_PORT;
+  const switches: string[] = [];
+  if (options.forceX11 === true) switches.push(OZONE_X11_SWITCH);
+  if (debugPort > 0) switches.push('--remote-debugging-port=' + debugPort);
+  return [...switches, helperPath];
 }
 
 /** 只做基本文件校验：不验证二进制格式，也不实际启动候选。 */
@@ -272,5 +297,5 @@ export function defaultLaunch(options: HelperOptions = {}): { command: string; a
     throw new Error('dsh-pet: cannot resolve Electron executable. Set DSH_PET_ELECTRON_PATH or install electron.');
   }
   const helperPath = options.helperPath || defaultHelperMain;
-  return { command: electronPath, args: helperLaunchArgs(helperPath) };
+  return { command: electronPath, args: helperLaunchArgs(helperPath, { forceX11: shouldForceXWayland() }) };
 }
