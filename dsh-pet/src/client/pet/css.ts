@@ -48,6 +48,8 @@ function ensureAlphaFilter(): void {
   svg.setAttribute('height', '0');
   svg.setAttribute('aria-hidden', 'true');
   svg.setAttribute('data-dsh-pet-alpha-fix', '');
+  // 滤镜定义必须留在文档里（filter:url(#…) 按同文档 id 解析）；绝对定位让它不参与宿主的行内流。
+  svg.style.position = 'absolute';
   const defs = document.createElementNS(NS, 'defs');
   const filter = document.createElementNS(NS, 'filter');
   filter.id = ALPHA_FIX_ID;
