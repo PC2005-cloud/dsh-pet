@@ -89,13 +89,17 @@ export function createStandaloneAi(
         : undefined,
     stream: createTextStream(runtime),
     getSettings: () => store.publicSettings(),
+    connectionForSetup: () => {
+      const { protocol, baseUrl, model, apiKey } = store.current();
+      return { protocol, baseUrl, model, apiKey };
+    },
     saveSettings: (input) => saveSettings(runtime, store, input),
     isReady: () => runtime.ready(),
     balanceAuth: () => ({ provider: store.current().balanceProvider, apiKey: store.current().apiKey }),
-    testConnection: (input) =>
+    testConnection: (input, signal) =>
       runtime.disposed
         ? Promise.resolve({ ok: false, message: '服务已关闭' })
-        : testAiConnection(runtime.fetcher, store.current(), input),
+        : testAiConnection(runtime.fetcher, store.current(), input, signal),
     discoverModels: (input) =>
       runtime.disposed
         ? Promise.resolve({ ok: false, code: 'input', message: '服务已关闭' })

@@ -11,6 +11,7 @@ import { rejectRequest } from '../request-security.ts';
 import type { ModelDiscoveryInput } from '../ai-provider/types.ts';
 import { sendJson } from './respond.ts';
 import type { SetupService } from '../setup.ts';
+import { setupErrorMessage } from '../setup-models.ts';
 
 /** Installation is explicit, authenticated and asynchronous; polling never returns credentials. */
 export function setupHandler(
@@ -38,11 +39,7 @@ export function setupHandler(
       sendJson(res, 202, setup.status());
     } catch (error) {
       const busy = error instanceof Error && error.message === 'setup_busy';
-      rejectRequest(
-        res,
-        busy ? 409 : 400,
-        busy ? '正在准备，请稍候。' : '请检查模型信息；已有记忆的 embedding 模型和维度应保持不变。',
-      );
+      rejectRequest(res, busy ? 409 : 400, busy ? '正在准备，请稍候。' : setupErrorMessage(error));
     }
   };
 }

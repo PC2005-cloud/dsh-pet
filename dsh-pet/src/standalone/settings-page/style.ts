@@ -45,6 +45,10 @@ export const settingsStyle = `:root{
 }
 *{box-sizing:border-box}
 [hidden]{display:none!important}
+.setupFields{border:0;padding:0;margin:0;min-width:0}
+.setupSteps{display:flex;flex-wrap:wrap;gap:8px 24px;padding-left:20px;color:var(--dsw-alias-label-tertiary);font-size:13px}
+.setupSteps [aria-current=step]{color:var(--dsw-alias-label-primary);font-weight:600}
+input[readonly]{background:var(--dsw-alias-bg-base)}
 html,body{height:100%}
 body{margin:0;background:var(--dsw-alias-bg-base);color:var(--dsw-alias-label-primary);font:14px/1.55 var(--dsw-font-family);-webkit-font-smoothing:antialiased}
 a{color:var(--dsw-static-blue-500)}

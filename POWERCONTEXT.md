@@ -6,17 +6,21 @@
 
 独立应用第一次启动会打开「开始养鱼」。已有用户可以右键桌宠 →「打开 AI 设置」→「开始养鱼」；源码构建后也可运行 `pnpm standalone --setup`。无需先安装 Python、手写 `.env` 或单独运行记忆服务。
 
-1. 选择模型预设，填写服务商提供的 API 地址和密钥。「查看或调整模型」可修改模型名；embedding 使用另一家服务时，也在这里填写它的地址和密钥。
-2. 勾选「开启本机长期记忆」，点击「开始养鱼」。程序先检查聊天连接，再下载并校验 uv 0.9.26，在用户目录安装 Python 3.12 和 PowerContext 1.5.0。需要联网和系统 `curl`、`tar`；不会修改全局 Python 或 PATH。预设模型必须在自己的账户和地域可用。
-3. 等待「长期记忆：服务已就绪」，点击「去聊天」。程序会为默认宠物条目设置 4 轮近期历史、6000 字节近期正文与 4096 字节召回正文预算。其他 pet pack 的独立配置仍在「配置」中管理。
+1. 已经能聊天的用户保持「沿用当前聊天配置」勾选，无需再填 Key。新用户选择服务商和地域，地址、模型会自动填写，再输入该地域的 Key。自定义服务，或 Embedding 使用另一家服务时，展开「高级选项：模型与 Embedding」。
+2. 勾选「开启本机长期记忆」，点击「开始养鱼」。程序检查聊天和 Embedding 连接及向量维度，然后下载并校验 uv 0.9.26，在用户目录安装 Python 3.12 和 PowerContext 1.5.0。页面显示当前步骤和等待时间，安装期间可取消；聊天配置检查成功后，可以先去聊天。需要联网和系统 `curl`、`tar`；不会修改全局 Python 或 PATH。
+3. 等待「长期记忆：服务已就绪」，点击「去聊天」。首次接入为默认宠物条目设置 4 轮近期历史、6000 字节近期正文与 4096 字节召回正文预算；恢复已有绑定时保留已调整的预算。其他 pet pack 的独立配置仍在「配置」中管理。
+
+Qwen 预设包含北京、新加坡；地址与 Key 的地域须一致，切换预设或地域会清空输入中的聊天 Key。模型必须在自己的账户中可用，可按[官方地域与地址说明](https://help.aliyun.com/zh/model-studio/base-url)填写工作空间专属地址。预设 Embedding 的维度为 1024，详见[官方模型说明](https://help.aliyun.com/en/model-studio/qwen3-7-text-embedding)。
+
+已保存的 Key 仅在原完整接口地址下复用，不会返回浏览器；不同服务地址需要自己的 Key。新设置检查失败时，原来的聊天配置和记忆服务继续可用；服务切换失败或被取消时会尝试恢复原服务，恢复失败会明确提示。取消首次安装会保留已通过检查的聊天配置，未完成的记忆准备可重试。
 
 不勾选长期记忆时，只检查并保存聊天模型，不下载记忆服务。快速开始使用 OpenAI Chat Completions 兼容接口；Anthropic 聊天或已有远程服务继续使用下面的手动配置。
 
 本机服务只监听 `127.0.0.1`，使用自动生成的 Bearer 令牌。密钥与令牌写入用户目录 `dsh-pet/powercontext/settings.json`，设置接口不回显。数据库、运行环境和缓存也留在该目录；端口与数据库身份在重启后保持不变。已有 embedding 的地址、模型和维度不能直接覆盖，以免混用向量空间。
 
-再次启动桌宠时，已启用的本机记忆自动启动；退出桌宠时停止其拥有的记忆进程，不删除数据，也不安装开机服务。「停止本机记忆」会切回原生近期历史并停止服务。仅在高级设置里切换后端，不会立即停止已运行的本机服务。端口被占用或服务失败时显示错误，可按已保存配置重试；不会改端口另建一份记忆，也不会自动清空数据。
+再次启动桌宠时，已启用的本机记忆自动启动；退出桌宠时停止其拥有的记忆进程，不删除数据，也不安装开机服务。「暂停记忆」会切回原生近期历史并停止服务，刷新页面后仍显示暂停；点击「恢复记忆」重新启动。仅在高级设置里切换后端，不会立即停止已运行的本机服务。端口被占用或服务失败时显示错误，可按已保存配置重试；不会改端口另建一份记忆，也不会自动清空数据。
 
-首次模型检查和后续聊天、记忆整理、检索可能产生模型费用。只开启 Atomic Memory 会话抽取与 embedding；不开启 Dream、Topic Memory 或 Profile 定时生成。服务就绪不代表新对话已经整理成记忆，后台检查间隔 30 秒也不是完成时限。自动安装支持 Linux/macOS；Windows 随 PowerContext 保持实验性支持。
+首次聊天与 Embedding 检查，以及后续聊天、记忆整理、检索可能产生模型费用。只开启 Atomic Memory 会话抽取与 embedding；不开启 Dream、Topic Memory 或 Profile 定时生成。服务就绪不代表新对话已经整理成记忆，后台检查间隔 30 秒也不是完成时限。自动安装支持 Linux/macOS；Windows 随 PowerContext 保持实验性支持。
 
 无图形桌面的机器不会自动打开浏览器或出现桌面角色；可在本机启动清单 `dsh-pet/standalone-runtime.json` 中找到带凭据的 `settingsUrl`，不要分享该地址。
 
@@ -36,6 +40,8 @@
 字节预算不是模型 Token 限额，也不覆盖人设、本轮输入、时间或动作标记、图片和协议包装。减少近期输入不保证总费用下降，后台抽取、维护和检索也可能产生模型费用。本地历史文件和远端存储不会因输入预算而自动缩小。
 
 ## 同步状态与恢复
+
+聊天页直接显示当前宠物的后端、待同步与已同步轮数，以及最近一次召回结果；切换宠物时重新读取，不沿用上一只宠物的状态。本机管理服务的就绪、准备中或暂停状态单独显示，点击「记忆设置」可回到开始养鱼页。可见页面约每 5 秒刷新，连接失败会显示未知状态并自动重连。
 
 - **待同步**：成功问答已落盘，仍待服务接收。进程运行时每 15 秒尝试补传，每批最多两条；网络上传不占用聊天文件锁。
 - **已同步**：Source 已被接收，不表示 Memory 已抽取，也不保证下一轮能召回。
@@ -61,7 +67,8 @@ Scope 幂等键、Source ID 和精确载荷随 `memory.json` 持久化，重启�
 
 独立 CLI 与打包应用额外提供 `/standalone-ai/setup`，沿用本机 Host、同源和进程令牌校验。它不属于 DSH 插件 HTTP 契约，不在插件 OpenAPI 的 `/dsh-pet-7340/` 路径中。
 
-- `GET` 返回 `stage`（`idle/checking/installing/starting/ready/error/stopped`）、`message`、`busy`、`chatReady`、`memoryReady`、`configured`，以及可选的 `serverUrl` 和不含密钥的 `models`。`chatReady` 表示已有可用配置，不是每次读取都请求模型。
-- `POST` 使用 JSON。首次设置传 `action: "start"`、`memory` 布尔值、`baseUrl`、`model`、`apiKey`；`memory: true` 时另需 `embeddingBaseUrl`、`embeddingModel`、`embeddingApiKey`、`embeddingDimension`。未知字段拒绝，两个模型分别支持自己的密钥；界面在提交前补齐复用项。
-- `POST {"action":"retry"}` 按已保存配置启动本机记忆；`POST {"action":"stop"}` 停止本机记忆并关闭自动启动，保留数据库。接受操作返回 HTTP 202，通过 GET 轮询；忙时再次提交返回 409。
+- `GET` 返回 `stage`、`message`、`busy`、`canCancel`、`startedAt`（Unix 毫秒）、`chatReady`、`memoryReady`、`memoryEnabled`、`memoryRunning`、`configured`、`canRetry`、`retryDraft`，以及不含密钥的 `chat`、可选的 `serverUrl` 和 `models`。`chat.hasKey` 仅表示已保存密钥；`chatReady` 表示已有完整聊天配置，不是每次读取都请求模型。`memoryReady` 独立于本次操作是否成功，原服务仍可用时不会因新设置失败而变成 false。
+- `stage` 包含 `idle/checking/checking_embedding/checking_runtime/downloading/installing_python/installing_memory/starting/restoring/saving/ready/error/stopped/cancelling/cancelled`。安装步骤对应实际工作，不提供估算百分比。
+- `POST` 使用 JSON。首次设置传 `action: "start"`、`memory` 布尔值、`baseUrl`、`model`、`apiKey`；`memory: true` 时另需 `embeddingBaseUrl`、`embeddingModel`、`embeddingDimension`，以及必要时的 `embeddingApiKey`。未知字段拒绝。密钥留空或省略时，由服务端按完整接口地址匹配已保存密钥；Embedding 也可在与聊天地址相同时复用聊天 Key，不同地址且没有匹配的已保存 Key 时必须填写。
+- `POST {"action":"retry"}` 重试尚未成功的本次设置；没有本次草稿时按已保存配置恢复记忆。草稿只保留在当前进程内，重启后不会自动执行失败的新设置。`POST {"action":"stop"}` 暂停本机记忆并关闭自动启动，保留数据库。`POST {"action":"cancel"}` 取消可取消的准备步骤；进入最终保存后 `canCancel` 为 false，取消请求返回 409。接受操作返回 HTTP 202，通过 GET 轮询；忙时其他写操作返回 409。
 - 缺少能力令牌或来自不可信 Origin 返回 403；错误 JSON/字段返回 400，非 JSON 写入返回 415，其他方法返回 405。安装、模型和磁盘错误只返回固定说明，不返回原始子进程输出、服务商正文、密钥或令牌。

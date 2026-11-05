@@ -113,7 +113,7 @@ function previewNode(rt: ChatPanelRuntime, state: ChatPanelState): unknown {
  * @param state - 当前状态与动作。
  * @returns 面板根元素。
  */
-export function buildPanel(rt: ChatPanelRuntime, state: ChatPanelState): unknown {
+export function buildPanel(rt: ChatPanelRuntime, state: ChatPanelState, memoryStatus?: unknown): unknown {
   const { h } = rt;
   return h('div', {
     className: 'pet-chat',
@@ -125,6 +125,7 @@ export function buildPanel(rt: ChatPanelRuntime, state: ChatPanelState): unknown
       tabsNode(h, state),
       orphansNode(h, state),
       toolsNode(h, state),
+      memoryStatus ?? null,
       personaNode(h, state),
       listNode(rt, state),
       confirmNode(rt, state),

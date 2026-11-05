@@ -5,7 +5,7 @@
  * 必须始终成立：字段全部 readonly，调用方不得改写服务内部状态。
  * @module dsh-pet/src/standalone/ai-provider/types
  */
-import { type createAiConfig, type StandaloneAiPublicSettings } from '../ai-config.ts';
+import { type createAiConfig, type StandaloneAiPublicSettings, type StandaloneAiSettings } from '../ai-config.ts';
 import { type AiFetch } from '../ai-transport.ts';
 import { type StandaloneLogger } from '../context.ts';
 import { type BalanceResult } from '../../host/balance/index.ts';
@@ -26,6 +26,7 @@ export interface TestConnectionResult {
   ok: boolean;
   message: string;
   reply?: string;
+  reason?: 'authentication' | 'quota' | 'not_found' | 'connection' | 'timeout' | 'unknown';
 }
 
 /** 「拉取模型」的输入：任一项缺省则沿用当前设置；空字符串视为未填。 */
@@ -83,10 +84,12 @@ export interface StandaloneAiService {
   stream(options: unknown): AsyncIterable<{ type: 'text'; text: string }>;
   /** 取脱敏后的当前设置。 */
   getSettings(): StandaloneAiPublicSettings;
+  /** Internal setup transaction only; includes credentials and must never be serialized in HTTP responses. */
+  connectionForSetup(): Pick<StandaloneAiSettings, 'protocol' | 'baseUrl' | 'model' | 'apiKey'>;
   /** 校验并保存设置，成功后解除认证失败造成的暂停。 */
   saveSettings(input: unknown): Promise<StandaloneAiPublicSettings>;
   /** 用一次最小请求验证地址、模型与密钥。 */
-  testConnection(input: TestConnectionInput): Promise<TestConnectionResult>;
+  testConnection(input: TestConnectionInput, signal?: AbortSignal): Promise<TestConnectionResult>;
   /** 按协议拉取端点声明可用的模型；失败时 code 稳定、message 可直接展示。 */
   discoverModels(input: ModelDiscoveryInput): Promise<ModelDiscoveryResult>;
   /** 按设置里选中的服务商查询余额；未选择或缺少密钥时返回显式失败，绝不伪造数字。 */

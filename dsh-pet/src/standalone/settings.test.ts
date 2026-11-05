@@ -149,7 +149,8 @@ async function setupPage(): Promise<Page> {
   let stripped = '';
   runInNewContext(settingsScript, {
     URLSearchParams,
-    setTimeout,
+    // Page polling should not keep this isolated VM fixture alive after the test finishes.
+    setTimeout: (callback: () => void, ms: number) => setTimeout(callback, ms).unref(),
     clearTimeout,
     console,
     window: { addEventListener() {}, removeEventListener() {}, innerHeight: 800, confirm: () => false },
@@ -295,7 +296,8 @@ test('settings shell is accessible, self contained, and never saves browser secr
   assert.match(settingsScript, /history\.replaceState/);
   assert.match(settingsScript, /X-DSH-Pet-Token/);
   assert.doesNotMatch(settingsScript, /localStorage|sessionStorage|document\.cookie|innerHTML/);
-  assert.doesNotMatch(settingsPage, /https?:\/\/(?!example)/);
+  // Public provider presets are form values; the shell must not load remote resources or submit remotely.
+  assert.doesNotMatch(settingsPage, /(?:src|href|action)=["']https?:\/\//);
   assert.match(settingsStyle, /focus-visible/);
 });
 

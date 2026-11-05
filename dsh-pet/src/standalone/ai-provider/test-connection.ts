@@ -46,6 +46,7 @@ export async function testAiConnection(
   fetcher: AiFetch,
   current: StandaloneAiSettings,
   input: TestConnectionInput,
+  signal?: AbortSignal,
 ): Promise<TestConnectionResult> {
   const protocol = input.protocol === 'anthropic' ? 'anthropic' : (input.protocol ?? current.protocol);
   const baseUrl = (input.baseUrl !== undefined ? input.baseUrl : current.baseUrl).trim();
@@ -64,6 +65,9 @@ export async function testAiConnection(
     timeoutMs: PROBE_TIMEOUT_MS,
   };
   const controller = new AbortController();
+  signal?.throwIfAborted();
+  const cancel = (): void => controller.abort();
+  signal?.addEventListener('abort', cancel, { once: true });
   const timer = setTimeout(() => controller.abort(), PROBE_TIMEOUT_MS);
   try {
     const probe = sdkTextStream(
@@ -83,8 +87,22 @@ export async function testAiConnection(
       ? { ok: true, message: '连接成功！模型响应正常。', reply: reply.trim() }
       : { ok: true, message: '连接成功！接口已成功响应。', reply: '(模型返回了空白内容)' };
   } catch (error) {
-    return { ok: false, message: describeFailure(error, controller) };
+    signal?.throwIfAborted();
+    const raw = error instanceof Error ? error.message : '';
+    const reason = controller.signal.aborted
+      ? 'timeout'
+      : isAuthenticationFailure(error)
+        ? 'authentication'
+        : isRateLimitFailure(error)
+          ? 'quota'
+          : raw.includes('404')
+            ? 'not_found'
+            : raw.includes('ECONNREFUSED') || raw.includes('fetch failed')
+              ? 'connection'
+              : 'unknown';
+    return { ok: false, reason, message: describeFailure(error, controller) };
   } finally {
     clearTimeout(timer);
+    signal?.removeEventListener('abort', cancel);
   }
 }

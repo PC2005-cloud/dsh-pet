@@ -8,6 +8,7 @@
 import { createPetChatState } from './state.ts';
 import { buildPanel } from './view.ts';
 import type { ChatPanelRuntime } from './runtime.ts';
+import { makeMemoryStatus } from './memory-status.ts';
 
 export type { ChatPanelRuntime } from './runtime.ts';
 
@@ -19,7 +20,16 @@ export type { ChatPanelRuntime } from './runtime.ts';
  */
 export function makePetChatPanel(rt: ChatPanelRuntime): () => unknown {
   const useChatState = createPetChatState(rt);
+  const MemoryStatus = makeMemoryStatus(rt);
   return function PetChatPanel(): unknown {
-    return buildPanel(rt, useChatState());
+    const state = useChatState();
+    return buildPanel(
+      rt,
+      state,
+      rt.h(MemoryStatus, {
+        petId: state.petId,
+        revision: state.messages[state.messages.length - 1]?.ts ?? 0,
+      }),
+    );
   };
 }

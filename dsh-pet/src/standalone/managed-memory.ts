@@ -18,7 +18,7 @@ import { z } from 'zod';
 import { registerMemoryToken } from '../host/powercontext-auth.ts';
 import { memoryServerUrlValid } from '../shared/chat-memory-config.ts';
 import { readPrivateJson, writePrivateJson } from './ai-storage.ts';
-import { installMemoryRuntime, memoryProcessEnv } from './memory-install.ts';
+import { installMemoryRuntime, memoryProcessEnv, type MemoryStage } from './memory-install.ts';
 
 const printable = (s: string): boolean => [...s].every((c) => c.charCodeAt(0) >= 32 && c.charCodeAt(0) !== 127);
 const text = z.string().trim().min(1).max(200).refine(printable);
@@ -136,6 +136,50 @@ export class ManagedMemory {
     return { baseUrl, model, embeddingBaseUrl, embeddingModel, embeddingDimension };
   }
 
+  /** Private credential reuse is limited to the previously configured embedding endpoint. */
+  embeddingKeyForEndpoint(url: string): string | undefined {
+    return this.config?.embeddingBaseUrl.replace(/\/+$/, '') === url.replace(/\/+$/, '')
+      ? this.config.embeddingApiKey
+      : undefined;
+  }
+
+  /** Prepare before disturbing a working service; restore its identity and process if activation fails. */
+  async replace(
+    models: MemoryModels,
+    signal: AbortSignal,
+    progress: (stage: MemoryStage | 'restoring') => void,
+    commit: (url: string) => Promise<void>,
+    recoverySignal: AbortSignal,
+  ): Promise<void> {
+    this.validateModels(models);
+    this.claim();
+    const previous = this.config;
+    const wasRunning = this.running;
+    await installMemoryRuntime(this.directory, signal, progress);
+    signal.throwIfAborted();
+    try {
+      await this.configure(models);
+      const url = await this.start(signal, progress);
+      signal.throwIfAborted();
+      this.setEnabled(true);
+      await commit(url);
+    } catch (error) {
+      await this.stopProcess();
+      this.config = previous;
+      if (previous) writePrivateJson(this.file, previous);
+      else if (existsSync(this.file)) unlinkSync(this.file);
+      if (wasRunning && previous && !recoverySignal.aborted) {
+        progress('restoring');
+        try {
+          await this.start(recoverySignal, () => {});
+        } catch {
+          throw new Error('recovery_failed');
+        }
+      }
+      throw error;
+    }
+  }
+
   /** Claim the private runtime before touching configuration or processes; never terminate another owner. */
   private claim(): void {
     if (this.lockOwned) return;
@@ -195,12 +239,11 @@ export class ManagedMemory {
     this.config.enabled = enabled;
   }
 
-  async start(signal: AbortSignal, progress: (stage: 'installing' | 'starting') => void): Promise<string> {
+  async start(signal: AbortSignal, progress: (stage: MemoryStage) => void): Promise<string> {
     this.claim();
     if (!this.config) throw new Error('memory_not_configured');
     if (this.running) return this.url!;
-    progress('installing');
-    const python = await installMemoryRuntime(this.directory, signal);
+    const python = await installMemoryRuntime(this.directory, signal, progress);
     signal.throwIfAborted();
     progress('starting');
     // A persisted endpoint must never silently attach to a different service or acquire a new identity.

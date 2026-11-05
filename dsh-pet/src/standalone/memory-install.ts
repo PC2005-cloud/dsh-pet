@@ -5,6 +5,7 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs'
 import { join } from 'node:path';
 
 const UV_VERSION = '0.9.26';
+export type MemoryStage = 'checking_runtime' | 'downloading' | 'installing_python' | 'installing_memory' | 'starting';
 const ARCHIVES: Record<string, [string, string]> = {
   'linux-x64': [
     'uv-x86_64-unknown-linux-gnu.tar.gz',
@@ -67,23 +68,73 @@ export function runMemoryCommand(
   env: NodeJS.ProcessEnv,
   signal: AbortSignal,
 ): Promise<void> {
+  signal.throwIfAborted();
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, { env, signal, stdio: 'ignore', windowsHide: true });
-    const timer = setTimeout(() => child.kill('SIGKILL'), 600_000);
-    let failed = false;
-    child.once('error', () => {
-      failed = true;
+    const child = spawn(command, args, {
+      env,
+      detached: process.platform !== 'win32',
+      stdio: 'ignore',
+      windowsHide: true,
+    });
+    let failure = '';
+    let killTimer: ReturnType<typeof setTimeout> | undefined;
+    const terminate = (): void => {
+      if (!child.pid || child.exitCode !== null || child.signalCode !== null) return;
+      if (process.platform === 'win32') {
+        const killer = spawn('taskkill', ['/PID', String(child.pid), '/T', '/F'], {
+          stdio: 'ignore',
+          windowsHide: true,
+        });
+        killer.on('error', () => child.kill());
+      } else {
+        try {
+          process.kill(-child.pid, 'SIGTERM');
+        } catch {
+          /* Already exited. */
+        }
+        killTimer ??= setTimeout(() => {
+          try {
+            process.kill(-child.pid!, 'SIGKILL');
+          } catch {
+            /* Already exited. */
+          }
+        }, 3000);
+      }
+    };
+    const timer = setTimeout(() => {
+      failure = 'runtime_command_timeout';
+      terminate();
+    }, 600_000);
+    signal.addEventListener('abort', terminate, { once: true });
+    child.once('error', (error: NodeJS.ErrnoException) => {
+      failure = error.code === 'ENOENT' ? 'runtime_tool_missing' : 'runtime_command_failed';
     });
     child.once('close', (code) => {
       clearTimeout(timer);
-      if (code === 0 && !failed && !signal.aborted) resolve();
-      else reject(new Error('runtime_command_failed'));
+      if (killTimer) {
+        // A parent may exit on SIGTERM while one of its descendants ignores it.
+        try {
+          process.kill(-child.pid!, 'SIGKILL');
+        } catch {
+          /* Group already gone. */
+        }
+        clearTimeout(killTimer);
+      }
+      signal.removeEventListener('abort', terminate);
+      if (signal.aborted) reject(signal.reason);
+      else if (code === 0 && !failure) resolve();
+      else reject(new Error(failure || 'runtime_command_failed'));
     });
   });
 }
 
 /** Download official uv with a release-pinned SHA-256, then let it install Python and PowerContext privately. */
-export async function installMemoryRuntime(directory: string, signal: AbortSignal): Promise<string> {
+export async function installMemoryRuntime(
+  directory: string,
+  signal: AbortSignal,
+  progress: (stage: MemoryStage) => void = () => {},
+): Promise<string> {
+  progress('checking_runtime');
   const python = join(directory, 'venv', process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python');
   const env = memoryProcessEnv(directory);
   if (existsSync(python)) {
@@ -113,6 +164,7 @@ export async function installMemoryRuntime(directory: string, signal: AbortSigna
     }
   }
   if (!existsSync(uv)) {
+    progress('downloading');
     const [name, digest] = artifact;
     const archive = join(directory, name);
     try {
@@ -152,8 +204,11 @@ export async function installMemoryRuntime(directory: string, signal: AbortSigna
       rmSync(archive, { force: true });
     }
   }
-  if (!existsSync(python))
+  if (!existsSync(python)) {
+    progress('installing_python');
     await runMemoryCommand(uv, ['venv', '--clear', '--python', '3.12', join(directory, 'venv')], env, signal);
+  }
+  progress('installing_memory');
   await runMemoryCommand(uv, ['pip', 'install', '--python', python, 'powercontext[cli,server]==1.5.0'], env, signal);
   // Do not treat a partial download/installation as a usable runtime.
   await runMemoryCommand(
