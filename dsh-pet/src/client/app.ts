@@ -12,6 +12,7 @@ import { takeMenuEvents } from './menu-service.ts';
 import { getStateSnapshot } from './state-service.ts';
 import { dicts, makePetConfigSection, NS, petBridge } from './settings.ts';
 import { initNotify } from './notify.ts';
+import { mountBaifan } from './baifan.ts';
 import { installCommandFaces, type CommandFace, type CommandUiLike } from './command-faces.ts';
 import { installSectionNavIcon } from './nav-icon.ts';
 import { registerPetChatTab, openPetChatTab } from './chat/register.ts';
@@ -83,6 +84,9 @@ export function makeFactory(): (require: (mod: string) => any) => any {
         pose: readPose,
         progress: readProgress,
       });
+
+      // 内置玩法「吃白饭」：注册走 HTTP，点击读页面内 Cordis 服务，不读本模块的内部状态。
+      ctx.effect(() => mountBaifan(ctx), 'dsh-pet: activity-baifan');
 
       // 系统通知：host 把通知帧写进 /state 的 sections.notify，统一轮询发现变化后弹 toast。
       ctx.effect(

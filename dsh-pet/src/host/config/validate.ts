@@ -9,6 +9,9 @@ import { FONT_SIZE_MAX, FONT_SIZE_MIN } from '../../shared/fonts.ts';
 import { isKnownVoice } from '../voice/voices.ts';
 import { FONT_FAMILY_SET } from './constants.ts';
 
+/** 内置玩法动画的槽位数：`animations.baifan` 必须恰好这么多个（顺序是玩法契约，见 shared/types 的 Animations）。 */
+const ACTIVITY_SLOTS = 5;
+
 /** animations 段完整性校验（与旧 assertAnimationsHost 同一套规则；不 throw，非法返回 false） */
 function animationsValid(a: unknown): boolean {
   if (!a || typeof a !== 'object') return false;
@@ -49,6 +52,9 @@ function animationsValid(a: unknown): boolean {
   }
   const balance = evEntries.balance;
   if (!Array.isArray(balance) || balance.length === 0) return false;
+  // baifan 可选：没写 = 该条目没有这个玩法。写了才校验形状——槽位数不对会让玩法
+  // 按位置取到 undefined，表现成「点了没反应」，比不配更难解释。
+  if (anims.baifan !== undefined && !activitySlotsValid(anims.baifan)) return false;
   // sleep 可选：pet pack 不写也合法（不同角色的睡觉素材不一样，不能强求）。
   // 写了才校验形状——一个空套或空段会让状态机「进去了但没动画播」，比不配更难解释。
   return anims.sleep === undefined || sleepValid(anims.sleep);
@@ -70,6 +76,13 @@ function sleepValid(value: unknown): boolean {
     }
   }
   return true;
+}
+
+/** baifan 段校验：恰好 {@link ACTIVITY_SLOTS} 个非空动画名。
+ *  写少写多都算非法——槽位按索引取，缺一个就是那个时机没有动画可播。 */
+function activitySlotsValid(value: unknown): boolean {
+  if (!Array.isArray(value) || value.length !== ACTIVITY_SLOTS) return false;
+  return value.every((name) => typeof name === 'string' && name.length > 0);
 }
 
 /** animationWeights 段校验（idle/turn/move 三个非负数字） */

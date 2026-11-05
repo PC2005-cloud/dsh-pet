@@ -214,6 +214,44 @@ describe('readAllConfig —— animations.sleep（可选段）校验', () => {
   });
 });
 
+describe('readAllConfig —— animations.baifan（内置玩法动画，可选段）校验', () => {
+  /** 用给定 baifan 覆盖内置默认的 animations，读回成品里 main 条目的 animations */
+  function mergedAnimations(baifan: unknown): Record<string, unknown> {
+    const animations = baifan === undefined ? BASE.animations : { ...BASE.animations, baifan };
+    return readAllConfig(withBase({}, { animations })).main.animations as Record<string, unknown>;
+  }
+
+  /** 合法的五个槽位（顺序即玩法契约，见 shared/types 的 Animations） */
+  const SLOTS = ['跑向底部', '侧身追', '期待', '吃碗饭', '吃饭团'];
+
+  test('合法的五个名字原样保留', () => {
+    assert.deepEqual(mergedAnimations(SLOTS).baifan, SLOTS);
+  });
+
+  test('不写 baifan：合法，该条目只是没有这个玩法（其余动画不受影响）', () => {
+    const anim = mergedAnimations(undefined);
+    assert.equal(anim.baifan, undefined);
+    assert.deepEqual(anim.idle, BASE.animations.idle);
+  });
+
+  test('非法形态整段回退默认：少一个 / 多一个 / 空串 / 非字符串 / 非数组', () => {
+    const bad: unknown[] = [
+      ['跑向底部', '侧身追', '期待', '吃碗饭'],
+      [...SLOTS, '吃饭团'],
+      ['跑向底部', '侧身追', '期待', '吃碗饭', ''],
+      ['跑向底部', '侧身追', '期待', '吃碗饭', 1],
+      'baifan',
+    ];
+    for (const baifan of bad) {
+      assert.deepEqual(
+        mergedAnimations(baifan),
+        BASE.animations,
+        `非法 baifan 必须整段回退：${JSON.stringify(baifan)}`,
+      );
+    }
+  });
+});
+
 /** 跑一趟 readAllConfig：base 为内置默认（可注入表情包开关），overlay 为用户层 */
 function withBase(baseExtra: Record<string, unknown>, overlay?: Record<string, unknown>): ConfigPaths {
   const dir = mkdtempSync(join(tmpdir(), 'dsh-pet-config-test-'));
