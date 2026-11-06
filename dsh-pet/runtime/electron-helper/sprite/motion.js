@@ -128,19 +128,6 @@ Object.assign(PetSprite.prototype, {
       }
       state = { x: res.x, y: res.y, vx: res.vx, vy: res.vy };
       this.throwState = state;
-      // 上报飞行状态（节流 ~30ms）：主进程 broker 汇聚后广播，其它窗口据此做跨窗碰撞检测；
-      // broker 协议单位是物理像素，这里 ×scale。
-      if (window.petBridge && window.petBridge.reportFlight && now - this.lastFlightReport > 30) {
-        window.petBridge.reportFlight({
-          x: toScreen(state.x),
-          y: toScreen(state.y),
-          vx: toScreen(state.vx),
-          vy: toScreen(state.vy),
-          size: toScreen(this.size),
-          bottomPad: toScreen(this.bottomPad),
-        });
-        this.lastFlightReport = now;
-      }
       // 宠物间碰撞（仅 petCollision 开启）：飞行中的自己撞到其它宠物 → 动量弹开
       if (this.physics && this.physics.petCollision) {
         const myBody = S.bodyPixelBox({ x: state.x, y: state.y, size: this.size, bottomPad: this.bottomPad });
