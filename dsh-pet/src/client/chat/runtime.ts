@@ -6,6 +6,10 @@
  * @module dsh-pet/src/client/chat/runtime
  */
 import type { Button, ImageLightbox, Modal } from '@deepseek-ai/dsh-client-ui-primitives';
+import type { Key } from './locales/index.ts';
+
+/** 面板文案的翻译函数：`params` 用于 `{name}` 占位符替换。 */
+export type ChatTranslate = (key: Key, params?: Record<string, unknown>) => string;
 
 /** DSH 的 UI 原语：确认弹窗与图片灯箱都用平台组件，不自己造。 */
 export interface PetChatUi {
@@ -25,6 +29,8 @@ export interface ChatPanelRuntime {
   useEffect: (effect: () => void | (() => void), deps: readonly unknown[]) => void;
   /** 跨渲染引用。 */
   useRef: <T>(initial: T) => { current: T };
+  /** 文案翻译；读取的是宿主当前语言，随语言切换即时生效。 */
+  readonly t: ChatTranslate;
   /** 平台 UI 原语；缺失时确认弹窗退化为内联确认条。 */
   readonly ui?: PetChatUi;
 }

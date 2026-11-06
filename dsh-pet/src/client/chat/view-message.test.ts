@@ -11,6 +11,7 @@ import { avatarNode, messageNode } from './view-message.ts';
 import { ROUTE_PATH } from '../../shared/constants.ts';
 import type { ChatMessageView } from './api.ts';
 import type { ChatPanelRuntime } from './runtime.ts';
+import { zh } from './locales/zh.ts';
 
 interface Node {
   tag: string;
@@ -18,6 +19,9 @@ interface Node {
 }
 
 const h = ((tag: unknown, props: Record<string, unknown>) => ({ tag, props })) as unknown as ChatPanelRuntime['h'];
+
+/** 中文桩：本文件不断言文案，只用它满足运行时契约。 */
+const t = ((key: string) => (zh as Record<string, string>)[key] ?? key) as unknown as ChatPanelRuntime['t'];
 
 const message: ChatMessageView = { role: 'assistant', text: '在的', ts: 1 };
 
@@ -49,7 +53,7 @@ describe('avatarNode', () => {
 
 describe('messageNode', () => {
   test('宠物消息的头像跟随传入的素材根与版本号', () => {
-    const node = messageNode(h, {
+    const node = messageNode(h, t, {
       message,
       isMe: false,
       assetRoot: 'baimao',
@@ -61,7 +65,7 @@ describe('messageNode', () => {
   });
 
   test('用户消息的头像仍是 SVG', () => {
-    const node = messageNode(h, {
+    const node = messageNode(h, t, {
       message: { ...message, role: 'user' },
       isMe: true,
       assetRoot: 'baimao',

@@ -32,7 +32,7 @@ function tabsNode(h: ChatPanelRuntime['h'], state: ChatPanelState): unknown {
  *
  * 内存里没有更早的轮时，同一个位置换成一行说明——不然按钮消失后用户不知道是「到底了」还是「坏了」。
  */
-function olderNode(h: ChatPanelRuntime['h'], state: ChatPanelState): unknown {
+function olderNode(h: ChatPanelRuntime['h'], t: ChatPanelRuntime['t'], state: ChatPanelState): unknown {
   if (state.rounds.length === 0) return null; // 空态由列表里的提示负责
   if (state.hasOlder) {
     return h('div', {
@@ -42,7 +42,7 @@ function olderNode(h: ChatPanelRuntime['h'], state: ChatPanelState): unknown {
           type: 'button',
           className: 'pet-chat-older-btn',
           onClick: () => state.showOlder(),
-          children: '加载更早',
+          children: t('older'),
         }),
       ],
     });
@@ -54,38 +54,38 @@ function olderNode(h: ChatPanelRuntime['h'], state: ChatPanelState): unknown {
     children: [
       h('span', {
         className: 'pet-chat-older-note',
-        children: capped ? '已经到底了（最多加载 ' + HISTORY_ROUNDS + ' 轮）' : '已经到底了',
+        children: capped ? t('olderEndCapped', { n: HISTORY_ROUNDS }) : t('olderEnd'),
       }),
     ],
   });
 }
 
 /** 记忆边界：线以下才是桌宠每次真正带进上下文的最近 N 轮。 */
-function memoryLineNode(h: ChatPanelRuntime['h'], rounds: number): unknown {
+function memoryLineNode(h: ChatPanelRuntime['h'], t: ChatPanelRuntime['t'], rounds: number): unknown {
   return h('div', {
     key: 'memory-line',
     className: 'pet-chat-memory',
     // 工具栏的「记忆线」按钮按这个标记滚过来：线在不在窗口里、第几个，都由渲染决定
     [MEMORY_LINE_ATTR]: 'true',
-    children: [h('span', { className: 'pet-chat-memory-note', children: `以下 ${rounds} 轮进入桌宠的记忆` })],
+    children: [h('span', { className: 'pet-chat-memory-note', children: t('memoryLine', { n: rounds }) })],
   });
 }
 
 /** 消息列表：加载更早 + 记忆边界 + 空态提示或按轮渲染。 */
 function listNode(rt: ChatPanelRuntime, state: ChatPanelState): unknown {
-  const emptyText = state.loading ? '加载中…' : state.petId === '' ? '没有可对话的桌宠' : '还没有聊过天';
+  const emptyText = state.loading ? rt.t('loading') : state.petId === '' ? rt.t('emptyNoPet') : rt.t('emptyNoChat');
   const body =
     state.rounds.length === 0
       ? [rt.h('div', { key: 'empty', className: 'pet-chat-hint', children: emptyText })]
       : state.rounds.map((round) => roundNode(rt, state, round));
   const cut = memoryBoundaryIndex(state.rounds.length, state.memoryRounds);
   if (cut !== null && state.memoryRounds !== undefined) {
-    body.splice(cut, 0, memoryLineNode(rt.h, state.memoryRounds));
+    body.splice(cut, 0, memoryLineNode(rt.h, rt.t, state.memoryRounds));
   }
   return rt.h('div', {
     className: 'pet-chat-list',
     ref: state.listRef,
-    children: [olderNode(rt.h, state), ...body],
+    children: [olderNode(rt.h, rt.t, state), ...body],
   });
 }
 
@@ -100,8 +100,8 @@ function previewNode(rt: ChatPanelRuntime, state: ChatPanelState): unknown {
   const { ImageLightbox } = rt.ui;
   return rt.h(ImageLightbox, {
     src: state.previewUrl,
-    alt: '对话图片',
-    labels: { dialog: '图片预览', close: '关闭' },
+    alt: rt.t('imageAlt'),
+    labels: { dialog: rt.t('lightboxDialog'), close: rt.t('close') },
     onClose: () => state.closeImage(),
   });
 }
@@ -123,14 +123,14 @@ export function buildPanel(rt: ChatPanelRuntime, state: ChatPanelState): unknown
     },
     children: [
       tabsNode(h, state),
-      orphansNode(h, state),
-      toolsNode(h, state),
+      orphansNode(h, rt.t, state),
+      toolsNode(h, rt.t, state),
       personaNode(h, state),
       listNode(rt, state),
       confirmNode(rt, state),
       previewNode(rt, state),
       state.error === '' ? null : h('div', { className: 'pet-chat-error', role: 'alert', children: state.error }),
-      composerNode(h, state),
+      composerNode(h, rt.t, state),
     ],
   });
 }

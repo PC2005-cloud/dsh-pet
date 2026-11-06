@@ -18,6 +18,7 @@ const RT: ChatPanelRuntime = {
   useState: <T>(init: T) => [init, () => {}] as unknown as [T, (next: T | ((prev: T) => T)) => void],
   useEffect: () => {},
   useRef: <T>(initial: T) => ({ current: initial }),
+  t: (key) => key,
 };
 
 /** 假上下文：记录调用顺序；inject 立即驱动生成器，模拟「插槽已声明」。 */

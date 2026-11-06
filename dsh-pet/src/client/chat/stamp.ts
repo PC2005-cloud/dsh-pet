@@ -5,6 +5,7 @@
  * 更早的补上日期——聊天记录跨天时，光看 `08:26:46` 分不清是哪天。
  * @module dsh-pet/src/client/chat/stamp
  */
+import type { ChatTranslate } from './runtime.ts';
 
 /** 一天的毫秒数；只用于算「差几天」，日界按本地时区取整。 */
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -24,17 +25,20 @@ const startOfDay = (date: Date): number => new Date(date.getFullYear(), date.get
  *
  * @param ts - 消息时间戳（毫秒）；非正数视为没有时间。
  * @param now - 当前时刻（毫秒），由调用方注入。
- * @returns 今天 `HH:mm:ss`；昨天 `昨天 HH:mm:ss`；同年 `M月D日 HH:mm:ss`；跨年 `YYYY年M月D日 HH:mm:ss`。
+ * @param t - 文案翻译；日期格式由字典按语言给出，不在代码里写死中文。
+ * @returns 今天 `HH:mm:ss`；昨天带「昨天」；同年补月日；跨年补年份。
  */
-export function formatStamp(ts: number, now: number): string {
+export function formatStamp(ts: number, now: number, t: ChatTranslate): string {
   if (!Number.isFinite(ts) || ts <= 0) return '';
   const date = new Date(ts);
   const today = new Date(now);
   const days = Math.round((startOfDay(today) - startOfDay(date)) / DAY_MS);
   const clock = clockOf(date);
   if (days <= 0) return clock; // 今天（以及时钟偏差导致的「未来」都按今天处理）
-  if (days === 1) return '昨天 ' + clock;
-  const monthDay = date.getMonth() + 1 + '月' + date.getDate() + '日';
+  if (days === 1) return t('stampYesterday') + ' ' + clock;
+  const monthDay = t('stampMonthDay', { month: date.getMonth() + 1, day: date.getDate() });
   if (date.getFullYear() === today.getFullYear()) return monthDay + ' ' + clock;
-  return date.getFullYear() + '年' + monthDay + ' ' + clock;
+  return (
+    t('stampFullDate', { year: date.getFullYear(), month: date.getMonth() + 1, day: date.getDate() }) + ' ' + clock
+  );
 }

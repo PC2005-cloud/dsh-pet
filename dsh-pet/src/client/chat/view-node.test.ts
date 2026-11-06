@@ -10,6 +10,7 @@ import assert from 'node:assert/strict';
 import type { ChatPanelRuntime } from './runtime.ts';
 import type { ChatPanelState } from './types.ts';
 import { composerNode, toolsNode } from './view-node.ts';
+import { zh } from './locales/zh.ts';
 
 /** 假节点：`h` 只记录标签与属性。 */
 interface Node {
@@ -21,6 +22,12 @@ const h = ((tag: unknown, props?: Record<string, unknown> | null): Node => ({
   tag,
   props: props ?? {},
 })) as unknown as ChatPanelRuntime['h'];
+
+/** 中文桩：断言继续写中文文案，参数按 `{name}` 规则替换。 */
+const t = ((key: string, params?: Record<string, unknown>) => {
+  const text = (zh as Record<string, string>)[key] ?? key;
+  return text.replace(/\{(\w+)\}/g, (_match: string, name: string) => String(params?.[name] ?? ''));
+}) as unknown as ChatPanelRuntime['t'];
 
 /** 深度遍历节点树（children 可能是数组、单个节点或文本）。 */
 function walk(node: unknown, visit: (one: Node) => void): void {
@@ -91,7 +98,7 @@ function stateOf(overrides: Partial<ChatPanelState> = {}): ChatPanelState {
 describe('toolsNode —— 记忆线与刷新入口', () => {
   test('配了记忆轮数 → 出现「记忆线」，点击走 jumpToMemory', () => {
     let jumped = 0;
-    const node = toolsNode(h, stateOf({ jumpToMemory: () => (jumped += 1) }));
+    const node = toolsNode(h, t, stateOf({ jumpToMemory: () => (jumped += 1) }));
     const line = buttonByText(node, '记忆线');
     assert.ok(line !== undefined, '工具栏应有「记忆线」按钮');
     assert.equal(line?.props.disabled, false, '有分界线时按钮可用');
@@ -100,18 +107,18 @@ describe('toolsNode —— 记忆线与刷新入口', () => {
   });
 
   test('历史没超过记忆轮数 → 「记忆线」置灰（没有线可跳）', () => {
-    const node = toolsNode(h, stateOf({ hasMemoryLine: false }));
+    const node = toolsNode(h, t, stateOf({ hasMemoryLine: false }));
     assert.equal(buttonByText(node, '记忆线')?.props.disabled, true);
   });
 
   test('配置里没有记忆轮数 → 不出现「记忆线」（本就不画线）', () => {
-    const node = toolsNode(h, stateOf({ memoryRounds: undefined, hasMemoryLine: false }));
+    const node = toolsNode(h, t, stateOf({ memoryRounds: undefined, hasMemoryLine: false }));
     assert.equal(buttonByText(node, '记忆线'), undefined);
   });
 
   test('「刷新」始终在，点击走 refresh', () => {
     let refreshed = 0;
-    const node = toolsNode(h, stateOf({ memoryRounds: undefined, refresh: () => (refreshed += 1) }));
+    const node = toolsNode(h, t, stateOf({ memoryRounds: undefined, refresh: () => (refreshed += 1) }));
     const button = buttonByText(node, '刷新');
     assert.ok(button !== undefined, '工具栏应有「刷新」按钮');
     (button?.props.onClick as () => void)();
@@ -121,7 +128,7 @@ describe('toolsNode —— 记忆线与刷新入口', () => {
 
 describe('composerNode —— 生成中的灰化与转圈', () => {
   test('busy → 容器带 is-busy 与 aria-busy，发送键换成转圈', () => {
-    const node = composerNode(h, stateOf({ busy: true }));
+    const node = composerNode(h, t, stateOf({ busy: true }));
     const composer = node as Node;
     assert.match(String(composer.props.className), /is-busy/);
     assert.equal(composer.props['aria-busy'], 'true');
@@ -134,7 +141,7 @@ describe('composerNode —— 生成中的灰化与转圈', () => {
   });
 
   test('非 busy → 没有灰化与转圈，发送键是可点的箭头', () => {
-    const node = composerNode(h, stateOf({ busy: false }));
+    const node = composerNode(h, t, stateOf({ busy: false }));
     const composer = node as Node;
     assert.doesNotMatch(String(composer.props.className), /is-busy/);
     assert.equal(byClass(node, 'pet-chat-send-spinner'), undefined);
@@ -146,7 +153,7 @@ describe('composerNode —— 生成中的灰化与转圈', () => {
 
 describe('composerNode —— 回车发送要让开输入法', () => {
   test('输入框接上了组合事件与按键处理器', () => {
-    const area = byClass(composerNode(h, stateOf()), 'pet-chat-input');
+    const area = byClass(composerNode(h, t, stateOf()), 'pet-chat-input');
     assert.ok(area !== undefined, '应有输入框');
     assert.equal(typeof area?.props.onKeyDown, 'function');
     assert.equal(typeof area?.props.onCompositionStart, 'function');
@@ -157,6 +164,7 @@ describe('composerNode —— 回车发送要让开输入法', () => {
     const calls: string[] = [];
     const node = composerNode(
       h,
+      t,
       stateOf({
         onDraftKeyDown: () => calls.push('keydown'),
         onDraftCompositionStart: () => calls.push('start'),

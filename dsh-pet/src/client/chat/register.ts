@@ -14,8 +14,6 @@ import { disposeTip } from './tooltip.ts';
 const TAB_ID = 'dsh-pet-chat';
 /** 标签类型；`openTab` 按它打开。 */
 const TAB_KIND = 'pet-chat';
-/** 标签头与指南页卡片的文案。 */
-const TAB_TITLE = '桌宠对话';
 
 /** 右侧栏标签注册表的最小形状（按用到的成员声明，不引整包类型）。 */
 interface SidebarTabRegistry {
@@ -98,13 +96,13 @@ export function registerPetChatTab(
     kind: TAB_KIND,
     // extension 是外部插件最高优先带：不与内置类型抢地址，但可以覆盖同名 kind
     priority: 'extension',
-    title: () => TAB_TITLE,
+    title: () => rt.t('tabTitle'),
     guide: [
       {
         id: TAB_KIND,
         order: 400,
-        title: () => TAB_TITLE,
-        description: () => '与所有桌宠对话，点标签切换',
+        title: () => rt.t('tabTitle'),
+        description: () => rt.t('tabGuide'),
         icon: GuideIcon,
         ...(commandId === undefined ? {} : { commandId }),
       },

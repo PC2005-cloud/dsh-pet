@@ -11,16 +11,22 @@ import { tipAttrs } from './tooltip.ts';
 import type { ChatPanelState } from './types.ts';
 
 /** 语音播报按钮：贴在时间右边，四种状态一眼可分——可播 / 生成中转圈 / 播放中高亮 / 失败可重试。 */
-function speakNode(h: ChatPanelRuntime['h'], text: string, ts: number, state: ChatPanelState): unknown {
+function speakNode(
+  h: ChatPanelRuntime['h'],
+  t: ChatPanelRuntime['t'],
+  text: string,
+  ts: number,
+  state: ChatPanelState,
+): unknown {
   const phase = state.speaking?.ts === ts ? state.speaking.phase : 'idle';
   const label =
     phase === 'loading'
-      ? '正在生成语音…'
+      ? t('speakGenerate')
       : phase === 'playing'
-        ? '正在播放'
+        ? t('speakPlaying')
         : phase === 'failed'
-          ? '播放失败，点击重试'
-          : '播放这句';
+          ? t('speakFailed')
+          : t('speakPlay');
   return h('button', {
     type: 'button',
     className: 'pet-chat-speak is-' + phase,
@@ -42,11 +48,16 @@ function speakNode(h: ChatPanelRuntime['h'], text: string, ts: number, state: Ch
  *
  * 悬浮气泡只显示动作名本身（不加「播放动作：」这类前缀）；读屏需要的语义放在 aria-label 上。
  */
-function actionNode(h: ChatPanelRuntime['h'], action: string, state: ChatPanelState): unknown {
+function actionNode(
+  h: ChatPanelRuntime['h'],
+  t: ChatPanelRuntime['t'],
+  action: string,
+  state: ChatPanelState,
+): unknown {
   return h('button', {
     type: 'button',
     className: 'pet-chat-action',
-    'aria-label': '播放动作：' + action,
+    'aria-label': t('speakAction', { name: action }),
     ...tipAttrs(action),
     onClick: (event: { stopPropagation: () => void }) => {
       // 多选模式下整轮可点：这里必须拦一下，否则点动作键会顺手切换选中
@@ -154,7 +165,7 @@ export interface MessageNodeInput {
 /**
  * 一条消息：头像 + 气泡；图片排在文字之后，点一下放大。
  */
-export function messageNode(h: ChatPanelRuntime['h'], input: MessageNodeInput): unknown {
+export function messageNode(h: ChatPanelRuntime['h'], t: ChatPanelRuntime['t'], input: MessageNodeInput): unknown {
   const { message, isMe, assetRoot, avatarVersion, onOpenImage } = input;
   const image =
     message.image !== undefined
@@ -175,10 +186,10 @@ export function messageNode(h: ChatPanelRuntime['h'], input: MessageNodeInput): 
             : h('button', {
                 type: 'button',
                 className: 'pet-chat-img-btn',
-                'aria-label': '点开看大图',
-                ...tipAttrs('点开看大图'),
+                'aria-label': t('imageOpen'),
+                ...tipAttrs(t('imageOpen')),
                 onClick: () => onOpenImage(image),
-                children: h('img', { className: 'pet-chat-img', src: image, alt: '对话图片', loading: 'lazy' }),
+                children: h('img', { className: 'pet-chat-img', src: image, alt: t('imageAlt'), loading: 'lazy' }),
               }),
         ],
       }),
@@ -192,7 +203,7 @@ export function roundNode(
   state: ChatPanelState,
   round: ChatPanelState['rounds'][number],
 ): unknown {
-  const { h } = rt;
+  const { h, t } = rt;
   const selected = state.selected.includes(round.ts);
   // 多选模式下整轮是一张可点的卡片：选中给浅底，未选中透明（与豆包一致）
   const className = 'pet-chat-round' + (state.selecting ? ' is-selecting' : '') + (selected ? ' is-selected' : '');
@@ -212,13 +223,13 @@ export function roundNode(
       state.selecting
         ? h('label', {
             className: 'pet-chat-pick',
-            title: '选中这一轮（问 + 答一起删）',
+            title: t('selectRoundTitle'),
             children: [
               h('input', {
                 type: 'checkbox',
                 checked: selected,
                 onChange: () => state.toggleRound(round.ts),
-                'aria-label': '选中这一轮',
+                'aria-label': t('selectRound'),
               }),
             ],
           })
@@ -228,7 +239,7 @@ export function roundNode(
         children: [
           round.user === undefined
             ? null
-            : messageNode(h, {
+            : messageNode(h, t, {
                 message: round.user,
                 isMe: true,
                 assetRoot: state.assetRoot,
@@ -237,7 +248,7 @@ export function roundNode(
               }),
           round.assistant === undefined
             ? null
-            : messageNode(h, {
+            : messageNode(h, t, {
                 message: round.assistant,
                 isMe: false,
                 assetRoot: state.assetRoot,
@@ -249,11 +260,11 @@ export function roundNode(
             ? h('div', {
                 className: 'pet-chat-time ' + (round.assistant === undefined ? 'is-me' : 'is-pet'),
                 children: [
-                  formatStamp(round.ts, Date.now()),
+                  formatStamp(round.ts, Date.now(), t),
                   // 只有回答那句能点播：用户自己的话没有语音
-                  round.assistant === undefined ? null : speakNode(h, round.assistant.text, round.ts, state),
+                  round.assistant === undefined ? null : speakNode(h, t, round.assistant.text, round.ts, state),
                   // 动作键贴在喇叭右边：这一轮没演动作时整块不出现
-                  round.assistant?.action === undefined ? null : actionNode(h, round.assistant.action, state),
+                  round.assistant?.action === undefined ? null : actionNode(h, t, round.assistant.action, state),
                 ],
               })
             : null,

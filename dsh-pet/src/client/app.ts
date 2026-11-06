@@ -17,6 +17,7 @@ import { installCommandFaces, type CommandFace, type CommandUiLike } from './com
 import { installSectionNavIcon } from './nav-icon.ts';
 import { registerPetChatTab, openPetChatTab } from './chat/register.ts';
 import { PET_CHAT_COMMAND_ID, registerPetChatShortcut } from './chat/shortcut.ts';
+import { dicts as chatDicts, NS as CHAT_NS } from './chat/locales/index.ts';
 import { registerPetCardShortcuts } from './pet/card/shortcut.ts';
 import type * as ReactNS from 'react';
 import type * as PrimitivesNS from '@deepseek-ai/dsh-client-ui-primitives';
@@ -73,6 +74,9 @@ export function makeFactory(): (require: (mod: string) => any) => any {
       // 设置页文案字典。
       ctx.effect(() => ctx.locale.register(NS, dicts), 'dsh-pet: dictionaries');
       const t = ctx.locale.bind(NS);
+      // 侧栏对话的文案独立成命名空间：只覆盖对话面板，不与设置页字典混在一起。
+      ctx.effect(() => ctx.locale.register(CHAT_NS, chatDicts), 'dsh-pet: chat dictionaries');
+      const chatT = ctx.locale.bind(CHAT_NS);
 
       // 同页第三方插件可通过 Cordis 服务 petApi7340 读取本页宠物的实况、播放进度、最近一拍状态与菜单点击。
       // 只开读，控制仍走 HTTP，避免出现两条控制通道。
@@ -217,6 +221,7 @@ export function makeFactory(): (require: (mod: string) => any) => any {
               useEffect,
               useRef,
               useState,
+              t: chatT,
               ...(primitives === undefined
                 ? {}
                 : {
