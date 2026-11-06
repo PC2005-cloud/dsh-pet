@@ -61,6 +61,9 @@ const keep = [
   'assets/config.jsonc',
   // 插件图标：package.json 顶层 icon 指向这张图；缺图时读取方 dsh-app-boot 的 iconOf 会抛错、退回默认插画。
   'assets/logo.png',
+  // 角色参考图：/character 的包内兜底只读 `<素材根>-character.<ext>`，漏发则第三方拿不到官方参考图。
+  // 新增内置角色时在这里补一行（文件名里的素材根跟着角色走）。
+  'assets/main-character.png',
   'scripts/ensure-electron.mjs',
   'cordis.patch.yml',
 ];

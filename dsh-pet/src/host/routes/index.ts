@@ -11,6 +11,7 @@ import { handleAssetsRoutes } from './assets.ts';
 import { handleAttachmentRoutes } from './attachment.ts';
 import { handleAvatarRoutes } from './avatar.ts';
 import { handleBalanceRoutes } from './balance.ts';
+import { handleCharacterRoutes } from './character.ts';
 import { handleChatRoutes } from './chat.ts';
 import { handleConfigRoutes } from './config/index.ts';
 import { handleDesktopRoutes } from './desktop.ts';
@@ -42,6 +43,7 @@ const HANDLERS: readonly RouteHandler[] = [
   handleTodoRoutes,
   handleVoiceRoutes,
   handleAvatarRoutes,
+  handleCharacterRoutes,
   handleAssetsRoutes,
 ];
 

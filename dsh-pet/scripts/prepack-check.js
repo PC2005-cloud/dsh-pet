@@ -151,6 +151,12 @@ try {
   console.log(`[prepack-check] note: 跳过 memes 键对齐核对（config.jsonc 解析失败：${e.message}）`);
 }
 
+// 角色参考图：/character 的包内兜底只读这张图，漏发则第三方拿不到任何官方参考图。
+// 与 memes 同一类问题——prepare.js 的白名单才是真源，这里显式断言防止再次静默漏发。
+const characterFile = 'assets/main-character.png';
+if (Array.isArray(pkg.files) && pkg.files.includes(characterFile)) ok(`files includes ${characterFile}`);
+else fail(`package.json files must include ${characterFile} (character reference would not ship)`);
+
 // 估算将进包的总大小：跳过 node_modules、.git、脚本、母版目录与 preview，
 // 另不计 sourcemap 与 npm pack 遗留的 tarball。
 let total = 0;

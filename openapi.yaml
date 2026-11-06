@@ -2505,6 +2505,59 @@ paths:
         "405":
           description: 方法不是 GET。
 
+  /dsh-pet-7340/character:
+    get:
+      tags: [Assets]
+      operationId: getCharacter
+      summary: 获取角色参考图（第三方自建生图时对齐角色）
+      description: |
+        按素材根回一张角色参考图（通常是三视图），给第三方插件自己做生图时保持角色一致用。
+
+        **dsh-pet 不代调生图模型**：这个端点只交付「什么叫像这只角色」，出图、模型、key 与
+        计费都在调用方。所以它不需要图像服务商配置，也不消耗宿主的额度。
+
+        查找顺序：`pet/<素材根>-character.<ext>`（pet pack 自带）→ 包内
+        `assets/<素材根>-character.<ext>`（随包发布）。扩展名按 png / jpg / jpeg / webp / gif
+        依次探测，命中第一个即返回；扩展名同时决定 `content-type`。
+
+        参数名是 `root` 而不是 `pet`：要的是素材根（目录前缀），不是其它端点 `PetIdQuery.pet`
+        的宠物实例 id。与 `/logo?root=`、`/pet-avatar?root=` 同口径。
+      parameters:
+        - name: root
+          in: query
+          required: true
+          description: |
+            素材根（`pet/<名>-config.json(c)` 的文件名前缀）——**必填**，没有缺省值：
+            猜一个默认值会让调用方静默拿到别只宠物的脸。含路径分隔符等非法字符 → 400。
+          schema:
+            type: string
+          example: main
+      responses:
+        "200":
+          description: |
+            图片字节；`content-type` 由命中的扩展名决定。
+          content:
+            image/png:
+              schema:
+                type: string
+                format: binary
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+            image/webp:
+              schema:
+                type: string
+                format: binary
+            image/gif:
+              schema:
+                type: string
+                format: binary
+        "400":
+          description: 缺 `root`，或 `root` 含路径分隔符等非法字符（`text/plain`）。
+        "404":
+          description: "该素材根没有角色参考图（`text/plain`，正文 `dsh-pet: character not found`）。"
+
   /dsh-pet-7340/logo:
     get:
       tags: [Assets]
