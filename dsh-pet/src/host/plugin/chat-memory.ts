@@ -20,6 +20,25 @@ import { SLEEP_TALK_INSTRUCTION } from '../whisper.ts';
 import { pickVoiceSurface, type VoiceTarget } from '../surface.ts';
 import type { HostSetup } from './setup.ts';
 import type { HostContext } from './context.ts';
+import {
+  activeChatMemoryProvider,
+  type ChatContent,
+  type ChatContentPatch,
+  type ChatTurn,
+} from '../chat-memory-provider.ts';
+
+/** 第三方召回的硬超时（ms）：到点按“不修改内容”继续生成，不拖住这一轮对话。 */
+const RECALL_TIMEOUT_MS = 1500;
+
+/** 校验召回补丁里的历史项：形状不对的整段丢弃，避免坏数据把生成打崩。 */
+function isChatTurn(value: unknown): value is ChatTurn {
+  const turn = value as { role?: unknown; content?: unknown; ts?: unknown } | null;
+  return (
+    (turn?.role === 'user' || turn?.role === 'assistant') &&
+    typeof turn?.content === 'string' &&
+    typeof turn?.ts === 'number'
+  );
+}
 
 /** 这一句该由哪一端念：取宠物实例的 display 推导（桌面优先）；两端都不显示时为 `undefined`。 */
 function voiceTargetFor(pet: Record<string, unknown>): VoiceTarget | undefined {
@@ -113,6 +132,64 @@ export function createChatMemory(deps: ChatMemoryInput) {
   const memoryRounds = (conf: Record<string, unknown>): number => {
     const v = Number(conf.chatMemoryRounds);
     return Number.isFinite(v) && v >= 0 ? Math.floor(v) : 5;
+  };
+
+  /**
+   * 对话前修改内容：召回钩子返回要覆盖的字段，核心合并后再交给模型。
+   *
+   * 超时、抛错、返回非法形状都当“不修改”，只记提供者 id 与原因。
+   *
+   * @param petId - 目标宠物；第三方按它区分记忆空间。
+   * @param content - 本轮将要发给模型的 system/history/userText。
+   * @returns 合法的覆盖字段；没有可应用的字段时 undefined。
+   */
+  const recallPatch = async (petId: string, content: ChatContent): Promise<ChatContentPatch | undefined> => {
+    const provider = activeChatMemoryProvider();
+    const recall = provider?.recall;
+    if (!provider || !recall) return undefined;
+    let timer: NodeJS.Timeout | undefined;
+    try {
+      const timeout = new Promise<undefined>((resolve) => {
+        timer = setTimeout(() => resolve(undefined), RECALL_TIMEOUT_MS);
+        timer.unref?.();
+      });
+      const result = await Promise.race([Promise.resolve(recall.call(provider, { petId, ...content })), timeout]);
+      if (!result || typeof result !== 'object') return undefined;
+      const patch: { system?: string; history?: readonly ChatTurn[]; userText?: string } = {};
+      if (typeof result.system === 'string') patch.system = result.system;
+      if (typeof result.userText === 'string') patch.userText = result.userText;
+      if (Array.isArray(result.history) && result.history.every(isChatTurn)) patch.history = result.history;
+      return Object.keys(patch).length === 0 ? undefined : patch;
+    } catch (error) {
+      log.warn(
+        '[dsh-pet] 记忆召回失败 id=' + provider.id + '：' + (error instanceof Error ? error.message : String(error)),
+      );
+      return undefined;
+    } finally {
+      if (timer !== undefined) clearTimeout(timer);
+    }
+  };
+
+  /**
+   * 落盘后接收这一轮问答：核心不等待，失败只记提供者 id 与原因。
+   *
+   * @param petId - 目标宠物。
+   * @param turn - 本轮问答与元信息；action/image 只是名字，不含素材本体。
+   */
+  const captureTurn = (
+    petId: string,
+    turn: { userText: string; replyText: string; action?: string; image?: string; ts: number },
+  ): void => {
+    const provider = activeChatMemoryProvider();
+    const capture = provider?.capture;
+    if (!provider || !capture) return;
+    void Promise.resolve()
+      .then(() => capture.call(provider, { petId, ...turn }))
+      .catch((error) => {
+        log.warn(
+          '[dsh-pet] 记忆接收失败 id=' + provider.id + '：' + (error instanceof Error ? error.message : String(error)),
+        );
+      });
   };
 
   /** 生成并返回某宠物的一句碎碎念（周期调度、菜单手动触发与命令行共用）：人设取它自己的 whisperPrompt，
@@ -267,12 +344,18 @@ export function createChatMemory(deps: ChatMemoryInput) {
             '（模型不支持读图时内核会以占位文本代替）',
         );
       }
+      // 第三方记忆：对话前修改内容；失败或超时降级为原内容（见 recallPatch）。
+      const patch = await recallPatch(petId, {
+        system,
+        history: list.map(({ role, content, ts }) => ({ role, content, ts })),
+        userText: text,
+      });
       // 模型：条目配置的 chatModel 优先（留空 = 不指定）；生成侧失败会回落到当前对话的模型重试一次
       const generated = await generateChat({
         ctx,
-        system,
-        history: list,
-        userText: text,
+        system: patch?.system ?? system,
+        history: patch?.history ?? list,
+        userText: patch?.userText ?? text,
         pool,
         actions,
         preferred: configuredModel(found.conf, 'chatModel'),
@@ -293,6 +376,14 @@ export function createChatMemory(deps: ChatMemoryInput) {
         ...(generated.action ? { action: generated.action } : {}),
       });
       await writeMemory(mem);
+      // 第三方记忆：落盘后异步接收；不等待、失败只记日志，不能影响这一轮回复。
+      captureTurn(petId, {
+        userText: text,
+        replyText: generated.text,
+        ts: now,
+        ...(generated.action !== undefined ? { action: generated.action } : {}),
+        ...(generated.image !== undefined ? { image: generated.image } : {}),
+      });
       // 动作先写：与 POST /anim 同一条写回链路（记录 + anim 叶子），渲染端据此播放并回报执。
       if (generated.action !== undefined) {
         const record = playback.create(petId, generated.action);

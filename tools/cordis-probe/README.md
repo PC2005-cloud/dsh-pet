@@ -5,7 +5,7 @@
 | 半侧 | 职责 |
 |---|---|
 | 客户端 | 页面右下角面板，列出 dsh-pet 的服务并调用（`ctx.get`，零请求）；头部多两个**语音 / 识别开关**按钮 |
-| 宿主 | 注册五个 mock 服务商，让模型选择器里能选到它们，用来验证余额气泡（含两种自定义多页）；另提供语音与识别两个开关路由 |
+| 宿主 | 注册五个 mock 服务商，让模型选择器里能选到它们，用来验证余额气泡（含两种自定义多页）；另提供语音、识别与记忆三个开关路由 |
 
 ## 安装
 
@@ -21,7 +21,8 @@ DSH 设置 →「添加插件」→ 填本目录绝对路径，重启 `dsh web`�
 | `lib/mock-adapter.js` | 让 mock 服务商出现在模型选择器里 |
 | `lib/mock-voice.js` | mock 语音实现：不论文本，一律返回一段内置提示音（0.3 秒 660Hz） |
 | `lib/mock-speech.js` | mock 识别实现：不看音频，一律回「mock 识别：收到 N 字节」 |
-| `lib/toggle-route.js` | 两个开关共用的路由：`GET` 读状态、`POST` 翻转 |
+| `lib/mock-memory.js` | mock 记忆实现：每只宠物存最近 5 轮，问到「记得/之前/上次」时把上一轮作为证据注入 |
+| `lib/toggle-route.js` | 三个开关共用的路由：`GET` 读状态、`POST` 翻转 |
 
 ## 语音开关
 
@@ -42,6 +43,22 @@ DSH 设置 →「添加插件」→ 填本目录绝对路径，重启 `dsh web`�
 返回的文字里带字节数，是为了验证音频真的穿过了 base64 与 HTTP：发一段 121 KB 的 WAV，回「收到 121388 字节」就说明整条链路通到了宿主。
 
 按钮与注册分属两半（页面 / 宿主），中间隔着 HTTP，所以宿主额外开了两个最小路由——只服务本示例，不属于 dsh-pet 的接口面。
+
+## 记忆开关
+
+`/cordis-probe-memory` 控制一个 mock 记忆实现，**默认关闭**（面板头部有按钮，也可以直接打路由）。
+
+**怎么证明扩展真的生效**（原生历史做不到这两点）：
+
+1. 打开记忆 → 聊一句 → `GET /cordis-probe-memory` 的 `captured` 加 1：`capture` 收到了这一轮；
+2. 再发一句带「记得/上次」的话 → 回复开头应出现 `[MOCK-RECALL-OK]`：`recall` 改写了本轮内容。这个标记是 mock 要求模型复读的，原生历史不会产生它。
+
+关闭 → disposer 注销，`recall`/`capture` 都不再发生；再问同样的话，标记消失、`captured` 停住。插件卸载时自动注销。
+
+```bash
+curl -X POST http://127.0.0.1:<port>/cordis-probe-memory   # 打开 / 关闭
+curl http://127.0.0.1:<port>/cordis-probe-memory           # {"ok":true,"on":…,"captured":N}
+```
 
 ## 余额 mock 一览
 

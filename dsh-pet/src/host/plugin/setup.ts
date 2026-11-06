@@ -12,6 +12,7 @@ import { resolveDshHome } from '@deepseek-ai/dsh-home-paths';
 import { listBalanceProviders, registerBalanceProvider } from '../balance/index.ts';
 import { listVoiceProviders, registerVoiceProvider } from '../voice/registry.ts';
 import { listSpeechProviders, registerSpeechProvider } from '../voice/speech-registry.ts';
+import { listChatMemoryProviders, registerChatMemoryProvider } from '../chat-memory-provider.ts';
 import { migrateUserConfig, type ConfigPaths } from '../config.ts';
 import { createFileLogger, isFileLogger, setDefaultLogger, type FileLogger, type LoggerLike } from '../log-file.ts';
 import { MenuRegistry } from '../menu.ts';
@@ -205,6 +206,11 @@ export function createHostSetup(ctx: HostSetupContext): HostSetup {
     speech: {
       register: registerSpeechProvider,
       list: listSpeechProviders,
+    },
+    // 记忆：第三方注册自己的长期记忆后端（单槽）；只给 register 与 list，注销走返回值。
+    memory: {
+      register: registerChatMemoryProvider,
+      list: listChatMemoryProviders,
     },
   });
 

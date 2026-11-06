@@ -29,6 +29,8 @@ dsh-pet 提供两个 Cordis 服务：页面内的 `petApi7340`（浏览器半侧
 | `voice.list()` | 列出内置与已注册的语音实现 id，用来确认注册是否生效 |
 | `speech.register(def)` | 注册一个语音识别实现（`{ id, name, transcribe }`）：注册后 `POST /voice/hear` 改走它，`transcribe` 收 WAV 字节回文字；同一时刻只有一个生效，后注册覆盖先注册 |
 | `speech.list()` | 列出内置与已注册的识别实现 id，用来确认注册是否生效 |
+| `memory.register(def)` | 注册一个第三方记忆实现（`{ id, recall?, capture? }`）：`recall` 在生成前改本轮 `system/history/userText`，`capture` 在落盘后收这一轮；同一时刻只有一个生效，后注册覆盖先注册 |
+| `memory.list()` | 列出原生与已注册的记忆实现 id，用来确认注册是否生效 |
 
 ---
 

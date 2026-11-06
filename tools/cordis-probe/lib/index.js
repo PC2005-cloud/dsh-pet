@@ -11,14 +11,16 @@
  *
  * 另有两个开关（语音合成 / 语音识别）：默认关闭，打开后各注册一个 mock 实现，
  * 用来验证 `petApi7340.voice.register` 与 `petApi7340.speech.register` 两条第三方入口。
+ * 记忆同理：一个开关，打开后注册 mock 记忆，验证 `petApi7340.memory.register`。
  *
  * @module dsh-cordis-probe
  */
 import { MOCK_BALANCE_PROVIDERS } from './mock-balance.js';
 import { createMockAdapter } from './mock-adapter.js';
+import { createMockMemoryProvider } from './mock-memory.js';
 import { createMockSpeechProvider } from './mock-speech.js';
 import { createMockVoiceProvider } from './mock-voice.js';
-import { SPEECH_ROUTE, VOICE_ROUTE, createToggleHandler } from './toggle-route.js';
+import { MEMORY_ROUTE, SPEECH_ROUTE, VOICE_ROUTE, createToggleHandler } from './toggle-route.js';
 
 /** Cordis 插件名（诊断与日志里显示）。 */
 export const name = 'cordis-probe';
@@ -127,6 +129,40 @@ export function apply(ctx) {
       setSpeechOn(false);
     });
     toggles.push([SPEECH_ROUTE, { isOn: () => disposeSpeech !== null, setOn: setSpeechOn }]);
+  }
+
+  const memory = api?.memory;
+  if (memory) {
+    /** 已打开的注销函数；null = 当前关闭。 */
+    let disposeMemory = null;
+    /** 当前持有的 provider 实例；关闭后置空，计数从 0 重新开始。 */
+    let memoryProvider = null;
+    /** 打开/关闭 mock 记忆；幂等，重复调用不会叠加注册。 */
+    const setMemoryOn = (on) => {
+      if (on && !disposeMemory) {
+        memoryProvider = createMockMemoryProvider();
+        disposeMemory = memory.register(memoryProvider);
+      }
+      if (!on && disposeMemory) {
+        disposeMemory();
+        disposeMemory = null;
+        memoryProvider = null;
+      }
+      return on;
+    };
+    // 卸载时注销：否则 mock 记忆会赖在宿主里，之后的对话一直带 mock 证据
+    ctx.effect(() => () => {
+      setMemoryOn(false);
+    });
+    toggles.push([
+      MEMORY_ROUTE,
+      {
+        isOn: () => disposeMemory !== null,
+        setOn: setMemoryOn,
+        // capture 计数：聊一句后 +1，证明扩展真的收到了这一轮
+        extra: () => ({ captured: memoryProvider ? memoryProvider.stats().captured : 0 }),
+      },
+    ]);
   }
 
   const webServer = ctx.get('webServer', false);

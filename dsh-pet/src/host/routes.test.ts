@@ -19,6 +19,7 @@ import { tmpdir } from 'node:os';
 import { Writable } from 'node:stream';
 
 import { apply } from './index.ts';
+import { activeChatMemoryProvider } from './chat-memory-provider.ts';
 
 /** 用户根之外的诱饵内容：任何响应体出现它都说明越根读盘成功 */
 const SECRET = 'TOP-SECRET-BYTES';
@@ -863,6 +864,38 @@ describe('对外 Cordis 服务 —— 第三方注册余额查询', () => {
       dispose();
     }
     assert.equal(api().list().external.includes('route-test-plugin'), false);
+  });
+});
+
+describe('对外 Cordis 服务 —— 第三方注册记忆', () => {
+  interface MemoryApi {
+    register: (def: { id: string; recall?: () => Promise<{ userText?: string }> }) => () => void;
+    list: () => { builtin: string[]; external: string[] };
+  }
+  const api = (): MemoryApi => {
+    const value = provided.get('petApi7340') as { memory?: MemoryApi } | undefined;
+    assert.ok(value?.memory, 'apply() 必须挂出 petApi7340.memory');
+    return value.memory;
+  };
+
+  test('挂出的是 register + list（没有 unregister：注销走 register 的返回值）', () => {
+    const memory = api() as unknown as Record<string, unknown>;
+    assert.equal(typeof memory.register, 'function');
+    assert.equal(typeof memory.list, 'function');
+    assert.equal('unregister' in memory, false);
+  });
+
+  test('通过服务注册后 list 与聊天路径都看得到，disposer 后回落原生', () => {
+    const def = { id: 'route-test-memory', recall: async () => ({ userText: '改后的问题' }) };
+    const dispose = api().register(def);
+    try {
+      assert.ok(api().list().external.includes('route-test-memory'));
+      assert.equal(activeChatMemoryProvider(), def, '聊天路径读到的必须是服务注册的这一份');
+    } finally {
+      dispose();
+    }
+    assert.equal(api().list().external.includes('route-test-memory'), false);
+    assert.equal(activeChatMemoryProvider(), null);
   });
 });
 

@@ -17,7 +17,7 @@
     "  所以不写进 dsh-pet 的 files 白名单，也不进 dsh-pet 的 lint / format:check 作用域。",
     "【没有构建】lib/client.js 是手写的经典脚本，直接进 DSH 的模块系统，不跑 tsdown。",
     "  对应的就是 dsh-pet 里 src/client/index.ts + tsdown 打包后的那两行契约，只是省掉了构建。",
-    "【dsh.client.platform】web —— 浏览器半侧提供服务清单面板与语音/识别两个开关；宿主半侧注册五个 mock 模型路由、对应余额服务商，以及 mock 语音合成与 mock 语音识别各一个实现（开关路由控制，默认关闭）。",
+    "【dsh.client.platform】web —— 浏览器半侧提供服务清单面板与语音/识别/记忆三个开关；宿主半侧注册五个 mock 模型路由、对应余额服务商，以及 mock 语音合成、mock 语音识别与 mock 记忆各一个实现（开关路由控制，默认关闭）。",
     "【dsh.client.inject】构建期外部依赖（模块名），本插件不 import 任何平台模块，故为空；",
     "  运行时要用的服务一律靠 ctx.get() 现场探测，拿不到就降级，不写进 inject。",
     "【宿主半侧依赖】走 ctx.get('llm') / ctx.get('petApi7340') 软取，不 import 平台包——mock 适配器是鸭子类型。",

@@ -54,6 +54,8 @@
   const VOICE_ROUTE = '/cordis-probe-voice';
   /** 识别开关与语音同构，只有路径不同。 */
   const SPEECH_ROUTE = '/cordis-probe-speech';
+  /** 记忆开关与语音同构，只有路径不同。 */
+  const MEMORY_ROUTE = '/cordis-probe-memory';
 
   /** 探测不到服务归属时的兜底服务名（保持面板永远可用）。 */
   const FALLBACK_SERVICES = ['petApi7340'];
@@ -280,7 +282,7 @@
         const head = el('div', 'cp-head');
         head.appendChild(el('span', 'cp-title', 'Cordis 服务探针'));
         const refreshBtn = el('button', 'cp-btn', '刷新');
-        // 语音与识别各一个开关：注册在宿主（Node），按钮在这一页，两半没有直接通道，所以走宿主开的小路由。
+        // 语音、识别与记忆各一个开关：注册在宿主（Node），按钮在这一页，两半没有直接通道，所以走宿主开的小路由。
         // 默认关闭；点一次翻转一次，文案跟着服务端返回的状态走。
         const makeToggleButton = (route, label, onText, offText) => {
           const button = el('button', 'cp-btn', label + '：关');
@@ -310,10 +312,17 @@
           'mock 识别已打开：再发一段音频给 /voice/hear，会回来一段带字节数的假文字。',
           'mock 识别已关闭：识别回到宿主自带能力。',
         );
+        const memoryBtn = makeToggleButton(
+          MEMORY_ROUTE,
+          '记忆',
+          'mock 记忆已打开：发「你记得我刚才说了什么吗」，回复里会带 mock 证据。',
+          'mock 记忆已关闭：对话回到原生记忆。',
+        );
         const closeBtn = el('button', 'cp-btn', '×');
         head.appendChild(refreshBtn);
         head.appendChild(voiceBtn);
         head.appendChild(speechBtn);
+        head.appendChild(memoryBtn);
         head.appendChild(closeBtn);
         root.appendChild(head);
 
