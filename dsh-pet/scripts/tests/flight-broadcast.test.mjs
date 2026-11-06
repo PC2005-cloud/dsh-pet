@@ -94,10 +94,9 @@ test('一秒五只宠物以60帧更新，最多广播300条且保留落地尾帧
   assert.equal(messages.at(-1).state.p0.x, 59);
   assert.equal(messages.at(-1).state.p0.vx, 0);
 });
-test('飞行逐帧更新窗口并捎带速度，不额外上报同一状态', () => {
+test('飞行逐帧更新窗口并捎带速度', () => {
   let callback,
-    now = 0,
-    duplicate = 0;
+    now = 0;
   class Sprite {}
   const context = {
     PetSprite: Sprite,
@@ -108,7 +107,7 @@ test('飞行逐帧更新窗口并捎带速度，不额外上报同一状态', ()
     performance: { now: () => now },
     requestAnimationFrame: (fn) => ((callback = fn), 1),
     cancelAnimationFrame: () => {},
-    window: { petBridge: { reportFlight: () => duplicate++ }, __dshPetDebug: {} },
+    window: { petBridge: {}, __dshPetDebug: {} },
   };
   vm.runInNewContext(
     readFileSync(new URL('../../runtime/electron-helper/sprite/motion.js', import.meta.url), 'utf8'),
@@ -134,5 +133,4 @@ test('飞行逐帧更新窗口并捎带速度，不额外上报同一状态', ()
   assert.equal(positions.length, 3);
   assert.equal(positions[2].x, 30);
   assert.equal(positions[2].vx, 600);
-  assert.equal(duplicate, 0);
 });

@@ -69,23 +69,6 @@ function registerIpc({ ipcMain, petWindows, shell, openTarget, petRoute }) {
     }
   });
 
-  // 飞行状态上报（碰撞站场）：renderer 飞行中每 ~30ms 上报一次自己的位置/速度/尺寸
-  ipcMain.on('pet:report-flight', (event, state) => {
-    const win = BrowserWindow.fromWebContents(event.sender);
-    if (!win || win.isDestroyed()) return;
-    const petId = [...petWindows.state.windows.keys()].find((id) => petWindows.state.windows.get(id) === win);
-    if (!petId) return;
-    const s = state || {};
-    const x = Number(s.x);
-    const y = Number(s.y);
-    const vx = Number(s.vx);
-    const vy = Number(s.vy);
-    const size = Number(s.size);
-    const bottomPad = Number(s.bottomPad);
-    if (![x, y, vx, vy, size, bottomPad].every(Number.isFinite)) return;
-    petWindows.updatePetState(petId, { x, y, vx, vy, size, bottomPad });
-  });
-
   // 碰撞结果转发：飞行方窗口检测到撞到 targetId → 把动量结果（目标新初速）转发给目标窗口
   ipcMain.on('pet:collide-result', (event, payload) => {
     const targetId = payload && typeof payload === 'object' ? String(payload.targetId || '') : '';
