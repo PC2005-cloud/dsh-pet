@@ -40,9 +40,10 @@ concurrency:
 jobs:
   encode:
     # HEVC-with-Alpha 编码（AVFoundation hevcWithAlpha）需要 macOS
-    # 固定 macos-14：同源素材/同脚本/同 quality 0.75 下，不同 macOS 版本的
-    # VideoToolbox HEVC 编码器码率映射不同（macos-latest 产物约为 macos-14 的 1.66×）
-    runs-on: macos-14
+    # 固定 macos-15：macos-14 的 arm64 runner 配置已下线（job 启动即被取消，
+    # 注解为 configuration not supported）；不同 macOS 版本的 VideoToolbox 码率
+    # 映射不同，换 runner 会改变 mov 体积，产物需重新核对
+    runs-on: macos-15
     timeout-minutes: 120
     steps:
       - name: 检出本仓库（含插件素材与编码脚本）
