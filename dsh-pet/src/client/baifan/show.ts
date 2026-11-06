@@ -124,11 +124,11 @@ export function createShow(deps: ShowDeps): Show {
     return sprite;
   }
 
-  /** 点播一段自带素材；返回点播编号。 */
-  async function playAnim(url: string, dir?: 'left' | 'right'): Promise<string | null> {
+  /** 点播一段玩法动画（按名字）；返回点播编号。 */
+  async function playAnim(name: string, dir?: 'left' | 'right'): Promise<string | null> {
     const lease = lock?.id() ?? null;
     if (lease === null) throw new Halted();
-    const body: Record<string, unknown> = { url };
+    const body: Record<string, unknown> = { name };
     if (dir !== undefined) body.facing = dir;
     const r = await transport.call('POST', '/anim?pet=' + enc(petId) + '&surface=web&lock=' + enc(lease), body);
     if (r.ok !== true) {
