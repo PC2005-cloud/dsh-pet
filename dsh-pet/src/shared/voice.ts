@@ -46,20 +46,20 @@ export type VoiceUtteranceEvent =
   | { readonly kind: 'end'; readonly seq: number; readonly text: string };
 
 /**
- * 自动播报最多念多少字。
- *
- * 气泡照旧显示全文，只有念的部分截断：一句 500 字能合成几分钟，那段时间气泡无事可做，
- * 用户还会被拖着听半分钟。60 字约 15 秒语音，与气泡的挂起上限配套。
- */
-export const VOICE_SPEECH_MAX_CHARS = 60;
-
-/**
  * 客户端等合成结果的上限（ms）。
  *
  * 比宿主侧的总超时（28s）再宽一点：让宿主先超时并回结构化失败，
  * 客户端这道只是兜底，避免上游挂住时气泡上的转圈永远停不下来。
  */
 const SPEAK_TIMEOUT_MS = 30_000;
+
+/**
+ * 等一句播完的上限（ms）。
+ *
+ * 比气泡自身的挂起上限（50s）再宽一点：正常单句远小于它，到点还没收尾说明播放这条线
+ * 已经断了，此时按收尾处理，气泡不至于跟着永久挂住。
+ */
+export const PLAYBACK_WAIT_MAX_MS = 60_000;
 
 /** 合成请求的超时信号；自动播报与手动点播共用同一份口径。 */
 function speakSignal(): AbortSignal {
@@ -111,22 +111,6 @@ export function subscribeVoiceUtterance(listener: (event: VoiceUtteranceEvent) =
 /** 广播一次播报事件；单个订阅者抛错不能挡住其余订阅者。 */
 function emitUtterance(event: VoiceUtteranceEvent): void {
   for (const listener of utteranceListeners) listener(event);
-}
-
-/**
- * 取真正送合成的那一段：超长时在句读处截断，不把一句话切在半截。
- *
- * @param text - 气泡上的原文。
- * @returns 不超过 {@link VOICE_SPEECH_MAX_CHARS} 的正文；原文够短时原样返回。
- */
-export function speechSlice(text: string): string {
-  if (text.length <= VOICE_SPEECH_MAX_CHARS) return text;
-  const head = text.slice(0, VOICE_SPEECH_MAX_CHARS);
-  const cut = Math.max(
-    ...['。', '！', '？', '；', '，', '.', '!', '?', ';', ','].map((mark) => head.lastIndexOf(mark)),
-  );
-  // 句读太靠前就不值得截在那里：宁可硬切，也别只念出半句话。
-  return cut >= VOICE_SPEECH_MAX_CHARS / 2 ? head.slice(0, cut + 1) : head;
 }
 
 /**
@@ -217,11 +201,39 @@ async function speakIfEnabled(text: string): Promise<void> {
   emitUtterance({ kind: 'start', seq, text });
   setVoiceState('loading');
   try {
-    await speak(speechSlice(text));
+    await speak(text);
   } finally {
     // 成功、失败、超时都走这里：气泡在等这个收尾，漏一次就永远挂着。
     emitUtterance({ kind: 'end', seq, text });
   }
+}
+
+/**
+ * 等到这一句真正播完。
+ *
+ * `play()` 的 Promise 在「开播」时就 resolve，而气泡要的是「播完」：两者的差就是气泡提前
+ * 收起的全部原因。所以这里另等收尾信号，并用 {@link PLAYBACK_WAIT_MAX_MS} 兜底。
+ *
+ * @param audio - 正在播的元素。
+ * @param objectUrl - 收尾时要释放的 blob 地址。
+ */
+function waitForPlaybackEnd(audio: HTMLAudioElement, objectUrl: string): Promise<void> {
+  return new Promise<void>((resolve) => {
+    let settled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const finish = (): void => {
+      if (settled) return; // ended 与 pause 会先后到达，只收一次尾
+      settled = true;
+      if (timer !== null) clearTimeout(timer);
+      URL.revokeObjectURL(objectUrl);
+      resolve();
+    };
+    timer = setTimeout(finish, PLAYBACK_WAIT_MAX_MS);
+    timer.unref?.(); // 与宿主侧定时器同一策略：别把这个等待钉进事件循环
+    audio.onended = finish;
+    audio.onerror = finish;
+    audio.onpause = finish; // 被下一句顶掉或用户暂停：同样算收尾，气泡不该再等一个不会响的音频
+  });
 }
 
 /** 请求合成并播放；任何一步失败都落到 `failed`（气泡上留一个静音喇叭，而不是干脆没图标）。 */
@@ -240,12 +252,17 @@ async function speak(text: string): Promise<void> {
     const objectUrl = URL.createObjectURL(await response.blob());
     const audio = new Audio(objectUrl);
     audio.volume = voiceVolume;
-    // 播完或出错都要释放，否则每句留一个 blob 引用
-    audio.onended = () => URL.revokeObjectURL(objectUrl);
-    audio.onerror = () => URL.revokeObjectURL(objectUrl);
     // 音频就绪即置 ready：喇叭表示「这句有语音」，不跟播放进度绑定
     setVoiceState('ready');
-    await audio.play();
+    try {
+      await audio.play(); // 只代表开播：开播就失败要落到 failed，也不必再等收尾
+    } catch {
+      URL.revokeObjectURL(objectUrl);
+      setVoiceState('failed');
+      return;
+    }
+    // 气泡靠 end 事件收起，所以必须等播完：停在「已经开播」会让气泡提早 1.5 秒消失
+    await waitForPlaybackEnd(audio, objectUrl);
   } catch {
     /* 含超时：气泡已经显示，失败也不能反过来打断渲染，只把图标换成静音喇叭 */
     setVoiceState('failed');

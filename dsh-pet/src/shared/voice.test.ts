@@ -1,26 +1,24 @@
 /**
  * 端侧语音播报（src/shared/voice.ts）的判定行为测试：这一句到底该不该念。
  *
- * 六条契约：
+ * 五条契约：
  *   1. 只有叶子点名本端才念——`voiceTo` 缺省或是另一端，都只弹气泡；
  *   2. 点名了还要总开关开着，否则一样静音；
  *   3. 网页端页面不可见时不念（没人在看就不出声）；
  *   4. 合成失败落到 `failed`，界面留一个静音喇叭而不是什么都没有；
- *   5. 超长正文只念开头一段（气泡仍显示全文）；
- *   6. 每句都报一次 `start` 与一次 `end`，气泡靠它决定何时收起。
+ *   5. 每句都报一次 `start` 与一次 `end`；`end` 只在播完（或失败、超时）之后发，气泡靠它决定何时收起。
  *
- * 播放本身（Audio / blob）在浏览器里才有意义，这里只钉住「有没有发合成请求」与状态。
+ * 播放本身（Audio / blob）在浏览器里才有意义，这里用假音频钉住「有没有发合成请求」、状态与收尾时机。
  */
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  VOICE_SPEECH_MAX_CHARS,
+  PLAYBACK_WAIT_MAX_MS,
   getVoiceState,
   playSayVoice,
   setSurface,
   setVoiceConfig,
-  speechSlice,
   subscribeVoiceUtterance,
   type VoiceUtteranceEvent,
 } from './voice.ts';
@@ -46,30 +44,68 @@ function stubFetch(options: { ok?: boolean } = {}): { calls: Array<{ text: strin
   };
 }
 
+/** 假音频：测试要能手动触发收尾，才钉得住「播完才发 end」。 */
+interface FakeAudio {
+  /** 与真实 Audio 同名的音量字段。 */
+  volume: number;
+  onended: (() => void) | null;
+  onerror: (() => void) | null;
+  onpause: (() => void) | null;
+  play(): Promise<void>;
+  /** 模拟一次收尾事件。 */
+  fire(event: 'ended' | 'error' | 'pause'): void;
+}
+
 /**
  * 补上浏览器才有的两个对象：音频元素与 blob 地址。
  *
- * @param sink - 可选：每段音频开始播放时把它的 `volume` 记进来，用来断言音量。
- * @returns 还原函数。
+ * @param options - `volumes` 收集每段音频开播时的音量；`autoEnd` 缺省 true，让不关心时长的用例
+ *   在开播后自动播完；`playFails` 模拟浏览器拒绝开播。
+ * @returns 按播放顺序创建的假音频与还原函数。
  */
-function stubBrowser(sink?: { volumes: number[] }): () => void {
+function stubBrowser(options: { volumes?: number[]; autoEnd?: boolean; playFails?: boolean } = {}): {
+  audios: FakeAudio[];
+  restore: () => void;
+} {
+  const { volumes, autoEnd = true, playFails = false } = options;
   const previousAudio = (globalThis as { Audio?: unknown }).Audio;
   const previousCreate = URL.createObjectURL;
   const previousRevoke = URL.revokeObjectURL;
+  const audios: FakeAudio[] = [];
   (globalThis as { Audio?: unknown }).Audio = class {
     /** 与真实 Audio 同名的音量字段：被测代码写它，这里在 play 时取出。 */
     volume = 1;
+    onended: (() => void) | null = null;
+    onerror: (() => void) | null = null;
+    onpause: (() => void) | null = null;
+
+    constructor() {
+      audios.push(this);
+    }
+
     play(): Promise<void> {
-      sink?.volumes.push(this.volume);
+      volumes?.push(this.volume);
+      if (playFails) return Promise.reject(new Error('play blocked'));
+      // 宏任务而不是微任务：收尾回调由被测代码在 await play() 之后才挂上
+      if (autoEnd) setTimeout(() => this.fire('ended'), 0);
       return Promise.resolve();
+    }
+
+    fire(event: 'ended' | 'error' | 'pause'): void {
+      if (event === 'ended') this.onended?.();
+      else if (event === 'error') this.onerror?.();
+      else this.onpause?.();
     }
   };
   URL.createObjectURL = () => 'blob:dsh-pet-test';
   URL.revokeObjectURL = () => undefined;
-  return () => {
-    (globalThis as { Audio?: unknown }).Audio = previousAudio;
-    URL.createObjectURL = previousCreate;
-    URL.revokeObjectURL = previousRevoke;
+  return {
+    audios,
+    restore: () => {
+      (globalThis as { Audio?: unknown }).Audio = previousAudio;
+      URL.createObjectURL = previousCreate;
+      URL.revokeObjectURL = previousRevoke;
+    },
   };
 }
 
@@ -78,10 +114,15 @@ async function flush(): Promise<void> {
   for (let round = 0; round < 20; round++) await new Promise((resolve) => setTimeout(resolve, 0));
 }
 
+/** 只跑微任务：mock 掉 setTimeout 的用例不能用 {@link flush}，否则会等一个永远不来的定时器。 */
+async function microtasks(): Promise<void> {
+  for (let round = 0; round < 20; round++) await Promise.resolve();
+}
+
 describe('playSayVoice —— 这一句该不该念', () => {
   test('叶子没点名（voiceTo 缺省）→ 不发请求，气泡照旧', async () => {
     const fetchStub = stubFetch();
-    const restoreBrowser = stubBrowser();
+    const browser = stubBrowser();
     try {
       setSurface('web');
       setVoiceConfig('', true);
@@ -89,14 +130,14 @@ describe('playSayVoice —— 这一句该不该念', () => {
       await flush();
       assert.equal(fetchStub.calls.length, 0, '没人点名就不该合成，更不该出声');
     } finally {
-      restoreBrowser();
+      browser.restore();
       fetchStub.restore();
     }
   });
 
   test('叶子点名另一端 → 本端不发请求', async () => {
     const fetchStub = stubFetch();
-    const restoreBrowser = stubBrowser();
+    const browser = stubBrowser();
     try {
       setSurface('web');
       setVoiceConfig('', true);
@@ -104,14 +145,14 @@ describe('playSayVoice —— 这一句该不该念', () => {
       await flush();
       assert.equal(fetchStub.calls.length, 0, '两端不重复播报靠的就是这一条');
     } finally {
-      restoreBrowser();
+      browser.restore();
       fetchStub.restore();
     }
   });
 
   test('点名本端 + 总开关开 → 发一次合成请求，正文原样', async () => {
     const fetchStub = stubFetch();
-    const restoreBrowser = stubBrowser();
+    const browser = stubBrowser();
     try {
       setSurface('desktop');
       setVoiceConfig('', true);
@@ -119,14 +160,14 @@ describe('playSayVoice —— 这一句该不该念', () => {
       await flush();
       assert.deepEqual(fetchStub.calls, [{ text: '该喝水了' }]);
     } finally {
-      restoreBrowser();
+      browser.restore();
       fetchStub.restore();
     }
   });
 
   test('点名本端但总开关关 → 不发请求', async () => {
     const fetchStub = stubFetch();
-    const restoreBrowser = stubBrowser();
+    const browser = stubBrowser();
     try {
       setSurface('desktop');
       setVoiceConfig('', false);
@@ -134,14 +175,14 @@ describe('playSayVoice —— 这一句该不该念', () => {
       await flush();
       assert.equal(fetchStub.calls.length, 0, '总开关是最后一道门');
     } finally {
-      restoreBrowser();
+      browser.restore();
       fetchStub.restore();
     }
   });
 
   test('网页端页面不可见 → 不发请求（桌面端不看可见性）', async () => {
     const fetchStub = stubFetch();
-    const restoreBrowser = stubBrowser();
+    const browser = stubBrowser();
     const previousDocument = (globalThis as { document?: unknown }).document;
     (globalThis as { document?: unknown }).document = { hidden: true };
     try {
@@ -158,14 +199,14 @@ describe('playSayVoice —— 这一句该不该念', () => {
       assert.deepEqual(fetchStub.calls, [{ text: '桌面端照念' }]);
     } finally {
       (globalThis as { document?: unknown }).document = previousDocument;
-      restoreBrowser();
+      browser.restore();
       fetchStub.restore();
     }
   });
 
   test('合成失败 → 状态落到 failed（留一个静音喇叭，而不是干脆没图标）', async () => {
     const fetchStub = stubFetch({ ok: false });
-    const restoreBrowser = stubBrowser();
+    const browser = stubBrowser();
     try {
       setSurface('desktop');
       setVoiceConfig('', true);
@@ -174,40 +215,17 @@ describe('playSayVoice —— 这一句该不该念', () => {
       assert.equal(fetchStub.calls.length, 1, '该请求的合成请求照发');
       assert.equal(getVoiceState(), 'failed', '失败要看得见，不能静默回 idle');
     } finally {
-      restoreBrowser();
+      browser.restore();
       fetchStub.restore();
     }
   });
 });
 
-describe('speechSlice —— 念的部分只取开头一段', () => {
-  test('够短就原样返回', () => {
-    assert.equal(speechSlice('该喝水了'), '该喝水了');
-  });
-
-  test('超长且没有句读：硬切到上限', () => {
-    const text = '啊'.repeat(VOICE_SPEECH_MAX_CHARS + 40);
-    assert.equal(speechSlice(text).length, VOICE_SPEECH_MAX_CHARS);
-  });
-
-  test('超长但有句读：截在最后一个句读上，不念半句话', () => {
-    const text = '第一句话在这里。'.repeat(10);
-    const sliced = speechSlice(text);
-    assert.ok(sliced.length <= VOICE_SPEECH_MAX_CHARS, `截断后不能超上限，实得 ${sliced.length}`);
-    assert.ok(sliced.endsWith('。'), '截在句号上才不像被掐断');
-  });
-
-  test('句读太靠前：宁可直接硬切，也不只念出半句', () => {
-    const text = '。' + '啊'.repeat(VOICE_SPEECH_MAX_CHARS + 40);
-    assert.equal(speechSlice(text).length, VOICE_SPEECH_MAX_CHARS);
-  });
-});
-
 describe('播放事件 —— 气泡靠它决定何时收起', () => {
-  test('念一句：报一次 start、一次 end，正文是气泡原文而不是截断文本', async () => {
+  test('念一句：报一次 start、一次 end，长句也整句送合成', async () => {
     const events: VoiceUtteranceEvent[] = [];
     const fetchStub = stubFetch();
-    const restoreBrowser = stubBrowser();
+    const browser = stubBrowser();
     const off = subscribeVoiceUtterance((event) => events.push(event));
     try {
       const text = '很长的一句话。'.repeat(20);
@@ -219,11 +237,12 @@ describe('播放事件 —— 气泡靠它决定何时收起', () => {
         events.map((event) => event.kind),
         ['start', 'end'],
       );
+      assert.equal(fetchStub.calls[0]?.text, text, '不截断：送合成的是气泡原文全句');
       assert.equal(events[0].text, text, '事件带原文：气泡要按它认句');
       assert.equal(events[0].seq, events[1].seq, '成对的同一句必须同序号');
     } finally {
       off();
-      restoreBrowser();
+      browser.restore();
       fetchStub.restore();
     }
   });
@@ -231,7 +250,7 @@ describe('播放事件 —— 气泡靠它决定何时收起', () => {
   test('合成失败也报 end：气泡不能因为失败就永远挂着', async () => {
     const events: VoiceUtteranceEvent[] = [];
     const fetchStub = stubFetch({ ok: false });
-    const restoreBrowser = stubBrowser();
+    const browser = stubBrowser();
     const off = subscribeVoiceUtterance((event) => events.push(event));
     try {
       setSurface('desktop');
@@ -244,7 +263,7 @@ describe('播放事件 —— 气泡靠它决定何时收起', () => {
       );
     } finally {
       off();
-      restoreBrowser();
+      browser.restore();
       fetchStub.restore();
     }
   });
@@ -252,7 +271,7 @@ describe('播放事件 —— 气泡靠它决定何时收起', () => {
   test('不该念的句子不报任何事件：没语音就别拖长气泡', async () => {
     const events: VoiceUtteranceEvent[] = [];
     const fetchStub = stubFetch();
-    const restoreBrowser = stubBrowser();
+    const browser = stubBrowser();
     const off = subscribeVoiceUtterance((event) => events.push(event));
     try {
       setSurface('web');
@@ -262,7 +281,7 @@ describe('播放事件 —— 气泡靠它决定何时收起', () => {
       assert.equal(events.length, 0);
     } finally {
       off();
-      restoreBrowser();
+      browser.restore();
       fetchStub.restore();
     }
   });
@@ -270,7 +289,7 @@ describe('播放事件 —— 气泡靠它决定何时收起', () => {
   test('退订之后不再收到事件', async () => {
     const events: VoiceUtteranceEvent[] = [];
     const fetchStub = stubFetch();
-    const restoreBrowser = stubBrowser();
+    const browser = stubBrowser();
     const off = subscribeVoiceUtterance((event) => events.push(event));
     off();
     try {
@@ -280,7 +299,89 @@ describe('播放事件 —— 气泡靠它决定何时收起', () => {
       await flush();
       assert.equal(events.length, 0);
     } finally {
-      restoreBrowser();
+      browser.restore();
+      fetchStub.restore();
+    }
+  });
+
+  test('播完才发 end：气泡不会在开播 1.5 秒后就收起', async () => {
+    const events: VoiceUtteranceEvent[] = [];
+    const fetchStub = stubFetch();
+    const browser = stubBrowser({ autoEnd: false });
+    const off = subscribeVoiceUtterance((event) => events.push(event));
+    try {
+      setSurface('desktop');
+      setVoiceConfig('', true);
+      playSayVoice({ text: '这一句要念一会儿', voiceTo: 'desktop' });
+      await flush();
+      assert.deepEqual(
+        events.map((event) => event.kind),
+        ['start'],
+        '音频还在播，气泡不能收到收尾信号',
+      );
+      assert.equal(browser.audios.length, 1, '应该已经开始播放');
+      browser.audios[0].fire('ended');
+      await flush();
+      assert.deepEqual(
+        events.map((event) => event.kind),
+        ['start', 'end'],
+        '播完才允许收起气泡',
+      );
+    } finally {
+      off();
+      browser.restore();
+      fetchStub.restore();
+    }
+  });
+
+  test('开播失败也发 end：气泡不能因为浏览器拒绝播放就永久挂着', async () => {
+    const events: VoiceUtteranceEvent[] = [];
+    const fetchStub = stubFetch();
+    const browser = stubBrowser({ playFails: true });
+    const off = subscribeVoiceUtterance((event) => events.push(event));
+    try {
+      setSurface('desktop');
+      setVoiceConfig('', true);
+      playSayVoice({ text: '播不出来', voiceTo: 'desktop' });
+      await flush();
+      assert.deepEqual(
+        events.map((event) => event.kind),
+        ['start', 'end'],
+      );
+      assert.equal(getVoiceState(), 'failed', '开播失败要看得见');
+    } finally {
+      off();
+      browser.restore();
+      fetchStub.restore();
+    }
+  });
+
+  test('播放卡住：到上限按收尾处理，气泡不会永久挂着', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const events: VoiceUtteranceEvent[] = [];
+    const fetchStub = stubFetch();
+    const browser = stubBrowser({ autoEnd: false });
+    const off = subscribeVoiceUtterance((event) => events.push(event));
+    try {
+      setSurface('desktop');
+      setVoiceConfig('', true);
+      playSayVoice({ text: '这句卡住了', voiceTo: 'desktop' });
+      await microtasks();
+      assert.deepEqual(
+        events.map((event) => event.kind),
+        ['start'],
+        '没到上限就不该收尾',
+      );
+      t.mock.timers.tick(PLAYBACK_WAIT_MAX_MS);
+      await microtasks();
+      assert.deepEqual(
+        events.map((event) => event.kind),
+        ['start', 'end'],
+        '到上限必须收尾',
+      );
+    } finally {
+      off();
+      browser.restore();
       fetchStub.restore();
     }
   });
@@ -290,7 +391,7 @@ describe('setVoiceConfig —— 音量系数', () => {
   test('0.35 原样落到播放：audio.volume 就是 0.35', async () => {
     const sink = { volumes: [] as number[] };
     const fetchStub = stubFetch();
-    const restoreBrowser = stubBrowser(sink);
+    const browser = stubBrowser({ volumes: sink.volumes });
     try {
       setSurface('web');
       setVoiceConfig('', true, 0.35);
@@ -298,7 +399,7 @@ describe('setVoiceConfig —— 音量系数', () => {
       await flush();
       assert.deepEqual(sink.volumes, [0.35], '音量要落到真正播放的那段音频上');
     } finally {
-      restoreBrowser();
+      browser.restore();
       fetchStub.restore();
     }
   });
@@ -306,7 +407,7 @@ describe('setVoiceConfig —— 音量系数', () => {
   test('越界与脏值收敛到 0–1：2 → 1、-1 → 0、非数值 → 1', async () => {
     const sink = { volumes: [] as number[] };
     const fetchStub = stubFetch();
-    const restoreBrowser = stubBrowser(sink);
+    const browser = stubBrowser({ volumes: sink.volumes });
     try {
       setSurface('web');
       const cases: ReadonlyArray<readonly [unknown, number]> = [
@@ -322,7 +423,7 @@ describe('setVoiceConfig —— 音量系数', () => {
         assert.equal(sink.volumes[sink.volumes.length - 1], wanted, `音量 ${String(input)} 应收敛到 ${wanted}`);
       }
     } finally {
-      restoreBrowser();
+      browser.restore();
       fetchStub.restore();
     }
   });
