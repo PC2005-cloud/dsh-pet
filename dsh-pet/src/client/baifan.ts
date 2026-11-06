@@ -139,15 +139,15 @@ export function mountBaifan(ctx: BaifanContext): () => void {
   }
 
   /**
-   * 按被点宠物所属条目算素材地址并开演；找不到配置就不演。
+   * 按被点宠物所属条目取五段动画名并开演；找不到配置就不演。
    *
-   * 素材根是条目 key（与 /thumb 的归属规则一致），5 个动画名来自该条目的 animations.baifan——
-   * 不同宠物可以用不同的动作，这是配置项存在的意义。
+   * 5 个动画名来自该条目的 animations.baifan——不同宠物可以用不同的动作，这是配置项存在的意义；
+   * 素材地址由各端渲染器按宠物的素材根拼，客户端这里只传名字。
    */
   async function launch(petId: string): Promise<void> {
     try {
       const cfg = await call('GET', '/config', undefined, abort.signal);
-      for (const [entry, raw] of Object.entries(cfg)) {
+      for (const raw of Object.values(cfg)) {
         if (!raw || typeof raw !== 'object') continue;
         const conf = raw as Record<string, unknown>;
         const pets = conf.pets;
@@ -161,7 +161,7 @@ export function mountBaifan(ctx: BaifanContext): () => void {
           animations && typeof animations === 'object' ? (animations as Record<string, unknown>)[ACTIVITY] : undefined;
         if (!Array.isArray(names)) return;
         const slots = names.filter((name): name is string => typeof name === 'string');
-        show.start(petId, activityAssets(slots, entry, petId));
+        show.start(petId, activityAssets(slots));
         return;
       }
     } catch (error) {

@@ -2,8 +2,8 @@
  * 点播动画（`POST /dsh-pet-7340/anim`）的决策层单测。
  *
  * 契约核心有两条（issue #122 第 1 条后是两种形态）：
- *   name = 名字必须在菜单能点到的集合里——播放端"名字即文件名"，播不存在的动画只会静默失败
- *     （404 → 加载失败 → 表现为"点了没反应"），所以这条校验必须钉死；
+ *   name = 名字必须在该宠物的允许集合里（菜单可点动画 ∪ 玩法自带动画）——播放端"名字即文件名"，
+ *     播不存在的动画只会静默失败（404 → 加载失败 → 表现为"点了没反应"），所以这条校验必须钉死；
  *   url  = 第三方自带的素材地址，不查池，但必须是 http/https 的完整 URL。
  * 两者二选一，由本模块判定。本模块只依赖配置，可完全离线测。
  *
@@ -14,7 +14,7 @@ import assert from 'node:assert/strict';
 
 import { animationNames, decideAnim } from './anim.ts';
 
-/** 与 assets/config.jsonc 同形状的动画配置：覆盖菜单树取的全部 7 个池 */
+/** 与 assets/config.jsonc 同形状的动画配置：覆盖菜单树的 7 个池 + 玩法池 baifan */
 const ANIMATIONS = {
   idle: ['待机呼吸休闲'],
   turn: ['东张西望'],
@@ -36,6 +36,7 @@ const ANIMATIONS = {
       '档位1', // 单候选
     ],
   },
+  baifan: ['开心小跑', '侧身急躁跑', '期待开饭', '吃饭·碗饭', '吃饭团'],
 };
 
 const cfg = {
@@ -52,8 +53,8 @@ const cfg = {
 const decide = (over: Partial<Parameters<typeof decideAnim>[0]> = {}) =>
   decideAnim({ cfg, requested: 'main', name: '东张西望', url: undefined, ...over });
 
-describe('animationNames —— 与右键菜单同一份动画集合', () => {
-  test('七个池全部收到（菜单树取的就是这些）', () => {
+describe('animationNames —— 菜单可点动画 + 玩法自带动画', () => {
+  test('菜单的七个池全部收到（菜单树取的就是这些）', () => {
     const names = animationNames(ANIMATIONS);
     for (const n of [
       '待机呼吸休闲', // idle
@@ -71,6 +72,14 @@ describe('animationNames —— 与右键菜单同一份动画集合', () => {
     ]) {
       assert.ok(names.includes(n), `缺少 ${n}`);
     }
+  });
+
+  test('玩法池（animations.baifan）也进白名单，排在菜单池之后', () => {
+    const names = animationNames(ANIMATIONS);
+    for (const n of ['开心小跑', '侧身急躁跑', '期待开饭', '吃饭·碗饭', '吃饭团']) {
+      assert.ok(names.includes(n), `缺少玩法动画 ${n}`);
+    }
+    assert.ok(names.indexOf('开心小跑') > names.indexOf('看钱包'), '玩法池排在菜单池之后');
   });
 
   test('顺序对齐菜单树：idle → turn → drag → clicks → moves → categories → events', () => {
@@ -123,7 +132,7 @@ describe('decideAnim —— 名字校验', () => {
     }
   });
 
-  test('全部七个池的名字都能点播', () => {
+  test('全部池（菜单 + 玩法）的名字都能点播', () => {
     for (const name of animationNames(ANIMATIONS)) {
       assert.equal(decide({ name }).ok, true, `${name} 应可点播`);
     }
