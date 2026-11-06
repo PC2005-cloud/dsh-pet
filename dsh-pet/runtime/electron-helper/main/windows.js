@@ -61,8 +61,15 @@ function createWindows({
   /** 冒烟期间暂停兜底泵：它按真实光标翻转，会干扰冒烟对渲染端通道的断言 */
   let pointerFallbackPaused = false;
 
+  /** 碰撞站场最多每 16ms 广播一次，位置仍由 IPC 逐帧立即提交。 */
+  let petStateTimer = null;
+
   /** 把当前全量宠物状态广播给所有窗口（碰撞检测的共享站场）。 */
   function broadcastPetStates() {
+    if (petStateTimer !== null) {
+      clearTimeout(petStateTimer);
+      petStateTimer = null;
+    }
     const states = {};
     for (const [pid, s] of petStates) {
       states[pid] = { x: s.x, y: s.y, vx: s.vx, vy: s.vy, size: s.size, bottomPad: s.bottomPad };
@@ -75,8 +82,13 @@ function createWindows({
   /** 记录/更新一只宠物的状态并广播。 */
   function updatePetState(petId, partial) {
     const prev = petStates.get(petId) || { x: 0, y: 0, vx: 0, vy: 0, size: 0, bottomPad: 0 };
-    petStates.set(petId, Object.assign({}, prev, partial));
-    broadcastPetStates();
+    const next = Object.assign({}, prev, partial);
+    if (petStates.has(petId) && Object.keys(next).every((key) => Object.is(next[key], prev[key]))) return;
+    petStates.set(petId, next);
+    // 单窗没有碰撞对象；多窗合并同一时间段内的更新，定时回调读取最新状态，保留最后一帧。
+    if (windows.size < 2 || petStateTimer !== null) return;
+    petStateTimer = setTimeout(broadcastPetStates, 16);
+    petStateTimer.unref?.();
   }
 
   /** 翻转整窗穿透的唯一出口：状态与镜像永远一起更新（穿透期间保留 forward）。 */
@@ -247,6 +259,8 @@ function createWindows({
       stopPointerFallback();
       stopTopmostWatchdog();
       windows.delete(pet.id);
+      petStates.delete(pet.id);
+      broadcastPetStates();
       lastRequestedBounds.delete(win.id);
       winMargins.delete(win.id);
       windowIgnore.delete(win.id);
@@ -308,6 +322,11 @@ function createWindows({
       }
     }
     windows.clear();
+    petStates.clear();
+    if (petStateTimer !== null) {
+      clearTimeout(petStateTimer);
+      petStateTimer = null;
+    }
   }
 
   return {
