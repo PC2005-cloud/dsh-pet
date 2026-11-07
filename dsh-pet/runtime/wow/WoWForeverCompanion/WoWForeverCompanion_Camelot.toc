@@ -1,0 +1,44 @@
+## Interface: 16001
+## Title: WoW Companion - Forever
+## Title-zhCN: 魔兽陪伴精灵 · 无限服
+## Notes: WoW Forever character, map, gold, acquisitions and current equipment snapshots. WCF1 grid and player-confirmed equipment swaps.
+## Notes-zhCN: 无限服独立插件，采集角色、地图、金币、新获取装备与全身穿戴快照供 魔兽陪伴精灵 读取；通过传输码发送，并在游戏内询问后换装。
+## Title-zhTW: 魔獸陪伴精靈 · Forever
+## Notes-zhTW: 角色資訊傳輸與遊戲內確認換裝。
+## Title-esES: Compañero de WoW · Forever
+## Notes-esES: Telemetría del personaje y confirmación de cambios de equipo.
+## Title-esMX: Compañero de WoW · Forever
+## Notes-esMX: Telemetría del personaje y confirmación de cambios de equipo.
+## Title-frFR: Compagnon WoW · Forever
+## Notes-frFR: Télémétrie du personnage et confirmation des changements d’équipement.
+## Title-itIT: Compagno di WoW · Forever
+## Notes-itIT: Telemetria del personaggio e conferma dei cambi di equipaggiamento.
+## Title-ptBR: Companheiro de WoW · Forever
+## Notes-ptBR: Telemetria do personagem e confirmação das trocas de equipamento.
+## Title-koKR: 와우 동반자 · Forever
+## Notes-koKR: 캐릭터 정보 전송 및 게임 내 장비 교체 확인.
+## Title-jaJP: WoW コンパニオン · Forever
+## Notes-jaJP: キャラクター情報の送信とゲーム内での装備変更の確認。
+## Title-ruRU: Спутник WoW · Forever
+## Notes-ruRU: Передача данных персонажа и подтверждение смены экипировки в игре.
+## Author: WoWForeverCompanion
+## Version: 1.17.0
+## SavedVariables: WoWForeverCompanionDB
+
+Localization.lua
+Protocol.lua
+Money.lua
+Equipment.lua
+Transfer.lua
+OfflineHistory.lua
+Inventory.lua
+Quests.lua
+Talents.lua
+Calendar.lua
+GroupBuffs.lua
+ExplorationLevels.lua
+ExplorationWarning.lua
+EquipmentCompare.lua
+ConfirmEquip.lua
+Telemetry.lua
+WoWForeverCompanion.lua

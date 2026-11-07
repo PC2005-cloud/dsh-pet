@@ -38,9 +38,11 @@ interface ElectronApp {
   whenReady(): Promise<void>;
   requestSingleInstanceLock(): boolean;
   exit(code?: number): void;
+  quit(): void;
   on(event: 'web-contents-created', listener: (event: unknown, contents: WebContentsLike) => void): void;
   on(event: 'second-instance', listener: () => void): void;
   on(event: 'will-quit', listener: () => void): void;
+  on(event: 'before-quit', listener: (event: { preventDefault(): void }) => void): void;
 }
 const { app, session } = createRequire(import.meta.url)('electron') as {
   app: ElectronApp;
@@ -160,13 +162,21 @@ async function boot(): Promise<void> {
   }
 
   app.on('second-instance', () => log('已有一个实例在运行，忽略本次启动'));
-  app.on('will-quit', () => {
-    // 退出前把最后一批日志刷出去（定时器最多 1s，这里显式补一次）
-    void logger.flush();
-    logger.dispose();
-    void ai.dispose();
-    void context.dispose().catch(() => undefined);
-    void server.close().catch(() => undefined);
+  let shutdownComplete = false;
+  let shuttingDown = false;
+  app.on('before-quit', (event) => {
+    if (shutdownComplete) return;
+    event.preventDefault();
+    if (shuttingDown) return;
+    shuttingDown = true;
+    // Await ledger flushes and owned Python helpers before Electron exits.
+    void (async () => {
+      await Promise.allSettled([context.dispose(), ai.dispose(), server.close()]);
+      await logger.flush();
+      logger.dispose();
+      shutdownComplete = true;
+      app.quit();
+    })();
   });
 }
 

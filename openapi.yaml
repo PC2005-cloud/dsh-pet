@@ -98,6 +98,80 @@ tags:
     description: 语音合成——参数校验、排队与缓存都在宿主，成功时直接返回 mp3 文件
 
 paths:
+  /dsh-pet-7340/wow/appearance:
+    get:
+      operationId: getWowCompanionAppearance
+      summary: 读取陪伴形象选择与已安装宠物
+      tags: [State]
+      responses:
+        '200':
+          description: selectedPetId（空字符串代表原有形象）、resolvedPetId 与 options；默认使用 main 首个内置宠物。
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '503':
+          description: 宿主没有装配魔兽服务。
+  /dsh-pet-7340/wow/state:
+    get:
+      operationId: getWowCompanionState
+      summary: 魔兽伙伴档案与设置（不含密钥）
+      tags: [State]
+      responses:
+        '200':
+          description: 正式服与无限服 profiles、settings、launcher、screen、addons 和 runtime；怀旧服无实况档案。
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '503':
+          description: 宿主没有装配魔兽服务。
+  /dsh-pet-7340/wow/action:
+    post:
+      operationId: performWowCompanionAction
+      summary: 执行魔兽伙伴配置与工具动作
+      tags: [Action]
+      description: |
+        复用宿主访问控制，动作串行执行。返回领域结果，不统一包 data。
+        插件安装只使用验证后的 CurseForge 文件、目录和安装收据。
+        宏导入只接受255字节以内的宏命令并要求对应游戏窗口验证与插件回执。
+        历史导入只复制固定白名单文件，整批校验并备份目标原文件。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              properties:
+                action:
+                  type: string
+                  enum: [appearance.select, preferences.save, settings.save, capture.save, demo, account.rename, macro.import, launcher.save, launcher.launch, screen.save, knowledge.search, history.import, addons.settings.save, addons.installed, addons.metadata, addons.search, addons.files, addons.install, addons.recommend, addons.installRecommendation]
+                game:
+                  type: string
+                  enum: [retail, forever]
+                data:
+                  description: 具体动作的领域输入；见随包 runtime/wow/MIGRATION.md 与共享领域 schema。
+                  type: object
+                  additionalProperties: true
+      responses:
+        '200':
+          description: 具体领域结果；失败包含 ok=false 及 code 或 error，调用方必须检查业务字段。
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '400':
+          description: 非法 JSON、动作或领域输入。
+        '405':
+          description: 只接受 POST。
+        '413':
+          description: 请求体超出 1 MiB。
+        '503':
+          description: 宿主没有装配魔兽服务。
   /dsh-pet-7340/state:
     get:
       tags: [State]
@@ -4194,6 +4268,29 @@ components:
           description: |
             该轮 AI 表演的动作名（`animations.categories` 内的名字），只出现在 assistant 消息里；
             缺失 = 这一轮没有演动作。与 `meme` 同类：只供聊天记录展示，不进上下文。
+
+        wowRecommendations:
+          type: object
+          description: |
+            用户本轮明确请求后获得的 CurseForge 只读推荐快照，仅在 assistant 记录出现。
+            图片像素不进入记录。报告过期后必须重新请求；安装仍需用户点击，服务端校验快照与版本。
+          required: [kind, version, id, game, query, versionTypeId, versionName, createdAt, expiresAt, addons]
+          properties:
+            kind: { type: string, const: wow-addon-recommendations }
+            version: { type: integer, const: 1 }
+            id: { type: string, maxLength: 100 }
+            game: { type: string, enum: [retail, forever, classic] }
+            query: { type: string, maxLength: 128 }
+            versionTypeId: { type: integer, minimum: 1 }
+            versionName: { type: string }
+            createdAt: { type: integer }
+            expiresAt: { type: integer }
+            addons:
+              type: array
+              maxItems: 5
+              items:
+                type: object
+                additionalProperties: true
 
     Provider:
       type: object

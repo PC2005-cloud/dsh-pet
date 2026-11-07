@@ -27,6 +27,8 @@ export interface StandaloneModelService {
 
 /** 宿主路由实际用到的 llm 面。 */
 export interface LlmFacade {
+  /** 独立传输支持直接发送仅本轮的内存图像；DSH 的 durable attachment 协议没有此能力。 */
+  readonly supportsTransientImages?: true;
   listProviders(): unknown[];
   listModels(provider: string): Promise<unknown[]>;
   resolveModelInfo(provider?: string, model?: string, signal?: AbortSignal): Promise<unknown>;
@@ -36,6 +38,7 @@ export interface LlmFacade {
 /** 有 AI 服务：直接转调，不做任何转换。 */
 export function createLlmFacade(ai: StandaloneModelService): LlmFacade {
   return {
+    supportsTransientImages: true,
     listProviders: () => ai.listProviders(),
     listModels: (provider) => ai.listModels(provider),
     resolveModelInfo: (provider, model, signal) => ai.resolveModelInfo(provider, model, signal),

@@ -27,7 +27,8 @@ const shim = (name) => join(packageRoot, 'src', 'standalone', 'shims', `${name}.
 const shared = {
   format: ['esm'],
   platform: 'node',
-  target: 'es2020',
+  // Node >=22.12 is the supported host baseline. Keep native class fields to avoid undeclared OXC helpers.
+  target: 'es2022',
   dts: false,
   outDir: 'lib',
   clean: false,
@@ -59,11 +60,7 @@ export default defineConfig([
   },
   {
     ...shared,
-    // 独立模式只在 Node ≥ 22.12 上运行（package.json 的 engines 已声明），因此目标可以是 es2022：
-    // es2020 目标会把 class field 一类语法降级成 `_defineProperty(...)`，进而把
-    // `@oxc-project/runtime` 拖成一条裸 import —— 那个包不在本包依赖里，装好的用户跑起来会
-    // ERR_MODULE_NOT_FOUND。提到 es2022 后这类降级辅助整体消失（与插件本体的 es2020 产物无关，
-    // 两者是不同的入口，DSH 侧仍按 es2020 发布）。
+    // 与宿主入口保持 Node >=22.12 / es2022，保留原生 class field，避免引入未声明的 OXC helper。
     target: 'es2022',
     entry: {
       standalone: 'src/standalone/cli.ts',
@@ -98,6 +95,9 @@ export default defineConfig([
     noExternal: [
       /^@deepseek-ai\/(?:dsh-home-paths|dsh-credentials|dsh-llm)$/,
       /^zod$/,
+      // WoW schema validation and ZIP installation are used by the app without node_modules.
+      /^valibot$/,
+      /^yauzl$/,
       /^openai$/,
       /^@anthropic-ai\/sdk$/,
       // 语音合成：运行时才 import，但应用产物无 node_modules，必须内联（连它的 ws 一起）。

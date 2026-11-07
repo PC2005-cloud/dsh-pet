@@ -20,6 +20,7 @@ import { SLEEP_TALK_INSTRUCTION } from '../whisper.ts';
 import { pickVoiceSurface, type VoiceTarget } from '../surface.ts';
 import type { HostSetup } from './setup.ts';
 import type { HostContext } from './context.ts';
+import type { WowCompanion } from '../wow/controller.ts';
 
 /** 这一句该由哪一端念：取宠物实例的 display 推导（桌面优先）；两端都不显示时为 `undefined`。 */
 function voiceTargetFor(pet: Record<string, unknown>): VoiceTarget | undefined {
@@ -30,6 +31,7 @@ function voiceTargetFor(pet: Record<string, unknown>): VoiceTarget | undefined {
 export type ChatMemoryInput = {
   /** 宿主上下文（apply 收到的那一个）。 */
   ctx: HostContext;
+  wow?: Pick<WowCompanion, 'context' | 'prepareChat' | 'finishChat'>;
 } & Pick<HostSetup, 'configPaths'> &
   Pick<HostSetup, 'log'> &
   Pick<HostSetup, 'memeDirsFor'> &
@@ -55,6 +57,17 @@ export function createChatMemory(deps: ChatMemoryInput) {
 
   // 对话写操作串行队列：read-modify-write 排队执行，防两端同时对话时交错写盘
   let chatQueue: Promise<void> = Promise.resolve();
+  let pendingMemoryOperations = 0;
+  let activeGenerations = 0;
+
+  const generateTracked = async <T>(generate: () => Promise<T>): Promise<T> => {
+    activeGenerations++;
+    try {
+      return await generate();
+    } finally {
+      activeGenerations--;
+    }
+  };
 
   /** 读记忆文件：不存在 → 空；解析失败/根不是对象 → 记日志 + 空记忆（不备份、不改写源文件） */
   const readMemory = async (): Promise<Record<string, Record<string, { messages: ChatMemoryMessage[] }>>> => {
@@ -83,7 +96,10 @@ export function createChatMemory(deps: ChatMemoryInput) {
 
   /** 把一次读写封进串行队列（同进程内防交错），返回 fn 的结果 */
   const withMemoryLock = <T>(fn: () => Promise<T>): Promise<T> => {
-    const run = chatQueue.then(fn, fn);
+    pendingMemoryOperations++;
+    const run = chatQueue.then(fn, fn).finally(() => {
+      pendingMemoryOperations--;
+    });
     chatQueue = run.then(
       () => undefined,
       () => undefined,
@@ -147,7 +163,9 @@ export function createChatMemory(deps: ChatMemoryInput) {
     // 关掉就不写 voiceTo（叶子不带这个键 = 谁都不念），气泡照旧弹。
     const whisperVoiceOn = cfg.main?.voiceWhisperEnabled === true;
     const target = kind === 'whisper' && !whisperVoiceOn ? undefined : (voiceTo ?? voiceTargetFor(found.pet));
-    const system = petSystemPrompt(found);
+    const system = [petSystemPrompt(found), deps.wow?.context('陪伴当前魔兽冒险，基于实际观测简短闲聊。')]
+      .filter(Boolean)
+      .join('\n\n');
     // 池只算一次：点名的图与随机抽图共用同一份（含文件存在性判定）。
     const pool = readMemePool(found.conf.memes, memeDirsFor(found.entry));
     // 点名了却没命中 = 配置写错或图已被删：明确失败，不静默换成另一张（点了 A 却看到 B 会以为坏了）。
@@ -157,11 +175,13 @@ export function createChatMemory(deps: ChatMemoryInput) {
     }
     const meme = forced ?? (found.conf.whisperImageEnabled === true ? pickMeme(pool) : undefined);
     // 模型：条目配置的 whisperModel 优先（留空 = 不指定）；生成侧失败会回落到当前对话的模型重试一次
-    const result = await generateWhisper(ctx, {
-      system,
-      meme,
-      preferred: configuredModel(found.conf, 'whisperModel'),
-    });
+    const result = await generateTracked(() =>
+      generateWhisper(ctx, {
+        system,
+        meme,
+        preferred: configuredModel(found.conf, 'whisperModel'),
+      }),
+    );
     if (!result.ok) {
       // 失败不写 S：静默跳过 + warn，不伪造文案、不弹错误气泡
       log.warn(
@@ -197,11 +217,13 @@ export function createChatMemory(deps: ChatMemoryInput) {
     const found = findPetInstance(cfg, petId);
     if (!found) return false;
     const system = petSystemPrompt(found);
-    const result = await generateWhisper(ctx, {
-      system,
-      preferred: configuredModel(found.conf, 'whisperModel'),
-      instruction: SLEEP_TALK_INSTRUCTION,
-    });
+    const result = await generateTracked(() =>
+      generateWhisper(ctx, {
+        system,
+        preferred: configuredModel(found.conf, 'whisperModel'),
+        instruction: SLEEP_TALK_INSTRUCTION,
+      }),
+    );
     if (!result.ok) {
       log.warn(
         '[dsh-pet] 梦话生成失败 pet=' +
@@ -259,7 +281,12 @@ export function createChatMemory(deps: ChatMemoryInput) {
       const list = sliceMemoryRounds(entry.messages, rounds);
       // 人设：实例级 whisperPrompt 优先，没写回落所属条目（与碎碎念同一拼装）。
       // 有历史才追加【历史】段：没有历史时那段话在描述不存在的前缀，只会误导模型。
-      const system = petSystemPrompt(found, { historyTimes: list.length > 0 });
+      const wowContext = await deps.wow?.prepareChat(text, image !== undefined);
+      if (wowContext?.error)
+        return { ok: false as const, reason: 'generate-error' as const, message: wowContext.error };
+      const system = [petSystemPrompt(found, { historyTimes: list.length > 0 }), wowContext?.context]
+        .filter(Boolean)
+        .join('\n\n');
       // 图片只记尺寸与字节数（不记 base64）：模型不支持读图时 dsh-llm 会把它投影成占位文本，靠这行日志定位
       if (image !== undefined) {
         log.info(
@@ -268,7 +295,7 @@ export function createChatMemory(deps: ChatMemoryInput) {
         );
       }
       // 模型：条目配置的 chatModel 优先（留空 = 不指定）；生成侧失败会回落到当前对话的模型重试一次
-      const generated = await generateChat({
+      let generated = await generateChat({
         ctx,
         system,
         history: list,
@@ -277,8 +304,10 @@ export function createChatMemory(deps: ChatMemoryInput) {
         actions,
         preferred: configuredModel(found.conf, 'chatModel'),
         image,
+        transientImage: wowContext?.transientImage,
       });
       if (!generated.ok) return generated;
+      if (deps.wow) generated = { ...generated, text: await deps.wow.finishChat(generated.text, wowContext?.tools) };
       const now = Date.now();
       // 用户上传的图只存不送：记忆要能还原「这一轮带过图」（聊天记录存档），但不把图本体重发给模型；
       // AI 配的图只回填名称标记（见 chat.ts 的 historyMarkersOf），同样不带图本体。
@@ -291,6 +320,7 @@ export function createChatMemory(deps: ChatMemoryInput) {
         // 动作名与配图名同类：落盘只存名字，回放历史时由 chat.ts 以 [动作:名] 回填——
         // 否则模型记不得自己演过什么，用户说「换一个」它无从判断
         ...(generated.action ? { action: generated.action } : {}),
+        ...(wowContext?.tools?.recommendations ? { wowRecommendations: wowContext.tools.recommendations } : {}),
       });
       await writeMemory(mem);
       // 动作先写：与 POST /anim 同一条写回链路（记录 + anim 叶子），渲染端据此播放并回报执。
@@ -378,6 +408,7 @@ export function createChatMemory(deps: ChatMemoryInput) {
     deleteOrphans,
     getActivePetId,
     setActivePetId,
+    isBusy: () => pendingMemoryOperations > 0 || activeGenerations > 0,
   };
 }
 /** 对话与记忆的产出（供下游工厂按需 Pick）。 */

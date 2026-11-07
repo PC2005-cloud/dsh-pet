@@ -1,0 +1,9 @@
+## Interface: 120105, 120100, 16001
+## Title: WoW Companion Macro Import
+## Title-zhCN: 魔兽陪伴精灵 · 宏导入
+## Notes: Validate and save a character macro with /import-marco. Does not execute macros.
+## Notes-zhCN: 使用 /import-marco 校验并保存角色宏，不执行宏。
+## Version: 1.0.0
+## SavedVariablesPerCharacter: WoWMacroImportDB
+
+MacroImport.lua

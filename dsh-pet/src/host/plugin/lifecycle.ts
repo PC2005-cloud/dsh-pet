@@ -15,6 +15,7 @@ import type { HostContext } from './context.ts';
 export type LifecycleInput = {
   /** 宿主上下文（apply 收到的那一个）。 */
   ctx: HostContext;
+  disposeWow?: () => Promise<void>;
 } & Pick<PetLookup, 'lock'> &
   Pick<DesktopHelper, 'markDisposed'> &
   Pick<HostSetup, 'playback'> &
@@ -28,7 +29,8 @@ export function registerLifecycle(deps: LifecycleInput): void {
   const { ctx, lock, markDisposed, playback, state, stopDownloadSlotTimer, stopHelper, stopWorkStatusFlush } = deps;
   // 随插件生命周期清理：桌面 Helper 回收（异步下载完成后不再拉起）+ 结束所有挂起的等待
   // （回执与 /state 长轮询不结束的话，插件重载会留下一批悬挂响应，各自要等到超时才收尾）。
-  ctx.effect(() => () => {
+  ctx.effect(() => async () => {
+    const wowDisposal = deps.disposeWow?.();
     markDisposed();
     // 工作状态的补写定时器：卸载后它到点已经没有意义（叶子连同长轮询一起收尾），清掉免得挂着
     stopWorkStatusFlush();
@@ -40,5 +42,6 @@ export function registerLifecycle(deps: LifecycleInput): void {
     playback.cancelAll();
     state.cancelAll();
     stopHelper('dsh-host-stop');
+    await wowDisposal;
   });
 }

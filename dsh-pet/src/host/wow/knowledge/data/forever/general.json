@@ -1,0 +1,82 @@
+[
+  {
+    "id": "forever-identity",
+    "kind": "fact",
+    "title": "魔兽世界：无限的版本定位",
+    "aliases": ["魔兽世界：无限", "无限服", "WoW Forever", "World of Warcraft Forever"],
+    "text": "截至 2026-10-28 核对的官方介绍，魔兽世界：无限围绕原版艾泽拉斯扩展内容，并以 60 级为等级上限。",
+    "usage": "这是独立版本。不要把经典旧世的技能、掉落或正式服系统直接视为无限服规则。后续更新需重新核对。",
+    "provenance": {
+      "status": "verified",
+      "sources": [
+        {
+          "title": "Blizzard: Carve a New Path with World of Warcraft: Forever",
+          "url": "https://worldofwarcraft.blizzard.com/en-us/news/24302093/carve-a-new-path-with-world-of-warcraft-forever"
+        },
+        {
+          "title": "魔兽世界官网：无限介绍",
+          "url": "https://wow.blizzard.cn/forever/"
+        }
+      ],
+      "reviewedAt": "2026-10-28"
+    },
+    "tags": ["版本", "等级上限"]
+  },
+  {
+    "id": "forever-rulesets",
+    "kind": "fact",
+    "title": "无限服规则集",
+    "aliases": ["无限规则集", "规则集", "ruleset", "普通规则集", "PvP规则集"],
+    "text": "2026-09-23 官方公告介绍普通、PvP、角色扮演与专家规则集，并说明专家模式将在上线后另行开放。",
+    "usage": "用户只说“无限服”时，涉及死亡后果或 PvP 的建议还需询问规则集。公告不是当前开服状态证明。",
+    "provenance": {
+      "status": "verified",
+      "sources": [
+        {
+          "title": "魔兽世界官网：无限，规则集由你定（2026-09-23 公告）",
+          "url": "https://wow.blizzard.cn/news/24302070/index.html"
+        }
+      ],
+      "reviewedAt": "2026-10-28"
+    },
+    "tags": ["PvP", "专家", "角色扮演"]
+  },
+  {
+    "id": "forever-legacy",
+    "kind": "fact",
+    "title": "无限服传承系统",
+    "aliases": ["传承系统", "传承点", "Legacy"],
+    "text": "无限服官方介绍将传承系统列为账号成长机制：角色冒险可带来账号通用奖励。",
+    "usage": "不要等同正式服战团，也不要假定与其他版本共享角色数据。点数、解锁条件和奖励以当前无限服资料为准。",
+    "provenance": {
+      "status": "verified",
+      "sources": [
+        {
+          "title": "魔兽世界官网：无限介绍",
+          "url": "https://wow.blizzard.cn/forever/"
+        }
+      ],
+      "reviewedAt": "2026-10-28"
+    },
+    "tags": ["账号", "成长"]
+  },
+  {
+    "id": "forever-project-observation",
+    "kind": "fact",
+    "title": "本项目无限服数据边界",
+    "aliases": ["无限服插件", "WCF1", "wowf"],
+    "text": "本项目为无限服使用独立插件、命令 /wowf 与 WCF1 传输标识，角色和账本与正式服隔离。",
+    "usage": "项目文档记录的 1.60.x／16001 是开发基线，不保证用户当前客户端仍相同。文档同时注明无限客户端尚待实机验收。",
+    "provenance": {
+      "status": "project",
+      "sources": [
+        {
+          "title": "项目无限服插件范围与验收边界",
+          "path": "WOWAddons/WoWForeverCompanion/README.md"
+        }
+      ],
+      "reviewedAt": "2026-10-28"
+    },
+    "tags": ["插件", "连接", "账本"]
+  }
+]

@@ -9,3 +9,10 @@ pnpm-workspace.yaml
 # 打包产物与一次性冒烟原型：都是生成物，不参与格式检查
 dist-app
 .smoke-app
+# Imported upstream snapshots: retain original bytes and formatting.
+runtime/wow/WoWCompanionBridge
+runtime/wow/WoWMapCompanion
+runtime/wow/WoWForeverCompanion
+runtime/wow/WoWMacroImport
+runtime/wow/WoWCompanion-PROTOCOL.md
+runtime/wow/wow-addon-airi-communication.md

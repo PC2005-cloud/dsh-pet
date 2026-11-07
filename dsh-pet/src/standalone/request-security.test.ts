@@ -43,6 +43,8 @@ test('encoded private routes still require a capability; invalid encodings fail 
     '/dsh-pet-7340/ch%61t',
     '/dsh-pet-7340/chat%2Fhistory',
     '/dsh-pet-7340/%77hisper',
+    '/dsh-pet-7340/wow/state',
+    '/dsh-pet-7340/%77ow%2Fstate',
   ]) {
     for (const method of ['GET', 'HEAD']) {
       const res = response();
@@ -169,7 +171,13 @@ test('only minimal health, settings shell and known media GET are public; public
     );
     assert.equal(security.authorize(request({}, path, 'POST'), response() as unknown as ServerResponse), false, path);
   }
-  for (const path of ['/standalone-ai/settings', '/dsh-pet-7340/whisper', '/dsh-pet-7340/chat', '/shutdown']) {
+  for (const path of [
+    '/standalone-ai/settings',
+    '/dsh-pet-7340/whisper',
+    '/dsh-pet-7340/chat',
+    '/dsh-pet-7340/wow/state',
+    '/shutdown',
+  ]) {
     assert.equal(security.authorize(request({}, path), response() as unknown as ServerResponse), false, path);
   }
   for (const path of ['/dsh-pet-7340/config', '/dsh-pet-7340/state']) {

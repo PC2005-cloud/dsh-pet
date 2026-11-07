@@ -7,6 +7,7 @@
  */
 import { type AiRequest } from '../ai-transport.ts';
 import { MAX_INPUT_CHARS, inputSchema, textBlock } from './limits.ts';
+import { parseTransientImage } from '../../host/transient-image.ts';
 
 /**
  * 把调用方输入收敛为纯文本消息。
@@ -21,14 +22,30 @@ export function parseRequest(options: unknown, model: string): { request: AiRequ
     throw new Error('Invalid standalone AI model selection or input.');
   const { data } = parsed;
   const messages = data.messages
-    .map((message) => ({
+    .map((message, index) => ({
       role: message.role,
+      ...(Array.isArray(message.content)
+        ? (() => {
+            const images = message.content.filter(
+              (block): block is Record<string, unknown> =>
+                typeof block === 'object' &&
+                block !== null &&
+                'type' in block &&
+                block.type === 'image' &&
+                'dataUrl' in block,
+            );
+            if (!images.length) return {};
+            if (images.length !== 1 || message.role !== 'user' || index !== data.messages.length - 1)
+              throw new Error('Transient images are only allowed in the current user message.');
+            return { images: images.map(parseTransientImage) };
+          })()
+        : {}),
       content:
         typeof message.content === 'string'
           ? message.content
           : message.content
               .map((block) => {
-                // 非文本块与 DSH 来源元数据不进入请求：服务商只该看到文本。
+                // 图片独立校验；附件引用和 DSH 来源元数据不进入此内存图像通道。
                 if (typeof block !== 'object' || block === null || !('type' in block) || block.type !== 'text')
                   return '';
                 const result = textBlock.safeParse(block);
@@ -37,7 +54,7 @@ export function parseRequest(options: unknown, model: string): { request: AiRequ
               })
               .join(''),
     }))
-    .filter((message) => message.content.trim().length > 0);
+    .filter((message) => message.content.trim().length > 0 || message.images?.length);
   const system = data.system ?? '';
   const size = system.length + messages.reduce((sum, message) => sum + message.content.length, 0);
   if (

@@ -10,6 +10,8 @@ import { flattenConfigPets } from '../../shared/config.ts';
 import { ROUTE_PATH } from '../../shared/constants.ts';
 import { postAction } from '../../shared/state.ts';
 import type { Pet } from '../../shared/types.ts';
+import type { AddonRecommendationReport } from '../../host/wow/shared/wow-addon-recommendations.ts';
+import { toWowRecommendationReport } from './wow-recommendation-api.ts';
 
 /** 消息里带的图片引用（与宿主 `PetImageRef` 同形，只取显示用到的字段）。 */
 export interface ChatImageRef {
@@ -31,6 +33,8 @@ export interface ChatMessageView {
   readonly meme?: string;
   /** 该轮 AI 表演的动作名（重播按钮的入参）；缺省 = 没演动作。 */
   readonly action?: string;
+  /** 用户主动请求的插件推荐，显示按钮不代表自动安装授权。 */
+  readonly wowRecommendations?: AddonRecommendationReport;
 }
 
 /** 一轮对话：一问一答共享同一个 ts，缺一侧（例如删过）也只占一轮。 */
@@ -76,6 +80,7 @@ export function toChatMessages(body: unknown): ChatMessageView[] {
     const image = imageRefOf(m.image);
     const meme = typeof m.meme === 'string' && m.meme !== '' ? m.meme : undefined;
     const action = typeof m.action === 'string' && m.action !== '' ? m.action : undefined;
+    const wowRecommendations = role === 'assistant' ? toWowRecommendationReport(m.wowRecommendations) : undefined;
     out.push({
       role,
       text: m.content,
@@ -83,6 +88,7 @@ export function toChatMessages(body: unknown): ChatMessageView[] {
       ...(image === undefined ? {} : { image }),
       ...(meme === undefined ? {} : { meme }),
       ...(action === undefined ? {} : { action }),
+      ...(wowRecommendations === undefined ? {} : { wowRecommendations }),
     });
   }
   return out;
@@ -147,6 +153,7 @@ export function memeUrl(name: string, assetRoot: string): string {
 
 /** 面板需要的配置：宠物列表 + 每个条目保留的对话轮数 + 每只宠物的人设正文。 */
 export interface ChatConfig {
+  readonly preferredPetId?: string;
   readonly pets: Pet[];
   /** 条目（素材根）→ 该条目配置的 `chatMemoryRounds`；缺失的条目不出现在表里。 */
   readonly roundsByEntry: Readonly<Record<string, number>>;
@@ -196,7 +203,19 @@ export async function fetchChatConfig(): Promise<ChatConfig> {
     const entry = merged[pet.assetRoot ?? '']?.whisperPrompt;
     personaByPet[pet.id] = personaText(pet.whisperPrompt, entry);
   }
-  return { pets, roundsByEntry, personaByPet };
+  // Optional on older hosts. The WoW selector chooses a real installed instance, including its own history/persona.
+  let preferredPetId: string | undefined;
+  try {
+    const response = await fetch(ROUTE_PATH + '/wow/appearance', { cache: 'no-store', credentials: 'same-origin' });
+    if (response.ok) {
+      const appearance = (await response.json()) as { resolvedPetId?: unknown };
+      if (typeof appearance.resolvedPetId === 'string' && pets.some((pet) => pet.id === appearance.resolvedPetId))
+        preferredPetId = appearance.resolvedPetId;
+    }
+  } catch {
+    /* Older/unavailable companion service leaves the ordinary pet chooser usable. */
+  }
+  return { pets, roundsByEntry, personaByPet, ...(preferredPetId ? { preferredPetId } : {}) };
 }
 
 /**

@@ -23,6 +23,7 @@ import { handleStateRoutes } from './state.ts';
 import { handleSleepRoutes } from './sleep.ts';
 import { handleTodoRoutes } from './todos.ts';
 import { handleVoiceRoutes } from './voice.ts';
+import { handleWowRoutes } from './wow.ts';
 import type { PetRouteDeps, RouteHandler } from './types.ts';
 
 /** 处理器顺序：越靠前越先匹配；素材兜底必须在末尾。 */
@@ -42,6 +43,7 @@ const HANDLERS: readonly RouteHandler[] = [
   handleTodoRoutes,
   handleVoiceRoutes,
   handleAvatarRoutes,
+  handleWowRoutes,
   handleAssetsRoutes,
 ];
 

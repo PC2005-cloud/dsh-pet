@@ -1,0 +1,59 @@
+[
+  {
+    "id": "retail-mythic-plus",
+    "kind": "fact",
+    "title": "史诗钥石地下城",
+    "aliases": ["史诗钥石", "史诗钥石地下城", "Mythic+", "M+", "Mythic Keystone"],
+    "text": "正式服的史诗钥石地下城带有层数与计时挑战，需要完成指定首领及敌人进度。",
+    "usage": "只采用系统基本定义。当前赛季副本池、词缀、分数、奖励和降层规则需核对当前补丁，不套用旧公告数值。",
+    "provenance": {
+      "status": "verified",
+      "sources": [
+        {
+          "title": "Blizzard: Preview: Mythic Keystones（仅采用系统基本定义）",
+          "url": "https://worldofwarcraft.blizzard.com/en-us/news/20271497"
+        }
+      ],
+      "reviewedAt": "2026-10-28"
+    },
+    "tags": ["地下城", "钥石", "计时"]
+  },
+  {
+    "id": "retail-warbands",
+    "kind": "fact",
+    "title": "战团",
+    "aliases": ["战团", "Warband", "Warbands"],
+    "text": "战团把正式服同一战网账号的部分角色进度与收藏连接起来，并提供战团银行等功能。",
+    "usage": "共享范围按具体系统判断，不声称所有声望、物品或货币都可共享。不要把战团当成无限服的传承系统。",
+    "provenance": {
+      "status": "verified",
+      "sources": [
+        {
+          "title": "Blizzard: Get the Band Together for Warbands",
+          "url": "https://worldofwarcraft.blizzard.com/en-gb/news/24115313"
+        }
+      ],
+      "reviewedAt": "2026-10-28"
+    },
+    "tags": ["账号", "共享", "收藏"]
+  },
+  {
+    "id": "retail-patch-scope",
+    "kind": "fact",
+    "title": "正式服攻略的补丁范围",
+    "aliases": ["正式服版本", "正式服赛季", "当前赛季", "retail season", "正式服"],
+    "text": "正式服的职业、装备和副本规则随内容更新改变。历史攻略的数值不等于当前数值。",
+    "usage": "给当前最优配装、职业强度或掉落表前确认资料片、补丁和赛季。本种子库只提供概念，不内置实时排行榜。",
+    "provenance": {
+      "status": "verified",
+      "sources": [
+        {
+          "title": "Blizzard: Content Update Notes（分别列出各分支）",
+          "url": "https://worldofwarcraft.blizzard.com/en-us/content-update-notes"
+        }
+      ],
+      "reviewedAt": "2026-10-28"
+    },
+    "tags": ["补丁", "赛季", "攻略"]
+  }
+]

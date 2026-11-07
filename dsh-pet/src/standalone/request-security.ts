@@ -32,7 +32,7 @@ function publicRead(req: IncomingMessage): boolean {
   const path = decodeURIComponent(new URL(req.url ?? '/', 'http://127.0.0.1').pathname);
   if (req.method !== 'GET' && req.method !== 'HEAD') return false;
   if (['/standalone-ai/settings', '/shutdown'].includes(path)) return false;
-  if (/^\/dsh-pet-\d+\/(?:whisper|chat)(?:\/|$)/.test(path)) return false;
+  if (/^\/dsh-pet-\d+\/(?:whisper|chat|wow)(?:\/|$)/.test(path)) return false;
   return (
     [
       '/',

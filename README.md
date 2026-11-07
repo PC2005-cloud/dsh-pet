@@ -1,5 +1,7 @@
 # dsh-pet 🐾
 
+本分支新增 [魔兽伙伴功能与迁移说明](dsh-pet/runtime/wow/MIGRATION.md)：在 dsh-pet 中连接魔兽、读取档案、聊天、管理插件、快捷启动和主动截图辅助。
+
 <p align="center">
   <a href="https://www.npmjs.com/package/dsh-pet"><img alt="npm version" src="https://img.shields.io/npm/v/dsh-pet?label=npm&color=blue"></a>
   <a href="https://www.npmjs.com/package/dsh-pet"><img alt="npm monthly downloads" src="https://img.shields.io/npm/dm/dsh-pet?label=%E6%9C%88%E4%B8%8B%E8%BD%BD&color=brightgreen"></a>

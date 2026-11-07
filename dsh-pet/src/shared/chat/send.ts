@@ -33,7 +33,8 @@ export async function sendChat(baseUrl: string, text: string, attachment?: ChatA
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(attachment ? { text, attachment } : { text }),
-    signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
+    // A requested WoW macro can wait for generation, stable focus and combat to end before the saved receipt.
+    signal: AbortSignal.timeout(/宏|\bmacro\b/iu.test(text) ? 300_000 : SEND_TIMEOUT_MS),
   });
   const raw: unknown = await res.json().catch(() => null);
   if (!raw || typeof raw !== 'object') {

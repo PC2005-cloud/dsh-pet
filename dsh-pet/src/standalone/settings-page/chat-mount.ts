@@ -11,6 +11,7 @@ import { createRoot } from 'react-dom/client';
 import { jsx } from 'react/jsx-runtime';
 import { makePetChatPanel } from '../../client/chat/panel.ts';
 import type { ChatPanelRuntime } from '../../client/chat/runtime.ts';
+import { mountWowPanel } from '../../shared/wow-panel/mount.ts';
 
 /** 设置页里对话面板的挂载点 id，与 chrome.ts 的容器一致。 */
 const HOST_ID = 'pet-chat-root';
@@ -22,4 +23,10 @@ const host = document.getElementById(HOST_ID);
 if (host !== null) {
   const Panel = makePetChatPanel(runtime) as unknown as FC;
   createRoot(host).render(createElement(Panel));
+}
+
+const wowHost = document.getElementById('wow-companion-root');
+if (wowHost !== null) {
+  const dispose = mountWowPanel(wowHost);
+  window.addEventListener('pagehide', dispose, { once: true });
 }

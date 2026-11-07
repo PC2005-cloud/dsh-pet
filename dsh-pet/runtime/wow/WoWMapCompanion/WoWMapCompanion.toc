@@ -1,0 +1,42 @@
+## Interface: 120105, 120100
+## Title: WoW Companion - Retail
+## Title-zhCN: 魔兽陪伴精灵 · 正式服
+## Notes: Character, map, gold, acquisitions and current equipment snapshots for WoW Companion. WCP1 grid and player-confirmed equipment swaps.
+## Notes-zhCN: 采集角色、地图、金币、新获取装备与全身穿戴快照供 魔兽陪伴精灵 读取；通过传输码发送，并在游戏内询问后换装。
+## Title-zhTW: 魔獸陪伴精靈 · Retail
+## Notes-zhTW: 角色資訊傳輸與遊戲內確認換裝。
+## Title-esES: Compañero de WoW · Retail
+## Notes-esES: Telemetría del personaje y confirmación de cambios de equipo.
+## Title-esMX: Compañero de WoW · Retail
+## Notes-esMX: Telemetría del personaje y confirmación de cambios de equipo.
+## Title-frFR: Compagnon WoW · Retail
+## Notes-frFR: Télémétrie du personnage et confirmation des changements d’équipement.
+## Title-itIT: Compagno di WoW · Retail
+## Notes-itIT: Telemetria del personaggio e conferma dei cambi di equipaggiamento.
+## Title-ptBR: Companheiro de WoW · Retail
+## Notes-ptBR: Telemetria do personagem e confirmação das trocas de equipamento.
+## Title-koKR: 와우 동반자 · Retail
+## Notes-koKR: 캐릭터 정보 전송 및 게임 내 장비 교체 확인.
+## Title-jaJP: WoW コンパニオン · Retail
+## Notes-jaJP: キャラクター情報の送信とゲーム内での装備変更の確認。
+## Title-ruRU: Спутник WoW · Retail
+## Notes-ruRU: Передача данных персонажа и подтверждение смены экипировки в игре.
+## Author: WoWMapCompanion
+## Version: 2.19.0
+## SavedVariables: WoWMapCompanionDB
+
+Localization.lua
+Protocol.lua
+Money.lua
+Equipment.lua
+Transfer.lua
+OfflineHistory.lua
+Inventory.lua
+Quests.lua
+Talents.lua
+Calendar.lua
+GroupBuffs.lua
+EquipmentCompare.lua
+ConfirmEquip.lua
+Telemetry.lua
+WoWMapCompanion.lua

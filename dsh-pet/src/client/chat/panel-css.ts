@@ -6,6 +6,7 @@
  * @module dsh-pet/src/client/chat/panel-css
  */
 import { px, SIZE } from './metrics.ts';
+import { WOW_RECOMMENDATION_CSS } from './wow-recommendation-css.ts';
 
 /** 面板样式（选择器前缀 `pet-chat`，避免与 DSH 或其它插件撞名）。 */
 export const PANEL_CSS = `
@@ -592,4 +593,5 @@ export const PANEL_CSS = `
 .pet-chat-tip.is-on {
   opacity: 1;
 }
+${WOW_RECOMMENDATION_CSS}
 `;

@@ -1,0 +1,196 @@
+[
+  {
+    "id": "en-lfg",
+    "kind": "abbreviation",
+    "title": "LFG: Looking for Group",
+    "aliases": ["LFG"],
+    "text": "LFG means Looking for Group: a player seeks a party.",
+    "usage": "Interpret it as a recruitment term in game chat. It does not prove that a group already exists.",
+    "provenance": {
+      "status": "community",
+      "sources": [
+        {
+          "title": "Wowhead: Classic WoW Glossary and Common Terms Explained",
+          "url": "https://www.wowhead.com/classic/guide/classic-wow-glossary-terminology"
+        }
+      ],
+      "reviewedAt": "2026-10-28"
+    },
+    "tags": ["group", "party"]
+  },
+  {
+    "id": "en-lfm",
+    "kind": "abbreviation",
+    "title": "LFM: Looking for More",
+    "aliases": ["LFM", "LF1M", "LF2M"],
+    "text": "LFM means Looking for More. LF1M and LF2M request one or two more players.",
+    "usage": "Use nearby role and dungeon names to understand the vacancy. Do not infer a complete party composition.",
+    "provenance": {
+      "status": "community",
+      "sources": [
+        {
+          "title": "Wowhead: Classic WoW Glossary and Common Terms Explained",
+          "url": "https://www.wowhead.com/classic/guide/classic-wow-glossary-terminology"
+        }
+      ],
+      "reviewedAt": "2026-10-28"
+    },
+    "tags": ["group", "recruitment"]
+  },
+  {
+    "id": "en-dps",
+    "kind": "abbreviation",
+    "title": "DPS: damage rate or damage role",
+    "aliases": ["DPS"],
+    "text": "DPS means damage per second. In recruitment, it can mean a damage dealer.",
+    "usage": "Distinguish a measured value from a party slot. Do not infer a player damage value from item level.",
+    "provenance": {
+      "status": "community",
+      "sources": [
+        {
+          "title": "Wowhead: Classic WoW Glossary and Common Terms Explained",
+          "url": "https://www.wowhead.com/classic/guide/classic-wow-glossary-terminology"
+        }
+      ],
+      "reviewedAt": "2026-10-28"
+    },
+    "tags": ["damage", "role"]
+  },
+  {
+    "id": "en-ot",
+    "kind": "abbreviation",
+    "title": "OT: off-tank",
+    "aliases": ["OT", "off-tank", "off tank"],
+    "text": "In English raid role chat, OT usually means the secondary tank.",
+    "usage": "Chinese combat chat often uses OT for lost threat control. Resolve the community and context before choosing a meaning.",
+    "provenance": {
+      "status": "community",
+      "sources": [
+        {
+          "title": "Wowhead: Classic WoW Glossary and Common Terms Explained",
+          "url": "https://www.wowhead.com/classic/guide/classic-wow-glossary-terminology"
+        }
+      ],
+      "reviewedAt": "2026-10-28"
+    },
+    "tags": ["tank", "role"]
+  },
+  {
+    "id": "en-aggro",
+    "kind": "abbreviation",
+    "title": "Aggro: enemy attention",
+    "aliases": ["aggro", "threat"],
+    "text": "Aggro refers to hostile attention. Threat describes the system behind much enemy target selection.",
+    "usage": "Special mechanics can override normal target selection. Do not infer exact threat thresholds from this term.",
+    "provenance": {
+      "status": "community",
+      "sources": [
+        {
+          "title": "Wowhead: Classic WoW Glossary and Common Terms Explained",
+          "url": "https://www.wowhead.com/classic/guide/classic-wow-glossary-terminology"
+        }
+      ],
+      "reviewedAt": "2026-10-28"
+    },
+    "tags": ["tank", "combat"]
+  },
+  {
+    "id": "en-adds",
+    "kind": "abbreviation",
+    "title": "Adds: additional enemies",
+    "aliases": ["add", "adds"],
+    "text": "Adds are additional enemies involved in an encounter.",
+    "usage": "Some adds come from intended mechanics. Others join after an accidental pull. Do not assign blame from the word alone.",
+    "provenance": {
+      "status": "community",
+      "sources": [
+        {
+          "title": "Wowhead: Classic WoW Glossary and Common Terms Explained",
+          "url": "https://www.wowhead.com/classic/guide/classic-wow-glossary-terminology"
+        }
+      ],
+      "reviewedAt": "2026-10-28"
+    },
+    "tags": ["combat", "enemies"]
+  },
+  {
+    "id": "en-wipe",
+    "kind": "abbreviation",
+    "title": "Wipe: group defeat",
+    "aliases": ["wipe", "wiped"],
+    "text": "A wipe is an attempt in which the group is defeated or cannot continue.",
+    "usage": "Acknowledge frustration before joking. Revival rules differ in Hardcore modes.",
+    "provenance": {
+      "status": "community",
+      "sources": [
+        {
+          "title": "Wowhead: Classic WoW Glossary and Common Terms Explained",
+          "url": "https://www.wowhead.com/classic/guide/classic-wow-glossary-terminology"
+        }
+      ],
+      "reviewedAt": "2026-10-28"
+    },
+    "tags": ["raid", "defeat", "death"]
+  },
+  {
+    "id": "en-sm",
+    "kind": "abbreviation",
+    "title": "SM: Scarlet Monastery",
+    "aliases": ["SM", "Scarlet Monastery"],
+    "text": "In English dungeon recruitment, SM commonly refers to Scarlet Monastery.",
+    "usage": "The same letters often mean Shaman in Chinese class chat. Confirm the dungeon version before discussing its layout or bosses.",
+    "provenance": {
+      "status": "community",
+      "sources": [
+        {
+          "title": "Warcraft Wiki: Scarlet Monastery Cathedral",
+          "url": "https://warcraft.wiki.gg/wiki/Scarlet_Monastery_Cathedral"
+        }
+      ],
+      "reviewedAt": "2026-10-28"
+    },
+    "tags": ["dungeon", "recruitment"]
+  },
+  {
+    "id": "en-meme-not-prepared",
+    "kind": "meme",
+    "title": "You are not prepared",
+    "aliases": ["You are not prepared", "not prepared"],
+    "text": "A well-known Illidan line, reused by players as a preparation joke.",
+    "usage": "Use sparingly when the user invites banter or discusses Illidan. Original companion example: “Then let us check repairs before the dramatic entrance.”",
+    "provenance": {
+      "status": "project",
+      "sources": [
+        {
+          "title": "项目已有角色语录研究",
+          "path": "WOWAddons/research/warcraft-characters/warcraft-character-library.json"
+        }
+      ],
+      "reviewedAt": "2026-10-28"
+    },
+    "tags": ["Illidan", "preparation", "level_up"]
+  },
+  {
+    "id": "en-meme-zug-zug",
+    "kind": "meme",
+    "title": "Zug zug",
+    "aliases": ["zug zug", "zug-zug", "zugzug"],
+    "text": "Zug zug is an Orcish acknowledgement associated with Warcraft orc units. Players reuse it as playful agreement.",
+    "usage": "Use it for brief, friendly banter when the user welcomes Warcraft humour. It does not imply an instruction to attack or a particular faction identity.",
+    "provenance": {
+      "status": "community",
+      "sources": [
+        {
+          "title": "Warcraft Wiki: Orcish language, acknowledgement phrases",
+          "url": "https://warcraft.wiki.gg/wiki/Zug_zug"
+        },
+        {
+          "title": "Warcraft Wiki: Quotes of Warcraft III/Orc Horde",
+          "url": "https://warcraft.wiki.gg/wiki/Quotes_of_Warcraft_III/Orc_Horde"
+        }
+      ],
+      "reviewedAt": "2026-10-28"
+    },
+    "tags": ["orc", "banter", "level_up"]
+  }
+]

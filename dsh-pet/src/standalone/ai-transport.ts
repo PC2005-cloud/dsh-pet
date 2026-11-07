@@ -9,6 +9,7 @@
 import OpenAI from 'openai';
 import Anthropic from '@anthropic-ai/sdk';
 import type { StandaloneAiSettings } from './ai-config.ts';
+import type { TransientChatImage } from '../host/transient-image.ts';
 
 /** fetch 的形状，便于测试替换。 */
 export type AiFetch = typeof globalThis.fetch;
@@ -16,6 +17,8 @@ export type AiFetch = typeof globalThis.fetch;
 export interface AiTextMessage {
   role: 'user' | 'assistant';
   content: string;
+  /** Only the current user message may carry one bounded memory-only image. */
+  images?: readonly TransientChatImage[];
 }
 /** 一次请求的系统提示与消息序列。 */
 export interface AiRequest {
@@ -95,7 +98,16 @@ export async function* sdkTextStream(
     const client = new OpenAI({ ...shared, organization: null, project: null, webhookSecret: null });
     const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
       ...(request.system ? [{ role: 'system' as const, content: request.system }] : []),
-      ...request.messages,
+      ...request.messages.map((message): OpenAI.Chat.Completions.ChatCompletionMessageParam => {
+        if (!message.images?.length) return { role: message.role, content: message.content };
+        return {
+          role: 'user',
+          content: [
+            { type: 'text', text: message.content },
+            ...message.images.map((image) => ({ type: 'image_url' as const, image_url: { url: image.dataUrl } })),
+          ],
+        };
+      }),
     ];
     const stream = await client.chat.completions.create(
       { model: settings.model, messages, stream: true, max_tokens: settings.maxTokens, n: 1 },
@@ -116,7 +128,25 @@ export async function* sdkTextStream(
     model: settings.model,
     max_tokens: settings.maxTokens,
     system: request.system,
-    messages: request.messages,
+    messages: request.messages.map((message): Anthropic.MessageParam => ({
+      role: message.role,
+      content: !message.images?.length
+        ? message.content
+        : [
+            { type: 'text', text: message.content },
+            ...message.images.map((image): Anthropic.ImageBlockParam => {
+              const separator = image.dataUrl.indexOf(',');
+              return {
+                type: 'image',
+                source: {
+                  type: 'base64',
+                  media_type: image.dataUrl.startsWith('data:image/png;') ? 'image/png' : 'image/jpeg',
+                  data: image.dataUrl.slice(separator + 1),
+                },
+              };
+            }),
+          ],
+    })),
     stream: true as const,
     ...(opus ? { thinking: { type: 'adaptive' as const }, output_config: { effort: 'low' as const } } : {}),
   };

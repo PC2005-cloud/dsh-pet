@@ -7,6 +7,7 @@
  * @module dsh-pet/src/standalone/settings-page/style
  */
 import { PANEL_CSS } from '../../client/chat/panel-css.ts';
+import { WOW_PANEL_CSS } from '../../shared/wow-panel/style.ts';
 
 /** 设置页样式表。 */
 export const settingsStyle = `:root{
@@ -168,4 +169,5 @@ input:disabled,select:disabled,textarea:disabled{background:var(--dsw-static-neu
 }
 @media(prefers-reduced-motion:no-preference){.navCell,.btn,.tab{transition:background-color .1s ease}}
 ${PANEL_CSS}
+${WOW_PANEL_CSS}
 `;

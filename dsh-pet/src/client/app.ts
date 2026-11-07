@@ -17,6 +17,7 @@ import { installSectionNavIcon } from './nav-icon.ts';
 import { registerPetChatTab, openPetChatTab } from './chat/register.ts';
 import { PET_CHAT_COMMAND_ID, registerPetChatShortcut } from './chat/shortcut.ts';
 import { registerPetCardShortcuts } from './pet/card/shortcut.ts';
+import { makeWowSettings } from './wow-settings.ts';
 import type * as ReactNS from 'react';
 import type * as PrimitivesNS from '@deepseek-ai/dsh-client-ui-primitives';
 
@@ -180,6 +181,14 @@ export function makeFactory(): (require: (mod: string) => any) => any {
         yield ctx.slots.register(
           { name: 'settings.section', id: 'pet-config', order: 30, label: () => t('nav'), inject: () => ({ t }) },
           PetConfigSection,
+        );
+      });
+
+      const WowSettings = makeWowSettings({ h, useEffect, useRef });
+      ctx.slots.inject('settings.section', function* () {
+        yield ctx.slots.register(
+          { name: 'settings.section', id: 'wow-companion', order: 31, label: () => '魔兽陪伴 / Warcraft' },
+          WowSettings,
         );
       });
 

@@ -1,0 +1,109 @@
+[
+  {
+    "id": "shared-factions",
+    "kind": "fact",
+    "title": "联盟与部落",
+    "aliases": ["联盟", "部落", "Alliance", "Horde"],
+    "text": "联盟与部落是魔兽的主要玩家阵营。角色还可能暂未选择阵营。",
+    "usage": "解释阵营背景时使用。不能由玩家的玩梗、职业或一句口号推断其真实阵营。",
+    "provenance": {
+      "status": "verified",
+      "sources": [
+        {
+          "title": "Blizzard: 魔兽世界经典手册（繁体中文）",
+          "url": "https://tw.media.blizzard.com/manuals/wow/tw/classic/wow-classic-manual-zhTW.pdf"
+        },
+        {
+          "title": "项目无限服插件范围与验收边界",
+          "path": "WOWAddons/WoWForeverCompanion/README.md"
+        }
+      ],
+      "reviewedAt": "2026-10-28"
+    },
+    "tags": ["阵营", "faction"]
+  },
+  {
+    "id": "shared-party-roles",
+    "kind": "fact",
+    "title": "队伍职责",
+    "aliases": ["坦克", "治疗", "输出", "tank", "healer", "damage dealer"],
+    "text": "组队常按承伤、治疗和伤害输出分工。职业名称与当前承担的职责不是同一个概念。",
+    "usage": "先看玩家当前专精和队伍分工。不能把圣骑士一律当治疗，也不能跨版本推断某职业可担任的职责。",
+    "provenance": {
+      "status": "community",
+      "sources": [
+        {
+          "title": "Wowhead: Classic WoW Glossary and Common Terms Explained",
+          "url": "https://www.wowhead.com/classic/guide/classic-wow-glossary-terminology"
+        }
+      ],
+      "reviewedAt": "2026-10-28"
+    },
+    "tags": ["组队", "职责", "role"]
+  },
+  {
+    "id": "shared-money-units",
+    "kind": "fact",
+    "title": "金币、银币与铜币",
+    "aliases": ["金币", "银币", "铜币", "gold", "silver", "copper"],
+    "text": "货币换算为 1 金币 = 100 银币 = 10000 铜币。",
+    "usage": "用于解释游戏钱包。不要把铜币整数当金币，也不要把转账收入当作净利润。",
+    "provenance": {
+      "status": "community",
+      "sources": [
+        {
+          "title": "Blizzard 玩家论坛：Where can I get silver",
+          "url": "https://us.forums.blizzard.com/en/wow/t/where-can-i-get-silver/1408532"
+        }
+      ],
+      "reviewedAt": "2026-10-28"
+    },
+    "tags": ["金钱", "钱包", "money"]
+  },
+  {
+    "id": "shared-class-vs-specialization",
+    "kind": "fact",
+    "title": "职业与专精",
+    "aliases": ["职业", "专精", "class", "specialization"],
+    "text": "职业是角色的基础类别，专精或天赋决定更具体的玩法方向。不同版本的技能和专精规则不同。",
+    "usage": "只解释概念。没有当前版本、专精或天赋资料时，不承诺技能可用、职业强度或最优配装。",
+    "provenance": {
+      "status": "verified",
+      "sources": [
+        {
+          "title": "Blizzard: 魔兽世界经典手册（繁体中文）",
+          "url": "https://tw.media.blizzard.com/manuals/wow/tw/classic/wow-classic-manual-zhTW.pdf"
+        },
+        {
+          "title": "项目无限服插件范围与验收边界",
+          "path": "WOWAddons/WoWForeverCompanion/README.md"
+        }
+      ],
+      "reviewedAt": "2026-10-28"
+    },
+    "tags": ["天赋", "talents"]
+  },
+  {
+    "id": "shared-version-boundaries",
+    "kind": "fact",
+    "title": "版本与服务器区分",
+    "aliases": ["游戏版本", "正式服", "无限服", "怀旧服", "retail", "forever", "classic"],
+    "text": "本知识库区分正式服、魔兽世界：无限和怀旧服；它们不是同一套规则。服务器名也不等于游戏版本。",
+    "usage": "讨论等级上限、掉落、天赋或副本规则前确认版本。怀旧服还需确认具体资料片和规则集。",
+    "provenance": {
+      "status": "project",
+      "sources": [
+        {
+          "title": "项目范围与版本隔离说明",
+          "path": "README.md"
+        },
+        {
+          "title": "Blizzard: Content Update Notes（分别列出各分支）",
+          "url": "https://worldofwarcraft.blizzard.com/en-us/content-update-notes"
+        }
+      ],
+      "reviewedAt": "2026-10-28"
+    },
+    "tags": ["版本", "规则集"]
+  }
+]

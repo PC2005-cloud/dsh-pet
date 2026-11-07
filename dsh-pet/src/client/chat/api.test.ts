@@ -267,6 +267,26 @@ describe('roundsToRevealMemory —— 让记忆线进入视窗要放多少轮', 
 });
 
 describe('fetchChatConfig —— 同一份 /config 里带出记忆轮数', () => {
+  test('使用服务端选定形象作为对话默认值，未知实例不能成为默认', async () => {
+    const original = globalThis.fetch;
+    let resolvedPetId = 'elf';
+    globalThis.fetch = (async (url: string | URL) =>
+      new Response(
+        JSON.stringify(
+          String(url).endsWith('/wow/appearance')
+            ? { resolvedPetId }
+            : { main: { pets: [{ id: 'main', name: '原有形象' }] }, elf: { pets: [{ id: 'elf', name: '精灵' }] } },
+        ),
+        { status: 200 },
+      )) as typeof fetch;
+    try {
+      assert.equal((await fetchChatConfig()).preferredPetId, 'elf');
+      resolvedPetId = 'missing';
+      assert.equal((await fetchChatConfig()).preferredPetId, undefined);
+    } finally {
+      globalThis.fetch = original;
+    }
+  });
   test('按条目读 chatMemoryRounds，同时拍平宠物列表', async () => {
     const body = {
       main: { pets: [{ id: 'main', name: '主宠' }], chatMemoryRounds: 7 },

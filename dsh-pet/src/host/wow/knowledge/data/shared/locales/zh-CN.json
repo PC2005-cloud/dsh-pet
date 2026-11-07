@@ -1,0 +1,558 @@
+[
+  {
+    "id": "zh-class-dz",
+    "kind": "abbreviation",
+    "title": "DZ：盗贼／潜行者",
+    "aliases": ["DZ", "盗贼", "潜行者"],
+    "text": "中文游戏聊天中的 DZ 通常来自“盗贼”的拼音首字母，指 Rogue／潜行者。",
+    "usage": "在魔兽职业语境中解释。DZ 不表明专精、阵营或现实身份。",
+    "provenance": {
+      "status": "community",
+      "sources": [
+        {
+          "title": "游侠网：魔兽世界职业简称大全（社区用法）",
+          "url": "https://gl.ali213.net/html/2024-7/1438583.html"
+        }
+      ],
+      "reviewedAt": "2026-10-28"
+    },
+    "tags": ["盗贼", "职业"]
+  },
+  {
+    "id": "zh-class-zs",
+    "kind": "abbreviation",
+    "title": "ZS：战士",
+    "aliases": ["ZS", "战士"],
+    "text": "ZS 是“战士”的拼音缩写，对应 Warrior。",
+    "usage": "防战、武器战和狂暴战等具体玩法要结合版本与专精确认。",
+    "provenance": {
+      "status": "community",
+      "sources": [
+        {
+          "title": "游侠网：魔兽世界职业简称大全（社区用法）",
+          "url": "https://gl.ali213.net/html/2024-7/1438583.html"
+        }
+      ],
+      "reviewedAt": "2026-10-28"
+    },
+    "tags": ["战士", "职业"]
+  },
+  {
+    "id": "zh-class-fs",
+    "kind": "abbreviation",
+    "title": "FS：法师",
+    "aliases": ["FS", "法师"],
+    "text": "FS 是“法师”的拼音缩写，对应 Mage。",
+    "usage": "只解释职业，不由 FS 推断火焰、冰霜或奥术专精。",
+    "provenance": {
+      "status": "community",
+      "sources": [
+        {
+          "title": "游侠网：魔兽世界职业简称大全（社区用法）",
+          "url": "https://gl.ali213.net/html/2024-7/1438583.html"
+        }
+      ],
+      "reviewedAt": "2026-10-28"
+    },
+    "tags": ["法师", "职业"]
+  },
+  {
+    "id": "zh-class-lr",
+    "kind": "abbreviation",
+    "title": "LR：猎人",
+    "aliases": ["LR", "猎人"],
+    "text": "LR 是“猎人”的拼音缩写，对应 Hunter。",
+    "usage": "不要与恶魔猎手 DH 混同。宠物和专精规则需结合版本。",
+    "provenance": {
+      "status": "community",
+      "sources": [
+        {
+          "title": "游侠网：魔兽世界职业简称大全（社区用法）",
+          "url": "https://gl.ali213.net/html/2024-7/1438583.html"
+        }
+      ],
+      "reviewedAt": "2026-10-28"
+    },
+    "tags": ["猎人", "职业"]
+  },
+  {
+    "id": "zh-class-qs",
+    "kind": "abbreviation",
+    "title": "QS：圣骑士",
+    "aliases": ["QS", "圣骑士", "骑士"],
+    "text": "QS 常指圣骑士，对应 Paladin。",
+    "usage": "奶骑、防骑、惩戒骑是不同玩法称呼，不能只凭 QS 判定其队伍职责。",
+    "provenance": {
+      "status": "community",
+      "sources": [
+        {
+          "title": "游侠网：魔兽世界职业简称大全（社区用法）",
+          "url": "https://gl.ali213.net/html/2024-7/1438583.html"
+        }
+      ],
+      "reviewedAt": "2026-10-28"
+    },
+    "tags": ["圣骑士", "职业"]
+  },
+  {
+    "id": "zh-class-ms",
+    "kind": "abbreviation",
+    "title": "MS：牧师",
+    "aliases": ["MS", "牧师"],
+    "text": "MS 是“牧师”的拼音缩写，对应 Priest。",
+    "usage": "中文职业聊天优先按牧师理解。英文组队里的 MS 也可指 main spec，需看语言和上下文。",
+    "provenance": {
+      "status": "community",
+      "sources": [
+        {
+          "title": "游侠网：魔兽世界职业简称大全（社区用法）",
+          "url": "https://gl.ali213.net/html/2024-7/1438583.html"
+        }
+      ],
+      "reviewedAt": "2026-10-28"
+    },
+    "tags": ["牧师", "职业"]
+  },
+  {
+    "id": "zh-class-xd",
+    "kind": "abbreviation",
+    "title": "XD：德鲁伊",
+    "aliases": ["XD", "小德", "小D", "德鲁伊"],
+    "text": "XD 来自“小德”，通常指德鲁伊 Druid。",
+    "usage": "中文职业语境使用。英文 XD 也可能是笑脸，不要自动当职业。",
+    "provenance": {
+      "status": "community",
+      "sources": [
+        {
+          "title": "游侠网：魔兽世界职业简称大全（社区用法）",
+          "url": "https://gl.ali213.net/html/2024-7/1438583.html"
+        }
+      ],
+      "reviewedAt": "2026-10-28"
+    },
+    "tags": ["德鲁伊", "职业"]
+  },
+  {
+    "id": "zh-class-sm",
+    "kind": "abbreviation",
+    "title": "SM：萨满祭司",
+    "aliases": ["SM", "萨满", "萨满祭司"],
+    "text": "中文职业聊天中 SM 通常指萨满祭司 Shaman。",
+    "usage": "英文组队中的 SM 常指血色修道院。先判断讨论的是职业还是副本，必要时询问。",
+    "provenance": {
+      "status": "community",
+      "sources": [
+        {
+          "title": "游侠网：魔兽世界职业简称大全（社区用法）",
+          "url": "https://gl.ali213.net/html/2024-7/1438583.html"
+        }
+      ],
+      "reviewedAt": "2026-10-28"
+    },
+    "tags": ["萨满", "职业"]
+  },
+  {
+    "id": "zh-class-ss",
+    "kind": "abbreviation",
+    "title": "SS：术士",
+    "aliases": ["SS", "术士"],
+    "text": "SS 是“术士”的拼音缩写，对应 Warlock。",
+    "usage": "职业称呼不保证已学召唤或治疗石等特定技能，具体可用性依版本和角色进度。",
+    "provenance": {
+      "status": "community",
+      "sources": [
+        {
+          "title": "游侠网：魔兽世界职业简称大全（社区用法）",
+          "url": "https://gl.ali213.net/html/2024-7/1438583.html"
+        }
+      ],
+      "reviewedAt": "2026-10-28"
+    },
+    "tags": ["术士", "职业"]
+  },
+  {
+    "id": "zh-dk-ambiguous",
+    "kind": "abbreviation",
+    "title": "DK：死亡骑士或旧副本称呼",
+    "aliases": ["DK", "死骑", "死亡骑士", "DK马", "刷DK"],
+    "text": "DK 通常指 Death Knight／死亡骑士；“刷 DK、DK 马”也可指斯坦索姆瑞文戴尔男爵及其坐骑相关话题。",
+    "usage": "先看是否在谈职业或刷坐骑。不能据此推断当前版本允许创建死亡骑士。",
+    "provenance": {
+      "status": "community",
+      "sources": [
+        {
+          "title": "游侠网：魔兽世界职业简称大全（社区用法）",
+          "url": "https://gl.ali213.net/html/2024-7/1438583.html"
+        },
+        {
+          "title": "DVG：DK 含义解析（社区称呼）",
+          "url": "https://www.dvg.cn/news/187413.html"
+        }
+      ],
+      "reviewedAt": "2026-10-28"
+    },
+    "tags": ["职业", "斯坦索姆", "坐骑"]
+  },
+  {
+    "id": "zh-role-t",
+    "kind": "abbreviation",
+    "title": "T：坦克",
+    "aliases": ["T", "坦克", "主T"],
+    "text": "组队语境中的 T 通常指承担敌人攻击的坦克职责。",
+    "usage": "“缺 T”是在招坦克。单独字母含义不确定时结合组队上下文。",
+    "provenance": {
+      "status": "community",
+      "sources": [
+        {
+          "title": "游侠网：魔兽世界职业简称大全（社区用法）",
+          "url": "https://gl.ali213.net/html/2024-7/1438583.html"
+        },
+        {
+          "title": "17173：魔兽世界黑话大盘点（仅采用词义）",
+          "url": "https://news.17173.com/content/12232025/185544081.shtml"
+        }
+      ],
+      "reviewedAt": "2026-10-28"
+    },
+    "tags": ["组队", "承伤"]
+  },
+  {
+    "id": "zh-role-healer",
+    "kind": "abbreviation",
+    "title": "奶／N：治疗",
+    "aliases": ["奶", "N", "奶妈", "治疗", "缺奶", "来个奶", "奶量"],
+    "text": "组队聊天里的“奶”或 N 通常表示治疗职责；“奶量”通常表示治疗量。",
+    "usage": "“缺奶、来个奶”表示队伍需要治疗。将游戏昵称解释为职责，不推断玩家性别。日常食品语境中的“奶”不能按游戏术语解释。",
+    "provenance": {
+      "status": "community",
+      "sources": [
+        {
+          "title": "游侠网：魔兽世界职业简称大全（社区用法）",
+          "url": "https://gl.ali213.net/html/2024-7/1438583.html"
+        },
+        {
+          "title": "17173：魔兽世界黑话大盘点（仅采用词义）",
+          "url": "https://news.17173.com/content/12232025/185544081.shtml"
+        }
+      ],
+      "reviewedAt": "2026-10-28"
+    },
+    "tags": ["组队", "回血"]
+  },
+  {
+    "id": "zh-dps",
+    "kind": "abbreviation",
+    "title": "DPS：秒伤或输出位",
+    "aliases": ["DPS", "秒伤", "输出位"],
+    "text": "DPS 原义是每秒伤害，组队时也常代指伤害输出队员。",
+    "usage": "“缺一个 DPS”指队员，“DPS 多少”通常问统计值。不要把面板武器 DPS 当角色实际秒伤。",
+    "provenance": {
+      "status": "community",
+      "sources": [
+        {
+          "title": "游侠网：魔兽世界职业简称大全（社区用法）",
+          "url": "https://gl.ali213.net/html/2024-7/1438583.html"
+        },
+        {
+          "title": "Wowhead: Classic WoW Glossary and Common Terms Explained",
+          "url": "https://www.wowhead.com/classic/guide/classic-wow-glossary-terminology"
+        }
+      ],
+      "reviewedAt": "2026-10-28"
+    },
+    "tags": ["组队", "伤害"]
+  },
+  {
+    "id": "zh-ot",
+    "kind": "abbreviation",
+    "title": "OT：仇恨失控",
+    "aliases": ["OT", "OT了", "仇恨失控"],
+    "text": "中文战斗聊天中的 OT 常表示仇恨失控，怪物转去攻击原本不该承伤的队员。",
+    "usage": "英文队伍中的 OT 常指 off-tank／副坦克。先按语言和句子消歧，不套用固定仇恨阈值。",
+    "provenance": {
+      "status": "community",
+      "sources": [
+        {
+          "title": "17173：魔兽世界黑话大盘点（仅采用词义）",
+          "url": "https://news.17173.com/content/12232025/185544081.shtml"
+        },
+        {
+          "title": "Wowhead: Classic WoW Glossary and Common Terms Explained",
+          "url": "https://www.wowhead.com/classic/guide/classic-wow-glossary-terminology"
+        }
+      ],
+      "reviewedAt": "2026-10-28"
+    },
+    "tags": ["仇恨", "坦克"]
+  },
+  {
+    "id": "zh-lm",
+    "kind": "abbreviation",
+    "title": "LM：联盟",
+    "aliases": ["LM"],
+    "text": "中文阵营语境中的 LM 通常指联盟。",
+    "usage": "“LM 玩家”描述阵营。离开魔兽语境时不要强行展开缩写。",
+    "provenance": {
+      "status": "community",
+      "sources": [
+        {
+          "title": "游侠网：LM 与 BL 的社区含义",
+          "url": "https://gl.ali213.net/html/2024-7/1439071.html"
+        }
+      ],
+      "reviewedAt": "2026-10-28"
+    },
+    "tags": ["联盟", "阵营"]
+  },
+  {
+    "id": "zh-bl",
+    "kind": "abbreviation",
+    "title": "BL：部落",
+    "aliases": ["BL"],
+    "text": "中文阵营语境中的 BL 通常指部落。",
+    "usage": "英文战斗语境里的 BL 也可能指 Bloodlust／嗜血。结合语言、阵营或技能话题消歧。",
+    "provenance": {
+      "status": "community",
+      "sources": [
+        {
+          "title": "游侠网：LM 与 BL 的社区含义",
+          "url": "https://gl.ali213.net/html/2024-7/1439071.html"
+        }
+      ],
+      "reviewedAt": "2026-10-28"
+    },
+    "tags": ["部落", "阵营"]
+  },
+  {
+    "id": "zh-yy",
+    "kind": "abbreviation",
+    "title": "YY：英勇或语音频道",
+    "aliases": ["YY", "英勇"],
+    "text": "魔兽中文战斗语境中的 YY 常指英勇技能；“上 YY、YY 频道”一般指语音聊天服务。",
+    "usage": "结合“开技能”或“进频道”的动词消歧。不要据此保证当前版本、阵营或职业拥有英勇。",
+    "provenance": {
+      "status": "community",
+      "sources": [
+        {
+          "title": "17173：魔兽世界黑话大盘点（仅采用词义）",
+          "url": "https://news.17173.com/content/12232025/185544081.shtml"
+        }
+      ],
+      "reviewedAt": "2026-10-28"
+    },
+    "tags": ["技能", "语音"]
+  },
+  {
+    "id": "zh-sx",
+    "kind": "abbreviation",
+    "title": "SX：嗜血",
+    "aliases": ["SX", "嗜血"],
+    "text": "中文战斗语境中的 SX 常指嗜血类团队爆发技能。",
+    "usage": "“开 SX”通常是在约定爆发时机。技能来源、效果和可用性随版本变化，知识库不提供固定数值。",
+    "provenance": {
+      "status": "community",
+      "sources": [
+        {
+          "title": "17173：魔兽世界黑话大盘点（仅采用词义）",
+          "url": "https://news.17173.com/content/12232025/185544081.shtml"
+        }
+      ],
+      "reviewedAt": "2026-10-28"
+    },
+    "tags": ["技能", "爆发"]
+  },
+  {
+    "id": "zh-mt",
+    "kind": "abbreviation",
+    "title": "MT：主坦克",
+    "aliases": ["MT", "主坦"],
+    "text": "MT 是 Main Tank，常指队伍或团队中的主坦克。",
+    "usage": "使用队伍分工理解，不等于某一个固定职业或固定玩家。",
+    "provenance": {
+      "status": "community",
+      "sources": [
+        {
+          "title": "游侠网：魔兽世界专业术语一览（仅采用词义）",
+          "url": "https://gl.ali213.net/html/2024-3/1342483.html"
+        },
+        {
+          "title": "Wowhead: Classic WoW Glossary and Common Terms Explained",
+          "url": "https://www.wowhead.com/classic/guide/classic-wow-glossary-terminology"
+        }
+      ],
+      "reviewedAt": "2026-10-28"
+    },
+    "tags": ["坦克", "组队"]
+  },
+  {
+    "id": "zh-add",
+    "kind": "abbreviation",
+    "title": "ADD：额外引怪",
+    "aliases": ["ADD", "引到怪", "引怪"],
+    "text": "中文队伍说“ADD 了”通常表示额外的敌人加入战斗，常带有意外引怪的意思。",
+    "usage": "描述战况，不自动把原因归咎于某个队友；英文 adds 还可指首领机制生成的小怪。",
+    "provenance": {
+      "status": "community",
+      "sources": [
+        {
+          "title": "17173：魔兽世界黑话大盘点（仅采用词义）",
+          "url": "https://news.17173.com/content/12232025/185544081.shtml"
+        },
+        {
+          "title": "Wowhead: Classic WoW Glossary and Common Terms Explained",
+          "url": "https://www.wowhead.com/classic/guide/classic-wow-glossary-terminology"
+        }
+      ],
+      "reviewedAt": "2026-10-28"
+    },
+    "tags": ["小怪", "战斗"]
+  },
+  {
+    "id": "zh-aoe",
+    "kind": "abbreviation",
+    "title": "AOE：范围效果",
+    "aliases": ["AOE", "群伤", "群攻"],
+    "text": "AOE 是 Area of Effect，指作用于一片范围的效果，聊天中常指范围伤害。",
+    "usage": "不意味着每个范围技能都造成伤害，也不意味着所有怪都适合同时拉。",
+    "provenance": {
+      "status": "community",
+      "sources": [
+        {
+          "title": "游侠网：魔兽世界专业术语一览（仅采用词义）",
+          "url": "https://gl.ali213.net/html/2024-3/1342483.html"
+        },
+        {
+          "title": "Wowhead: Classic WoW Glossary and Common Terms Explained",
+          "url": "https://www.wowhead.com/classic/guide/classic-wow-glossary-terminology"
+        }
+      ],
+      "reviewedAt": "2026-10-28"
+    },
+    "tags": ["范围", "伤害"]
+  },
+  {
+    "id": "zh-meme-horde-worthless",
+    "kind": "meme",
+    "title": "部落都是废物",
+    "aliases": ["部落都是废物"],
+    "text": "这是用户指定的中文魔兽阵营梗。社区常把它与希尔瓦娜斯相关剧情联系起来；本条未核验官方中文原片的精确字幕。",
+    "usage": "用户主动玩梗时可解释或接梗。自动事件只在已知角色属于部落且用户明确愿意接受阵营互损时使用，联盟角色不自动嘲讽真实玩家。原创接梗示例：“台词够狠，咱们下一把打回来。”这是戏谑，不是对阵营的事实判断。",
+    "provenance": {
+      "status": "user-example",
+      "sources": [
+        {
+          "title": "用户在 2026-10-28 的知识库需求中提供的例句"
+        },
+        {
+          "title": "萌娘百科镜像：你们这是自寻死路（社区记录，未核对原片音轨）",
+          "url": "https://moegirl.uk/%E4%BD%A0%E4%BB%AC%E8%BF%99%E6%98%AF%E8%87%AA%E5%AF%BB%E6%AD%BB%E8%B7%AF"
+        }
+      ],
+      "reviewedAt": "2026-10-28"
+    },
+    "tags": ["希尔瓦娜斯", "阵营玩梗", "death"]
+  },
+  {
+    "id": "zh-meme-not-prepared",
+    "kind": "meme",
+    "title": "你们这是自寻死路",
+    "aliases": ["你们这是自寻死路", "自寻死路", "你们还没准备好"],
+    "text": "社区将这句中文梗关联到伊利丹与燃烧的远征片头，英文关联句为 You are not prepared。不同中文版本不能视为同一条精确字幕。",
+    "usage": "适合用户主动玩梗、讨论伊利丹或出发前的准备。原创接梗示例：“气势到了，药水和修理也准备好了没？”不要把它当作对现实用户的威胁。",
+    "provenance": {
+      "status": "community",
+      "sources": [
+        {
+          "title": "萌娘百科镜像：你们这是自寻死路（社区记录，未核对原片音轨）",
+          "url": "https://moegirl.uk/%E4%BD%A0%E4%BB%AC%E8%BF%99%E6%98%AF%E8%87%AA%E5%AF%BB%E6%AD%BB%E8%B7%AF"
+        },
+        {
+          "title": "项目已有角色语录研究",
+          "path": "WOWAddons/research/warcraft-characters/warcraft-character-library.json"
+        }
+      ],
+      "reviewedAt": "2026-10-28"
+    },
+    "tags": ["伊利丹", "蛋总", "准备", "zone"]
+  },
+  {
+    "id": "zh-meme-for-horde",
+    "kind": "meme",
+    "title": "为了部落",
+    "aliases": ["为了部落"],
+    "text": "魔兽中的部落阵营口号，许多角色和玩家都使用，并非某一位角色独有。",
+    "usage": "用户表达部落认同或庆祝时可简短接梗。未知或联盟身份时，不替用户宣布阵营。",
+    "provenance": {
+      "status": "project",
+      "sources": [
+        {
+          "title": "项目已有角色语录研究",
+          "path": "WOWAddons/research/warcraft-characters/warcraft-character-library.json"
+        }
+      ],
+      "reviewedAt": "2026-10-28"
+    },
+    "tags": ["部落", "庆祝", "level_up"]
+  },
+  {
+    "id": "zh-meme-bubble-hearth",
+    "kind": "meme",
+    "title": "无敌炉石",
+    "aliases": ["无敌炉石", "无敌回城"],
+    "text": "玩家把圣骑士免疫效果与炉石回城的组合称作“无敌炉石”，也借它调侃及时撤退。",
+    "usage": "可作回城或休息的轻松梗。具体可行性依版本与规则；官方经典硬核规则限制该组合，不能把梗当通用逃生指导。",
+    "provenance": {
+      "status": "verified",
+      "sources": [
+        {
+          "title": "Blizzard: Rules of Engagement: Classic Hardcore",
+          "url": "https://worldofwarcraft.blizzard.com/en-us/news/23973734/rules-of-engagement-classic-hardcore-is-coming-to-world-of-warcraft"
+        },
+        {
+          "title": "项目已有角色语录研究",
+          "path": "WOWAddons/research/warcraft-characters/warcraft-character-library.json"
+        }
+      ],
+      "reviewedAt": "2026-10-28"
+    },
+    "tags": ["圣骑士", "回城", "休息"]
+  },
+  {
+    "id": "zh-class-dh",
+    "kind": "abbreviation",
+    "title": "DH：恶魔猎手",
+    "aliases": ["DH", "恶魔猎手", "瞎子"],
+    "text": "DH 是 Demon Hunter／恶魔猎手的英文缩写；中文玩家也使用“瞎子”这一游戏绰号。",
+    "usage": "只解释游戏称呼，不保证当前分支可选择该职业，尤其不能据此认为经典旧世拥有恶魔猎手。先核实版本；不要与猎人 LR 混淆，也不要将游戏绰号用于现实残障人士。",
+    "provenance": {
+      "status": "community",
+      "sources": [
+        {
+          "title": "九游：职业缩写说明（仅采用 DH 等词义，不采用过期强度）",
+          "url": "https://www.9game.cn/mshgdzz/6678399.html"
+        }
+      ],
+      "reviewedAt": "2026-10-28"
+    },
+    "tags": ["职业"]
+  },
+  {
+    "id": "zh-class-ws",
+    "kind": "abbreviation",
+    "title": "WS：武僧",
+    "aliases": ["WS", "武僧"],
+    "text": "WS 是“武僧”的拼音缩写，对应 Monk。",
+    "usage": "只解释职业缩写。正式服和已包含武僧的怀旧资料片分支可以谈及此职业，但不能据此保证经典旧世、无限服或所有分支都可创建武僧。具体职责看当前专精。",
+    "provenance": {
+      "status": "community",
+      "sources": [
+        {
+          "title": "游侠网：魔兽世界职业简称大全（社区用法）",
+          "url": "https://gl.ali213.net/html/2024-7/1438583.html"
+        }
+      ],
+      "reviewedAt": "2026-10-28"
+    },
+    "tags": ["职业"]
+  }
+]

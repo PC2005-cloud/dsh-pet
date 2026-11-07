@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+bridge-config.json
+bridge-config.json.tmp
+bridge-config-forever.json
+bridge-config-forever.json.tmp
+bridge.pid
+bridge-forever.pid
+*.log

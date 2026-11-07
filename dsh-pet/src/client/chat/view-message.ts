@@ -9,6 +9,7 @@ import type { ChatPanelRuntime } from './runtime.ts';
 import { formatStamp } from './stamp.ts';
 import { tipAttrs } from './tooltip.ts';
 import type { ChatPanelState } from './types.ts';
+import { wowRecommendationsNode } from './wow-recommendations.ts';
 
 /** 语音播报按钮：贴在时间右边，四种状态一眼可分——可播 / 生成中转圈 / 播放中高亮 / 失败可重试。 */
 function speakNode(h: ChatPanelRuntime['h'], text: string, ts: number, state: ChatPanelState): unknown {
@@ -149,6 +150,8 @@ export interface MessageNodeInput {
   readonly avatarVersion: number;
   /** 点开大图；由轮节点传入，本模块不碰面板状态。 */
   readonly onOpenImage: (url: string) => void;
+  /** 已装配的推荐卡，仅在精灵回答侧显示。 */
+  readonly recommendations?: unknown;
 }
 
 /**
@@ -170,6 +173,7 @@ export function messageNode(h: ChatPanelRuntime['h'], input: MessageNodeInput): 
         className: 'pet-chat-bubble',
         children: [
           h('div', { className: 'pet-chat-text', children: message.text }),
+          isMe ? null : (input.recommendations ?? null),
           image === undefined
             ? null
             : h('button', {
@@ -243,6 +247,10 @@ export function roundNode(
                 assetRoot: state.assetRoot,
                 avatarVersion: state.avatarVersion,
                 onOpenImage: state.showImage,
+                recommendations:
+                  round.assistant.wowRecommendations === undefined
+                    ? undefined
+                    : wowRecommendationsNode(rt, round.assistant.wowRecommendations),
               }),
           // 时间跟着这一轮的最后一条消息走：有回答就贴在回答下方，否则贴在我的问题下方
           round.ts > 0

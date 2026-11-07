@@ -9,7 +9,7 @@
  * @module dsh-pet/scripts/prepack-check
  */
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 // 包根目录（scripts/ 的上一级）
@@ -57,6 +57,14 @@ const stripJsonc = (s) => {
 const required = [
   'lib/index.js', // 宿主半侧
   'lib/client.js', // 浏览器半侧
+  'runtime/wow/WoWCompanionBridge/server.py',
+  'runtime/wow/WoWCompanionBridge/protocol.py',
+  'runtime/wow/WoWCompanionBridge/window.py',
+  'runtime/wow/WoWCompanionBridge/macro_import.py',
+  'runtime/wow/WoWCompanionBridge/macro_native.py',
+  'runtime/wow/WoWMapCompanion/WoWMapCompanion.toc',
+  'runtime/wow/WoWForeverCompanion/WoWForeverCompanion.toc',
+  'runtime/wow/WoWMacroImport/WoWMacroImport.toc',
   'lib/types/index.d.ts', // 宿主类型声明
   'lib/types/client/index.d.ts', // 客户端类型声明
   'cordis.patch.yml', // bundle patch（挂载声明）
@@ -191,6 +199,29 @@ if (oxcBundles.length > 0)
       '类字段改用 declare + 构造器赋值（见 src/host/helper-process.ts 的约定）',
   );
 else ok(`no undeclared ${OXC_RUNTIME} import in bundles`);
+
+// The Electron app ships without node_modules. Follow generated chunks as well as the entry file.
+const appEntry = join(ROOT, 'lib', 'app.js');
+const checkedAppChunks = new Set();
+const pendingAppChunks = existsSync(appEntry) ? [appEntry] : [];
+const unbundledWowDependencies = [];
+while (pendingAppChunks.length) {
+  const chunk = pendingAppChunks.pop();
+  if (checkedAppChunks.has(chunk)) continue;
+  checkedAppChunks.add(chunk);
+  const source = readFileSync(chunk, 'utf8');
+  const imports = source.matchAll(/\b(?:from\s*|import\s*(?:\(\s*)?|require\s*\(\s*)["']([^"']+)["']/g);
+  for (const [, specifier] of imports) {
+    if (/^(?:valibot|yauzl)(?:\/|$)/.test(specifier)) unbundledWowDependencies.push(specifier);
+    if (specifier.startsWith('.')) {
+      const dependency = resolve(dirname(chunk), specifier);
+      if (dependency.endsWith('.js') && existsSync(dependency)) pendingAppChunks.push(dependency);
+    }
+  }
+}
+if (unbundledWowDependencies.length)
+  fail(`app contains external WoW dependencies: ${[...new Set(unbundledWowDependencies)].join(', ')}`);
+else if (checkedAppChunks.size) ok(`WoW dependencies bundled across ${checkedAppChunks.size} app chunks`);
 
 if (process.exitCode) console.error('\n[prepack-check] fix the failures above before publishing.');
 else console.log('\n[prepack-check] all checks passed — ready to pack/publish.');

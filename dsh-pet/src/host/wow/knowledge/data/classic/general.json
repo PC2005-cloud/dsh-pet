@@ -1,0 +1,63 @@
+[
+  {
+    "id": "classic-branches",
+    "kind": "fact",
+    "title": "怀旧服需要进一步确认规则集",
+    "aliases": ["怀旧服", "Classic", "经典怀旧服", "探索赛季", "周年服"],
+    "text": "“怀旧服”是多个怀旧分支的统称，包含经典旧世、专家模式及不同资料片或赛季规则。",
+    "usage": "先问清资料片和规则集，再回答等级上限、天赋、副本或复活问题。不要把 Classic 直接等同永久 60 级。",
+    "provenance": {
+      "status": "verified",
+      "sources": [
+        {
+          "title": "Blizzard: Content Update Notes（分别列出各分支）",
+          "url": "https://worldofwarcraft.blizzard.com/en-us/content-update-notes"
+        },
+        {
+          "title": "Blizzard: Relive Your Adventure With the WoW Classic 20th Anniversary Edition",
+          "url": "https://news.blizzard.com/en-us/article/24156594/relive-your-adventure-with-the-wow-classic-20th-anniversary-edition"
+        }
+      ],
+      "reviewedAt": "2026-10-28"
+    },
+    "tags": ["版本", "规则集"]
+  },
+  {
+    "id": "classic-era-level",
+    "kind": "fact",
+    "title": "经典旧世与等级上限",
+    "aliases": ["经典旧世", "Classic Era", "60级怀旧服"],
+    "text": "经典旧世的基础内容以 60 级阶段为范围。周年服或资料片进度服不能仅凭“怀旧”二字套用该上限。",
+    "usage": "只在已经确认经典旧世分支时使用。不能据此回答所有怀旧服的当前等级上限。",
+    "provenance": {
+      "status": "verified",
+      "sources": [
+        {
+          "title": "Blizzard: Relive Your Adventure With the WoW Classic 20th Anniversary Edition",
+          "url": "https://news.blizzard.com/en-us/article/24156594/relive-your-adventure-with-the-wow-classic-20th-anniversary-edition"
+        }
+      ],
+      "reviewedAt": "2026-10-28"
+    },
+    "tags": ["等级上限", "旧世"]
+  },
+  {
+    "id": "classic-hardcore-death",
+    "kind": "fact",
+    "title": "经典专家模式的死亡规则",
+    "aliases": ["经典专家模式", "硬核服", "Hardcore", "一命"],
+    "text": "官方经典专家模式将角色死亡作为该模式旅程的终点，并限制圣骑士免疫期间使用炉石。",
+    "usage": "讨论死亡时先确认规则集。不能建议专家模式玩家按普通服流程跑尸复活，也不要用失败梗嘲讽刚失去角色的用户。",
+    "provenance": {
+      "status": "verified",
+      "sources": [
+        {
+          "title": "Blizzard: Rules of Engagement: Classic Hardcore",
+          "url": "https://worldofwarcraft.blizzard.com/en-us/news/23973734/rules-of-engagement-classic-hardcore-is-coming-to-world-of-warcraft"
+        }
+      ],
+      "reviewedAt": "2026-10-28"
+    },
+    "tags": ["死亡", "复活", "无敌炉石", "death"]
+  }
+]

@@ -1,0 +1,1098 @@
+[
+  {
+    "name": "same-level-actual-stat-upgrade",
+    "comparison": {
+      "v": 1,
+      "id": 1,
+      "session": "1700000000-12500-123456",
+      "guid": "Player-1-00000001",
+      "class": "MAGE",
+      "spec": 64,
+      "primary": 4,
+      "observedAt": 1700000002,
+      "slot": 5,
+      "usable": true,
+      "specMatch": true,
+      "current": {
+        "itemID": 100,
+        "name": "Old chest",
+        "itemLevel": 150,
+        "equipLoc": "INVTYPE_CHEST",
+        "type": "Armor",
+        "subtype": "Plate",
+        "stats": [
+          {
+            "key": "ITEM_MOD_HASTE_RATING_SHORT",
+            "value": 42
+          },
+          {
+            "key": "ITEM_MOD_INTELLECT_SHORT",
+            "value": 150
+          }
+        ],
+        "complex": false,
+        "complete": true
+      },
+      "candidate": {
+        "itemID": 12345,
+        "name": "New item",
+        "itemLevel": 150,
+        "equipLoc": "INVTYPE_CHEST",
+        "type": "Armor",
+        "subtype": "Plate",
+        "stats": [
+          {
+            "key": "ITEM_MOD_HASTE_RATING_SHORT",
+            "value": 42
+          },
+          {
+            "key": "ITEM_MOD_INTELLECT_SHORT",
+            "value": 151
+          }
+        ],
+        "complex": false,
+        "complete": true
+      }
+    },
+    "assessment": {
+      "verdict": "upgrade",
+      "reason": "stats_upgrade"
+    }
+  },
+  {
+    "name": "empty-slot",
+    "comparison": {
+      "v": 1,
+      "id": 1,
+      "session": "1700000000-12500-123456",
+      "guid": "Player-1-00000001",
+      "class": "MAGE",
+      "spec": 64,
+      "primary": 4,
+      "observedAt": 1700000002,
+      "slot": 5,
+      "usable": true,
+      "specMatch": true,
+      "current": {
+        "itemID": 0,
+        "name": "空槽",
+        "itemLevel": -1,
+        "equipLoc": "",
+        "type": "",
+        "subtype": "",
+        "stats": [],
+        "complex": false,
+        "complete": true
+      },
+      "candidate": {
+        "itemID": 12345,
+        "name": "New item",
+        "itemLevel": 150,
+        "equipLoc": "INVTYPE_CHEST",
+        "type": "Armor",
+        "subtype": "Plate",
+        "stats": [
+          {
+            "key": "ITEM_MOD_HASTE_RATING_SHORT",
+            "value": 42
+          },
+          {
+            "key": "ITEM_MOD_INTELLECT_SHORT",
+            "value": 151
+          }
+        ],
+        "complex": false,
+        "complete": true
+      }
+    },
+    "assessment": {
+      "verdict": "upgrade",
+      "reason": "empty_slot"
+    }
+  },
+  {
+    "name": "unusable",
+    "comparison": {
+      "v": 1,
+      "id": 1,
+      "session": "1700000000-12500-123456",
+      "guid": "Player-1-00000001",
+      "class": "MAGE",
+      "spec": 64,
+      "primary": 4,
+      "observedAt": 1700000002,
+      "slot": 5,
+      "usable": false,
+      "specMatch": true,
+      "current": {
+        "itemID": 100,
+        "name": "Old chest",
+        "itemLevel": 150,
+        "equipLoc": "INVTYPE_CHEST",
+        "type": "Armor",
+        "subtype": "Plate",
+        "stats": [
+          {
+            "key": "ITEM_MOD_HASTE_RATING_SHORT",
+            "value": 42
+          },
+          {
+            "key": "ITEM_MOD_INTELLECT_SHORT",
+            "value": 150
+          }
+        ],
+        "complex": false,
+        "complete": true
+      },
+      "candidate": {
+        "itemID": 12345,
+        "name": "New item",
+        "itemLevel": 150,
+        "equipLoc": "INVTYPE_CHEST",
+        "type": "Armor",
+        "subtype": "Plate",
+        "stats": [
+          {
+            "key": "ITEM_MOD_HASTE_RATING_SHORT",
+            "value": 42
+          },
+          {
+            "key": "ITEM_MOD_INTELLECT_SHORT",
+            "value": 151
+          }
+        ],
+        "complex": false,
+        "complete": true
+      }
+    },
+    "assessment": {
+      "verdict": "not_upgrade",
+      "reason": "unusable"
+    }
+  },
+  {
+    "name": "wrong-spec",
+    "comparison": {
+      "v": 1,
+      "id": 1,
+      "session": "1700000000-12500-123456",
+      "guid": "Player-1-00000001",
+      "class": "MAGE",
+      "spec": 64,
+      "primary": 4,
+      "observedAt": 1700000002,
+      "slot": 5,
+      "usable": true,
+      "specMatch": false,
+      "current": {
+        "itemID": 100,
+        "name": "Old chest",
+        "itemLevel": 150,
+        "equipLoc": "INVTYPE_CHEST",
+        "type": "Armor",
+        "subtype": "Plate",
+        "stats": [
+          {
+            "key": "ITEM_MOD_HASTE_RATING_SHORT",
+            "value": 42
+          },
+          {
+            "key": "ITEM_MOD_INTELLECT_SHORT",
+            "value": 150
+          }
+        ],
+        "complex": false,
+        "complete": true
+      },
+      "candidate": {
+        "itemID": 12345,
+        "name": "New item",
+        "itemLevel": 150,
+        "equipLoc": "INVTYPE_CHEST",
+        "type": "Armor",
+        "subtype": "Plate",
+        "stats": [
+          {
+            "key": "ITEM_MOD_HASTE_RATING_SHORT",
+            "value": 42
+          },
+          {
+            "key": "ITEM_MOD_INTELLECT_SHORT",
+            "value": 151
+          }
+        ],
+        "complex": false,
+        "complete": true
+      }
+    },
+    "assessment": {
+      "verdict": "not_upgrade",
+      "reason": "wrong_spec"
+    }
+  },
+  {
+    "name": "unknown-target",
+    "comparison": {
+      "v": 1,
+      "id": 1,
+      "session": "1700000000-12500-123456",
+      "guid": "Player-1-00000001",
+      "class": "MAGE",
+      "spec": 64,
+      "primary": 4,
+      "observedAt": 1700000002,
+      "slot": 0,
+      "usable": true,
+      "specMatch": true,
+      "current": null,
+      "candidate": {
+        "itemID": 12345,
+        "name": "New item",
+        "itemLevel": 150,
+        "equipLoc": "INVTYPE_CHEST",
+        "type": "Armor",
+        "subtype": "Plate",
+        "stats": [
+          {
+            "key": "ITEM_MOD_HASTE_RATING_SHORT",
+            "value": 42
+          },
+          {
+            "key": "ITEM_MOD_INTELLECT_SHORT",
+            "value": 151
+          }
+        ],
+        "complex": false,
+        "complete": true
+      }
+    },
+    "assessment": {
+      "verdict": "review",
+      "reason": "no_target"
+    }
+  },
+  {
+    "name": "incomplete",
+    "comparison": {
+      "v": 1,
+      "id": 1,
+      "session": "1700000000-12500-123456",
+      "guid": "Player-1-00000001",
+      "class": "MAGE",
+      "spec": 64,
+      "primary": 4,
+      "observedAt": 1700000002,
+      "slot": 5,
+      "usable": true,
+      "specMatch": true,
+      "current": {
+        "itemID": 100,
+        "name": "Old chest",
+        "itemLevel": 150,
+        "equipLoc": "INVTYPE_CHEST",
+        "type": "Armor",
+        "subtype": "Plate",
+        "stats": [
+          {
+            "key": "ITEM_MOD_HASTE_RATING_SHORT",
+            "value": 42
+          },
+          {
+            "key": "ITEM_MOD_INTELLECT_SHORT",
+            "value": 150
+          }
+        ],
+        "complex": false,
+        "complete": true
+      },
+      "candidate": {
+        "itemID": 12345,
+        "name": "New item",
+        "itemLevel": 150,
+        "equipLoc": "INVTYPE_CHEST",
+        "type": "Armor",
+        "subtype": "Plate",
+        "stats": [
+          {
+            "key": "ITEM_MOD_HASTE_RATING_SHORT",
+            "value": 42
+          },
+          {
+            "key": "ITEM_MOD_INTELLECT_SHORT",
+            "value": 151
+          }
+        ],
+        "complex": false,
+        "complete": false
+      }
+    },
+    "assessment": {
+      "verdict": "review",
+      "reason": "incomplete"
+    }
+  },
+  {
+    "name": "unknown-spec",
+    "comparison": {
+      "v": 1,
+      "id": 1,
+      "session": "1700000000-12500-123456",
+      "guid": "Player-1-00000001",
+      "class": "MAGE",
+      "spec": 64,
+      "primary": 4,
+      "observedAt": 1700000002,
+      "slot": 5,
+      "usable": true,
+      "specMatch": null,
+      "current": {
+        "itemID": 100,
+        "name": "Old chest",
+        "itemLevel": 150,
+        "equipLoc": "INVTYPE_CHEST",
+        "type": "Armor",
+        "subtype": "Plate",
+        "stats": [
+          {
+            "key": "ITEM_MOD_HASTE_RATING_SHORT",
+            "value": 42
+          },
+          {
+            "key": "ITEM_MOD_INTELLECT_SHORT",
+            "value": 150
+          }
+        ],
+        "complex": false,
+        "complete": true
+      },
+      "candidate": {
+        "itemID": 12345,
+        "name": "New item",
+        "itemLevel": 150,
+        "equipLoc": "INVTYPE_CHEST",
+        "type": "Armor",
+        "subtype": "Plate",
+        "stats": [
+          {
+            "key": "ITEM_MOD_HASTE_RATING_SHORT",
+            "value": 42
+          },
+          {
+            "key": "ITEM_MOD_INTELLECT_SHORT",
+            "value": 151
+          }
+        ],
+        "complex": false,
+        "complete": true
+      }
+    },
+    "assessment": {
+      "verdict": "review",
+      "reason": "unknown_spec"
+    }
+  },
+  {
+    "name": "complex",
+    "comparison": {
+      "v": 1,
+      "id": 1,
+      "session": "1700000000-12500-123456",
+      "guid": "Player-1-00000001",
+      "class": "MAGE",
+      "spec": 64,
+      "primary": 4,
+      "observedAt": 1700000002,
+      "slot": 5,
+      "usable": true,
+      "specMatch": true,
+      "current": {
+        "itemID": 100,
+        "name": "Old chest",
+        "itemLevel": 150,
+        "equipLoc": "INVTYPE_CHEST",
+        "type": "Armor",
+        "subtype": "Plate",
+        "stats": [
+          {
+            "key": "ITEM_MOD_HASTE_RATING_SHORT",
+            "value": 42
+          },
+          {
+            "key": "ITEM_MOD_INTELLECT_SHORT",
+            "value": 150
+          }
+        ],
+        "complex": false,
+        "complete": true
+      },
+      "candidate": {
+        "itemID": 12345,
+        "name": "New item",
+        "itemLevel": 150,
+        "equipLoc": "INVTYPE_CHEST",
+        "type": "Armor",
+        "subtype": "Plate",
+        "stats": [
+          {
+            "key": "ITEM_MOD_HASTE_RATING_SHORT",
+            "value": 42
+          },
+          {
+            "key": "ITEM_MOD_INTELLECT_SHORT",
+            "value": 151
+          }
+        ],
+        "complex": true,
+        "complete": true
+      }
+    },
+    "assessment": {
+      "verdict": "review",
+      "reason": "complex_item"
+    }
+  },
+  {
+    "name": "different-weapon-family",
+    "comparison": {
+      "v": 1,
+      "id": 1,
+      "session": "1700000000-12500-123456",
+      "guid": "Player-1-00000001",
+      "class": "MAGE",
+      "spec": 64,
+      "primary": 4,
+      "observedAt": 1700000002,
+      "slot": 5,
+      "usable": true,
+      "specMatch": true,
+      "current": {
+        "itemID": 100,
+        "name": "Old chest",
+        "itemLevel": 150,
+        "equipLoc": "INVTYPE_2HWEAPON",
+        "type": "Armor",
+        "subtype": "Plate",
+        "stats": [
+          {
+            "key": "ITEM_MOD_HASTE_RATING_SHORT",
+            "value": 42
+          },
+          {
+            "key": "ITEM_MOD_INTELLECT_SHORT",
+            "value": 150
+          }
+        ],
+        "complex": false,
+        "complete": true
+      },
+      "candidate": {
+        "itemID": 12345,
+        "name": "New item",
+        "itemLevel": 150,
+        "equipLoc": "INVTYPE_CHEST",
+        "type": "Armor",
+        "subtype": "Plate",
+        "stats": [
+          {
+            "key": "ITEM_MOD_HASTE_RATING_SHORT",
+            "value": 42
+          },
+          {
+            "key": "ITEM_MOD_INTELLECT_SHORT",
+            "value": 151
+          }
+        ],
+        "complex": false,
+        "complete": true
+      }
+    },
+    "assessment": {
+      "verdict": "review",
+      "reason": "weapon_change"
+    }
+  },
+  {
+    "name": "weaker",
+    "comparison": {
+      "v": 1,
+      "id": 1,
+      "session": "1700000000-12500-123456",
+      "guid": "Player-1-00000001",
+      "class": "MAGE",
+      "spec": 64,
+      "primary": 4,
+      "observedAt": 1700000002,
+      "slot": 5,
+      "usable": true,
+      "specMatch": true,
+      "current": {
+        "itemID": 100,
+        "name": "Old chest",
+        "itemLevel": 150,
+        "equipLoc": "INVTYPE_CHEST",
+        "type": "Armor",
+        "subtype": "Plate",
+        "stats": [
+          {
+            "key": "ITEM_MOD_HASTE_RATING_SHORT",
+            "value": 42
+          },
+          {
+            "key": "ITEM_MOD_INTELLECT_SHORT",
+            "value": 150
+          }
+        ],
+        "complex": false,
+        "complete": true
+      },
+      "candidate": {
+        "itemID": 12345,
+        "name": "New item",
+        "itemLevel": 150,
+        "equipLoc": "INVTYPE_CHEST",
+        "type": "Armor",
+        "subtype": "Plate",
+        "stats": [
+          {
+            "key": "ITEM_MOD_INTELLECT_SHORT",
+            "value": 140
+          },
+          {
+            "key": "ITEM_MOD_HASTE_RATING_SHORT",
+            "value": 42
+          }
+        ],
+        "complex": false,
+        "complete": true
+      }
+    },
+    "assessment": {
+      "verdict": "not_upgrade",
+      "reason": "weaker_stats"
+    }
+  },
+  {
+    "name": "equivalent",
+    "comparison": {
+      "v": 1,
+      "id": 1,
+      "session": "1700000000-12500-123456",
+      "guid": "Player-1-00000001",
+      "class": "MAGE",
+      "spec": 64,
+      "primary": 4,
+      "observedAt": 1700000002,
+      "slot": 5,
+      "usable": true,
+      "specMatch": true,
+      "current": {
+        "itemID": 100,
+        "name": "Old chest",
+        "itemLevel": 150,
+        "equipLoc": "INVTYPE_CHEST",
+        "type": "Armor",
+        "subtype": "Plate",
+        "stats": [
+          {
+            "key": "ITEM_MOD_HASTE_RATING_SHORT",
+            "value": 42
+          },
+          {
+            "key": "ITEM_MOD_INTELLECT_SHORT",
+            "value": 150
+          }
+        ],
+        "complex": false,
+        "complete": true
+      },
+      "candidate": {
+        "itemID": 12345,
+        "name": "New item",
+        "itemLevel": 150,
+        "equipLoc": "INVTYPE_CHEST",
+        "type": "Armor",
+        "subtype": "Plate",
+        "stats": [
+          {
+            "key": "ITEM_MOD_HASTE_RATING_SHORT",
+            "value": 42
+          },
+          {
+            "key": "ITEM_MOD_INTELLECT_SHORT",
+            "value": 150
+          }
+        ],
+        "complex": false,
+        "complete": true
+      }
+    },
+    "assessment": {
+      "verdict": "not_upgrade",
+      "reason": "equivalent"
+    }
+  },
+  {
+    "name": "mixed",
+    "comparison": {
+      "v": 1,
+      "id": 1,
+      "session": "1700000000-12500-123456",
+      "guid": "Player-1-00000001",
+      "class": "MAGE",
+      "spec": 64,
+      "primary": 4,
+      "observedAt": 1700000002,
+      "slot": 5,
+      "usable": true,
+      "specMatch": true,
+      "current": {
+        "itemID": 100,
+        "name": "Old chest",
+        "itemLevel": 150,
+        "equipLoc": "INVTYPE_CHEST",
+        "type": "Armor",
+        "subtype": "Plate",
+        "stats": [
+          {
+            "key": "ITEM_MOD_HASTE_RATING_SHORT",
+            "value": 42
+          },
+          {
+            "key": "ITEM_MOD_INTELLECT_SHORT",
+            "value": 150
+          }
+        ],
+        "complex": false,
+        "complete": true
+      },
+      "candidate": {
+        "itemID": 12345,
+        "name": "New item",
+        "itemLevel": 150,
+        "equipLoc": "INVTYPE_CHEST",
+        "type": "Armor",
+        "subtype": "Plate",
+        "stats": [
+          {
+            "key": "ITEM_MOD_INTELLECT_SHORT",
+            "value": 160
+          },
+          {
+            "key": "ITEM_MOD_HASTE_RATING_SHORT",
+            "value": 20
+          }
+        ],
+        "complex": false,
+        "complete": true
+      }
+    },
+    "assessment": {
+      "verdict": "review",
+      "reason": "stat_tradeoff"
+    }
+  },
+  {
+    "name": "primary-upgrade-secondary-tradeoff",
+    "comparison": {
+      "v": 1,
+      "id": 1,
+      "session": "1700000000-12500-123456",
+      "guid": "Player-1-00000001",
+      "class": "MAGE",
+      "spec": 64,
+      "primary": 4,
+      "observedAt": 1700000002,
+      "slot": 5,
+      "usable": true,
+      "specMatch": true,
+      "current": {
+        "itemID": 100,
+        "name": "Old chest",
+        "itemLevel": 150,
+        "equipLoc": "INVTYPE_CHEST",
+        "type": "Armor",
+        "subtype": "Plate",
+        "stats": [
+          {
+            "key": "ITEM_MOD_HASTE_RATING_SHORT",
+            "value": 42
+          },
+          {
+            "key": "ITEM_MOD_INTELLECT_SHORT",
+            "value": 150
+          }
+        ],
+        "complex": false,
+        "complete": true
+      },
+      "candidate": {
+        "itemID": 12345,
+        "name": "New item",
+        "itemLevel": 160,
+        "equipLoc": "INVTYPE_CHEST",
+        "type": "Armor",
+        "subtype": "Plate",
+        "stats": [
+          {
+            "key": "ITEM_MOD_INTELLECT_SHORT",
+            "value": 160
+          },
+          {
+            "key": "ITEM_MOD_HASTE_RATING_SHORT",
+            "value": 20
+          }
+        ],
+        "complex": false,
+        "complete": true
+      }
+    },
+    "assessment": {
+      "verdict": "review",
+      "reason": "primary_upgrade_tradeoff"
+    }
+  },
+  {
+    "name": "primary-upgrade-core-stat-loss",
+    "comparison": {
+      "v": 1,
+      "id": 1,
+      "session": "1700000000-12500-123456",
+      "guid": "Player-1-00000001",
+      "class": "MAGE",
+      "spec": 64,
+      "primary": 4,
+      "observedAt": 1700000002,
+      "slot": 5,
+      "usable": true,
+      "specMatch": true,
+      "current": {
+        "itemID": 100,
+        "name": "Old chest",
+        "itemLevel": 150,
+        "equipLoc": "INVTYPE_CHEST",
+        "type": "Armor",
+        "subtype": "Plate",
+        "stats": [
+          {
+            "key": "ITEM_MOD_HASTE_RATING_SHORT",
+            "value": 42
+          },
+          {
+            "key": "ITEM_MOD_INTELLECT_SHORT",
+            "value": 150
+          },
+          {
+            "key": "ITEM_MOD_STAMINA_SHORT",
+            "value": 200
+          }
+        ],
+        "complex": false,
+        "complete": true
+      },
+      "candidate": {
+        "itemID": 12345,
+        "name": "New item",
+        "itemLevel": 160,
+        "equipLoc": "INVTYPE_CHEST",
+        "type": "Armor",
+        "subtype": "Plate",
+        "stats": [
+          {
+            "key": "ITEM_MOD_INTELLECT_SHORT",
+            "value": 160
+          },
+          {
+            "key": "ITEM_MOD_HASTE_RATING_SHORT",
+            "value": 20
+          },
+          {
+            "key": "ITEM_MOD_STAMINA_SHORT",
+            "value": 199
+          }
+        ],
+        "complex": false,
+        "complete": true
+      }
+    },
+    "assessment": {
+      "verdict": "review",
+      "reason": "stat_tradeoff"
+    }
+  },
+  {
+    "name": "lower-level-up-stats",
+    "comparison": {
+      "v": 1,
+      "id": 1,
+      "session": "1700000000-12500-123456",
+      "guid": "Player-1-00000001",
+      "class": "MAGE",
+      "spec": 64,
+      "primary": 4,
+      "observedAt": 1700000002,
+      "slot": 5,
+      "usable": true,
+      "specMatch": true,
+      "current": {
+        "itemID": 100,
+        "name": "Old chest",
+        "itemLevel": 150,
+        "equipLoc": "INVTYPE_CHEST",
+        "type": "Armor",
+        "subtype": "Plate",
+        "stats": [
+          {
+            "key": "ITEM_MOD_HASTE_RATING_SHORT",
+            "value": 42
+          },
+          {
+            "key": "ITEM_MOD_INTELLECT_SHORT",
+            "value": 150
+          }
+        ],
+        "complex": false,
+        "complete": true
+      },
+      "candidate": {
+        "itemID": 12345,
+        "name": "New item",
+        "itemLevel": 140,
+        "equipLoc": "INVTYPE_CHEST",
+        "type": "Armor",
+        "subtype": "Plate",
+        "stats": [
+          {
+            "key": "ITEM_MOD_HASTE_RATING_SHORT",
+            "value": 42
+          },
+          {
+            "key": "ITEM_MOD_INTELLECT_SHORT",
+            "value": 151
+          }
+        ],
+        "complex": false,
+        "complete": true
+      }
+    },
+    "assessment": {
+      "verdict": "review",
+      "reason": "stat_tradeoff"
+    }
+  },
+  {
+    "name": "ignore-inactive-primary",
+    "comparison": {
+      "v": 1,
+      "id": 1,
+      "session": "1700000000-12500-123456",
+      "guid": "Player-1-00000001",
+      "class": "MAGE",
+      "spec": 64,
+      "primary": 4,
+      "observedAt": 1700000002,
+      "slot": 5,
+      "usable": true,
+      "specMatch": true,
+      "current": {
+        "itemID": 100,
+        "name": "Old chest",
+        "itemLevel": 150,
+        "equipLoc": "INVTYPE_CHEST",
+        "type": "Armor",
+        "subtype": "Plate",
+        "stats": [
+          {
+            "key": "ITEM_MOD_HASTE_RATING_SHORT",
+            "value": 42
+          },
+          {
+            "key": "ITEM_MOD_INTELLECT_SHORT",
+            "value": 150
+          },
+          {
+            "key": "ITEM_MOD_STRENGTH_SHORT",
+            "value": 500
+          }
+        ],
+        "complex": false,
+        "complete": true
+      },
+      "candidate": {
+        "itemID": 12345,
+        "name": "New item",
+        "itemLevel": 150,
+        "equipLoc": "INVTYPE_CHEST",
+        "type": "Armor",
+        "subtype": "Plate",
+        "stats": [
+          {
+            "key": "ITEM_MOD_HASTE_RATING_SHORT",
+            "value": 42
+          },
+          {
+            "key": "ITEM_MOD_INTELLECT_SHORT",
+            "value": 151
+          },
+          {
+            "key": "ITEM_MOD_STRENGTH_SHORT",
+            "value": 100
+          }
+        ],
+        "complex": false,
+        "complete": true
+      }
+    },
+    "assessment": {
+      "verdict": "upgrade",
+      "reason": "stats_upgrade"
+    }
+  },
+  {
+    "name": "unknown-stat-key",
+    "comparison": {
+      "v": 1,
+      "id": 1,
+      "session": "1700000000-12500-123456",
+      "guid": "Player-1-00000001",
+      "class": "MAGE",
+      "spec": 64,
+      "primary": 4,
+      "observedAt": 1700000002,
+      "slot": 5,
+      "usable": true,
+      "specMatch": true,
+      "current": {
+        "itemID": 100,
+        "name": "Old chest",
+        "itemLevel": 150,
+        "equipLoc": "INVTYPE_CHEST",
+        "type": "Armor",
+        "subtype": "Plate",
+        "stats": [
+          {
+            "key": "ITEM_MOD_HASTE_RATING_SHORT",
+            "value": 42
+          },
+          {
+            "key": "ITEM_MOD_INTELLECT_SHORT",
+            "value": 150
+          }
+        ],
+        "complex": false,
+        "complete": true
+      },
+      "candidate": {
+        "itemID": 12345,
+        "name": "New item",
+        "itemLevel": 150,
+        "equipLoc": "INVTYPE_CHEST",
+        "type": "Armor",
+        "subtype": "Plate",
+        "stats": [
+          {
+            "key": "ITEM_MOD_HASTE_RATING_SHORT",
+            "value": 42
+          },
+          {
+            "key": "ITEM_MOD_INTELLECT_SHORT",
+            "value": 151
+          },
+          {
+            "key": "UNKNOWN_EFFECT",
+            "value": 100
+          }
+        ],
+        "complex": false,
+        "complete": true
+      }
+    },
+    "assessment": {
+      "verdict": "review",
+      "reason": "incomplete"
+    }
+  },
+  {
+    "name": "actual-retribution-hammer",
+    "comparison": {
+      "v": 1,
+      "id": 1,
+      "session": "1700000000-12500-123456",
+      "guid": "Player-1-00000001",
+      "class": "PALADIN",
+      "spec": 70,
+      "primary": 1,
+      "observedAt": 1700000002,
+      "slot": 16,
+      "usable": true,
+      "specMatch": false,
+      "current": {
+        "itemID": 219354,
+        "name": "塑山者的巨斧",
+        "itemLevel": 111,
+        "equipLoc": "INVTYPE_2HWEAPON",
+        "type": "武器",
+        "subtype": "双手斧",
+        "stats": [
+          {
+            "key": "ITEM_MOD_STRENGTH_SHORT",
+            "value": 24
+          },
+          {
+            "key": "ITEM_MOD_STAMINA_SHORT",
+            "value": 131
+          },
+          {
+            "key": "ITEM_MOD_HASTE_RATING_SHORT",
+            "value": 26
+          },
+          {
+            "key": "ITEM_MOD_VERSATILITY",
+            "value": 22
+          },
+          {
+            "key": "ITEM_MOD_DAMAGE_PER_SECOND_SHORT",
+            "value": 17.6
+          }
+        ],
+        "complex": false,
+        "complete": true
+      },
+      "candidate": {
+        "itemID": 257013,
+        "name": "新绿碎击者",
+        "itemLevel": 158,
+        "equipLoc": "INVTYPE_WEAPON",
+        "type": "武器",
+        "subtype": "单手锤",
+        "stats": [
+          {
+            "key": "ITEM_MOD_STRENGTH_SHORT",
+            "value": 18
+          },
+          {
+            "key": "ITEM_MOD_STAMINA_SHORT",
+            "value": 201
+          },
+          {
+            "key": "ITEM_MOD_HASTE_RATING_SHORT",
+            "value": 16
+          },
+          {
+            "key": "ITEM_MOD_VERSATILITY",
+            "value": 17
+          },
+          {
+            "key": "ITEM_MOD_DAMAGE_PER_SECOND_SHORT",
+            "value": 20.769229888916
+          }
+        ],
+        "complex": false,
+        "complete": true
+      }
+    },
+    "assessment": {
+      "verdict": "not_upgrade",
+      "reason": "wrong_spec"
+    }
+  }
+]

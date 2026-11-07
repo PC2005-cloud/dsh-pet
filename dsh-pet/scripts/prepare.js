@@ -51,6 +51,7 @@ const keep = [
   'src',
   'assets/webm',
   'runtime/electron-helper',
+  'runtime/wow',
   'assets/fonts',
   'assets/pic',
   // 表情包：宿主半侧只从包内 assets/memes 读图，并与配置的 memes 键配对，漏掉即配图功能整体失效。

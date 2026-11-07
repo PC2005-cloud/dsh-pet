@@ -4,7 +4,7 @@
  * @module dsh-pet/src/host/index
  */
 import { createHostSetup } from './plugin/setup.ts';
-import { readAllConfig } from './config.ts';
+import { findPetInstance, flattenPetList, readAllConfig } from './config.ts';
 import { createHttpRoute, registerHttpRoute } from './plugin/http-route.ts';
 import { registerLifecycle } from './plugin/lifecycle.ts';
 import { registerChatCommand } from './plugin/command-chat.ts';
@@ -25,6 +25,11 @@ import { createHearService } from './voice/hear.ts';
 import { TODO_FILE_NAME, TodoStore } from './todo/store.ts';
 import { join } from 'node:path';
 import type { PetRouteDeps } from './routes/types.ts';
+import { WowCompanion } from './wow/controller.ts';
+import { WowAppearance } from './wow/appearance.ts';
+import { PACKAGE_ROOT } from './paths.ts';
+import { pickVoiceSurface } from './surface.ts';
+import { pickReminderSpeaker } from './plugin/todo-reminders.ts';
 
 /** 插件行 id（与 cordis.patch.yml 一致） */
 export const name = 'pet';
@@ -60,6 +65,63 @@ export function apply(ctx: any): void {
   const { reportDownload, stopDownloadSlotTimer } = downloadReport;
   const petLookup = createPetLookup({ state, configPaths });
   const { lock, sleep, sleepRefusalText } = petLookup;
+  const wow = new WowCompanion({
+    root: join(userRoot, 'wow'),
+    appPath: PACKAGE_ROOT,
+    resourcesPath: (process as NodeJS.Process & { resourcesPath?: string }).resourcesPath ?? '',
+    warn: (message) => log.warn(message),
+    appearance: new WowAppearance(configPaths),
+    appearanceChanged(petId, changedPetIds) {
+      for (const id of changedPetIds) lock.release({ petId: id, force: true });
+      chatMemory.setActivePetId(petId);
+      state.writeSection('config', {});
+      void desktopHelper.requestRestart().catch(() => log.warn('[wow] 陪伴形象已保存，桌面刷新失败，请重启桌宠。'));
+    },
+    idleEligibility(preferredPetId) {
+      if (state.waiterCount() === 0) return { eligible: false, busy: false };
+      const cfg = readAllConfig(configPaths);
+      const pets = flattenPetList(cfg);
+      const speaker =
+        preferredPetId ||
+        pickReminderSpeaker(
+          pets,
+          (id) => lock.locked(id),
+          (id) => sleep.sleeping(id),
+        );
+      const pet = pets.find((value) => String(value.id) === speaker);
+      return {
+        eligible:
+          !!pet &&
+          pet.display !== 'none' &&
+          pet.whisperEnabled === true &&
+          !lock.locked(String(speaker)) &&
+          !sleep.sleeping(String(speaker)),
+        busy: chatMemory.isBusy(),
+      };
+    },
+    notify(text, preferredPetId) {
+      if (state.waiterCount() === 0) return false;
+      const cfg = readAllConfig(configPaths);
+      const pets = flattenPetList(cfg);
+      const speaker = preferredPetId
+        ? pets.some((pet) => String(pet.id) === preferredPetId && pet.display !== 'none') &&
+          !lock.locked(preferredPetId) &&
+          !sleep.sleeping(preferredPetId)
+          ? preferredPetId
+          : null
+        : pickReminderSpeaker(
+            pets,
+            (id) => lock.locked(id),
+            (id) => sleep.sleeping(id),
+          );
+      if (!speaker) return false;
+      const found = findPetInstance(cfg, speaker);
+      if (!found) return false;
+      const voiceTo = pickVoiceSurface(String(found.pet.display ?? ''));
+      state.writePet(speaker, 'say', { text, ...(voiceTo ? { voiceTo } : {}) });
+      return true;
+    },
+  });
   const sessionNotify = createSessionNotify({ ctx, publishWorkStatus, state, workStatus });
   const {
     pushNotifyFrame,
@@ -73,8 +135,10 @@ export function apply(ctx: any): void {
     notifyActivityTimers,
     scheduleCompletionNotify,
   } = sessionNotify;
-  const chatMemory = createChatMemory({ ctx, configPaths, log, memeDirsFor, playback, state, userRoot });
+  const chatMemory = createChatMemory({ ctx, configPaths, log, memeDirsFor, playback, state, userRoot, wow });
   const { lastWhisperAt, publishWhisper, publishSleepTalk, chatWithPet, getActivePetId, setActivePetId } = chatMemory;
+  const companionId = wow.preferredPetId();
+  if (companionId) setActivePetId(companionId);
 
   const balancePoll = createBalancePoll({ ctx, configPaths, getActivePetId, log, state, standaloneAiBalance });
   const { effectivePetList, balancePeriodSec, whisperPeriodSec, refreshBalance, resolveActivePetId, petDisplayName } =
@@ -104,6 +168,7 @@ export function apply(ctx: any): void {
     ...desktopHelper,
     ...sessionNotify,
     ctx,
+    wow,
     todos,
     // 语音合成：缓存落 userRoot，失败只留日志，不打断宿主
     voice: createVoiceService({ userRoot, log }),
@@ -166,6 +231,7 @@ export function apply(ctx: any): void {
 
   registerLifecycle({
     ctx,
+    disposeWow: () => wow.dispose(),
     lock,
     markDisposed,
     playback,
@@ -176,5 +242,6 @@ export function apply(ctx: any): void {
   });
 
   // 路由就绪后拉起桌面 Helper（Electron 缺失时仅告警，不影响 DSH 与浏览器 overlay）
+  wow.start();
   startHelper();
 }

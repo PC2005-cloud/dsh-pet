@@ -1,0 +1,120 @@
+[
+  {
+    "id": "classic-zh-mc",
+    "kind": "abbreviation",
+    "title": "MC：熔火之心",
+    "aliases": ["MC", "熔火之心"],
+    "text": "MC 是 Molten Core 的缩写，中文名称为熔火之心。",
+    "usage": "在怀旧组团语境中理解副本名称。不要据此推断当前进度、开放状态或具体掉落。",
+    "provenance": {
+      "status": "community",
+      "sources": [
+        {
+          "title": "游侠网：魔兽世界职业简称大全（社区用法）",
+          "url": "https://gl.ali213.net/html/2024-7/1438583.html"
+        },
+        {
+          "title": "17173：魔兽世界黑话大盘点（仅采用词义）",
+          "url": "https://news.17173.com/content/12232025/185544081.shtml"
+        }
+      ],
+      "reviewedAt": "2026-10-28"
+    },
+    "tags": ["团本", "副本"]
+  },
+  {
+    "id": "classic-zh-bwl",
+    "kind": "abbreviation",
+    "title": "BWL：黑翼之巢",
+    "aliases": ["BWL", "黑翼之巢"],
+    "text": "BWL 是 Blackwing Lair 的缩写，中文名称为黑翼之巢。",
+    "usage": "用于理解团本招募。人数、难度和奖励先确认玩家所在怀旧分支。",
+    "provenance": {
+      "status": "community",
+      "sources": [
+        {
+          "title": "游侠网：魔兽世界职业简称大全（社区用法）",
+          "url": "https://gl.ali213.net/html/2024-7/1438583.html"
+        }
+      ],
+      "reviewedAt": "2026-10-28"
+    },
+    "tags": ["团本", "副本"]
+  },
+  {
+    "id": "classic-zh-taq",
+    "kind": "abbreviation",
+    "title": "TAQ：安其拉神殿",
+    "aliases": ["TAQ", "安其拉神殿", "AQ40"],
+    "text": "TAQ 常指安其拉神殿，AQ40 是经典旧世社区常见的相关称呼。",
+    "usage": "不要与安其拉废墟混同。不同规则集的重做版本需单独核对，不能由名称保证人数或掉落。",
+    "provenance": {
+      "status": "community",
+      "sources": [
+        {
+          "title": "游侠网：魔兽世界职业简称大全（社区用法）",
+          "url": "https://gl.ali213.net/html/2024-7/1438583.html"
+        }
+      ],
+      "reviewedAt": "2026-10-28"
+    },
+    "tags": ["团本", "副本"]
+  },
+  {
+    "id": "classic-zh-st-dk",
+    "kind": "abbreviation",
+    "title": "刷 DK：斯坦索姆相关用法",
+    "aliases": ["刷DK", "DK马", "斯坦索姆", "STSM"],
+    "text": "在经典旧世中文刷本语境里，“刷 DK、DK 马”常围绕斯坦索姆的瑞文戴尔男爵及其坐骑展开。",
+    "usage": "这不是说经典旧世玩家拥有死亡骑士职业。需要具体打法、首领或掉率时，先确认资料片和副本版本。",
+    "provenance": {
+      "status": "community",
+      "sources": [
+        {
+          "title": "DVG：DK 含义解析（社区称呼）",
+          "url": "https://www.dvg.cn/news/187413.html"
+        }
+      ],
+      "reviewedAt": "2026-10-28"
+    },
+    "tags": ["坐骑", "副本"]
+  },
+  {
+    "id": "classic-zh-g-raid",
+    "kind": "abbreviation",
+    "title": "G 团：金币分配团",
+    "aliases": ["G团", "金团"],
+    "text": "G 团是玩家对使用游戏金币处理战利品竞价和分配的一类团队组织方式的称呼。",
+    "usage": "只解释社区术语，不保证任何地区、版本或团规允许该模式。不要把它等同官方分配系统或承诺收益。",
+    "provenance": {
+      "status": "community",
+      "sources": [
+        {
+          "title": "17173：魔兽世界黑话大盘点（仅采用词义）",
+          "url": "https://news.17173.com/content/12232025/185544081.shtml"
+        }
+      ],
+      "reviewedAt": "2026-10-28"
+    },
+    "tags": ["团本", "分配", "金币"]
+  },
+  {
+    "id": "classic-zh-world-buff",
+    "kind": "abbreviation",
+    "title": "世界 BUFF：野外获得的增益",
+    "aliases": ["世界BUFF", "世界buff", "世界增益"],
+    "text": "怀旧聊天中的“世界 BUFF”通常指来自特定世界事件或活动的角色增益。",
+    "usage": "不同怀旧规则集对保存、进入副本后的保留和效果各有规定。不要把某服的增益规则搬到其他服。",
+    "provenance": {
+      "status": "community",
+      "sources": [
+        {
+          "title": "Blizzard: Content Update Notes（分别列出各分支）",
+          "url": "https://worldofwarcraft.blizzard.com/en-us/content-update-notes"
+        }
+      ],
+      "reviewedAt": "2026-10-28"
+    },
+    "tags": ["增益", "团本"]
+  }
+]

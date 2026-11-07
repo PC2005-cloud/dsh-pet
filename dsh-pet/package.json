@@ -63,6 +63,7 @@
     "src",
     "assets/webm",
     "runtime/electron-helper",
+    "runtime/wow",
     "assets/fonts",
     "assets/pic",
     "assets/memes",
@@ -106,6 +107,8 @@
     "@electron-internal/extract-zip": "^1.0.5",
     "@electron/get": "^5.1.0",
     "openai": "7.39.0",
+    "valibot": "1.4.2",
+    "yauzl": "3.4.0",
     "zod": "4.6.7"
   },
   "dsh": {
@@ -145,6 +148,7 @@
     "@types/node": "^26.2.0",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
+    "@types/yauzl": "^3.4.0",
     "electron-builder": "^26.15.3",
     "eslint": "^10.9.0",
     "eslint-plugin-jsdoc": "^65.4.2",

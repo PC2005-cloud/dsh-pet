@@ -22,6 +22,7 @@ import type { TodoStore } from '../todo/store.ts';
 import type { HearService } from '../voice/hear.ts';
 import type { VoiceService } from '../voice/speak.ts';
 import type { WorkStatusStore } from '../work-status.ts';
+import type { WowCompanion } from '../wow/controller.ts';
 
 /** 一次路由调用的输入：URL 已解析，`rest` 是去掉前缀并解码后的路径。 */
 export interface RouteInput {
@@ -67,6 +68,8 @@ export type RouteHandler = (deps: PetRouteDeps, input: RouteInput) => Promise<Ro
  * 唯一有副作用的是 `nextExternalWorkSeq`：它推进外部写入序号并返回新值。
  */
 export interface PetRouteDeps {
+  /** Warcraft services share this host and its authenticated routes. */
+  readonly wow?: Pick<WowCompanion, 'read' | 'action' | 'appearance'>;
   /** 配置路径集（内置默认 + 用户主配置 + 文件宠物目录）。 */
   readonly configPaths: ConfigPaths;
   /** 第三方右键菜单注册表（进程内存态）。 */

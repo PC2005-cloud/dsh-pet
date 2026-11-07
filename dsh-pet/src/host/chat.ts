@@ -13,12 +13,16 @@
 import { BlockAssembler, createAssistantMessage, createUserMessage, ReasoningEffortId } from '@deepseek-ai/dsh-llm';
 import { actionInstruction, extractChatAction } from './chat-action.ts';
 import type { PetImageRef } from './image-attachment.ts';
+import type { AddonRecommendationReport } from './wow/shared/wow-addon-recommendations.ts';
 import { PET_CALL_IDENTITY, noTextReason } from './llm-call.ts';
 import { supportsReasoningOff } from './llm-reasoning.ts';
 import { defaultLog } from './log-file.ts';
 import { extractChatImage, memeCatalog, type MemeEntry } from './memes.ts';
 import { modelCandidates, modelLabel, type ModelRef } from './model-selection.ts';
 import { historyStampOf } from './time-context.ts';
+import { parseTransientImage, type TransientChatImage } from './transient-image.ts';
+
+export type { TransientChatImage } from './transient-image.ts';
 
 /** 生成失败原因（与 shared/whisper.ts 的 WhisperState 失败分支同构）。 */
 export type ChatGenerateResult =
@@ -36,6 +40,8 @@ export interface ChatMemoryMessage {
   meme?: string;
   /** 该轮 AI 表演的动作名（animations.categories 内的名字）；回放历史时以 `[动作:名称]` 回填。 */
   action?: string;
+  /** Verified read-only catalog snapshot; installation still requires an explicit click. */
+  wowRecommendations?: AddonRecommendationReport;
 }
 
 /** 单次生成超时（ms）：对话等 LLM 回复，60s 足够。 */
@@ -112,6 +118,8 @@ export interface ChatGenerateInput {
   readonly preferred?: ModelRef;
   /** 本轮附带的图片；缺省 = 纯文本请求，数据路径与加入图片前一致。 */
   readonly image?: PetImageRef;
+  /** 仅本轮使用的内存图像，不落附件或聊天记录；只有显式声明支持的宿主可以接收。 */
+  readonly transientImage?: TransientChatImage;
 }
 
 /**
@@ -135,12 +143,37 @@ export async function generateChat(input: ChatGenerateInput): Promise<ChatGenera
   if (!llm || typeof llm.stream !== 'function') {
     return { ok: false, reason: 'generate-error', message: 'LLM 服务不可用' };
   }
+  let transientImage: TransientChatImage | undefined;
+  if (input.transientImage) {
+    if ((llm as { supportsTransientImages?: boolean }).supportsTransientImages !== true) {
+      return {
+        ok: false,
+        reason: 'generate-error',
+        message: '当前宿主不支持仅内存的游戏截图输入，请使用独立模式或上传图片。',
+      };
+    }
+    try {
+      transientImage = parseTransientImage(input.transientImage);
+    } catch {
+      return { ok: false, reason: 'generate-error', message: '游戏截图无效，请重新请求查看画面。' };
+    }
+  }
   // 依次尝试：配置的模型失败（凭据被删 / 模型下架 / 该服务商没配 key）时回落到当前对话的模型
   // 重试一次——那才是用户当前真正在用的模型，报错更有意义。
   // 兜底文案与失败分支同源，避免两处字面量漂移
   let last: ChatGenerateResult = { ok: false, reason: 'generate-error', message: noTextReason(undefined) };
   for (const [i, sel] of candidates.entries()) {
-    const result = await generateWith(ctx, { llm, sel, system, history, userText, pool, actions, image });
+    const result = await generateWith(ctx, {
+      llm,
+      sel,
+      system,
+      history,
+      userText,
+      pool,
+      actions,
+      image,
+      transientImage,
+    });
     if (result.ok) return result;
     last = result;
     // 回落要留痕：配的模型没生效时能在日志里看到原因（否则「我明明配了 A，怎么还是用 B」没法查）
@@ -164,11 +197,12 @@ interface GenerateOnce {
   readonly pool: MemeEntry[];
   readonly actions: string[];
   readonly image?: PetImageRef;
+  readonly transientImage?: TransientChatImage;
 }
 
 /** 用一个确定的 provider/model 跑一次对话生成（失败原样返回结构化原因，不吞）。 */
 async function generateWith(ctx: { llm?: unknown }, once: GenerateOnce): Promise<ChatGenerateResult> {
-  const { llm, sel, system, history, userText, pool, actions, image } = once;
+  const { llm, sel, system, history, userText, pool, actions, image, transientImage } = once;
   // 历史 → dsh-llm 消息：user 经 createUserMessage（plugin 来源），assistant 经 createAssistantMessage
   // （provider/model 只是消息的角色载体，不涉及适配器回放）。
   // 时间前缀只加在 user 上（模型会照抄 assistant 自己那侧的格式）；配图/动作标记只加在 assistant 上。
@@ -200,6 +234,8 @@ async function generateWith(ctx: { llm?: unknown }, once: GenerateOnce): Promise
   ];
   // 图片块排在文本块之后：提示词先到、像素后到，模型更容易按提示去看图。
   if (image !== undefined) content.push({ type: 'image', attachment: image });
+  // 此扩展仅发往声明能力的独立模式 facade；真实 DSH 的 ImageBlock 只允许 durable attachment。
+  if (transientImage !== undefined) content.push({ type: 'image', ...transientImage });
   const options = {
     provider: sel.provider,
     model: sel.model,

@@ -46,7 +46,19 @@ export function createHttpRoute(deps: PetRouteDeps): { handlePetRoute: HttpRoute
     // 写配置的三条路径（PUT/POST /config、POST /pet-display、POST /pet-config）都是「读当前配置
     // → 白名单重建整段 pets → 写盘」，并发交错会互相覆盖，必须共用一条串行队列；
     // GET /config 同样排队，避免写入尚未完成时读到空文件而回退内置默认。
-    const isConfigQueue = rest === 'config' || ((rest === 'pet-display' || rest === 'pet-config') && method === 'POST');
+    let appearanceWrite = false;
+    if (rest === 'wow/action' && method === 'POST' && (body?.length ?? 0) <= 1024 * 1024) {
+      try {
+        appearanceWrite = JSON.parse(body ?? 'null')?.action === 'appearance.select';
+      } catch {
+        /* The domain route returns the invalid JSON response. */
+      }
+    }
+    const isConfigQueue =
+      rest === 'config' ||
+      rest === 'wow/appearance' ||
+      appearanceWrite ||
+      ((rest === 'pet-display' || rest === 'pet-config') && method === 'POST');
     if (isConfigQueue) {
       const pending = configQueue.then(run, run);
       configQueue = pending.then(
