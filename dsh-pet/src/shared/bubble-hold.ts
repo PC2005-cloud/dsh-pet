@@ -4,6 +4,7 @@
  * 不决定这一句该不该念——那是 {@link module:dsh-pet/src/shared/voice} 的门禁。
  * @module dsh-pet/src/shared/bubble-hold
  */
+import type { VoiceUtteranceEvent } from './voice.ts';
 
 /** 播完（或失败）后再留这么久，让人看完最后一个字（ms）。 */
 export const BUBBLE_HOLD_TAIL_MS = 1_500;
@@ -23,6 +24,20 @@ export type BubbleHoldEvent =
   | { readonly kind: 'release'; readonly seq: number }
   | { readonly kind: 'hide' }
   | { readonly kind: 'clear' };
+
+/**
+ * 把一句播报的开始/结束翻成气泡的挂起/收尾。
+ *
+ * 两端同用这一份：订阅者拿到的是 voice 的 `start`/`end`，而状态机只认 `hold`/`release`。
+ * 少翻一次就会静默落空——事件走不到 `hold`，气泡按 `show` 自己的时长收起；桌面端是纯 JS，
+ * 传错形状不会有任何类型报错，所以这条链路只能靠共用同一份实现来保证两端不漂移。
+ *
+ * @param event - 播报的开始或结束事件。
+ * @returns 对应的收起计划事件。
+ */
+export function utteranceToHold(event: VoiceUtteranceEvent): BubbleHoldEvent {
+  return { kind: event.kind === 'start' ? 'hold' : 'release', seq: event.seq };
+}
 
 /** 气泡的计时状态；`delayMs` 为 null 表示不设自动收起，等下一个事件。 */
 export interface BubbleHoldState {

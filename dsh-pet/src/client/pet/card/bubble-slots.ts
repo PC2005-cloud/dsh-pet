@@ -9,6 +9,7 @@ import { balancePageCount as balancePageCountOf, type BalanceState } from '../..
 import {
   BUBBLE_HOLD_IDLE,
   reduceBubbleHold,
+  utteranceToHold,
   type BubbleHoldEvent,
   type BubbleHoldState,
 } from '../../../shared/bubble-hold.ts';
@@ -258,7 +259,7 @@ export function createBubbleSlots(rt: BubbleSlotsRuntime, components: BubbleComp
       () =>
         subscribeVoiceUtterance((event) => {
           if (event.text !== whisperTextRef.current) return;
-          applyWhisperHold({ kind: event.kind === 'start' ? 'hold' : 'release', seq: event.seq });
+          applyWhisperHold(utteranceToHold(event));
         }),
       // eslint-disable-next-line react-hooks/exhaustive-deps -- 订阅只建一次：收起计划全部经 ref 现读，重订阅只会漏事件
       [],

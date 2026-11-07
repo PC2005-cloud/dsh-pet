@@ -1,7 +1,7 @@
 /**
  * 气泡收起状态机的行为契约（src/shared/bubble-hold.ts）。
  *
- * 覆盖挂起、收尾、迟到的上一句与未点亮时的忽略分支；计时器本身由两端各自验收。
+ * 覆盖挂起、收尾、迟到的上一句与未点亮时的忽略分支，以及语音事件到这两步的翻译；计时器本身由两端各自验收。
  */
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -11,6 +11,8 @@ import {
   BUBBLE_HOLD_MAX_MS,
   BUBBLE_HOLD_TAIL_MS,
   reduceBubbleHold,
+  utteranceToHold,
+  type BubbleHoldEvent,
   type BubbleHoldState,
 } from './bubble-hold.ts';
 
@@ -82,5 +84,35 @@ describe('reduceBubbleHold —— 跟着语音挂起与收尾', () => {
       holdSeq: null,
       on: true,
     });
+  });
+});
+
+describe('utteranceToHold —— 语音事件翻成收起计划', () => {
+  test('开始：翻成 hold，气泡从默认时长延到上限', () => {
+    const hold = utteranceToHold({ kind: 'start', seq: 7, text: '一句要念很久的话' });
+    assert.deepEqual(hold, { kind: 'hold', seq: 7 }, 'start 必须落到 hold，否则气泡仍是 show 的默认时长');
+    assert.deepEqual(reduceBubbleHold(shown(), hold), {
+      delayMs: BUBBLE_HOLD_MAX_MS,
+      holdSeq: 7,
+      on: true,
+    });
+  });
+
+  test('结束：翻成 release，同一句接上就留尾巴', () => {
+    const started = utteranceToHold({ kind: 'start', seq: 7, text: '一句要念很久的话' });
+    const ended = utteranceToHold({ kind: 'end', seq: 7, text: '一句要念很久的话' });
+    assert.deepEqual(ended, { kind: 'release', seq: 7 });
+    assert.deepEqual(reduceBubbleHold(reduceBubbleHold(shown(), started), ended), {
+      delayMs: BUBBLE_HOLD_TAIL_MS,
+      holdSeq: null,
+      on: true,
+    });
+  });
+
+  test('语音事件不翻译直接喂状态机：不生效，气泡仍是默认时长', () => {
+    // 桌面端曾把 start/end 原样传进来，两句话都落在这个分支上，气泡便按 show 的时长收起。
+    const raw = { kind: 'start', seq: 7 } as unknown as BubbleHoldEvent;
+    const before = shown();
+    assert.equal(reduceBubbleHold(before, raw), before, '认不出的 kind 必须原样返回，才暴露「漏了翻译」');
   });
 });

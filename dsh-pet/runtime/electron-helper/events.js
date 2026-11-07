@@ -489,7 +489,9 @@ function startLoops() {
   // 语音每句的开始/结束推进气泡的收起计划：合成慢时气泡挂住，播完再收。
   // 按文本认句：本窗口只装一只宠物，但同一份状态是模块单例，认句才不会算到别人头上。
   S.subscribeVoiceUtterance((event) => {
-    for (const s of sprites) if (s.whisperText === event.text) s.applyWhisperHold(event);
+    // 状态机只认 hold/release，语音给的是 start/end：翻译与网页端共用同一份，别再各写一遍。
+    const hold = S.utteranceToHold(event);
+    for (const s of sprites) if (s.whisperText === event.text) s.applyWhisperHold(hold);
   });
 
   // 统一轮询是自调度的长轮询（请求 → 处理 → 立刻再请求）：宿主在版本没变时挂起，空闲时
