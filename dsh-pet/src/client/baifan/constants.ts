@@ -85,6 +85,7 @@ const Z_INDEX = 1500;
 
 /** 覆盖层与米饭、分数的样式。 */
 export const CSS = [
+  '#dsh-pet-baifan-root{-webkit-app-region:initial !important}',
   '#dsh-pet-baifan-root{position:fixed;inset:0;pointer-events:none;overflow:hidden;z-index:' + Z_INDEX + '}',
   '.bf-rice{position:absolute;transform-origin:50% 100%;will-change:transform,opacity;',
   'user-select:none;-webkit-user-drag:none;pointer-events:none}',
