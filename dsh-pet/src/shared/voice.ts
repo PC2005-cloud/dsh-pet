@@ -209,6 +209,20 @@ async function speakIfEnabled(text: string): Promise<void> {
 }
 
 /**
+ * 念一句与气泡无关的系统提示（工作状态播报）。
+ *
+ * 与 {@link playSayVoice} 的分工：那条按 `say` 叶子的 `voiceTo` 决定由哪一端念；这条不依赖
+ * 气泡，由调用方自己判断该不该念。仍受 `voiceEnabled` 总开关约束，并与其它自动播报共用
+ * 同一个单槽——后一句掐掉前一句，不会叠着响。
+ *
+ * @param text - 要念的整句；空串直接跳过。
+ */
+export function speakNotice(text: string): void {
+  if (text === '') return;
+  void speakIfEnabled(text);
+}
+
+/**
  * 等到这一句真正播完。
  *
  * `play()` 的 Promise 在「开播」时就 resolve，而气泡要的是「播完」：两者的差就是气泡提前
