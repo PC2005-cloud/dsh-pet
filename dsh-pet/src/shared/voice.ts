@@ -236,8 +236,39 @@ function waitForPlaybackEnd(audio: HTMLAudioElement, objectUrl: string): Promise
   });
 }
 
+/** 自动播报当前正在响的那个音频：新的一句进来先掐掉旧的，熄屏醒来后攒下的一串才不会叠着响。 */
+let autoAudio: HTMLAudioElement | null = null;
+/** 自动播报世代号：合成期间可能被更新的一句顶掉，回来的旧结果直接丢弃。 */
+let autoSeq = 0;
+
+/**
+ * 掐掉当前自动播报。
+ *
+ * 用 pause 而不是直接丢掉引用：`waitForPlaybackEnd` 已经挂了 `onpause` 收尾，
+ * 气泡能照常收起，不会等一个已经不会响的音频。
+ */
+function stopAutoAudio(): void {
+  if (autoAudio === null) return;
+  const audio = autoAudio;
+  autoAudio = null;
+  try {
+    audio.pause();
+  } catch {
+    /* 播放器已销毁：忽略 */
+  }
+}
+
+// 页面被藏起来（切后台 / 息屏）就静音：回来时不补播。
+if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) stopAutoAudio();
+  });
+}
+
 /** 请求合成并播放；任何一步失败都落到 `failed`（气泡上留一个静音喇叭，而不是干脆没图标）。 */
 async function speak(text: string): Promise<void> {
+  const token = ++autoSeq;
+  stopAutoAudio();
   try {
     const response = await fetch(voiceBase + '/voice/speak', {
       method: 'POST',
@@ -245,27 +276,42 @@ async function speak(text: string): Promise<void> {
       body: JSON.stringify({ text, ...(voiceName ? { voice: voiceName } : {}) }),
       signal: speakSignal(),
     });
+    if (token !== autoSeq) return;
     if (!response.ok || !(response.headers.get('content-type') ?? '').includes('audio')) {
       setVoiceState('failed');
       return;
     }
     const objectUrl = URL.createObjectURL(await response.blob());
+    if (token !== autoSeq) {
+      URL.revokeObjectURL(objectUrl);
+      return;
+    }
     const audio = new Audio(objectUrl);
     audio.volume = voiceVolume;
+    // 合成期间页面被藏起来：这一句不补播，直接丢掉
+    if (typeof document !== 'undefined' && document.hidden) {
+      URL.revokeObjectURL(objectUrl);
+      setVoiceState('idle');
+      return;
+    }
     // 音频就绪即置 ready：喇叭表示「这句有语音」，不跟播放进度绑定
     setVoiceState('ready');
+    autoAudio = audio;
     try {
       await audio.play(); // 只代表开播：开播就失败要落到 failed，也不必再等收尾
     } catch {
       URL.revokeObjectURL(objectUrl);
+      if (autoAudio === audio) autoAudio = null;
       setVoiceState('failed');
       return;
     }
     // 气泡靠 end 事件收起，所以必须等播完：停在「已经开播」会让气泡提早 1.5 秒消失
     await waitForPlaybackEnd(audio, objectUrl);
+    if (autoAudio === audio) autoAudio = null;
   } catch {
     /* 含超时：气泡已经显示，失败也不能反过来打断渲染，只把图标换成静音喇叭 */
-    setVoiceState('failed');
+    // 旧请求的失败晚到不能覆盖新句状态：世代号已变就说明这句已经被顶掉。
+    if (token === autoSeq) setVoiceState('failed');
   }
 }
 
