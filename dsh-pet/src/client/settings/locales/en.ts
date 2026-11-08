@@ -156,23 +156,23 @@ export const en: Record<Key, string> = {
     'Shows a tray icon (notification area on Windows, menu bar on macOS) once desktop mode is running. It lists every pet in the config and toggles each one between desktop and web/none — including pets that are currently off the desktop and therefore have no window to right-click. With it off, bringing a pet back to the desktop requires opening the browser (the settings page, or right-clicking a web pet there). Windows already folds third-party icons into the "hidden icons" overflow. Desktop mode only.',
   voiceTitle: 'Voice',
   voiceHint:
-    'Four switches plus a voice: the master switch gates automatic speech, the three sub-switches gate one kind of proactive message each. All off by default; written to the user config on "Save" (never written immediately).',
-  voiceEnabled: 'Speak replies',
+    'Four switches plus a voice: each kind of speech has its own switch and none of them depends on another. All off by default; written to the user config on "Save" (never written immediately).',
+  voiceEnabled: 'Speak manual whispers',
   voiceEnabledHint:
-    'Master switch for automatic speech. When off, periodic whispers, todo reminders and work-status announcements stay silent (the three sub-switches below have no effect). Manual whispers, chat replies and the speaker button in the chat panel are not gated — you asked for those, so the surface you asked from speaks them directly. It only affects whether sound is produced — bubbles, chat memory and system notification pop-ups are untouched; a failed synthesis is logged and never interrupts the conversation.',
+    'Speaks whispers triggered from the context menu or a slash command, plus chat replies. The speaker button in the chat panel speaks a single line whenever you press it. It only affects whether sound is produced — bubbles, chat memory and system notification pop-ups are untouched; a failed synthesis is logged and never interrupts the conversation.',
   voiceWhisperEnabled: 'Speak whispers',
   voiceWhisperEnabledHint:
-    'Speaks the periodically generated whisper (right-clicking for a manual whisper is unaffected). Gated by the master switch above. Off by default — whispers are background narration and should not make noise unasked.',
+    'Speaks the periodically generated whisper. Off by default — whispers are background narration and should not make noise unasked.',
   voiceTodoEnabled: 'Speak todo reminders',
   voiceTodoEnabledHint:
-    'Speaks a todo reminder when it comes due (the bubble still appears; this only decides whether it is spoken). Gated by the master switch above. Off by default.',
+    'Speaks a todo reminder when it comes due (the bubble still appears; this only decides whether it is spoken). Off by default.',
   voiceNotifyEnabled: 'Speak work status',
   voiceNotifyEnabledHint:
-    'Speaks a configured work-status line when a task completes, fails, or waits for your confirmation. Like system notifications, it only speaks while you are away from this page (switched away, unfocused, minimized) — no interruption while you are looking at the screen. Only the configured line is spoken, never the task detail. Gated by the master switch above. Off by default.',
+    'Speaks a configured work-status line when a task completes, fails, or waits for your confirmation. Like system notifications, it only speaks while you are away from this page (switched away, unfocused, minimized) — no interruption while you are looking at the screen. Only the configured line is spoken, never the task detail. Off by default.',
   voiceNameLabel: 'Voice',
   voiceVolumeLabel: 'Volume',
   voiceVolumeHint:
-    'Playback volume as a 0–1 decimal: 1 is full volume (100%), 0 is muted. Changes loudness only and never re-synthesizes audio, so adjusting it costs nothing extra. Independent of the master switch above — it has no effect while that switch is off.',
+    'Playback volume as a 0–1 decimal: 1 is full volume (100%), 0 is muted. Changes loudness only and never re-synthesizes audio, so adjusting it costs nothing extra. All four kinds of speech share this one volume.',
   physicsTitle: 'Physics (drag & throw feel)',
   physicsHint:
     'Global default, shared by every pet (a pet pack may override it in its own kind file); written to the user config on "Save" (never written immediately). Applies instantly in the browser; on the desktop it applies once Save reloads the pet windows.',

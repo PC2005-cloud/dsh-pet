@@ -26,7 +26,7 @@ export interface MainConfigPatch {
   chatAnimationEnabled?: boolean;
   confineToScreen?: boolean;
   trayEnabled?: boolean;
-  /** 语音播报总开关；缺省表示这次响应里没有可信值。 */
+  /** 手动播报开关：手动触发的碎碎念与对话回复；缺省表示这次响应里没有可信值。 */
   voiceEnabled?: boolean;
   /** 语音音色 id（宿主已按白名单校验，客户端原样展示）。 */
   voiceName?: string;

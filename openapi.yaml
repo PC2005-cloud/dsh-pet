@@ -4384,23 +4384,40 @@ components:
             由模型在语境贴合时挑一个当场表演；关掉则纯文字。设置页「全局开关」卡里的「对话动作联动」写的就是它。
         confineToScreen:
           type: boolean
+        voiceEnabled:
+          type: boolean
+          description: |
+            手动播报开关（全局默认）：右键菜单、斜杠命令触发的碎碎念与对话回复是否念出来。
+            与 `voiceWhisperEnabled`/`voiceTodoEnabled`/`voiceNotifyEnabled` 平级，各自独立。
+            设置页「语音播报」卡里的「手动播报」开关写的就是它。缺失默认 `false`。
+        voiceName:
+          type: string
+          description: |
+            音色 id，白名单为 `/voice/voices` 里的四个中文音色之一；写错或留空即配置错误，
+            告警并回落到 `zh-CN-XiaoyiNeural`。设置页「语音播报」卡的音色下拉写的就是它。
+        voiceVolume:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: |
+            播放音量系数：0–1，1 = 最大音量，0 = 静音；四类语音共用这一个音量。
+            只改播放响度，不重新合成音频。设置页「语音播报」卡的音量输入框写的就是它。缺失默认 1。
         voiceWhisperEnabled:
           type: boolean
           description: |
-            周期碎碎念要不要念出来（全局默认）。受 `voiceEnabled` 总开关约束：总开关关掉时本项不生效。
+            周期碎碎念要不要念出来（全局默认）。
             设置页「语音播报」卡里的「碎碎念播报」开关写的就是它。缺失默认 `false`。
         voiceTodoEnabled:
           type: boolean
           description: |
-            待办提醒要不要念出来（全局默认）。同样受 `voiceEnabled` 总开关约束。
+            待办提醒要不要念出来（全局默认）。
             设置页「语音播报」卡里的「待办播报」开关写的就是它。缺失默认 `false`。
         voiceNotifyEnabled:
           type: boolean
           description: |
             工作状态播报要不要念出来（全局默认）：任务完成 / 出错 / 等你确认时念一句该档位配置的
             工作状态文案；和系统通知同一取向，用户不在本页时才念。只念配置的台词，不念 `task`。
-            受 `voiceEnabled` 总开关约束。设置页「语音播报」卡里的「通知播报」开关写的就是它。
-            缺失默认 `false`。
+            设置页「语音播报」卡里的「通知播报」开关写的就是它。缺失默认 `false`。
         chatMemoryRounds:
           type: integer
           minimum: 0

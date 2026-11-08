@@ -122,8 +122,8 @@ export function createPetMulti(
         setClickSoundEnabled(main.clickSoundEnabled === true);
         // 本页就是网页端：按叶子播放时只认 voiceTo='web' 的那一句。
         setSurface('web');
-        // 音色、总开关与音量同源：缺字段即「不播」，不在端上兜默认值。
-        setVoiceConfig(main.voiceName, main.voiceEnabled, main.voiceVolume);
+        // 音色与音量同源：缺字段即「用默认音色 / 最大音量」，不在端上兜默认值。
+        setVoiceConfig(main.voiceName, main.voiceVolume);
         setVoiceNotifyEnabled(main.voiceNotifyEnabled);
         const flattened = flattenConfigPets(merged);
         petBridge.current = flattened;

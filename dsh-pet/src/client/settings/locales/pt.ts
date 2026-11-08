@@ -157,23 +157,23 @@ export const pt: Record<Key, string> = {
     'Mostra um ícone na área de notificação (barra de menus no macOS) quando o modo desktop inicia. Ele lista todos os pets da configuração e alterna a exibição de cada um — inclusive os que estão fora do desktop agora e não têm janela para clicar com o botão direito. Sem ele, para trazer um pet de volta ao desktop é preciso abrir o navegador (a página de configuração, ou clicar com o botão direito no pet na web). O Windows já esconde ícones de terceiros na gaveta "ícones ocultos". Só afeta o modo desktop.',
   voiceTitle: 'Voz',
   voiceHint:
-    'Quatro interruptores e uma voz: o mestre controla a fala automática; os três secundários controlam um tipo de mensagem proativa cada. Tudo desligado por padrão; gravado na configuração do usuário ao "Salvar" (nunca na hora).',
-  voiceEnabled: 'Falar respostas',
+    'Quatro interruptores e uma voz: cada tipo de fala tem o próprio interruptor e nenhum depende de outro. Tudo desligado por padrão; gravado na configuração do usuário ao "Salvar" (nunca na hora).',
+  voiceEnabled: 'Falar sussurros manuais',
   voiceEnabledHint:
-    'Interruptor mestre da fala automática. Desligado, sussurros periódicos, lembretes de tarefas e anúncios de estado de trabalho ficam mudos (os três secundários abaixo não têm efeito). Sussurro manual, respostas da conversa e o botão de alto-falante do painel de conversa não são afetados — você pediu, então a origem fala direto. Só decide se sai som: balões, memória da conversa e pop-ups de notificação do sistema não mudam; falha na síntese só gera log e nunca interrompe a conversa.',
+    'Fala os sussurros disparados pelo menu de contexto ou por um comando de barra, e também as respostas da conversa. O botão de alto-falante do painel de conversa fala uma única frase assim que você o aperta. Só decide se sai som: balões, memória da conversa e pop-ups de notificação do sistema não mudam; falha na síntese só gera log e nunca interrompe a conversa.',
   voiceWhisperEnabled: 'Falar sussurros',
   voiceWhisperEnabledHint:
-    'Fala o sussurro gerado periodicamente (o sussurro manual pelo botão direito não é afetado). Dependente do interruptor mestre acima. Desligado por padrão — sussurros são narração de fundo e não devem fazer barulho sem pedir.',
+    'Fala o sussurro gerado periodicamente. Desligado por padrão — sussurros são narração de fundo e não devem fazer barulho sem pedir.',
   voiceTodoEnabled: 'Falar lembretes de tarefas',
   voiceTodoEnabledHint:
-    'Fala o lembrete quando uma tarefa vence (o balão continua aparecendo; isto só decide se fala). Dependente do interruptor mestre acima. Desligado por padrão.',
+    'Fala o lembrete quando uma tarefa vence (o balão continua aparecendo; isto só decide se fala). Desligado por padrão.',
   voiceNotifyEnabled: 'Falar estado de trabalho',
   voiceNotifyEnabledHint:
-    'Fala uma frase configurada de estado de trabalho quando uma tarefa termina, falha ou aguarda sua confirmação. Como as notificações do sistema, só fala enquanto você não está nesta página (outro aplicativo, sem foco, minimizado) — sem interromper enquanto você olha para a tela. Só a frase configurada é falada, nunca o detalhe da tarefa. Dependente do interruptor mestre acima. Desligado por padrão.',
+    'Fala uma frase configurada de estado de trabalho quando uma tarefa termina, falha ou aguarda sua confirmação. Como as notificações do sistema, só fala enquanto você não está nesta página (outro aplicativo, sem foco, minimizado) — sem interromper enquanto você olha para a tela. Só a frase configurada é falada, nunca o detalhe da tarefa. Desligado por padrão.',
   voiceNameLabel: 'Voz',
   voiceVolumeLabel: 'Volume',
   voiceVolumeHint:
-    'Volume de reprodução em decimal 0–1: 1 é o volume máximo (100%) e 0 silencia. Altera apenas a intensidade e não sintetiza o áudio de novo, então ajustá-lo não custa nada extra. É independente do interruptor geral acima: com ele desligado, não tem efeito.',
+    'Volume de reprodução em decimal 0–1: 1 é o volume máximo (100%) e 0 silencia. Altera apenas a intensidade e não sintetiza o áudio de novo, então ajustá-lo não custa nada extra. Os quatro tipos de fala compartilham este mesmo volume.',
   physicsTitle: 'Física (sensação de arrastar e arremessar)',
   physicsHint:
     'Padrão global, compartilhado por todos os pets (um pet pack pode sobrescrever no arquivo do próprio tipo); gravado na configuração do usuário ao "Salvar" (nunca na hora). No navegador vale na hora; no desktop vale quando o "Salvar" recarrega as janelas do pet.',

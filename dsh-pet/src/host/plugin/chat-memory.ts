@@ -219,11 +219,12 @@ export function createChatMemory(deps: ChatMemoryInput) {
     // 宠物可能在「校验那次读」与这里之间被删（配置随时会变，两次读之间就是窗口）：
     // 明确失败、不生成不写 S——写下去就是一只已不存在宠物的幽灵叶子（常驻到进程重启）。
     if (!found) return { ok: false, reason: 'unknown-pet', message: '没有这只桌宠：' + petId };
-    // 调用方没指定就按这只宠物自己的 display 推（桌面优先）。规则只写在这一处，
-    // 周期调度、斜杠命令这些调用点不必各算一遍。周期碎碎念另外受自己的开关管：
-    // 关掉就不写 voiceTo（叶子不带这个键 = 谁都不念），气泡照旧弹。
+    // 每一类语音由自己的开关决定：周期调度看 voiceWhisperEnabled，手动触发（右键菜单、
+    // 斜杠命令）看 voiceEnabled。叶子不带 voiceTo = 谁都不念，气泡照旧弹。
     const whisperVoiceOn = cfg.main?.voiceWhisperEnabled === true;
-    const target = kind === 'whisper' && !whisperVoiceOn ? undefined : (voiceTo ?? voiceTargetFor(found.pet));
+    const manualVoiceOn = cfg.main?.voiceEnabled === true;
+    const voiceOff = kind === 'whisper' ? !whisperVoiceOn : !manualVoiceOn;
+    const target = voiceOff ? undefined : (voiceTo ?? voiceTargetFor(found.pet));
     const system = petSystemPrompt(found);
     // 池只算一次：点名的图与随机抽图共用同一份（含文件存在性判定）。
     const pool = readMemePool(found.conf.memes, memeDirsFor(found.entry));
@@ -391,7 +392,8 @@ export function createChatMemory(deps: ChatMemoryInput) {
       }
       // 回复写进 S（与碎碎念同一个叶子：前端本来就是同一条展示链路）。
       // 该由哪一端念按这只宠物的 display 推：对话请求带的是 surface=any，本来就没有具体的一端可用。
-      const replyVoiceTo = voiceTargetFor(found.pet);
+      // 对话回复归「手动播报」：用户发了消息才有的这一句，由 voiceEnabled 决定念不念。
+      const replyVoiceTo = cfg.main?.voiceEnabled === true ? voiceTargetFor(found.pet) : undefined;
       // 只有动作没有正文（模型只写了标记）→ 不写 say，避免弹一个空气泡。
       if (generated.text !== '') {
         state.writePet(petId, 'say', {

@@ -158,8 +158,12 @@ describe('createChatMemory —— 图信息写入记忆文件', () => {
 
 describe('createChatMemory —— 指定配图的碎碎念', () => {
   /** 池里两张图、文件都在；自动配图开关关着，用来验证「点名不受自动开关门控」。 */
-  function poolWorkspace() {
-    const ws = tempWorkspace({ whisperImageEnabled: false, memes: { 可爱: '卖萌立绘', 生气: '鼓腮帮子' } });
+  function poolWorkspace(overlay: Record<string, unknown> = {}) {
+    const ws = tempWorkspace({
+      whisperImageEnabled: false,
+      memes: { 可爱: '卖萌立绘', 生气: '鼓腮帮子' },
+      ...overlay,
+    });
     mkdirSync(ws.memeDir, { recursive: true });
     writeFileSync(join(ws.memeDir, '可爱.png'), '');
     writeFileSync(join(ws.memeDir, '生气.png'), '');
@@ -215,7 +219,7 @@ describe('createChatMemory —— 指定配图的碎碎念', () => {
   });
 
   test('voiceTo：传了就用传的，没传按 display 推导（默认宠物 display=both → desktop）', async () => {
-    const ws = poolWorkspace();
+    const ws = poolWorkspace({ voiceEnabled: true });
     const records: Array<{ petId: string; leaf: string; data: Record<string, unknown> }> = [];
     try {
       await createMemory('随便一句', ws, ws.memeDir, { records }).publishWhisper('main', undefined, 'web');
@@ -227,8 +231,8 @@ describe('createChatMemory —— 指定配图的碎碎念', () => {
       rmSync(ws.dir, { recursive: true, force: true });
     }
   });
-  test('kind=whisper 受 voiceWhisperEnabled 管；手动（缺省 kind）不受它管', async () => {
-    const off = poolWorkspace();
+  test('四类语音各由自己的开关决定：周期碎碎念看 voiceWhisperEnabled，手动触发看 voiceEnabled', async () => {
+    const off = tempWorkspace();
     const offRecords: Array<{ petId: string; leaf: string; data: Record<string, unknown> }> = [];
     try {
       await createMemory('一句', off, off.memeDir, { records: offRecords }).publishWhisper(
@@ -240,12 +244,12 @@ describe('createChatMemory —— 指定配图的碎碎念', () => {
       assert.equal('voiceTo' in (offRecords[0]?.data ?? {}), false, '开关关着时周期碎碎念不该写 voiceTo');
 
       await createMemory('一句', off, off.memeDir, { records: offRecords }).publishWhisper('main');
-      assert.equal(offRecords[1]?.data.voiceTo, 'desktop', '手动触发不看那个开关，照常按 display 推导');
+      assert.equal('voiceTo' in (offRecords[1]?.data ?? {}), false, '手动播报开关关着时手动触发也不该写 voiceTo');
     } finally {
       rmSync(off.dir, { recursive: true, force: true });
     }
 
-    const on = tempWorkspace({ voiceWhisperEnabled: true });
+    const on = tempWorkspace({ voiceWhisperEnabled: true, voiceEnabled: true });
     const onRecords: Array<{ petId: string; leaf: string; data: Record<string, unknown> }> = [];
     try {
       await createMemory('一句', on, undefined, { records: onRecords }).publishWhisper(
@@ -255,6 +259,9 @@ describe('createChatMemory —— 指定配图的碎碎念', () => {
         'whisper',
       );
       assert.equal(onRecords[0]?.data.voiceTo, 'desktop', '开关打开后周期碎碎念照常带 voiceTo');
+
+      await createMemory('一句', on, undefined, { records: onRecords }).publishWhisper('main');
+      assert.equal(onRecords[1]?.data.voiceTo, 'desktop', '开关打开后手动触发照常带 voiceTo');
     } finally {
       rmSync(on.dir, { recursive: true, force: true });
     }
@@ -263,12 +270,25 @@ describe('createChatMemory —— 指定配图的碎碎念', () => {
 
 describe('createChatMemory —— 对话回复的 voiceTo', () => {
   test('回复写叶子时带上该由哪一端念（对话请求没有具体端，按 display 推导）', async () => {
-    const ws = tempWorkspace();
+    const ws = tempWorkspace({ voiceEnabled: true });
     const records: Array<{ petId: string; leaf: string; data: Record<string, unknown> }> = [];
     try {
       const r = await createMemory('在的', ws, undefined, { records }).chatWithPet('main', '在吗');
       assert.equal(r.ok, true);
       assert.equal(records[0]?.data.voiceTo, 'desktop', '默认宠物 display=both，桌面优先');
+    } finally {
+      rmSync(ws.dir, { recursive: true, force: true });
+    }
+  });
+
+  test('手动播报开关关着：回复照样写气泡，叶子不带 voiceTo', async () => {
+    const ws = tempWorkspace();
+    const records: Array<{ petId: string; leaf: string; data: Record<string, unknown> }> = [];
+    try {
+      const r = await createMemory('在的', ws, undefined, { records }).chatWithPet('main', '在吗');
+      assert.equal(r.ok, true);
+      assert.equal(records[0]?.leaf, 'say', '气泡照弹');
+      assert.equal('voiceTo' in (records[0]?.data ?? {}), false, '关着时不该写这个键');
     } finally {
       rmSync(ws.dir, { recursive: true, force: true });
     }

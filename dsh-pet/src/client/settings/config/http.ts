@@ -37,7 +37,7 @@ export interface SaveFields {
   chatAnimationEnabled: boolean;
   confineToScreen: boolean;
   trayEnabled: boolean;
-  /** 语音播报总开关。 */
+  /** 手动播报开关：手动触发的碎碎念与对话回复。 */
   voiceEnabled: boolean;
   /** 语音音色 id（白名单内的四个之一）。 */
   voiceName: string;

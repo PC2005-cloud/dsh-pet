@@ -1,12 +1,11 @@
 /**
  * 端侧语音播报（src/shared/voice.ts）的判定行为测试：这一句到底该不该念。
  *
- * 五条契约：
+ * 四条契约：
  *   1. 只有叶子点名本端才念——`voiceTo` 缺省或是另一端，都只弹气泡；
- *   2. 点名了还要总开关开着，否则一样静音；
- *   3. 网页端页面不可见时不念（没人在看就不出声）；
- *   4. 合成失败落到 `failed`，界面留一个静音喇叭而不是什么都没有；
- *   5. 每句都报一次 `start` 与一次 `end`；`end` 只在播完（或失败、超时）之后发，气泡靠它决定何时收起。
+ *   2. 网页端页面不可见时不念（没人在看就不出声）；
+ *   3. 合成失败落到 `failed`，界面留一个静音喇叭而不是什么都没有；
+ *   4. 每句都报一次 `start` 与一次 `end`；`end` 只在播完（或失败、超时）之后发，气泡靠它决定何时收起。
  *
  * 播放本身（Audio / blob）在浏览器里才有意义，这里用假音频钉住「有没有发合成请求」、状态与收尾时机。
  */
@@ -148,7 +147,7 @@ describe('playSayVoice —— 这一句该不该念', () => {
     const browser = stubBrowser();
     try {
       setSurface('web');
-      setVoiceConfig('', true);
+      setVoiceConfig('', 1);
       playSayVoice({ text: '随便一句' });
       await flush();
       assert.equal(fetchStub.calls.length, 0, '没人点名就不该合成，更不该出声');
@@ -163,7 +162,7 @@ describe('playSayVoice —— 这一句该不该念', () => {
     const browser = stubBrowser();
     try {
       setSurface('web');
-      setVoiceConfig('', true);
+      setVoiceConfig('', 1);
       playSayVoice({ text: '这一句归桌面端', voiceTo: 'desktop' });
       await flush();
       assert.equal(fetchStub.calls.length, 0, '两端不重复播报靠的就是这一条');
@@ -173,30 +172,15 @@ describe('playSayVoice —— 这一句该不该念', () => {
     }
   });
 
-  test('点名本端 + 总开关开 → 发一次合成请求，正文原样', async () => {
+  test('点名本端 → 发一次合成请求，正文原样', async () => {
     const fetchStub = stubFetch();
     const browser = stubBrowser();
     try {
       setSurface('desktop');
-      setVoiceConfig('', true);
+      setVoiceConfig('', 1);
       playSayVoice({ text: '该喝水了', voiceTo: 'desktop' });
       await flush();
       assert.deepEqual(fetchStub.calls, [{ text: '该喝水了' }]);
-    } finally {
-      browser.restore();
-      fetchStub.restore();
-    }
-  });
-
-  test('点名本端但总开关关 → 不发请求', async () => {
-    const fetchStub = stubFetch();
-    const browser = stubBrowser();
-    try {
-      setSurface('desktop');
-      setVoiceConfig('', false);
-      playSayVoice({ text: '关了就别念', voiceTo: 'desktop' });
-      await flush();
-      assert.equal(fetchStub.calls.length, 0, '总开关是最后一道门');
     } finally {
       browser.restore();
       fetchStub.restore();
@@ -210,7 +194,7 @@ describe('playSayVoice —— 这一句该不该念', () => {
     (globalThis as { document?: unknown }).document = { hidden: true };
     try {
       setSurface('web');
-      setVoiceConfig('', true);
+      setVoiceConfig('', 1);
       playSayVoice({ text: '后台标签页', voiceTo: 'web' });
       await flush();
       assert.equal(fetchStub.calls.length, 0, '没人在看的页面不该出声');
@@ -232,7 +216,7 @@ describe('playSayVoice —— 这一句该不该念', () => {
     const browser = stubBrowser();
     try {
       setSurface('desktop');
-      setVoiceConfig('', true);
+      setVoiceConfig('', 1);
       playSayVoice({ text: '这句合成不出来', voiceTo: 'desktop' });
       await flush();
       assert.equal(fetchStub.calls.length, 1, '该请求的合成请求照发');
@@ -253,7 +237,7 @@ describe('播放事件 —— 气泡靠它决定何时收起', () => {
     try {
       const text = '很长的一句话。'.repeat(20);
       setSurface('desktop');
-      setVoiceConfig('', true);
+      setVoiceConfig('', 1);
       playSayVoice({ text, voiceTo: 'desktop' });
       await flush();
       assert.deepEqual(
@@ -277,7 +261,7 @@ describe('播放事件 —— 气泡靠它决定何时收起', () => {
     const off = subscribeVoiceUtterance((event) => events.push(event));
     try {
       setSurface('desktop');
-      setVoiceConfig('', true);
+      setVoiceConfig('', 1);
       playSayVoice({ text: '这句合成不出来', voiceTo: 'desktop' });
       await flush();
       assert.deepEqual(
@@ -298,8 +282,8 @@ describe('播放事件 —— 气泡靠它决定何时收起', () => {
     const off = subscribeVoiceUtterance((event) => events.push(event));
     try {
       setSurface('web');
-      setVoiceConfig('', false);
-      playSayVoice({ text: '关了就别念', voiceTo: 'web' });
+      setVoiceConfig('', 1);
+      playSayVoice({ text: '这一句归桌面端', voiceTo: 'desktop' });
       await flush();
       assert.equal(events.length, 0);
     } finally {
@@ -317,7 +301,7 @@ describe('播放事件 —— 气泡靠它决定何时收起', () => {
     off();
     try {
       setSurface('desktop');
-      setVoiceConfig('', true);
+      setVoiceConfig('', 1);
       playSayVoice({ text: '没人听了', voiceTo: 'desktop' });
       await flush();
       assert.equal(events.length, 0);
@@ -334,7 +318,7 @@ describe('播放事件 —— 气泡靠它决定何时收起', () => {
     const off = subscribeVoiceUtterance((event) => events.push(event));
     try {
       setSurface('desktop');
-      setVoiceConfig('', true);
+      setVoiceConfig('', 1);
       playSayVoice({ text: '这一句要念一会儿', voiceTo: 'desktop' });
       await flush();
       assert.deepEqual(
@@ -364,7 +348,7 @@ describe('播放事件 —— 气泡靠它决定何时收起', () => {
     const off = subscribeVoiceUtterance((event) => events.push(event));
     try {
       setSurface('desktop');
-      setVoiceConfig('', true);
+      setVoiceConfig('', 1);
       playSayVoice({ text: '播不出来', voiceTo: 'desktop' });
       await flush();
       assert.deepEqual(
@@ -387,7 +371,7 @@ describe('播放事件 —— 气泡靠它决定何时收起', () => {
     const off = subscribeVoiceUtterance((event) => events.push(event));
     try {
       setSurface('desktop');
-      setVoiceConfig('', true);
+      setVoiceConfig('', 1);
       playSayVoice({ text: '这句卡住了', voiceTo: 'desktop' });
       await microtasks();
       assert.deepEqual(
@@ -417,7 +401,7 @@ describe('setVoiceConfig —— 音量系数', () => {
     const browser = stubBrowser({ volumes: sink.volumes });
     try {
       setSurface('web');
-      setVoiceConfig('', true, 0.35);
+      setVoiceConfig('', 0.35);
       playSayVoice({ text: '小声说', voiceTo: 'web' });
       await flush();
       assert.deepEqual(sink.volumes, [0.35], '音量要落到真正播放的那段音频上');
@@ -440,7 +424,7 @@ describe('setVoiceConfig —— 音量系数', () => {
         [0, 0],
       ];
       for (const [input, wanted] of cases) {
-        setVoiceConfig('', true, input);
+        setVoiceConfig('', input);
         playSayVoice({ text: '说一句', voiceTo: 'web' });
         await flush();
         assert.equal(sink.volumes[sink.volumes.length - 1], wanted, `音量 ${String(input)} 应收敛到 ${wanted}`);
@@ -458,7 +442,7 @@ describe('自动播报互斥 —— 熄屏醒来不叠音', () => {
     const browser = stubBrowser({ autoEnd: false });
     try {
       setSurface('web');
-      setVoiceConfig('', true);
+      setVoiceConfig('', 1);
       playSayVoice({ text: '第一句', voiceTo: 'web' });
       await flush();
       playSayVoice({ text: '第二句', voiceTo: 'web' });
@@ -479,7 +463,7 @@ describe('自动播报互斥 —— 熄屏醒来不叠音', () => {
     const previousDocument = (globalThis as { document?: unknown }).document;
     try {
       setSurface('web');
-      setVoiceConfig('', true);
+      setVoiceConfig('', 1);
       (globalThis as { document?: unknown }).document = { hidden: true };
       playSayVoice({ text: '息屏时生成的一句', voiceTo: 'web' });
       await flush();
@@ -496,7 +480,7 @@ describe('自动播报互斥 —— 熄屏醒来不叠音', () => {
     const browser = stubBrowser({ autoEnd: false });
     try {
       setSurface('web');
-      setVoiceConfig('', true);
+      setVoiceConfig('', 1);
       playSayVoice({ text: '第一句', voiceTo: 'web' });
       playSayVoice({ text: '第二句', voiceTo: 'web' });
       await flush();
@@ -523,7 +507,7 @@ describe('speakNotice —— 通知类播报允许后台出声', () => {
     (globalThis as { document?: unknown }).document = { hidden: true };
     try {
       setSurface('web');
-      setVoiceConfig('', true);
+      setVoiceConfig('', 1);
       speakNotice('任务完成啦');
       await flush();
       assert.deepEqual(fetchStub.calls, [{ text: '任务完成啦' }], '通知类不该被可见性门挡掉');
@@ -540,7 +524,7 @@ describe('speakNotice —— 通知类播报允许后台出声', () => {
     const browser = stubBrowser();
     try {
       setSurface('web');
-      setVoiceConfig('', true);
+      setVoiceConfig('', 1);
       speakNotice('');
       await flush();
       assert.equal(fetchStub.calls.length, 0, '空串没有可念的内容');

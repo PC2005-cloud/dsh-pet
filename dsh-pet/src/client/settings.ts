@@ -155,7 +155,7 @@ export function makePetConfigSection(
     const [voiceName, setVoiceName] = useState('zh-CN-XiaoyiNeural');
     // 播放音量（全局系数 0–1）：初值 1 是内置默认（最大音量），加载后由成品值覆盖。
     const [voiceVolume, setVoiceVolume] = useState(1);
-    // 语音的两个细分开关（周期碎碎念 / 待办提醒）：与总开关同一套语义，初值 false 是内置默认。
+    // 另外三类语音开关（周期碎碎念 / 待办提醒 / 工作状态播报）：与语音播报平级，初值 false 是内置默认。
     const [voiceWhisperEnabled, setVoiceWhisperEnabled] = useState(false);
     const [voiceTodoEnabled, setVoiceTodoEnabled] = useState(false);
     const [voiceNotifyEnabled, setVoiceNotifyEnabled] = useState(false);
