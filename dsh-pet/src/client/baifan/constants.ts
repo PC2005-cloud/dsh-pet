@@ -85,7 +85,11 @@ const Z_INDEX = 1500;
 
 /** 覆盖层与米饭、分数的样式。 */
 export const CSS = [
-  '#dsh-pet-baifan-root{position:fixed;inset:0;pointer-events:none;overflow:hidden;z-index:' + Z_INDEX + '}',
+  // 覆盖层挂在 body 下，会吃到 DSH 桌面端给 macOS 写的 body > :not(#root){no-drag}，
+  // 把整条标题栏变成拖拽死区；pointer-events 管不到 app-region 的区域收集，
+  // 而 :not(#root) 带 ID 特异度，只有 !important 压得住。
+  '#dsh-pet-baifan-root{position:fixed;inset:0;pointer-events:none;overflow:hidden;',
+  '-webkit-app-region:none!important;z-index:' + Z_INDEX + '}',
   '.bf-rice{position:absolute;transform-origin:50% 100%;will-change:transform,opacity;',
   'user-select:none;-webkit-user-drag:none;pointer-events:none}',
   '.bf-score{position:absolute;display:flex;align-items:center;gap:6px;',
