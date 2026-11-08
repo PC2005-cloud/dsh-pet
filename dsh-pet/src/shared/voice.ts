@@ -310,7 +310,8 @@ async function speak(text: string): Promise<void> {
     if (autoAudio === audio) autoAudio = null;
   } catch {
     /* 含超时：气泡已经显示，失败也不能反过来打断渲染，只把图标换成静音喇叭 */
-    setVoiceState('failed');
+    // 旧请求的失败晚到不能覆盖新句状态：世代号已变就说明这句已经被顶掉。
+    if (token === autoSeq) setVoiceState('failed');
   }
 }
 

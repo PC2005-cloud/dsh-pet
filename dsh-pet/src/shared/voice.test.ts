@@ -24,20 +24,31 @@ import {
 } from './voice.ts';
 
 /** 假的合成端点：记录每次请求，响应默认是一个假音频；`ok: false` 模拟宿主返回失败。 */
-function stubFetch(options: { ok?: boolean } = {}): { calls: Array<{ text: string }>; restore: () => void } {
+function stubFetch(options: { ok?: boolean; hold?: boolean } = {}): {
+  calls: Array<{ text: string }>;
+  pending: Array<{ resolve: () => void; reject: () => void }>;
+  restore: () => void;
+} {
   const ok = options.ok ?? true;
+  const hold = options.hold === true;
   const calls: Array<{ text: string }> = [];
+  const pending: Array<{ resolve: () => void; reject: () => void }> = [];
   const previous = globalThis.fetch;
-  (globalThis as { fetch: unknown }).fetch = async (_url: string, init?: { body?: string }) => {
+  const respond = () => ({
+    ok,
+    headers: { get: () => (ok ? 'audio/mpeg' : 'application/json') },
+    blob: async () => ({ size: 1 }),
+  });
+  (globalThis as { fetch: unknown }).fetch = (_url: string, init?: { body?: string }) => {
     calls.push({ text: String((JSON.parse(init?.body ?? '{}') as { text?: unknown }).text ?? '') });
-    return {
-      ok,
-      headers: { get: () => (ok ? 'audio/mpeg' : 'application/json') },
-      blob: async () => ({ size: 1 }),
-    };
+    if (!hold) return Promise.resolve(respond());
+    return new Promise((resolve, reject) => {
+      pending.push({ resolve: () => resolve(respond()), reject: () => reject(new Error('合成失败')) });
+    });
   };
   return {
     calls,
+    pending,
     restore: () => {
       (globalThis as { fetch: unknown }).fetch = previous;
     },
@@ -474,6 +485,28 @@ describe('自动播报互斥 —— 熄屏醒来不叠音', () => {
       assert.deepEqual(sink.volumes, [], '隐藏期间合成的句子不该补播');
     } finally {
       (globalThis as { document?: unknown }).document = previousDocument;
+      browser.restore();
+      fetchStub.restore();
+    }
+  });
+
+  test('过期的失败：前一句迟到的报错 → 后一句的喇叭仍是 ready', async () => {
+    const fetchStub = stubFetch({ hold: true });
+    const browser = stubBrowser({ autoEnd: false });
+    try {
+      setSurface('web');
+      setVoiceConfig('', true);
+      playSayVoice({ text: '第一句', voiceTo: 'web' });
+      playSayVoice({ text: '第二句', voiceTo: 'web' });
+      await flush();
+      assert.equal(fetchStub.pending.length, 2, '两句各发一次合成请求');
+      // 先让后一句成功、再让前一句失败：失败到得晚，不能把新句的喇叭拉回静音
+      fetchStub.pending[1].resolve();
+      await flush();
+      fetchStub.pending[0].reject();
+      await flush();
+      assert.equal(getVoiceState(), 'ready', '新句已就绪，旧句的失败不该覆盖它');
+    } finally {
       browser.restore();
       fetchStub.restore();
     }
