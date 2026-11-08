@@ -42,12 +42,12 @@ describe('decideWorkStatusLine —— 工作状态播报的判定', () => {
     assert.equal(decideWorkStatusLine(mkSnap('error'), [mkPet(TEXTS)], null), '出错了');
   });
 
-  test('任务详情优先于配置台词', () => {
-    assert.equal(decideWorkStatusLine(mkSnap('success', '改文件'), [mkPet(TEXTS)], null), '改文件');
+  test('任务详情不参与播报：只念配置台词', () => {
+    assert.equal(decideWorkStatusLine(mkSnap('success', 'voice.ts 这里要修一下'), [mkPet(TEXTS)], null), '完成啦');
   });
 
-  test('没有任务详情也没配台词 → 不念', () => {
-    assert.equal(decideWorkStatusLine(mkSnap('success'), [mkPet()], null), undefined);
+  test('该档位没配台词 → 不念（哪怕有任务详情）', () => {
+    assert.equal(decideWorkStatusLine(mkSnap('success', '改文件'), [mkPet()], null), undefined);
     assert.equal(decideWorkStatusLine(mkSnap('success'), [], null), undefined);
   });
 

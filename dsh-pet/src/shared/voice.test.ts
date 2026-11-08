@@ -19,6 +19,7 @@ import {
   playSayVoice,
   setSurface,
   setVoiceConfig,
+  speakNotice,
   subscribeVoiceUtterance,
   type VoiceUtteranceEvent,
 } from './voice.ts';
@@ -506,6 +507,43 @@ describe('自动播报互斥 —— 熄屏醒来不叠音', () => {
       fetchStub.pending[0].reject();
       await flush();
       assert.equal(getVoiceState(), 'ready', '新句已就绪，旧句的失败不该覆盖它');
+    } finally {
+      browser.restore();
+      fetchStub.restore();
+    }
+  });
+});
+
+describe('speakNotice —— 通知类播报允许后台出声', () => {
+  test('页面不可见时照常发请求并开播（用户走开时才最需要它响）', async () => {
+    const fetchStub = stubFetch();
+    const volumes: number[] = [];
+    const browser = stubBrowser({ volumes });
+    const previousDocument = (globalThis as { document?: unknown }).document;
+    (globalThis as { document?: unknown }).document = { hidden: true };
+    try {
+      setSurface('web');
+      setVoiceConfig('', true);
+      speakNotice('任务完成啦');
+      await flush();
+      assert.deepEqual(fetchStub.calls, [{ text: '任务完成啦' }], '通知类不该被可见性门挡掉');
+      assert.equal(volumes.length, 1, '要真的开播，而不是合成完就丢掉');
+    } finally {
+      (globalThis as { document?: unknown }).document = previousDocument;
+      browser.restore();
+      fetchStub.restore();
+    }
+  });
+
+  test('空串 → 不发请求', async () => {
+    const fetchStub = stubFetch();
+    const browser = stubBrowser();
+    try {
+      setSurface('web');
+      setVoiceConfig('', true);
+      speakNotice('');
+      await flush();
+      assert.equal(fetchStub.calls.length, 0, '空串没有可念的内容');
     } finally {
       browser.restore();
       fetchStub.restore();

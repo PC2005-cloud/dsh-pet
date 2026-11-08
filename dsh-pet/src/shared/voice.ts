@@ -189,8 +189,13 @@ export function playSayVoice(say: { readonly text: string; readonly voiceTo?: Vo
   void speakIfEnabled(say.text); // 不 await：播放是旁路，不能挡住气泡与动画
 }
 
-/** 确认配置后再播；桌面端首次调用会顺手拉一次 `/config`。 */
-async function speakIfEnabled(text: string): Promise<void> {
+/**
+ * 确认配置后再播；桌面端首次调用会顺手拉一次 `/config`。
+ *
+ * @param text - 要念的整句。
+ * @param canPlayHidden - 页面隐藏时是否继续播；缺省 `false` = 老口径（藏起来就静音）。
+ */
+async function speakIfEnabled(text: string, canPlayHidden = false): Promise<void> {
   await loadConfigOnce();
   if (!voiceEnabled) {
     setVoiceState('idle');
@@ -201,7 +206,7 @@ async function speakIfEnabled(text: string): Promise<void> {
   emitUtterance({ kind: 'start', seq, text });
   setVoiceState('loading');
   try {
-    await speak(text);
+    await speak(text, canPlayHidden);
   } finally {
     // 成功、失败、超时都走这里：气泡在等这个收尾，漏一次就永远挂着。
     emitUtterance({ kind: 'end', seq, text });
@@ -219,7 +224,8 @@ async function speakIfEnabled(text: string): Promise<void> {
  */
 export function speakNotice(text: string): void {
   if (text === '') return;
-  void speakIfEnabled(text);
+  // 允许后台播：用户正在别的应用里，正是需要它出声的时候。
+  void speakIfEnabled(text, true);
 }
 
 /**
@@ -255,6 +261,9 @@ let autoAudio: HTMLAudioElement | null = null;
 /** 自动播报世代号：合成期间可能被更新的一句顶掉，回来的旧结果直接丢弃。 */
 let autoSeq = 0;
 
+/** 当前这句是否允许页面隐藏时继续播；跟随 autoAudio 一起换，不做成全局开关。 */
+let autoAudioCanPlayHidden = false;
+
 /**
  * 掐掉当前自动播报。
  *
@@ -262,9 +271,11 @@ let autoSeq = 0;
  * 气泡能照常收起，不会等一个已经不会响的音频。
  */
 function stopAutoAudio(): void {
-  if (autoAudio === null) return;
   const audio = autoAudio;
+  // 标记无条件清掉：没有音频时也要清，否则下一句会被上一句的许可值带偏。
   autoAudio = null;
+  autoAudioCanPlayHidden = false;
+  if (audio === null) return;
   try {
     audio.pause();
   } catch {
@@ -272,15 +283,20 @@ function stopAutoAudio(): void {
   }
 }
 
-// 页面被藏起来（切后台 / 息屏）就静音：回来时不补播。
+// 页面被藏起来（切后台 / 息屏）就静音：回来时不补播。通知类播报自带后台许可，不受这条影响。
 if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden) stopAutoAudio();
+    if (document.hidden && !autoAudioCanPlayHidden) stopAutoAudio();
   });
 }
 
-/** 请求合成并播放；任何一步失败都落到 `failed`（气泡上留一个静音喇叭，而不是干脆没图标）。 */
-async function speak(text: string): Promise<void> {
+/**
+ * 请求合成并播放；任何一步失败都落到 `failed`（气泡上留一个静音喇叭，而不是干脆没图标）。
+ *
+ * @param text - 要念的整句。
+ * @param canPlayHidden - 页面隐藏时是否继续播；缺省 `false`。
+ */
+async function speak(text: string, canPlayHidden = false): Promise<void> {
   const token = ++autoSeq;
   stopAutoAudio();
   try {
@@ -302,20 +318,24 @@ async function speak(text: string): Promise<void> {
     }
     const audio = new Audio(objectUrl);
     audio.volume = voiceVolume;
-    // 合成期间页面被藏起来：这一句不补播，直接丢掉
-    if (typeof document !== 'undefined' && document.hidden) {
+    // 合成期间页面被藏起来：这一句不补播，直接丢掉——除非这句自带后台许可（通知类）。
+    if (!canPlayHidden && typeof document !== 'undefined' && document.hidden) {
       URL.revokeObjectURL(objectUrl);
       setVoiceState('idle');
       return;
     }
     // 音频就绪即置 ready：喇叭表示「这句有语音」，不跟播放进度绑定
     setVoiceState('ready');
+    autoAudioCanPlayHidden = canPlayHidden;
     autoAudio = audio;
     try {
       await audio.play(); // 只代表开播：开播就失败要落到 failed，也不必再等收尾
     } catch {
       URL.revokeObjectURL(objectUrl);
-      if (autoAudio === audio) autoAudio = null;
+      if (autoAudio === audio) {
+        autoAudio = null;
+        autoAudioCanPlayHidden = false;
+      }
       setVoiceState('failed');
       return;
     }
