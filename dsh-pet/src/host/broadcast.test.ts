@@ -20,6 +20,7 @@ import {
   normalizeBroadcastAnim,
   normalizeBroadcastDuration,
   normalizeBroadcastText,
+  normalizeBroadcastVoice,
 } from './broadcast.ts';
 
 /** 池里真实存在的两张图 */
@@ -245,6 +246,18 @@ describe('normalizeBroadcastAnim —— 动画联动开关（只有严格 false 
   test('其余一律按"要联动"：缺省、true、字符串 "false"、0、null 都算开', () => {
     for (const v of [undefined, null, true, 'false', 0, 1, {}]) {
       assert.equal(normalizeBroadcastAnim(v), true, `${JSON.stringify(v)} 应按联动处理`);
+    }
+  });
+});
+
+describe('normalizeBroadcastVoice —— 播报开关（只有严格 true 才念）', () => {
+  test('只有严格 true 才念', () => {
+    assert.equal(normalizeBroadcastVoice(true), true);
+  });
+
+  test('缺省与其余值一律不念：undefined、null、false、字符串 "true"、1 都不出声', () => {
+    for (const v of [undefined, null, false, 'true', 1, 0, {}]) {
+      assert.equal(normalizeBroadcastVoice(v), false, `${JSON.stringify(v)} 不该出声`);
     }
   });
 });

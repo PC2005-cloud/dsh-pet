@@ -55,6 +55,13 @@ export function normalizeBroadcastAnim(anim: unknown): boolean {
   return anim !== false;
 }
 
+/** 播报开关规范化：只有严格 `true` 才念，其余（含 `"true"` 字符串）一律不念。
+ *  缺省不念是有意的：投喂的文本与时机都由调用方决定，默认不该出声——否则任何一次
+ *  高频投喂都会变成持续朗读，而调用方往往意识不到自己打开了扬声器。 */
+export function normalizeBroadcastVoice(speak: unknown): boolean {
+  return speak === true;
+}
+
 /**
  * `?pet=` → 实际落点（与 ./anim、./motion-cue 同一口径）：必填且必须真实存在。
  *

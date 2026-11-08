@@ -13,6 +13,7 @@ import {
   normalizeBroadcastAnim,
   normalizeBroadcastDuration,
   normalizeBroadcastText,
+  normalizeBroadcastVoice,
 } from '../broadcast.ts';
 import type { PetRouteDeps, RouteInput } from './types.ts';
 import type { RouteResult } from '../http.ts';
@@ -120,6 +121,7 @@ export async function handleInteractionRoutes(deps: PetRouteDeps, input: RouteIn
     const duration = normalizeBroadcastDuration(o.duration);
     if (duration === null) return failResult('bad-request', 'duration 必须是 ≥0 的有限数字（毫秒）');
     const anim = normalizeBroadcastAnim(o.anim);
+    const speak = normalizeBroadcastVoice(o.speak);
     try {
       const cfg = readAllConfig(configPaths);
       const d = decideBroadcast({
@@ -145,6 +147,7 @@ export async function handleInteractionRoutes(deps: PetRouteDeps, input: RouteIn
       const pic = d.url !== undefined ? { url: d.url } : d.image !== undefined ? { image: d.image } : {};
       // 与手动碎碎念同一口径：调用方用 ?surface= 明说了「我希望这句显示在哪一端」，就由那一端念；
       // both / any 不足以指定一端，留空不写（消费端据此不念）。
+      // speak 是第二道门：投喂默认只弹气泡，调用方显式要了才出声（见 normalizeBroadcastVoice）。
       const want = normalizeSurface(url.searchParams.get('surface'));
       const voiceTo = want === null ? undefined : voiceTargetOfSurface(want);
       state.writePet(d.petId, 'say', {
@@ -152,7 +155,7 @@ export async function handleInteractionRoutes(deps: PetRouteDeps, input: RouteIn
         ...pic,
         duration: d.duration,
         anim: d.anim,
-        ...(voiceTo ? { voiceTo } : {}),
+        ...(speak && voiceTo ? { voiceTo } : {}),
       });
       return okResult({ ok: true });
     } catch (e) {
