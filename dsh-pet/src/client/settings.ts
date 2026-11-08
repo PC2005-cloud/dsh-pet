@@ -158,6 +158,7 @@ export function makePetConfigSection(
     // 语音的两个细分开关（周期碎碎念 / 待办提醒）：与总开关同一套语义，初值 false 是内置默认。
     const [voiceWhisperEnabled, setVoiceWhisperEnabled] = useState(false);
     const [voiceTodoEnabled, setVoiceTodoEnabled] = useState(false);
+    const [voiceNotifyEnabled, setVoiceNotifyEnabled] = useState(false);
     // 可选音色：来自宿主 /voice/voices，拉不到就留空——下拉只显示当前值，绝不硬编码音色 id。
     const [voiceOptions, setVoiceOptions] = useState<VoiceOption[]>([]);
     // 物理参数（全局）：只改本地状态，随「保存」整包写入；初值仅占位，成品加载成功后才允许编辑与保存。
@@ -198,6 +199,7 @@ export function makePetConfigSection(
         if (patch.voiceVolume !== undefined) setVoiceVolume(patch.voiceVolume);
         if (patch.voiceWhisperEnabled !== undefined) setVoiceWhisperEnabled(patch.voiceWhisperEnabled);
         if (patch.voiceTodoEnabled !== undefined) setVoiceTodoEnabled(patch.voiceTodoEnabled);
+        if (patch.voiceNotifyEnabled !== undefined) setVoiceNotifyEnabled(patch.voiceNotifyEnabled);
         if (patch.physics !== undefined) setPhysics(patch.physics);
         if (patch.font !== undefined) setFont(patch.font);
         if (patch.animationWeights !== undefined) setWeights(patch.animationWeights);
@@ -310,6 +312,7 @@ export function makePetConfigSection(
         voiceVolume,
         voiceWhisperEnabled,
         voiceTodoEnabled,
+        voiceNotifyEnabled,
         physics,
         whisperModel,
         chatModel,
@@ -394,11 +397,13 @@ export function makePetConfigSection(
           voices: voiceOptions,
           whisperEnabled: voiceWhisperEnabled,
           todoEnabled: voiceTodoEnabled,
+          notifyEnabled: voiceNotifyEnabled,
           onToggle: setVoiceEnabled,
           onVoiceChange: setVoiceName,
           onVolumeChange: setVoiceVolume,
           onWhisperToggle: setVoiceWhisperEnabled,
           onTodoToggle: setVoiceTodoEnabled,
+          onNotifyToggle: setVoiceNotifyEnabled,
         }),
         h(FontCard, { busy, font, onChange: patchFont }),
         h(ModelCard, {

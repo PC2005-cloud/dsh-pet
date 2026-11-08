@@ -158,16 +158,19 @@ export const fr: Record<Key, string> = {
     "Affiche une icône dans la zone de notification (barre de menus sur macOS) dès que le mode bureau démarre. Elle liste tous les compagnons de la configuration et permet de basculer chacun entre bureau et web / aucun — y compris ceux qui ne sont pas sur le bureau et n'ont donc aucune fenêtre à cliquer droit. Une fois désactivée, ramener un compagnon sur le bureau exige d'ouvrir le navigateur (la page de configuration, ou un clic droit sur le compagnon web). Windows range déjà ces icônes dans le panneau « icônes masquées ». Mode bureau uniquement.",
   voiceTitle: 'Synthèse vocale',
   voiceHint:
-    "Trois interrupteurs et une voix : l'interrupteur principal commande la lecture automatique, les deux sous-interrupteurs commandent chacun un type de message proactif. Tout est désactivé par défaut et écrit dans la configuration utilisateur lors de l'enregistrement (jamais immédiatement).",
+    "Quatre interrupteurs et une voix : l'interrupteur principal commande la lecture automatique, les trois sous-interrupteurs commandent chacun un type de message proactif. Tout est désactivé par défaut et écrit dans la configuration utilisateur lors de l'enregistrement (jamais immédiatement).",
   voiceEnabled: 'Lecture vocale',
   voiceEnabledHint:
-    "Interrupteur principal de la lecture automatique. Désactivé, les murmures périodiques et les rappels de tâches restent muets (les deux sous-interrupteurs ci-dessous n'ont alors aucun effet). Les murmures manuels, les réponses de discussion et le bouton haut-parleur du panneau de discussion ne sont pas concernés — vous les avez demandés, la surface qui les déclenche les lit directement. Cela ne décide que du son émis : bulles, mémoire de discussion et notifications système restent intactes ; un échec de synthèse est seulement journalisé et n'interrompt jamais la conversation.",
+    "Interrupteur principal de la lecture automatique. Désactivé, les murmures périodiques, les rappels de tâches et les annonces d'état de travail restent muets (les trois sous-interrupteurs ci-dessous n'ont alors aucun effet). Les murmures manuels, les réponses de discussion et le bouton haut-parleur du panneau de discussion ne sont pas concernés — vous les avez demandés, la surface qui les déclenche les lit directement. Cela ne décide que du son émis : bulles, mémoire de discussion et pop-ups de notification système restent intacts ; un échec de synthèse est seulement journalisé et n'interrompt jamais la conversation.",
   voiceWhisperEnabled: 'Lire les murmures',
   voiceWhisperEnabledHint:
     "Lit le murmure généré périodiquement (un murmure manuel par clic droit n'est pas concerné). Soumis à l'interrupteur principal ci-dessus. Désactivé par défaut — les murmures sont une narration de fond et ne doivent pas faire de bruit sans qu'on le demande.",
   voiceTodoEnabled: 'Lire les rappels de tâches',
   voiceTodoEnabledHint:
     "Lit un rappel de tâche à son échéance (la bulle s'affiche toujours ; cet interrupteur décide seulement s'il est lu). Soumis à l'interrupteur principal ci-dessus. Désactivé par défaut.",
+  voiceNotifyEnabled: "Lire l'état de travail",
+  voiceNotifyEnabledHint:
+    "Lit une réplique d'état de travail configurée quand une tâche se termine, échoue ou attend votre confirmation. Comme les notifications système, elle n'est lue que lorsque vous n'êtes pas sur cette page (autre application, sans focus, réduite) — aucune interruption pendant que vous regardez l'écran. Seule la réplique configurée est lue, jamais le détail de la tâche. Soumis à l'interrupteur principal ci-dessus. Désactivé par défaut.",
   voiceNameLabel: 'Voix',
   voiceVolumeLabel: 'Volume',
   voiceVolumeHint:

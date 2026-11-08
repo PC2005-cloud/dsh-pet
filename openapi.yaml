@@ -1877,7 +1877,7 @@ paths:
           `whisperEnabled`/`workStatusEnabled`/`fixedEnabled`/`display`/`position`，以及顶层
           `notificationsEnabled`/`clickSoundEnabled`/`whisperImageEnabled`/`chatImageEnabled`/
           `chatAnimationEnabled`/`confineToScreen`/`trayEnabled`/`voiceEnabled`/`voiceName`/`voiceWhisperEnabled`/
-          `voiceTodoEnabled`/`physics`/`font`/`whisperModel`/`chatModel`/`chatMemoryRounds`/
+          `voiceTodoEnabled`/`voiceNotifyEnabled`/`physics`/`font`/`whisperModel`/`chatModel`/`chatMemoryRounds`/
           `chatImageLimit`。
           其余字段会沿用磁盘上用户文件里的原值（透传保留），所以设置页保存
           **不会抹掉**你手写的精调配置（`whisperPrompt`/`memes`/`eventsRefreshSec` 等）。
@@ -4394,6 +4394,13 @@ components:
           description: |
             待办提醒要不要念出来（全局默认）。同样受 `voiceEnabled` 总开关约束。
             设置页「语音播报」卡里的「待办播报」开关写的就是它。缺失默认 `false`。
+        voiceNotifyEnabled:
+          type: boolean
+          description: |
+            工作状态播报要不要念出来（全局默认）：任务完成 / 出错 / 等你确认时念一句该档位配置的
+            工作状态文案；和系统通知同一取向，用户不在本页时才念。只念配置的台词，不念 `task`。
+            受 `voiceEnabled` 总开关约束。设置页「语音播报」卡里的「通知播报」开关写的就是它。
+            缺失默认 `false`。
         chatMemoryRounds:
           type: integer
           minimum: 0

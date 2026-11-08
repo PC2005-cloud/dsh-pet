@@ -157,16 +157,19 @@ export const pt: Record<Key, string> = {
     'Mostra um ícone na área de notificação (barra de menus no macOS) quando o modo desktop inicia. Ele lista todos os pets da configuração e alterna a exibição de cada um — inclusive os que estão fora do desktop agora e não têm janela para clicar com o botão direito. Sem ele, para trazer um pet de volta ao desktop é preciso abrir o navegador (a página de configuração, ou clicar com o botão direito no pet na web). O Windows já esconde ícones de terceiros na gaveta "ícones ocultos". Só afeta o modo desktop.',
   voiceTitle: 'Voz',
   voiceHint:
-    'Três interruptores e uma voz: o mestre controla a fala automática; os dois secundários controlam um tipo de mensagem proativa cada. Tudo desligado por padrão; gravado na configuração do usuário ao "Salvar" (nunca na hora).',
+    'Quatro interruptores e uma voz: o mestre controla a fala automática; os três secundários controlam um tipo de mensagem proativa cada. Tudo desligado por padrão; gravado na configuração do usuário ao "Salvar" (nunca na hora).',
   voiceEnabled: 'Falar respostas',
   voiceEnabledHint:
-    'Interruptor mestre da fala automática. Desligado, sussurros periódicos e lembretes de tarefas ficam mudos (os dois secundários abaixo não têm efeito). Sussurro manual, respostas da conversa e o botão de alto-falante do painel de conversa não são afetados — você pediu, então a origem fala direto. Só decide se sai som: balões, memória da conversa e notificações do sistema não mudam; falha na síntese só gera log e nunca interrompe a conversa.',
+    'Interruptor mestre da fala automática. Desligado, sussurros periódicos, lembretes de tarefas e anúncios de estado de trabalho ficam mudos (os três secundários abaixo não têm efeito). Sussurro manual, respostas da conversa e o botão de alto-falante do painel de conversa não são afetados — você pediu, então a origem fala direto. Só decide se sai som: balões, memória da conversa e pop-ups de notificação do sistema não mudam; falha na síntese só gera log e nunca interrompe a conversa.',
   voiceWhisperEnabled: 'Falar sussurros',
   voiceWhisperEnabledHint:
     'Fala o sussurro gerado periodicamente (o sussurro manual pelo botão direito não é afetado). Dependente do interruptor mestre acima. Desligado por padrão — sussurros são narração de fundo e não devem fazer barulho sem pedir.',
   voiceTodoEnabled: 'Falar lembretes de tarefas',
   voiceTodoEnabledHint:
     'Fala o lembrete quando uma tarefa vence (o balão continua aparecendo; isto só decide se fala). Dependente do interruptor mestre acima. Desligado por padrão.',
+  voiceNotifyEnabled: 'Falar estado de trabalho',
+  voiceNotifyEnabledHint:
+    'Fala uma frase configurada de estado de trabalho quando uma tarefa termina, falha ou aguarda sua confirmação. Como as notificações do sistema, só fala enquanto você não está nesta página (outro aplicativo, sem foco, minimizado) — sem interromper enquanto você olha para a tela. Só a frase configurada é falada, nunca o detalhe da tarefa. Dependente do interruptor mestre acima. Desligado por padrão.',
   voiceNameLabel: 'Voz',
   voiceVolumeLabel: 'Volume',
   voiceVolumeHint:

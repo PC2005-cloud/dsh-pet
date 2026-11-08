@@ -117,6 +117,8 @@ export function saveUserConfig(
   if (vwe !== undefined && !topFieldValid('voiceWhisperEnabled', vwe)) return null;
   const vte = o.voiceTodoEnabled;
   if (vte !== undefined && !topFieldValid('voiceTodoEnabled', vte)) return null;
+  const vne = o.voiceNotifyEnabled;
+  if (vne !== undefined && !topFieldValid('voiceNotifyEnabled', vne)) return null;
   // 系统托盘开关（全局，仅桌面模式）：与上面几个全局布尔同语义——传了必须是布尔，没传走透传保留。
   const te = o.trayEnabled;
   if (te !== undefined && typeof te !== 'boolean') return null;
@@ -174,6 +176,7 @@ export function saveUserConfig(
   if (vv !== undefined) outConfig.voiceVolume = vv;
   if (vwe !== undefined) outConfig.voiceWhisperEnabled = vwe;
   if (vte !== undefined) outConfig.voiceTodoEnabled = vte;
+  if (vne !== undefined) outConfig.voiceNotifyEnabled = vne;
   if (te !== undefined) outConfig.trayEnabled = te;
   if (ph !== undefined) outConfig.physics = ph;
   if (aw !== undefined) outConfig.animationWeights = cleanWeights(aw as Record<string, unknown>);
@@ -199,6 +202,7 @@ export function saveUserConfig(
   if (vv !== undefined) bodyOwned.add('voiceVolume');
   if (vwe !== undefined) bodyOwned.add('voiceWhisperEnabled');
   if (vte !== undefined) bodyOwned.add('voiceTodoEnabled');
+  if (vne !== undefined) bodyOwned.add('voiceNotifyEnabled');
   if (te !== undefined) bodyOwned.add('trayEnabled');
   if (ph !== undefined) bodyOwned.add('physics');
   if (aw !== undefined) bodyOwned.add('animationWeights');

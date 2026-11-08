@@ -36,6 +36,8 @@ export interface MainConfigPatch {
   voiceWhisperEnabled?: boolean;
   /** 待办提醒的语音开关；缺省表示这次响应里没有可信值。 */
   voiceTodoEnabled?: boolean;
+  /** 工作状态播报开关；缺省表示这次响应里没有可信值。 */
+  voiceNotifyEnabled?: boolean;
   /** 物理参数：成品已按「内置默认 ← 用户层」填满，缺子键再用内置默认兜底一次。 */
   physics?: PhysicsParams;
   /** 字体：同物理参数。 */
@@ -87,6 +89,7 @@ export function readMainConfig(merged: MergedConfig): MainConfigPatch | null {
   if (typeof main.voiceName === 'string') patch.voiceName = main.voiceName;
   if (typeof main.voiceWhisperEnabled === 'boolean') patch.voiceWhisperEnabled = main.voiceWhisperEnabled;
   if (typeof main.voiceTodoEnabled === 'boolean') patch.voiceTodoEnabled = main.voiceTodoEnabled;
+  if (typeof main.voiceNotifyEnabled === 'boolean') patch.voiceNotifyEnabled = main.voiceNotifyEnabled;
   if (main.physics && typeof main.physics === 'object') {
     patch.physics = { ...DEFAULT_PHYSICS, ...(main.physics as PhysicsParams) };
   }

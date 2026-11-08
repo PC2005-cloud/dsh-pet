@@ -34,8 +34,9 @@ function initFocusTracking(): () => void {
   };
 }
 
-/** 用户是否在看本页（页面可见且持有焦点）；是则跳过通知。 */
-function isPageActive(): boolean {
+/** 用户是否在看本页（页面可见且持有焦点）。
+ *  系统通知与工作状态播报共用这一条：用户在看就不打扰，走开了才提醒。 */
+export function isPageActive(): boolean {
   return pageVisible && pageFocused;
 }
 

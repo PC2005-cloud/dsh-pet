@@ -157,16 +157,19 @@ export const de: Record<Key, string> = {
     'Zeigt im Desktop-Modus ein Tray-Symbol (Windows: Infobereich, macOS: Menüleiste). Es listet alle Pets der Konfiguration und schaltet die Anzeige um – auch für Pets, die gerade nicht auf dem Desktop sind und kein Fenster zum Rechtsklicken haben. Ohne Tray lässt sich ein Pet nur über den Browser (Einstellungsseite oder Rechtsklick auf das Web-Pet) zurück auf den Desktop holen. Windows blendet das Symbol ohnehin in die „ausgeblendeten Symbole" aus. Nur Desktop-Modus.',
   voiceTitle: 'Sprachausgabe',
   voiceHint:
-    'Drei Schalter und eine Stimme: Der Hauptschalter steuert die automatische Ausgabe, die beiden Unterschalter je eine Art proaktiver Meldung. Standardmäßig alle aus; wird beim „Speichern" in die Benutzerkonfiguration geschrieben (kein sofortiges Schreiben).',
+    'Vier Schalter und eine Stimme: Der Hauptschalter steuert die automatische Ausgabe, die drei Unterschalter je eine Art proaktiver Meldung. Standardmäßig alle aus; wird beim „Speichern" in die Benutzerkonfiguration geschrieben (kein sofortiges Schreiben).',
   voiceEnabled: 'Sprachausgabe aktivieren',
   voiceEnabledHint:
-    'Hauptschalter für die automatische Sprachausgabe. Aus = regelmäßige Flüstern-Sätze und To-do-Erinnerungen werden nicht gesprochen (die beiden Unterschalter unten wirken dann nicht). Manuelles Flüstern, Chat-Antworten und die Lautsprecher-Schaltfläche im Chat-Panel sind nicht betroffen – die haben Sie selbst ausgelöst, die sprechen direkt. Es betrifft nur das Sprechen: Blasen, Chat-Gedächtnis und Systembenachrichtigungen bleiben unberührt; eine fehlgeschlagene Synthese wird nur protokolliert und unterbricht den Chat nicht.',
+    'Hauptschalter für die automatische Sprachausgabe. Aus = regelmäßige Flüstern-Sätze, To-do-Erinnerungen und Arbeitsstatus-Ansagen werden nicht gesprochen (die drei Unterschalter unten wirken dann nicht). Manuelles Flüstern, Chat-Antworten und die Lautsprecher-Schaltfläche im Chat-Panel sind nicht betroffen – die haben Sie selbst ausgelöst, die sprechen direkt. Es betrifft nur das Sprechen: Blasen, Chat-Gedächtnis und Systembenachrichtigungs-Popups bleiben unberührt; eine fehlgeschlagene Synthese wird nur protokolliert und unterbricht den Chat nicht.',
   voiceWhisperEnabled: 'Flüstern sprechen',
   voiceWhisperEnabledHint:
     'Spricht den regelmäßig erzeugten Flüstern-Satz (manuelles Flüstern per Rechtsklick bleibt unberührt). Unterliegt dem Hauptschalter oben: Ist er aus, wirkt dieser Schalter nicht. Standardmäßig aus – Flüstern ist Hintergrundbegleitung und sollte nicht ungefragt Geräusche machen.',
   voiceTodoEnabled: 'To-do-Erinnerungen sprechen',
   voiceTodoEnabledHint:
     'Spricht eine fällige To-do-Erinnerung (die Blase erscheint weiterhin; dieser Schalter entscheidet nur, ob gesprochen wird). Unterliegt dem Hauptschalter oben. Standardmäßig aus.',
+  voiceNotifyEnabled: 'Arbeitsstatus sprechen',
+  voiceNotifyEnabledHint:
+    'Spricht eine konfigurierte Arbeitsstatus-Zeile, wenn eine Aufgabe abgeschlossen ist, fehlschlägt oder auf Ihre Bestätigung wartet. Wie Systembenachrichtigungen wird nur gesprochen, während Sie nicht auf dieser Seite sind (weggewechselt, ohne Fokus, minimiert) – keine Unterbrechung, während Sie auf den Bildschirm schauen. Nur die konfigurierte Zeile wird gesprochen, nie das Aufgabendetail. Unterliegt dem Hauptschalter oben. Standardmäßig aus.',
   voiceNameLabel: 'Stimme',
   voiceVolumeLabel: 'Lautstärke',
   voiceVolumeHint:

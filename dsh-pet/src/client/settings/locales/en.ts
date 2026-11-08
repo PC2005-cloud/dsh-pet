@@ -156,16 +156,19 @@ export const en: Record<Key, string> = {
     'Shows a tray icon (notification area on Windows, menu bar on macOS) once desktop mode is running. It lists every pet in the config and toggles each one between desktop and web/none — including pets that are currently off the desktop and therefore have no window to right-click. With it off, bringing a pet back to the desktop requires opening the browser (the settings page, or right-clicking a web pet there). Windows already folds third-party icons into the "hidden icons" overflow. Desktop mode only.',
   voiceTitle: 'Voice',
   voiceHint:
-    'Three switches plus a voice: the master switch gates automatic speech, the two sub-switches gate one kind of proactive message each. All off by default; written to the user config on "Save" (never written immediately).',
+    'Four switches plus a voice: the master switch gates automatic speech, the three sub-switches gate one kind of proactive message each. All off by default; written to the user config on "Save" (never written immediately).',
   voiceEnabled: 'Speak replies',
   voiceEnabledHint:
-    'Master switch for automatic speech. When off, periodic whispers and todo reminders stay silent (the two sub-switches below have no effect). Manual whispers, chat replies and the speaker button in the chat panel are not gated — you asked for those, so the surface you asked from speaks them directly. It only affects whether sound is produced — bubbles, chat memory and system notifications are untouched; a failed synthesis is logged and never interrupts the conversation.',
+    'Master switch for automatic speech. When off, periodic whispers, todo reminders and work-status announcements stay silent (the three sub-switches below have no effect). Manual whispers, chat replies and the speaker button in the chat panel are not gated — you asked for those, so the surface you asked from speaks them directly. It only affects whether sound is produced — bubbles, chat memory and system notification pop-ups are untouched; a failed synthesis is logged and never interrupts the conversation.',
   voiceWhisperEnabled: 'Speak whispers',
   voiceWhisperEnabledHint:
     'Speaks the periodically generated whisper (right-clicking for a manual whisper is unaffected). Gated by the master switch above. Off by default — whispers are background narration and should not make noise unasked.',
   voiceTodoEnabled: 'Speak todo reminders',
   voiceTodoEnabledHint:
     'Speaks a todo reminder when it comes due (the bubble still appears; this only decides whether it is spoken). Gated by the master switch above. Off by default.',
+  voiceNotifyEnabled: 'Speak work status',
+  voiceNotifyEnabledHint:
+    'Speaks a configured work-status line when a task completes, fails, or waits for your confirmation. Like system notifications, it only speaks while you are away from this page (switched away, unfocused, minimized) — no interruption while you are looking at the screen. Only the configured line is spoken, never the task detail. Gated by the master switch above. Off by default.',
   voiceNameLabel: 'Voice',
   voiceVolumeLabel: 'Volume',
   voiceVolumeHint:

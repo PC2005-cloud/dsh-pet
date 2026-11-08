@@ -8,7 +8,9 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { decideWorkStatusLine } from './voice-notify.ts';
+import { decideWorkStatusLine, resetSpokenState, speakWorkStatus } from './voice-notify.ts';
+import { petBridge } from './settings/bridge.ts';
+import { setSurface, setVoiceConfig, setVoiceNotifyEnabled } from '../shared/voice.ts';
 import type { WorkStatusSnapshot } from '../shared/work-status.ts';
 import type { Pet } from '../shared/types.ts';
 
@@ -53,5 +55,86 @@ describe('decideWorkStatusLine —— 工作状态播报的判定', () => {
 
   test('空闲（state 为 null）→ 不念', () => {
     assert.equal(decideWorkStatusLine(mkSnap(null), [mkPet(TEXTS)], 'success'), undefined);
+  });
+});
+
+/** 等异步链跑完。 */
+async function flush(): Promise<void> {
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  await new Promise<void>((resolve) => setImmediate(resolve));
+}
+
+/** 极简浏览器替身：只让发声链路能走完，并记录合成了几次。 */
+function stubSpeakEnv(): { count: () => number; restore: () => void } {
+  let count = 0;
+  const previousFetch = globalThis.fetch;
+  const previousAudio = (globalThis as { Audio?: unknown }).Audio;
+  const previousCreate = URL.createObjectURL;
+  const previousRevoke = URL.revokeObjectURL;
+  (globalThis as { fetch: unknown }).fetch = () => {
+    count += 1;
+    return Promise.resolve({
+      ok: true,
+      headers: { get: () => 'audio/mpeg' },
+      blob: async () => ({ size: 1 }),
+    });
+  };
+  (globalThis as { Audio?: unknown }).Audio = class {
+    volume = 1;
+    onended: (() => void) | null = null;
+    onerror: (() => void) | null = null;
+    onpause: (() => void) | null = null;
+    play(): Promise<void> {
+      setTimeout(() => this.onended?.(), 0);
+      return Promise.resolve();
+    }
+    pause(): void {
+      this.onpause?.();
+    }
+  };
+  URL.createObjectURL = () => 'blob:dsh-pet-test';
+  URL.revokeObjectURL = () => undefined;
+  return {
+    count: () => count,
+    restore: () => {
+      (globalThis as { fetch: unknown }).fetch = previousFetch;
+      (globalThis as { Audio?: unknown }).Audio = previousAudio;
+      URL.createObjectURL = previousCreate;
+      URL.revokeObjectURL = previousRevoke;
+    },
+  };
+}
+
+describe('speakWorkStatus —— 播报开关', () => {
+  test('开关关闭 → 不发声', async () => {
+    const env = stubSpeakEnv();
+    try {
+      setSurface('web');
+      setVoiceConfig('', true);
+      setVoiceNotifyEnabled(false);
+      resetSpokenState();
+      petBridge.current = [mkPet(TEXTS)];
+      speakWorkStatus(mkSnap('success'));
+      await flush();
+      assert.equal(env.count(), 0, '开关关着不该发合成请求');
+    } finally {
+      env.restore();
+    }
+  });
+
+  test('开关打开 → 念一句配置台词', async () => {
+    const env = stubSpeakEnv();
+    try {
+      setSurface('web');
+      setVoiceConfig('', true);
+      setVoiceNotifyEnabled(true);
+      resetSpokenState();
+      petBridge.current = [mkPet(TEXTS)];
+      speakWorkStatus(mkSnap('success'));
+      await flush();
+      assert.equal(env.count(), 1, '开关打开应发一次合成请求');
+    } finally {
+      env.restore();
+    }
   });
 });

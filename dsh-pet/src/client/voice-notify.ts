@@ -7,7 +7,8 @@
  * @module dsh-pet/src/client/voice-notify
  */
 import { petBridge } from './settings/bridge.ts';
-import { speakNotice } from '../shared/voice.ts';
+import { isPageActive } from './notify.ts';
+import { isVoiceNotifyEnabled, speakNotice } from '../shared/voice.ts';
 import { WORK_STATUS_INDEX, type WorkStatusSnapshot, type WorkStatusState } from '../shared/work-status.ts';
 import type { Pet } from '../shared/types.ts';
 
@@ -49,8 +50,12 @@ export function decideWorkStatusLine(
  */
 export function speakWorkStatus(snap: WorkStatusSnapshot): void {
   const line = decideWorkStatusLine(snap, petBridge.current, lastSpoken);
+  // 开关关着时 lastSpoken 照常推进：重新打开后不会补念一个已经过去的档位。
   lastSpoken = snap.state;
-  if (line !== undefined) speakNotice(line);
+  if (line === undefined || !isVoiceNotifyEnabled()) return;
+  // 与系统通知同一取向：用户正看着本页时不念——动画和头顶气泡已经把信息给了。
+  if (isPageActive()) return;
+  speakNotice(line);
 }
 
 /** 清掉去重状态，让下一次进入同一档位还能念。 @internal */

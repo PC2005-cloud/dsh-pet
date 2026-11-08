@@ -160,16 +160,19 @@ export const es: Record<Key, string> = {
     'Muestra un icono en la bandeja (área de notificaciones en Windows, barra de menús en macOS) cuando el modo escritorio está activo. Lista todas las mascotas de la configuración y alterna cada una entre escritorio y web/ninguno, incluidas las que ahora no están en el escritorio y no tienen ventana donde hacer clic derecho. Con esto desactivado, para devolver una mascota al escritorio hay que abrir el navegador (la página de configuración o el clic derecho sobre la mascota web). Windows ya oculta los iconos de terceros en «iconos ocultos». Solo afecta al modo escritorio.',
   voiceTitle: 'Voz',
   voiceHint:
-    'Tres interruptores y una voz: el maestro controla la locución automática y los dos secundarios controlan un tipo de mensaje proactivo cada uno. Todo desactivado por defecto; se escribe en la configuración del usuario al "Guardar" (nunca al instante).',
+    'Cuatro interruptores y una voz: el maestro controla la locución automática y los tres secundarios controlan un tipo de mensaje proactivo cada uno. Todo desactivado por defecto; se escribe en la configuración del usuario al "Guardar" (nunca al instante).',
   voiceEnabled: 'Locutar respuestas',
   voiceEnabledHint:
-    'Interruptor maestro de la locución automática. Si está desactivado, los susurros periódicos y los recordatorios de tareas quedan en silencio (los dos interruptores de abajo no tienen efecto). Los susurros manuales, las respuestas del chat y el botón de altavoz del panel de chat no dependen de él: los pediste tú, así que la superficie desde la que los pediste los locuta directamente. Solo afecta a si se produce sonido: los globos, la memoria del chat y las notificaciones del sistema no cambian; un fallo de síntesis se registra y nunca interrumpe la conversación.',
+    'Interruptor maestro de la locución automática. Si está desactivado, los susurros periódicos, los recordatorios de tareas y los anuncios de estado de trabajo quedan en silencio (los tres interruptores de abajo no tienen efecto). Los susurros manuales, las respuestas del chat y el botón de altavoz del panel de chat no dependen de él: los pediste tú, así que la superficie desde la que los pediste los locuta directamente. Solo afecta a si se produce sonido: los globos, la memoria del chat y las notificaciones emergentes del sistema no cambian; un fallo de síntesis se registra y nunca interrumpe la conversación.',
   voiceWhisperEnabled: 'Locutar susurros',
   voiceWhisperEnabledHint:
     'Locuta el susurro generado periódicamente (el susurro manual con clic derecho no se ve afectado). Depende del interruptor maestro de arriba. Desactivado por defecto: los susurros son narración de fondo y no deberían sonar sin pedirlo.',
   voiceTodoEnabled: 'Locutar recordatorios de tareas',
   voiceTodoEnabledHint:
     'Locuta el recordatorio de una tarea cuando vence (el globo sigue apareciendo; esto solo decide si se locuta). Depende del interruptor maestro de arriba. Desactivado por defecto.',
+  voiceNotifyEnabled: 'Locutar estado de trabajo',
+  voiceNotifyEnabledHint:
+    'Locuta una frase configurada de estado de trabajo cuando una tarea termina, falla o espera tu confirmación. Igual que las notificaciones del sistema, solo locuta cuando no estás en esta página (otra aplicación, sin foco, minimizada): no interrumpe mientras miras la pantalla. Solo se locuta la frase configurada, nunca el detalle de la tarea. Depende del interruptor maestro de arriba. Desactivado por defecto.',
   voiceNameLabel: 'Voz',
   voiceVolumeLabel: 'Volumen',
   voiceVolumeHint:

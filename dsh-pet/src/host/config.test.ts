@@ -1042,6 +1042,35 @@ describe('saveUserConfig —— 语音细分开关（白名单 + 透传保留）
   });
 });
 
+describe('saveUserConfig —— 工作状态播报开关（白名单 + 透传保留）', () => {
+  test('随请求体写入（设置页「语音播报」卡的第四个开关）', () => {
+    const out = saveOnce({ pets: PETS, voiceNotifyEnabled: true });
+    assert.equal(out?.voiceNotifyEnabled, true);
+  });
+
+  test('false 是合法值，照常落盘', () => {
+    const out = saveOnce({ pets: PETS, voiceNotifyEnabled: false });
+    assert.equal(out?.voiceNotifyEnabled, false, 'false 不能被当成「没传」而走透传');
+  });
+
+  test('未传时透传磁盘旧值；磁盘上也没有则不凭空造字段', () => {
+    const kept = saveOnce({ pets: PETS }, { pets: PETS, voiceNotifyEnabled: true });
+    assert.equal(kept?.voiceNotifyEnabled, true, '未传时必须原样保留磁盘上的手改值');
+    const fresh = saveOnce({ pets: PETS }) ?? {};
+    assert.equal('voiceNotifyEnabled' in fresh, false, '磁盘上也没有时不得凭空写入');
+  });
+
+  test('非布尔 → 整体拒绝（与读取侧 topFieldValid 同一套规则）', () => {
+    for (const value of ['true', 1, null, {}, []]) {
+      assert.equal(
+        saveOnce({ pets: PETS, voiceNotifyEnabled: value }),
+        null,
+        `voiceNotifyEnabled ${JSON.stringify(value)} 必须被拒绝`,
+      );
+    }
+  });
+});
+
 describe('saveUserConfig —— 对话历史条数 chatMemoryRounds（白名单 + 透传保留）', () => {
   test('随请求体写入（设置页「AI 模型与对话上下文」的数字输入框）', () => {
     const out = saveOnce({ pets: PETS, chatMemoryRounds: 9 });

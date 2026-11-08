@@ -80,6 +80,16 @@ describe('readMainConfig —— 成品聚合 → 表单补丁', () => {
     assert.equal('voiceTodoEnabled' in (bad ?? {}), false, '非布尔当作没写');
   });
 
+  test('工作状态播报开关：布尔原样带出，缺失或非布尔不进补丁', () => {
+    assert.equal(readMainConfig({ main: { pets: [], voiceNotifyEnabled: false } })?.voiceNotifyEnabled, false);
+    assert.equal('voiceNotifyEnabled' in (readMainConfig({ main: { pets: [] } }) ?? {}), false);
+    assert.equal(
+      'voiceNotifyEnabled' in (readMainConfig({ main: { pets: [], voiceNotifyEnabled: 'yes' } }) ?? {}),
+      false,
+      '非布尔当作没写',
+    );
+  });
+
   test('对话动作联动开关：布尔原样带出，缺失或非布尔不进补丁', () => {
     assert.equal(readMainConfig({ main: { pets: [], chatAnimationEnabled: false } })?.chatAnimationEnabled, false);
     assert.equal('chatAnimationEnabled' in (readMainConfig({ main: { pets: [] } }) ?? {}), false);

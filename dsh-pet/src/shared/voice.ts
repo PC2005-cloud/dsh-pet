@@ -15,6 +15,8 @@ import type { VoiceTarget } from './state.ts';
 let voiceName = '';
 /** 播报总开关；只有成品配置明确为 true 才播。 */
 let voiceEnabled = false;
+/** 工作状态播报开关；只有成品配置明确为 true 才念。总开关关着时仍然一律不念。 */
+let notifyEnabled = false;
 /** 播放音量系数（0–1，1 = 最大音量）；两端共用，只作用于播放，不影响已合成好的音频。 */
 let voiceVolume = 1;
 /** 本端是网页端还是桌面端；`null` = 还没声明，此时不按叶子播放。 */
@@ -144,6 +146,22 @@ export function setVoiceConfig(name: unknown, enabled: unknown, volume?: unknown
   configLoaded = true;
 }
 
+/**
+ * 记录工作状态播报开关；网页端在读到 `/config` 时调一次。
+ *
+ * 与 {@link setVoiceConfig} 分开：那一组是「音色 / 总开关 / 音量」，这一项是「哪类消息念不念」。
+ *
+ * @param on - 成品配置的 `main.voiceNotifyEnabled`；只有严格 `true` 才算开启。
+ */
+export function setVoiceNotifyEnabled(on: unknown): void {
+  notifyEnabled = on === true;
+}
+
+/** 工作状态播报是否开启。 */
+export function isVoiceNotifyEnabled(): boolean {
+  return notifyEnabled;
+}
+
 /** 把音量收敛到 0–1；非数值按最大音量（1）处理——脏配置不该把声音悄悄变成 0。 */
 function clampVolume(value: unknown): number {
   const n = Number(value);
@@ -160,6 +178,7 @@ async function loadConfigOnce(): Promise<void> {
     voiceName = typeof main?.voiceName === 'string' ? main.voiceName : '';
     voiceEnabled = main?.voiceEnabled === true;
     voiceVolume = clampVolume(main?.voiceVolume);
+    setVoiceNotifyEnabled(main?.voiceNotifyEnabled);
     // 只有成功才置位：拉不到（bridge 还没就绪 / 瞬时故障）留给下一句重试——
     // 否则一次失败就把这一端永久静音了。
     configLoaded = true;
