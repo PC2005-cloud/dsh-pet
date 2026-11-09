@@ -5,6 +5,7 @@
  * 由弹窗把原因显示出来（浏览器不允许时只能改用上传）。
  * @module dsh-pet/src/shared/chat/capture
  */
+import { uiT } from '../ui/i18n.ts';
 import { type EncodedImage, encodeCanvas } from './encode.ts';
 
 /** 等到视频真正有尺寸。 */
@@ -23,7 +24,7 @@ function waitForFrame(video: HTMLVideoElement): Promise<void> {
  */
 export async function captureDisplayFrame(): Promise<EncodedImage> {
   const media = navigator.mediaDevices;
-  if (!media || typeof media.getDisplayMedia !== 'function') throw new Error('当前环境不支持截屏');
+  if (!media || typeof media.getDisplayMedia !== 'function') throw new Error(uiT('chat.captureUnavailable'));
   const stream = await media.getDisplayMedia({ video: true, audio: false });
   try {
     const video = document.createElement('video');

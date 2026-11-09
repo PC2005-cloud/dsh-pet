@@ -5,7 +5,6 @@
  * @module dsh-pet/src/client/pet/card/entry
  */
 import {
-  CHAT_HOTKEY_HINT,
   createHearHold,
   isCaptureHotkey,
   mountChatDialog,
@@ -14,8 +13,8 @@ import {
 } from '../../../shared/chat/index.ts';
 import { captureDisplayFrame } from '../../../shared/chat/capture.ts';
 import { displayOfHotkey } from '../../../shared/display-hotkey.ts';
-import { SLEEP_HOTKEY_HINT, isSleepHotkey } from '../../../shared/sleep-hotkey.ts';
-import { TODO_HOTKEY_HINT, isTodoHotkey } from '../../../shared/todo/hotkey.ts';
+import { isSleepHotkey } from '../../../shared/sleep-hotkey.ts';
+import { isTodoHotkey } from '../../../shared/todo/hotkey.ts';
 import type { PetDisplay } from '../../../shared/types.ts';
 import { bindOpenChat } from './open-chat.ts';
 import { registerPetChatHandle } from './registry.ts';
@@ -29,6 +28,7 @@ import {
   type MenuNode,
 } from '../../../shared/menu.ts';
 import { ROUTE_PATH } from '../../../shared/constants.ts';
+import { uiT } from '../../../shared/ui/i18n.ts';
 import { TOOLTIP_GAP_RATIO, tooltipPlacement } from '../../../shared/tooltip.ts';
 import type { MenuMoreItem } from '../../../shared/menu.ts';
 import type { CardLive } from './live.ts';
@@ -202,7 +202,9 @@ export function createCardEntry(rt: CardEntryRuntime) {
       try {
         encoded = await captureDisplayFrame();
       } catch (error) {
-        const reason = '截屏失败：' + (error instanceof Error ? error.message : String(error));
+        const reason = uiT('chat.captureFailed', {
+          detail: error instanceof Error ? error.message : String(error),
+        });
         const opened = chatRef.current;
         if (opened !== null) {
           opened.flash(reason);
@@ -240,12 +242,14 @@ export function createCardEntry(rt: CardEntryRuntime) {
     const toggleSleepRef = useRef<() => void>(() => {});
     toggleSleepRef.current = () => {
       const asleep = live.current.flow?.sleeping() ?? false;
-      runMenuAction(asleep ? { label: '起来', action: 'wake' } : { label: '睡觉', action: 'sleep' });
+      runMenuAction(
+        asleep ? { label: uiT('action.wake'), action: 'wake' } : { label: uiT('action.sleep'), action: 'sleep' },
+      );
     };
     // 数字键切显示位置：与右键「显示位置」子菜单同一条动作派发（写 display 配置，宿主重启生效）。
     const switchDisplayRef = useRef<(display: PetDisplay) => void>(() => {});
     switchDisplayRef.current = (display) => {
-      runMenuAction({ label: '显示位置', action: 'set-display', display });
+      runMenuAction({ label: uiT('menu.display'), action: 'set-display', display });
     };
     // 按住说话的按下/松开同样每次渲染都新建闭包；状态机只建一次，只能经 ref 取最新的那两个。
     const startChatHearRef = useRef<() => void>(startChatHear);
@@ -348,23 +352,24 @@ export function createCardEntry(rt: CardEntryRuntime) {
       // 该条目没配 animations.sleep 就整项不出现——与配置注释「不写 = 没有睡觉功能」一致。
       const asleep = live.current.flow?.sleeping() ?? false;
       const canSleep = (cfgRef.current.animations.sleep ?? []).length > 0;
+      const sleepHint = uiT('hotkey.sleep');
       const sleepItem: MenuNode = asleep
-        ? { label: '起来', action: 'wake', hint: SLEEP_HOTKEY_HINT }
-        : { label: '睡觉', action: 'sleep', hint: SLEEP_HOTKEY_HINT };
+        ? { label: uiT('action.wake'), action: 'wake', hint: sleepHint }
+        : { label: uiT('action.sleep'), action: 'sleep', hint: sleepHint };
       // 顺序与桌面端同一排法：余额 / 待办 / 碎碎念 / 对话 / 配图 / 睡觉 → 动作树 → 显示位置 / 回到初始位置。
       // 桌面专属的两项（打开软件、重载配置）在网页端没有对应动作，不出现。
       const tools: MenuNode[] = [
-        { label: '查看余额', action: 'show-balance' },
-        { label: '待办事项', action: 'todo', hint: TODO_HOTKEY_HINT },
-        { label: '碎碎念', action: 'whisper' },
-        { label: '对话', action: 'chat', hint: CHAT_HOTKEY_HINT },
+        { label: uiT('action.balance'), action: 'show-balance' },
+        { label: uiT('action.todo'), action: 'todo', hint: uiT('hotkey.todo') },
+        { label: uiT('action.whisper'), action: 'whisper' },
+        { label: uiT('action.chat'), action: 'chat', hint: uiT('hotkey.chat') },
         ...(memes ? [memes] : []),
         ...(canSleep ? [sleepItem] : []),
       ];
       const tail: MenuNode[] = [
         // 显示位置子菜单与桌面端同一份；改成不含 web 的值后本宠物会从页面消失。
         displayMenuBranch(),
-        { label: '回到初始位置', action: 'home' },
+        { label: uiT('action.home'), action: 'home' },
       ];
       const tree: MenuNode[] = [
         ...tools,

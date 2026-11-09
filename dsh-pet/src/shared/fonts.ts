@@ -21,7 +21,7 @@ export const FONT_PRESETS: FontPreset[] = [
   {
     id: 'candy',
     stack:
-      '"ShangshouSoftCandy","Yuanti SC","YouYuan","幼圆","Comic Sans MS","PingFang SC","Microsoft YaHei",sans-serif',
+      '"DshPetRu","ShangshouSoftCandy","Yuanti SC","YouYuan","幼圆","Comic Sans MS","PingFang SC","Microsoft YaHei",sans-serif',
   },
   { id: 'yahei', stack: '"Microsoft YaHei","PingFang SC",sans-serif' },
   { id: 'youyuan', stack: '"YouYuan","Yuanti SC",sans-serif' },
@@ -54,8 +54,8 @@ export const FONT_REF_SIZE = 462;
 /** 基准宽度下的气泡正文字号（px）＝ 0.0455 × 462 ≈ 21.02。 */
 export const BUBBLE_FONT_BASE_PX = 0.0455 * FONT_REF_SIZE;
 
-/** 基准宽度下的悬浮提示字号（px）＝ 0.026 × 462 ≈ 12.01。 */
-export const TIP_FONT_BASE_PX = 0.026 * FONT_REF_SIZE;
+/** 基准宽度下的悬浮提示字号（px）＝ 0.031 × 462 ≈ 14.32。 */
+export const TIP_FONT_BASE_PX = 0.031 * FONT_REF_SIZE;
 
 /** 气泡与悬浮提示的最终字号（px），两端共用同一份换算以免漂移。
  *  字号 = 基准 px × (font.size ÷ 默认字号) × (followPet ? 宠物宽 ÷ 462 : 1)。

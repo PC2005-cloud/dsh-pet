@@ -6,6 +6,7 @@
  * @module dsh-pet/src/shared/balance/handlers/money
  */
 
+import { uiT } from '../../ui/i18n.ts';
 import type { BalanceBubbleRow, BalanceView } from '../types.ts';
 import type { ShapeHandler } from './shape.ts';
 
@@ -41,11 +42,11 @@ function moneyRows(v: BalanceView): BalanceBubbleRow[] {
     .sort((a, b) => (a.currency === 'CNY' ? 0 : 1) - (b.currency === 'CNY' ? 0 : 1));
   const amount =
     visible.length > 0 ? visible.map((w) => (w.currency === 'USD' ? '$' : '¥') + w.total).join('/') : '¥0.00';
-  if (!v.tier) return [{ role: 'label', text: '余额 ' + amount }];
+  if (!v.tier) return [{ role: 'label', text: uiT('balance.amount', { amount }) }];
   return [
-    { role: 'label', text: '余额（' },
-    { role: 'tier', tier: v.tier, text: v.tier === 'peak' ? '峰' : '谷' },
-    { role: 'label', text: '）' + amount },
+    { role: 'label', text: uiT('balance.labelOpen') },
+    { role: 'tier', tier: v.tier, text: uiT(v.tier === 'peak' ? 'balance.tier.peak' : 'balance.tier.valley') },
+    { role: 'label', text: uiT('balance.labelClose') + amount },
   ];
 }
 

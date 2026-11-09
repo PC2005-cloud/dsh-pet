@@ -5,6 +5,7 @@
  * 不负责取数与时区换算：`datetime-local` 的读写都按浏览器本地时区，与用户看到的一致。
  * @module dsh-pet/src/shared/todo/format
  */
+import { uiT } from '../ui/i18n.ts';
 import type { TodoItem } from './types.ts';
 
 const MINUTE_MS = 60 * 1000;
@@ -14,8 +15,16 @@ const DAY_MS = 24 * HOUR_MS;
 /** 紧迫度：面板据此染色，overdue 最红、undated 最淡。 */
 export type TodoUrgency = 'overdue' | 'soon' | 'today' | 'later' | 'undated';
 
-/** 星期名，索引与 Date.getDay() 对齐。 */
-const WEEKDAYS = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'] as const;
+/** 星期名的键，索引与 Date.getDay() 对齐（取词时再展开，语言切换后仍然正确）。 */
+const WEEKDAY_KEYS = [
+  'todo.weekday.0',
+  'todo.weekday.1',
+  'todo.weekday.2',
+  'todo.weekday.3',
+  'todo.weekday.4',
+  'todo.weekday.5',
+  'todo.weekday.6',
+] as const;
 
 /** 两位补零。 */
 function pad2(value: number): string {
@@ -40,10 +49,10 @@ function dayDiff(target: Date, base: Date): number {
  */
 export function spanText(ms: number): string {
   const minutes = Math.max(1, Math.round(Math.abs(ms) / MINUTE_MS));
-  if (minutes < 60) return `${minutes}分钟`;
+  if (minutes < 60) return uiT('todo.span.minutes', { n: minutes });
   const hours = Math.max(1, Math.round(minutes / 60));
-  if (hours < 24) return `${hours}小时`;
-  return `${Math.max(1, Math.round(hours / 24))}天`;
+  if (hours < 24) return uiT('todo.span.hours', { n: hours });
+  return uiT('todo.span.days', { n: Math.max(1, Math.round(hours / 24)) });
 }
 
 /**
@@ -54,15 +63,15 @@ export function spanText(ms: number): string {
  * @returns 「今天 18:00」「明天 09:00」「周五 20:00」「11月3日 09:00」「无期限」。
  */
 export function dueLabel(dueAt: number | null, now: number): string {
-  if (dueAt === null) return '无期限';
+  if (dueAt === null) return uiT('todo.due.none');
   const due = new Date(dueAt);
   const clock = `${pad2(due.getHours())}:${pad2(due.getMinutes())}`;
   const days = dayDiff(due, new Date(now));
-  if (days === 0) return `今天 ${clock}`;
-  if (days === 1) return `明天 ${clock}`;
-  if (days === 2) return `后天 ${clock}`;
-  if (days > 2 && days < 7) return `${WEEKDAYS[due.getDay()]} ${clock}`;
-  return `${due.getMonth() + 1}月${due.getDate()}日 ${clock}`;
+  if (days === 0) return uiT('todo.due.today', { clock });
+  if (days === 1) return uiT('todo.due.tomorrow', { clock });
+  if (days === 2) return uiT('todo.due.dayAfter', { clock });
+  if (days > 2 && days < 7) return uiT('todo.due.weekday', { weekday: uiT(WEEKDAY_KEYS[due.getDay()]), clock });
+  return uiT('todo.due.date', { month: due.getMonth() + 1, day: due.getDate(), clock });
 }
 
 /**
@@ -74,8 +83,8 @@ export function dueLabel(dueAt: number | null, now: number): string {
  */
 export function remainingLabel(dueAt: number | null, now: number): string {
   if (dueAt === null) return '';
-  if (dueAt <= now) return `已逾期${spanText(now - dueAt)}`;
-  return `还剩${spanText(dueAt - now)}`;
+  if (dueAt <= now) return uiT('todo.remaining.overdue', { span: spanText(now - dueAt) });
+  return uiT('todo.remaining.left', { span: spanText(dueAt - now) });
 }
 
 /**
@@ -103,9 +112,9 @@ export function todoUrgency(dueAt: number | null, now: number): TodoUrgency {
  */
 export function metaLabel(todo: TodoItem, now: number): string {
   if (todo.done) {
-    return todo.dueAt === null ? '已完成' : `已完成 · ${dueLabel(todo.dueAt, now)}`;
+    return todo.dueAt === null ? uiT('todo.meta.done') : uiT('todo.meta.doneAt', { due: dueLabel(todo.dueAt, now) });
   }
-  if (todo.dueAt === null) return '无期限';
+  if (todo.dueAt === null) return uiT('todo.due.none');
   const relative = remainingLabel(todo.dueAt, now);
   if (todo.dueAt <= now) return relative;
   return `${dueLabel(todo.dueAt, now)} · ${relative}`;

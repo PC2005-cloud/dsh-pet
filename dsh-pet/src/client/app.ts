@@ -19,6 +19,8 @@ import { installSectionNavIcon } from './nav-icon.ts';
 import { registerPetChatTab, openPetChatTab } from './chat/register.ts';
 import { PET_CHAT_COMMAND_ID, registerPetChatShortcut } from './chat/shortcut.ts';
 import { dicts as chatDicts, NS as CHAT_NS } from './chat/locales/index.ts';
+import { dicts as uiDicts, NS as UI_NS } from './ui/locales/index.ts';
+import { setUiTranslate } from '../shared/ui/i18n.ts';
 import { registerPetCardShortcuts } from './pet/card/shortcut.ts';
 import type * as ReactNS from 'react';
 import type * as PrimitivesNS from '@deepseek-ai/dsh-client-ui-primitives';
@@ -78,6 +80,13 @@ export function makeFactory(): (require: (mod: string) => any) => any {
       // 侧栏对话的文案独立成命名空间：只覆盖对话面板，不与设置页字典混在一起。
       ctx.effect(() => ctx.locale.register(CHAT_NS, chatDicts), 'dsh-pet: chat dictionaries');
       const chatT = ctx.locale.bind(CHAT_NS);
+      // 右键菜单 / 气泡 / 待办 / 通知等共享文案：独立命名空间。
+      // 共享模块不直接依赖 locale 服务，注册后把取词函数注入 shared/ui/i18n。
+      ctx.effect(() => ctx.locale.register(UI_NS, uiDicts), 'dsh-pet: ui dictionaries');
+      ctx.effect(() => {
+        setUiTranslate(ctx.locale.bind(UI_NS));
+        return () => setUiTranslate(null);
+      }, 'dsh-pet: ui translator');
 
       // 同页第三方插件可通过 Cordis 服务 petApi7340 读取本页宠物的实况、播放进度、最近一拍状态与菜单点击。
       // 只开读，控制仍走 HTTP，避免出现两条控制通道。

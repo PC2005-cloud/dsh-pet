@@ -33,6 +33,10 @@ import { ROUTE_PATH } from '../shared/constants.ts';
 const bubbleCss = [
   // 本地字体：由 host 从 assets/fonts 提供；font-display:swap 先回退后切换。
   `@font-face{font-family:"ShangshouSoftCandy";src:url("${ROUTE_PATH}/font/上首软糖体.ttf") format("truetype");font-display:swap;font-weight:400}`,
+  // 西里尔 / 拉丁补充字体（Comfortaa，OFL-1.1）：内置软糖体的西里尔字形发虚，
+  // 用 unicode-range 只接管对应码位，中文仍落到 ShangshouSoftCandy。
+  `@font-face{font-family:"DshPetRu";src:url("${ROUTE_PATH}/font/Comfortaa-latin-400.woff2") format("woff2");font-display:swap;font-weight:400;unicode-range:U+0000-00FF,U+2000-206F,U+20AC}`,
+  `@font-face{font-family:"DshPetRu";src:url("${ROUTE_PATH}/font/Comfortaa-cyrillic-400.woff2") format("woff2");font-display:swap;font-weight:400;unicode-range:U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116}`,
   '.dsh-pet-bubble{position:absolute;left:50%;transform:translateX(-50%);' +
     'bottom:calc(100% - var(--dsh-pet-size)*0.108);' +
     'width:max-content;min-width:calc(var(--f)*5.7143);max-width:min(calc(var(--f)*16),100%);' +
@@ -43,7 +47,7 @@ const bubbleCss = [
     'border-radius:calc(var(--f)*0.7692);' +
     'background:rgba(255,255,255,.92);' +
     '--f0:var(--dsh-pet-font-bubble,calc(var(--dsh-pet-size)*0.0455));--f:var(--f0);' +
-    'color:#2b2b2b;font-family:var(--dsh-pet-font-family,"ShangshouSoftCandy","Yuanti SC","YouYuan","幼圆","Comic Sans MS","PingFang SC","Microsoft YaHei",sans-serif);' +
+    'color:#2b2b2b;font-family:var(--dsh-pet-font-family,"DshPetRu","ShangshouSoftCandy","Yuanti SC","YouYuan","幼圆","Comic Sans MS","PingFang SC","Microsoft YaHei",sans-serif);' +
     'font-size:var(--f);line-height:1.6;z-index:3;pointer-events:none;' +
     'box-shadow:0 calc(var(--f)*0.1978) calc(var(--f)*0.7692) rgba(0,0,0,.14),0 1px 3px rgba(0,0,0,.08);' +
     'backdrop-filter:blur(6px);opacity:0;transition:opacity .25s ease;' +

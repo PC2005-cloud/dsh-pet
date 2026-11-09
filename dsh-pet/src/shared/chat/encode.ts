@@ -6,6 +6,7 @@
  * 头像的预算与质量阶梯不同，但「怎么把文件读成图、怎么读成规范 base64」只有这一份实现。
  * @module dsh-pet/src/shared/chat/encode
  */
+import { uiT } from '../ui/i18n.ts';
 import { type PetImageMediaType, imageMediaTypeOf } from './image-pick.ts';
 
 /** 单张图片的字节上限（解码后）。 */
@@ -56,16 +57,16 @@ export interface EncodedImage {
 export function loadImage(file: File): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onerror = () => reject(new Error('这个文件读不出来'));
+    reader.onerror = () => reject(new Error(uiT('chat.encode.read')));
     reader.onload = () => {
       const url = typeof reader.result === 'string' ? reader.result : '';
       if (!url) {
-        reject(new Error('这个文件读不出来'));
+        reject(new Error(uiT('chat.encode.read')));
         return;
       }
       const img = new Image();
       img.onload = () => resolve(img);
-      img.onerror = () => reject(new Error('这个文件解不出图片'));
+      img.onerror = () => reject(new Error(uiT('chat.encode.decode')));
       img.src = url;
     };
     reader.readAsDataURL(file);
@@ -119,7 +120,7 @@ export function encodeCanvas(canvas: HTMLCanvasElement): EncodedImage {
       return { base64, mediaType: 'image/jpeg', bytes, width, height, resized: true, previewUrl };
     }
   }
-  throw new Error('无法压到预算内');
+  throw new Error(uiT('chat.encode.budget'));
 }
 
 /**
@@ -133,7 +134,7 @@ export function encodeCanvas(canvas: HTMLCanvasElement): EncodedImage {
  */
 export async function encodeImageFile(file: File): Promise<EncodedImage> {
   const mediaType = imageMediaTypeOf(file);
-  if (!mediaType) throw new Error('不是可发送的图片');
+  if (!mediaType) throw new Error(uiT('chat.encode.invalid'));
   const img = await loadImage(file);
   const width = img.naturalWidth || img.width;
   const height = img.naturalHeight || img.height;

@@ -5,7 +5,8 @@
  * 必须始终成立：同一份输入必得同一棵树，层级顺序稳定。
  * @module dsh-pet/src/shared/menu/tree
  */
-import { DISPLAY_HOTKEY_HINTS, DISPLAY_ORDER } from '../display-hotkey.ts';
+import { DISPLAY_ORDER } from '../display-hotkey.ts';
+import { uiT, type Key } from '../ui/i18n.ts';
 import { type Animations, type Category, type PetDisplay } from '../types.ts';
 import type { MenuBranch, MenuLeaf, MenuMoreItem, MenuNode } from './types.ts';
 
@@ -18,12 +19,12 @@ const SLEEP_ALLOWED_ACTIONS: readonly string[] = ['sleep', 'wake', 'home', 'set-
 export const isSleepAllowedAction = (action: string | undefined): boolean =>
   action !== undefined && SLEEP_ALLOWED_ACTIONS.includes(action);
 
-/** 四个显示位置的菜单文案；键是 {@link DISPLAY_ORDER} 的元素，顺序以那边为准。 */
-const DISPLAY_LABELS: Readonly<Record<PetDisplay, string>> = {
-  web: '仅网页',
-  desktop: '仅桌面',
-  both: '两者',
-  none: '都不',
+/** 四个显示位置的文案键；键是 {@link DISPLAY_ORDER} 的元素，顺序以那边为准。 */
+const DISPLAY_LABEL_KEYS: Readonly<Record<PetDisplay, Key>> = {
+  web: 'menu.display.web',
+  desktop: 'menu.display.desktop',
+  both: 'menu.display.both',
+  none: 'menu.display.none',
 };
 
 /** 「显示位置」子菜单：两端注入同一份，文案与设置页的显示位置下拉框一致。
@@ -31,12 +32,12 @@ const DISPLAY_LABELS: Readonly<Record<PetDisplay, string>> = {
  *  「都不」是单向门（恢复入口是设置页），其余三个值都能从某一端改回来。
  *  右侧键帽由 `1`-`4` 数字键的同一份顺序派生，改顺序只改 {@link DISPLAY_ORDER}。 */
 export const displayMenuBranch = (): MenuBranch => ({
-  label: '显示位置',
+  label: uiT('menu.display'),
   children: DISPLAY_ORDER.map((display, index): MenuLeaf => ({
-    label: DISPLAY_LABELS[display],
+    label: uiT(DISPLAY_LABEL_KEYS[display]),
     action: 'set-display',
     display,
-    hint: DISPLAY_HOTKEY_HINTS[index],
+    hint: uiT('hotkey.display', { key: String(index + 1) }),
   })),
 });
 
@@ -93,14 +94,14 @@ export function buildMoreBranch(items: readonly MenuMoreItem[]): MenuBranch | nu
     }
     branch.children.push({ label: item.label, action: 'third-party', owner: item.owner });
   }
-  return children.length > 0 ? { label: MORE_MENU_LABEL, children } : null;
+  return children.length > 0 ? { label: uiT('menu.more'), children } : null;
 }
 
-/** 事件名 → 分类标签（无映射时用事件名本身）。 */
-const EVENT_LABELS: Record<string, string> = {
-  balance: '余额档位',
-  whisper: '碎碎念',
-  workStatus: '工作状态',
+/** 事件名 → 分类文案键（无映射时用事件名本身）。 */
+const EVENT_LABEL_KEYS: Record<string, Key> = {
+  balance: 'menu.event.balance',
+  whisper: 'menu.event.whisper',
+  workStatus: 'menu.event.workStatus',
 };
 
 /** 把动画名包成叶子。 */
@@ -109,15 +110,15 @@ export const leaf = (anim: string): MenuLeaf => ({ label: anim, anim });
 /** 由成品 animations 配置推导菜单树：一级「动作」→ 二级分类 → 三级动画名；空池与空分类自动省略。 */
 export function buildMenuTree(animations: Animations): MenuNode[] {
   const groups: MenuNode[] = [];
-  const pools: Array<[string, string[]]> = [
-    ['待机', animations.idle],
-    ['转向', animations.turn],
-    ['拖拽', animations.drag],
-    ['点击回应', animations.clicks],
-    ['移动', animations.moves.actions.map((m) => m.name)],
+  const pools: Array<[Key, string[]]> = [
+    ['menu.group.idle', animations.idle],
+    ['menu.group.turn', animations.turn],
+    ['menu.group.drag', animations.drag],
+    ['menu.group.clicks', animations.clicks],
+    ['menu.group.moves', animations.moves.actions.map((m) => m.name)],
   ];
   for (const [label, pool] of pools) {
-    if (pool.length) groups.push({ label, children: pool.map(leaf) });
+    if (pool.length) groups.push({ label: uiT(label), children: pool.map(leaf) });
   }
   // 随机动作分类：noMirror 分类照样可点播，播放端朝右时强制朝左（见 isNoMirrorAnimation）
   const cats = (animations.categories ?? []).filter((c) => c.actions.length > 0);
@@ -133,10 +134,13 @@ export function buildMenuTree(animations: Animations): MenuNode[] {
       if (typeof slot === 'string') names.push(slot);
       else names.push(...slot);
     }
-    if (names.length) groups.push({ label: EVENT_LABELS[key] ?? key, children: names.map(leaf) });
+    if (names.length) {
+      const eventKey = EVENT_LABEL_KEYS[key];
+      groups.push({ label: eventKey === undefined ? key : uiT(eventKey), children: names.map(leaf) });
+    }
   }
   if (!groups.length) return [];
-  return [{ label: '动作', children: groups }];
+  return [{ label: uiT('menu.group.actions'), children: groups }];
 }
 
 /** 该动画是否属于 noMirror 分类（文字类）：朝右镜像时点播前强制朝左，避免文字镜像。 */

@@ -5,6 +5,7 @@
  * @module dsh-pet/src/shared/score-popup
  */
 import { clickScore, SCORE_MIN_SPEED } from './score.ts';
+import { uiT } from './ui/i18n.ts';
 
 /** 弹窗展示时长（ms）：积分反馈比气泡（10s）短，够读即可。 */
 export const SCORE_POPUP_DURATION_MS = 2200;
@@ -16,7 +17,7 @@ export const SCORE_POPUP_CSS = [
   'box-shadow:0 10px 32px rgba(0,0,0,.22);padding:8px 16px 9px;user-select:none;pointer-events:auto;',
   // 字体族走全局配置变量（两端注入在 documentElement）：弹窗挂在 body 下，继承不到宠物根容器。
   // 字号固定 px——配置的 font.size 只作用于气泡与悬浮提示。
-  "font-family:var(--dsh-pet-font-family,'ShangshouSoftCandy','Yuanti SC','YouYuan','幼圆','Comic Sans MS','PingFang SC','Microsoft YaHei',sans-serif);}",
+  "font-family:var(--dsh-pet-font-family,'DshPetRu','ShangshouSoftCandy','Yuanti SC','YouYuan','幼圆','Comic Sans MS','PingFang SC','Microsoft YaHei',sans-serif);}",
   '.dsh-pet-score.is-in{animation:dshPetScorePop .28s ease}',
   '.dsh-pet-score-val{font-size:22px;line-height:1.25;font-weight:700;color:#ff8f00;font-variant-numeric:tabular-nums}',
   '.dsh-pet-score-sub{font-size:11px;line-height:1.4;color:rgba(43,43,43,.6);margin-top:2px;white-space:nowrap}',
@@ -140,7 +141,7 @@ export function mountScorePopup(opts: {
   val.textContent = '+' + opts.score;
   const sub = document.createElement('div');
   sub.className = 'dsh-pet-score-sub';
-  sub.textContent = '速度 ' + Math.round(opts.speed) + ' · 大小 ' + Math.round(opts.size);
+  sub.textContent = uiT('score.detail', { speed: Math.round(opts.speed), size: Math.round(opts.size) });
   root.appendChild(val);
   root.appendChild(sub);
   document.body.appendChild(root);

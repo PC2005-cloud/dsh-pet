@@ -7,6 +7,7 @@
  * @module dsh-pet/src/shared/balance/view
  */
 
+import { uiT } from '../ui/i18n.ts';
 import { HANDLERS } from './handlers/index.ts';
 import type { BalanceBubbleRow, BalanceState, BalanceUnavailable, CustomNode } from './types.ts';
 
@@ -19,17 +20,17 @@ function unavailableRows(state: BalanceUnavailable): BalanceBubbleRow[] {
   const rows: BalanceBubbleRow[] =
     state.reason === 'unsupported'
       ? [
-          { role: 'error', text: '当前服务商暂不支持余额查询' },
-          { role: 'sub', text: '当前服务商：' + state.provider },
+          { role: 'error', text: uiT('balance.unsupported') },
+          { role: 'sub', text: uiT('balance.provider', { provider: state.provider }) },
         ]
       : state.reason === 'credential-missing'
         ? [
             // host 的 message 已自带「缺少凭证 X」前缀，这里原样展示，不再加前缀。
-            { role: 'error', text: '缺少余额查询凭证' },
+            { role: 'error', text: uiT('balance.noCredentials') },
             { role: 'sub', text: state.message ?? '' },
           ]
         : [
-            { role: 'error', text: '余额查询失败' },
+            { role: 'error', text: uiT('balance.failed') },
             { role: 'sub', text: state.message ?? '' },
           ];
   return rows.filter((r) => r.role !== 'quota' && r.text !== '');

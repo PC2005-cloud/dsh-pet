@@ -55,7 +55,7 @@ export const TOOLTIP_CSS = [
   // 细边框：白底压在浅色宠物或浅色页面上会糊成一片，靠它划出轮廓
   'border:1px solid rgba(0,0,0,.12);',
   // 字体与气泡同一套；字体族走全局配置变量（注入在 documentElement），继承不到宠物根容器
-  'font-family:var(--dsh-pet-font-family,"ShangshouSoftCandy","Yuanti SC","YouYuan","幼圆","Comic Sans MS","PingFang SC","Microsoft YaHei",sans-serif);',
+  'font-family:var(--dsh-pet-font-family,"DshPetRu","ShangshouSoftCandy","Yuanti SC","YouYuan","幼圆","Comic Sans MS","PingFang SC","Microsoft YaHei",sans-serif);',
   // 字号对齐 Windows 原生提示（9pt ≈ 12px）：462px 的宠物下 0.026 → 约 12px。
   // --dsh-pet-font-tip 由两端按该宠物尺寸算好注入（shared/fonts.ts 的 resolveFontPx），未注入时回退原表达式。
   'font-size:var(--dsh-pet-font-tip,calc(var(--dsh-pet-size,var(--pet-size,462px))*0.026));line-height:1.4;',

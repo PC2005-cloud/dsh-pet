@@ -15,7 +15,7 @@ export const CHAT_CSS = [
   // 字体与桌宠气泡同款（上首软糖体，两端均已注入 @font-face），风格一致不显正式。
   // 字体族走全局配置变量 --dsh-pet-font-family：弹窗挂在 body 下、继承不到宠物根容器，由两端注入在 documentElement。
   // 字号保持固定 14px：配置里的 font.size 只作用于气泡与悬浮提示。
-  "font-family:var(--dsh-pet-font-family,'ShangshouSoftCandy','Yuanti SC','YouYuan','幼圆','Comic Sans MS','PingFang SC','Microsoft YaHei',sans-serif);",
+  "font-family:var(--dsh-pet-font-family,'DshPetRu','ShangshouSoftCandy','Yuanti SC','YouYuan','幼圆','Comic Sans MS','PingFang SC','Microsoft YaHei',sans-serif);",
   'user-select:none}',
   '.dsh-pet-chat *{box-sizing:border-box}',
   '.dsh-pet-chat-input{display:block;width:100%;border:none;outline:none;background:transparent;',

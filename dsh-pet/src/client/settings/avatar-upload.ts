@@ -7,6 +7,7 @@
  * @module dsh-pet/src/client/settings/avatar-upload
  */
 import { ROUTE_PATH } from '../../shared/constants.ts';
+import { uiT } from '../../shared/ui/i18n.ts';
 import { bytesToBase64, loadImage } from '../../shared/chat/encode.ts';
 
 /** 头像长边上限（px）：聊天面板按 28px 显示，512 足够清晰，再大只是白占请求体。 */
@@ -37,7 +38,7 @@ export async function encodeAvatarFile(file: File): Promise<{ base64: string; me
   canvas.width = Math.max(1, Math.round(width * scale));
   canvas.height = Math.max(1, Math.round(height * scale));
   const ctx = canvas.getContext('2d');
-  if (ctx === null) throw new Error('浏览器不支持缩放这张图');
+  if (ctx === null) throw new Error(uiT('upload.unsupported'));
   ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
   const dataUrl = canvas.toDataURL('image/png');
   return { base64: dataUrl.slice(dataUrl.indexOf(',') + 1), mediaType: 'image/png' };
@@ -62,8 +63,9 @@ export async function postAvatar(
     body: JSON.stringify({ base64 }),
   });
   const raw = (await res.json().catch(() => null)) as { ok?: unknown; message?: unknown } | null;
-  if (!res.ok || raw === null) return { ok: false, message: '上传失败（HTTP ' + res.status + '）' };
-  if (raw.ok !== true) return { ok: false, message: typeof raw.message === 'string' ? raw.message : '上传失败' };
+  if (!res.ok || raw === null) return { ok: false, message: uiT('upload.http', { status: res.status }) };
+  if (raw.ok !== true)
+    return { ok: false, message: typeof raw.message === 'string' ? raw.message : uiT('upload.failed') };
   return { ok: true };
 }
 

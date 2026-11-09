@@ -6,6 +6,7 @@
  * 只负责「麦克风 → WAV → 文字」，不碰界面：按钮状态、文字落点都归调用方（chat/dom）。
  * @module dsh-pet/src/shared/hear
  */
+import { uiT } from './ui/i18n.ts';
 
 /** 采样率：宿主 provider 只收 16kHz。 */
 export const HEAR_SAMPLE_RATE = 16000;
@@ -170,7 +171,7 @@ export async function hearAudio(url: string, audio: string, signal?: AbortSignal
     });
     const raw: unknown = await res.json().catch(() => null);
     if (!raw || typeof raw !== 'object') {
-      return { ok: false, reason: 'network', message: '识别响应不是 JSON' };
+      return { ok: false, reason: 'network', message: uiT('voice.responseNotJson') };
     }
     const body = raw as Record<string, unknown>;
     if (body.ok === true && typeof body.text === 'string') return { ok: true, text: body.text };

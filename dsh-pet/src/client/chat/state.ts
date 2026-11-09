@@ -16,6 +16,7 @@ import {
   playAction as requestPlayAction,
   roundsToRevealMemory,
 } from './api.ts';
+import { uiT } from '../../shared/ui/i18n.ts';
 import { createHistoryActions, createSendActions, createShellActions } from './actions.ts';
 import { createChatEffects } from './effects.ts';
 import type { ChatPanelRuntime } from './runtime.ts';
@@ -102,7 +103,7 @@ export function createPetChatState(rt: ChatPanelRuntime): () => ChatPanelState {
       ...shell,
       rounds,
       hasOlder: allRounds.length > rounds.length,
-      petName: pet?.name || '宠',
+      petName: pet?.name || uiT('pet.fallbackName'),
       assetRoot: pet?.assetRoot ?? '',
       memoryRounds,
       hasMemoryLine: memoryBoundaryIndex(allRounds.length, memoryRounds) !== null,

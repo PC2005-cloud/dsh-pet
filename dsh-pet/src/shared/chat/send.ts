@@ -3,6 +3,7 @@
  * 正文展示不走这里——回复统一从 `/state` 的 `pets.<id>.say` 读。
  * @module dsh-pet/src/shared/chat/send
  */
+import { uiT } from '../ui/i18n.ts';
 
 /** 随消息发送的一张图片：`data` 是规范 base64（不带 data: 前缀）。 */
 export interface ChatAttachment {
@@ -37,7 +38,7 @@ export async function sendChat(baseUrl: string, text: string, attachment?: ChatA
   });
   const raw: unknown = await res.json().catch(() => null);
   if (!raw || typeof raw !== 'object') {
-    throw new Error('dsh-pet: 对话响应非法');
+    throw new Error(uiT('chat.invalidResponse'));
   }
   const o = raw as Record<string, unknown>;
   if (o.ok !== true) {
