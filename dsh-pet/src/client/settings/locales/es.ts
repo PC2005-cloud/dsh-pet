@@ -174,6 +174,17 @@ export const es: Record<Key, string> = {
   voiceNotifyEnabledHint:
     'Locuta una frase configurada de estado de trabajo cuando una tarea termina, falla o espera tu confirmación. Igual que las notificaciones del sistema, solo locuta cuando no estás en esta página (otra aplicación, sin foco, minimizada): no interrumpe mientras miras la pantalla. Solo se locuta la frase configurada, nunca el detalle de la tarea. Desactivado por defecto.',
   voiceNameLabel: 'Voz',
+  voiceProviderLabel: 'Origen de síntesis',
+  voiceProviderHint:
+    'edge = la voz en línea integrada del plugin (sin clave; la voz es una de las cuatro integradas de abajo); breeze = una voz real de BreezeBlue (requiere una clave de API y un Voice ID que hayas creado allí). Por defecto edge — exactamente el comportamiento anterior a esta opción.',
+  'tts.edge': 'Voz integrada (edge)',
+  'tts.breeze': 'Voz de BreezeBlue',
+  breezeApiKeyLabel: 'Clave de API de Breeze',
+  breezeApiKeyHint:
+    'Tu clave de BreezeBlue (con forma brz_...). Vacía = sin configurar; el plugin recurre a edge integrado y deja un aviso en el registro en vez de dejar toda la cadena de voz en silencio. También puedes dejar esto vacío y usar la variable de entorno BREEZE_API_KEY (tiene prioridad). La clave solo se guarda en tu configuración local de usuario y nunca se incluye con el plugin.',
+  breezeVoiceLabel: 'Breeze Voice ID',
+  breezeVoiceHint:
+    'El id de la voz que creaste en la consola de BreezeBlue (con forma voc_8yud7hz7c9q2). Vacío = usar la voz predeterminada del plugin. Las voces las creas tú en la consola y no se pueden enumerar, así que solo se valida la forma — nunca una lista blanca.',
   voiceVolumeLabel: 'Volumen',
   voiceVolumeHint:
     'Volumen de reproducción como decimal 0–1: 1 es el volumen máximo (100 %) y 0 silencia. Solo cambia la intensidad y no vuelve a sintetizar el audio, así que ajustarlo no tiene coste extra. Los cuatro tipos de locución comparten este mismo volumen.',
@@ -258,6 +269,18 @@ export const es: Record<Key, string> = {
   chatImageLimitHint:
     'Cuántos memes como máximo se listan al modelo durante el chat ("los primeros N" = los N que escribiste primero en la configuración; mueve al frente los que quieras enviar). Esa lista completa se adjunta a cada mensaje y los tokens crecen de forma lineal con la cantidad, así que una lista larga es puro gasto; limitarla a los primeros N hace que el modelo elija solo entre esos. 0 = sin límite (enviar todo). Valor integrado predeterminado: 10. Valor predeterminado global, compartido por todas las mascotas (un pet pack puede sobrescribirlo en el archivo de su propio tipo). Solo afecta a la selección de imágenes del chat: un susurro lleva solo el meme que sacó.',
   invalidChatImageLimit: 'Revisa el límite de imágenes del chat: debe ser un número ≥ 0 (0 = sin límite).',
+  replyLanguageLabel: 'Idioma de respuesta',
+  replyLanguageHint:
+    'En qué idioma habla la mascota: susurros, habla dormida y respuestas del chat comparten esta opción. Vacío (predeterminado) = seguir al usuario, exactamente como antes de que existiera esta opción. Al elegirlo se añade una línea 【idioma】 al system prompt, y el mismo valor se pasa a BreezeBlue como language_code, así el texto y el acento siempre coinciden. Valor global predeterminado, compartido por todas las mascotas (un pet pack puede sobrescribirlo en su propio archivo).',
+  'lang.follow': 'Seguir al usuario (predeterminado)',
+  'lang.zh': 'Chino (simplificado)',
+  'lang.en': 'Inglés',
+  'lang.ja': 'Japonés',
+  'lang.es': 'Español',
+  'lang.fr': 'Francés',
+  'lang.de': 'Alemán',
+  'lang.ru': 'Ruso',
+  'lang.pt': 'Portugués',
   notifyTest: 'Probar notificación',
   notifyTestOk: 'Notificación de prueba enviada; mírala abajo a la derecha del escritorio.',
   notifyDenyUnsupported: 'Este entorno no admite notificaciones del sistema (no hay API Notification).',

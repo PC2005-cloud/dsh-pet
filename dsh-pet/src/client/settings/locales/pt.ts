@@ -171,6 +171,17 @@ export const pt: Record<Key, string> = {
   voiceNotifyEnabledHint:
     'Fala uma frase configurada de estado de trabalho quando uma tarefa termina, falha ou aguarda sua confirmação. Como as notificações do sistema, só fala enquanto você não está nesta página (outro aplicativo, sem foco, minimizado) — sem interromper enquanto você olha para a tela. Só a frase configurada é falada, nunca o detalhe da tarefa. Desligado por padrão.',
   voiceNameLabel: 'Voz',
+  voiceProviderLabel: 'Origem da síntese',
+  voiceProviderHint:
+    'edge = a voz online embutida do plugin (sem chave; a voz é uma das quatro embutidas abaixo); breeze = uma voz real do BreezeBlue (precisa de uma chave de API e de um Voice ID criado lá). Padrão edge — exatamente o comportamento antes desta opção.',
+  'tts.edge': 'Voz embutida (edge)',
+  'tts.breeze': 'Voz do BreezeBlue',
+  breezeApiKeyLabel: 'Chave de API do Breeze',
+  breezeApiKeyHint:
+    'Sua chave do BreezeBlue (no formato brz_...). Vazio = não configurada; o plugin então volta para a edge embutida e registra um aviso no log, em vez de deixar toda a cadeia de voz falhar em silêncio. Você também pode deixar vazio e usar a variável de ambiente BREEZE_API_KEY (ela tem prioridade). A chave fica só na sua configuração local de usuário e nunca acompanha o plugin.',
+  breezeVoiceLabel: 'Breeze Voice ID',
+  breezeVoiceHint:
+    'O id da voz que você criou no console do BreezeBlue (no formato voc_8yud7hz7c9q2). Vazio = usar a voz padrão do plugin. As vozes são criadas por você no console e não podem ser enumeradas, então só a forma é validada — nunca uma lista branca.',
   voiceVolumeLabel: 'Volume',
   voiceVolumeHint:
     'Volume de reprodução em decimal 0–1: 1 é o volume máximo (100%) e 0 silencia. Altera apenas a intensidade e não sintetiza o áudio de novo, então ajustá-lo não custa nada extra. Os quatro tipos de fala compartilham este mesmo volume.',
@@ -255,6 +266,18 @@ export const pt: Record<Key, string> = {
   chatImageLimitHint:
     'Quantos memes no máximo são listados ao modelo na conversa ("primeiros N" = os N primeiros da configuração, então mova para o começo os que quer enviar). A lista inteira vai em cada mensagem e os tokens crescem linearmente com a quantidade, então lista longa é gasto puro; limitar aos N primeiros faz o modelo escolher só entre eles. 0 = sem limite (envia tudo). Padrão embutido 10. Padrão global, compartilhado por todos os pets (um pet pack pode sobrescrever no arquivo do próprio tipo). Só afeta a conversa — o sussurro leva só o meme sorteado.',
   invalidChatImageLimit: 'Revise o limite de imagens na conversa: precisa ser um número ≥ 0 (0 = sem limite).',
+  replyLanguageLabel: 'Idioma das respostas',
+  replyLanguageHint:
+    'Em que idioma o pet fala: sussurros, fala dormindo e respostas do chat compartilham esta opção. Vazio (padrão) = seguir o usuário, exatamente como antes desta opção existir. Ao escolher, uma linha 【idioma】 é adicionada ao system prompt e o mesmo valor vai para o BreezeBlue como language_code, então texto e sotaque sempre combinam. Padrão global, compartilhado por todos os pets (um pet pack pode sobrescrevê-lo no próprio arquivo).',
+  'lang.follow': 'Seguir o usuário (padrão)',
+  'lang.zh': 'Chinês (simplificado)',
+  'lang.en': 'Inglês',
+  'lang.ja': 'Japonês',
+  'lang.es': 'Espanhol',
+  'lang.fr': 'Francês',
+  'lang.de': 'Alemão',
+  'lang.ru': 'Russo',
+  'lang.pt': 'Português',
   notifyTest: 'Testar notificação',
   notifyTestOk: 'Notificação de teste enviada — veja o canto inferior direito do desktop.',
   notifyDenyUnsupported: 'Este ambiente não suporta notificações do sistema (sem API Notification no navegador).',

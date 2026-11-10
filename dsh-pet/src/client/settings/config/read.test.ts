@@ -103,6 +103,32 @@ describe('readMainConfig —— 成品聚合 → 表单补丁', () => {
   test('条目人设原样带出，供「留空时跟随什么」的预览', () => {
     assert.equal(readMainConfig({ main: { pets: [], whisperPrompt: '条目人设' } })?.entryPrompt, '条目人设');
   });
+
+  test('回复语言与 Breeze 三项：字符串原样带出，非字符串不进补丁', () => {
+    const patch = readMainConfig({
+      main: {
+        pets: [],
+        replyLanguage: 'ja',
+        ttsProvider: 'breeze',
+        breezeApiKey: 'brz_from_disk',
+        breezeVoiceId: 'voc_aaaabbbb',
+      },
+    });
+    assert.equal(patch?.replyLanguage, 'ja');
+    assert.equal(patch?.ttsProvider, 'breeze');
+    assert.equal(patch?.breezeApiKey, 'brz_from_disk');
+    assert.equal(patch?.breezeVoiceId, 'voc_aaaabbbb');
+    const none = readMainConfig({ main: { pets: [] } });
+    for (const key of ['replyLanguage', 'ttsProvider', 'breezeApiKey', 'breezeVoiceId']) {
+      assert.equal(key in (none ?? {}), false, `${key} 缺失时不该进补丁`);
+    }
+    const bad = readMainConfig({
+      main: { pets: [], replyLanguage: 1, ttsProvider: false, breezeApiKey: [], breezeVoiceId: {} },
+    });
+    for (const key of ['replyLanguage', 'ttsProvider', 'breezeApiKey', 'breezeVoiceId']) {
+      assert.equal(key in (bad ?? {}), false, `${key} 非字符串时不该进补丁`);
+    }
+  });
 });
 
 describe('readConfigEntries —— 成品聚合 → 条目实例列表', () => {

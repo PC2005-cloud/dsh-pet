@@ -13,6 +13,8 @@ import { PET_DISPLAYS } from '../shared/config.ts';
 import { ROUTE_SEGMENT } from '../shared/constants.ts';
 import { DEFAULT_FONT, FONT_PRESETS } from '../shared/fonts.ts';
 import { DEFAULT_PHYSICS } from '../shared/physics.ts';
+import { REPLY_LANGUAGE_LABELS, REPLY_LANGUAGES } from '../shared/reply-language.ts';
+import { BREEZE_DEFAULT_VOICE_ID, TTS_PROVIDERS } from '../shared/voice-provider.ts';
 import { DEFAULT_WEIGHTS } from '../shared/weights.ts';
 import { aiScript } from './settings-page/script/ai.ts';
 import { avatarScript } from './settings-page/script/avatar.ts';
@@ -37,6 +39,10 @@ export const settingsScript = [
   '(function () {',
   coreScript(ROUTE_SEGMENT, {
     voices: VOICES.map((voice) => ({ id: voice.id, name: voice.name, tag: voice.tag })),
+    ttsProviders: TTS_PROVIDERS,
+    replyLanguages: REPLY_LANGUAGES,
+    replyLanguageLabels: REPLY_LANGUAGE_LABELS,
+    breezeVoiceId: BREEZE_DEFAULT_VOICE_ID,
     fonts: FONT_PRESETS.map((preset) => preset.id),
     displays: PET_DISPLAYS,
     corners: [...CORNER_SET],

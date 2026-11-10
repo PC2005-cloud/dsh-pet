@@ -8,7 +8,8 @@
 //   · 全局默认（本文件是默认值；用户在 main-config.jsonc 里写一次就对**所有宠物**生效，
 //     含 pet/<名>-config.json 定义的种类；种类文件自己写了则覆盖自己那份）：
 //     physics / font / confineToScreen / whisperImageEnabled / chatImageEnabled / chatAnimationEnabled /
-//     chatMemoryRounds / whisperModel / chatModel / eventsRefreshSec
+//     chatMemoryRounds / whisperModel / chatModel / eventsRefreshSec / replyLanguage /
+//     ttsProvider / breezeApiKey / breezeVoiceId
 //   · 条目级（每个条目一份：main 一份、每个种类各一份；种类文件顶层可覆盖）：
 //     whisperPrompt / memes / workStatusTexts / animations / animationWeights
 //   · 只读 main（写了也只认 main 条目那份）：notificationsEnabled / eventsRefreshSec.balance
@@ -84,9 +85,22 @@
   // 手动播报：右键菜单、斜杠命令触发的碎碎念，以及对话回复，是否用语音念出来。默认关闭——不是所有人都希望桌宠出声。
   // 只影响「说不说」：气泡、记忆与通知都不受影响。对话面板的喇叭按钮是单句点播，随时可点。
   "voiceEnabled": false,
-  // 用哪个音色念：必须是 /voice/voices 里的 id（四个中文音色的白名单）。
-  // 写错或留空即配置错误 → 告警并回落到默认 zh-CN-XiaoyiNeural（晓伊，女声·活泼）。
+  // 用哪个合成来源念：edge = 内置在线语音（免密钥，音色见下一项）；breeze = BreezeBlue 正式音色。
+  // 写错即配置错误 → 告警并回落到 edge。选了 breeze 但没填 breezeApiKey 时运行期回落 edge（日志留痕），
+  // 不会让整条语音链静默失效。
+  "ttsProvider": "edge",
+  // 用哪个音色念。
+  // ttsProvider=edge：必须是 /voice/voices 里的 id（四个中文音色的白名单），
+  //   写错或留空即配置错误 → 告警并回落到默认 zh-CN-XiaoyiNeural（晓伊，女声·活泼）。
+  // ttsProvider=breeze：必须是 BreezeBlue 的 Voice ID（形如 voc_8yud7hz7c9q2），留空则用插件内置默认音色；
+  //   写错即配置错误 → 同样告警并回落默认。音色由你在 Breeze 控制台自建，插件无法枚举，只校验形状。
   "voiceName": "zh-CN-XiaoyiNeural",
+  // BreezeBlue 的 API Key（ttsProvider=breeze 时必需）。只写在这里或环境变量 BREEZE_API_KEY，
+  // 环境变量优先；不要把它提交到仓库。留空 = 未配置，运行期回落 edge。
+  "breezeApiKey": "",
+  // BreezeBlue 的音色 id（ttsProvider=breeze 时生效）；留空 = 插件内置默认 voc_8yud7hz7c9q2。
+  // 与 voiceName 分开：换来源时不必来回改同一个字段，切回 edge 也不会把 Breeze 的音色写丢。
+  "breezeVoiceId": "voc_8yud7hz7c9q2",
   // 播放音量（全局）：0–1 的小数，1 = 最大音量（100%），0 = 静音。四类语音共用这一个音量。
   // 只改播放响度，不重新合成音频，所以调它不会多花一次 TTS 请求。
   "voiceVolume": 1,
@@ -99,6 +113,14 @@
   // 工作状态文案；和系统通知同一取向——用户不在本页（切走、失焦、最小化）时才念，正看着
   // 屏幕时不打扰。默认关闭。
   "voiceNotifyEnabled": false,
+  // ===================== 回复语言（全局默认；种类文件 pet/<名>-config.json 顶层可覆盖） =====================
+  // 桌宠说话用哪种语言：碎碎念、梦话与对话回复共用这一项，只影响「说什么语言」，不改人设内容。
+  // 留空（默认）= 跟随用户，行为与加这个字段之前完全一致。
+  // 可选：zh / en / ja / es / fr / de / ru / pt。写错即配置错误 → 告警并回落跟随用户。
+  // 与语音联动：ttsProvider=breeze 时同一取值会作为 language_code 传给 BreezeBlue，念出来的
+  // 口音与文字语言一致，不会出现「中文文字、英文发音」。
+  // 设置页「AI 模型与对话」卡有下拉框，改这里或那里等价（设置页写的是用户层）。
+  "replyLanguage": "",
   // ===================== 表情包：图片映射（名称 → 描述，模型据此选图） =====================
   // 键 = assets/memes/<键>.png 的文件名（不含扩展名）；值 = 该图内容的简要描述。
   // 用途：碎碎念随机抽到某张图后，把该图描述注入提示词让模型配合画面说话；

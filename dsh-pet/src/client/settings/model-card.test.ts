@@ -10,6 +10,7 @@ import assert from 'node:assert/strict';
 import type { jsx } from 'react/jsx-runtime';
 
 import { makeModelCard, type ChatFlagValues } from './model-card.ts';
+import { REPLY_LANGUAGES } from '../../shared/reply-language.ts';
 
 interface Node {
   tag: string;
@@ -51,6 +52,8 @@ function props(values: ChatFlagValues, over: Record<string, unknown> = {}): Reco
     chatImageLimit: 10,
     onChatMemoryChange: () => {},
     onChatImageLimitChange: () => {},
+    replyLanguage: '',
+    onReplyLanguageChange: () => {},
     values,
     onFlagChange: () => {},
     ...over,
@@ -95,5 +98,41 @@ describe('ModelCard —— 对话开关', () => {
     const pickers = flatten(tree).filter((node) => (node.tag as unknown) === Picker);
     assert.equal(pickers.length, 2, '两个模型格子各有一个选择器');
     for (const picker of pickers) assert.equal(picker.props.disabled, true);
+  });
+});
+
+describe('ModelCard —— 回复语言', () => {
+  /** 回复语言下拉：选项里带空 id（跟随用户）的就是它。 */
+  const replySelect = (tree: unknown): Node | undefined =>
+    flatten(tree).find(
+      (node) =>
+        Array.isArray(node.props.options) &&
+        (node.props.options as Array<{ id: string }>).some((option) => option.id === ''),
+    );
+
+  test('下拉当前值来自 props.replyLanguage', () => {
+    const tree = ModelCard(props(allOff, { replyLanguage: 'ja' }) as never);
+    assert.equal(replySelect(tree)?.props.value, 'ja');
+  });
+
+  test('选项是「跟随用户」+ 全部可选语言，顺序与共享清单一致', () => {
+    const tree = ModelCard(props(allOff) as never);
+    const options = (replySelect(tree)?.props.options ?? []) as Array<{ id: string }>;
+    assert.deepEqual(
+      options.map((option) => option.id),
+      ['', ...REPLY_LANGUAGES],
+    );
+  });
+
+  test('选择回传的是语言 id，不是事件对象', () => {
+    const seen: string[] = [];
+    const tree = ModelCard(props(allOff, { onReplyLanguageChange: (value: string) => seen.push(value) }) as never);
+    (replySelect(tree)?.props.onChange as (id: string) => void)('ru');
+    assert.deepEqual(seen, ['ru']);
+  });
+
+  test('忙时下拉禁用', () => {
+    const tree = ModelCard(props(allOff, { busy: true }) as never);
+    assert.equal(replySelect(tree)?.props.disabled, true);
   });
 });

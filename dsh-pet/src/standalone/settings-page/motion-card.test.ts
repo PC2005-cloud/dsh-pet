@@ -69,6 +69,10 @@ function probe(): Probe {
   const script = [
     coreScript('/dsh-pet-7340', {
       voices: [],
+      ttsProviders: ['edge', 'breeze'],
+      replyLanguages: ['zh', 'en'],
+      replyLanguageLabels: { zh: '简体中文', en: '英语（English）' },
+      breezeVoiceId: 'voc_8yud7hz7c9q2',
       fonts: [],
       displays: [],
       corners: [],

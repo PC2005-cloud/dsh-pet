@@ -38,6 +38,14 @@ export interface MainConfigPatch {
   voiceTodoEnabled?: boolean;
   /** 工作状态播报开关；缺省表示这次响应里没有可信值。 */
   voiceNotifyEnabled?: boolean;
+  /** 回复语言（空串 = 跟随用户）；缺省表示这次响应里没有可信值。 */
+  replyLanguage?: string;
+  /** 合成来源（edge / breeze）；缺省表示这次响应里没有可信值。 */
+  ttsProvider?: string;
+  /** BreezeBlue 密钥；缺省表示这次响应里没有可信值。 */
+  breezeApiKey?: string;
+  /** BreezeBlue 音色 id；缺省表示这次响应里没有可信值。 */
+  breezeVoiceId?: string;
   /** 物理参数：成品已按「内置默认 ← 用户层」填满，缺子键再用内置默认兜底一次。 */
   physics?: PhysicsParams;
   /** 字体：同物理参数。 */
@@ -90,6 +98,10 @@ export function readMainConfig(merged: MergedConfig): MainConfigPatch | null {
   if (typeof main.voiceWhisperEnabled === 'boolean') patch.voiceWhisperEnabled = main.voiceWhisperEnabled;
   if (typeof main.voiceTodoEnabled === 'boolean') patch.voiceTodoEnabled = main.voiceTodoEnabled;
   if (typeof main.voiceNotifyEnabled === 'boolean') patch.voiceNotifyEnabled = main.voiceNotifyEnabled;
+  if (typeof main.replyLanguage === 'string') patch.replyLanguage = main.replyLanguage;
+  if (typeof main.ttsProvider === 'string') patch.ttsProvider = main.ttsProvider;
+  if (typeof main.breezeApiKey === 'string') patch.breezeApiKey = main.breezeApiKey;
+  if (typeof main.breezeVoiceId === 'string') patch.breezeVoiceId = main.breezeVoiceId;
   if (main.physics && typeof main.physics === 'object') {
     patch.physics = { ...DEFAULT_PHYSICS, ...(main.physics as PhysicsParams) };
   }

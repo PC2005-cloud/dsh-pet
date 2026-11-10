@@ -19,7 +19,11 @@ DSH 设置 → 「桌宠配置」：
 - **物理参数**：拖拽抛掷手感（重力 / 弹性 / 地面摩擦 / 总力度 / 顶部反弹 / 宠物互撞 / 碰撞震动 / 倾斜控制重力 / 摇一摇抛出）也能在设置页图形化改，不用去手改配置文件。碰撞震动（`physics.hapticEnabled`，默认开）在撞墙、落地、撞顶与宠物互撞时各震一下：Chrome / Edge 等浏览器可用，iOS 与 Via 这类 WebView 套壳浏览器不生效，系统勿扰模式会挡住振动。宠物互撞（`physics.petCollision`，默认开）按动量守恒弹开（质量 ∝ 尺寸²）。体感拆成两个开关：倾斜控制重力（`physics.tiltGravity`，默认关）用手机倾斜方向代替固定向下的重力（`gravity` 为 0 时无从取值，等同关闭）；摇一摇抛出（`physics.shakeThrow`，默认关）沿甩动方向把宠物甩出去（力度 = 基准 × `throwPower`），与重力大小无关，`gravity` 设 0 也能甩着玩。两个都只在 HTTPS 或 localhost 下有效
 - **AI 模型**：碎碎念与对话可以**各自指定模型**——设置页「AI 模型」每项一个下拉框（与 DSH 对话框右下角的模型选择器同款：搜索框 + 按服务商分组的清单，选项同源）；选「跟随当前对话」= 用当前对话的模型，指定了但调用失败会自动回落到当前对话的模型重试一次
 - 点「保存」**即时生效**（无需刷新）；「同步」把包内 `config.jsonc` 的**原文**（含注释与全部高级字段）整份写入用户配置——既回到默认，又留下一份可直接编辑的完整配置
-- **语音**：碎碎念与对话回复可以念出来（默认关闭），音色四选一、默认晓伊（女声 · 活泼）；音色列表来自宿主 `/voice/voices`，不在页面里硬编码
+- **语音**：碎碎念与对话回复可以念出来（默认关闭）。合成来源两选一：
+  - `edge`（默认，免密钥）：音色四选一、默认晓伊（女声 · 活泼），列表来自宿主 `/voice/voices`，不在页面里硬编码
+  - `breeze`（BreezeBlue 正式音色）：填 **API Key** 与 **Voice ID**（默认 `voc_8yud7hz7c9q2`）。Key 存在用户配置 `breezeApiKey` 里，或改用环境变量 `BREEZE_API_KEY`（优先，适合临时验证与 CI）；**不要把它提交进仓库**。没填 Key 时运行期自动回落 `edge` 并记一行告警，不会让语音静默失效
+  - 音色由你在 Breeze 控制台自建，插件无法枚举，因此 `breezeVoiceId` 只做形状校验（`voc_` + 字母数字），不做白名单
+- **回复语言**：`replyLanguage` 决定宠物说话用哪种语言（碎碎念 / 梦话 / 对话回复共用）。留空 = 跟随用户（默认，行为不变）；可选 `zh`/`en`/`ja`/`es`/`fr`/`de`/`ru`/`pt`。非空时会在 system 提示词里追加一行【语言】，并同时作为 BreezeBlue 的 `language_code`
 
 ## 方式二：config.jsonc（单一来源）
 
@@ -50,6 +54,10 @@ DSH 设置 → 「桌宠配置」：
 | `sleepRefuseTexts`     | **睡着被打扰时的拒绝台词**（条目级，随机挑一句）                                                               | 非空字符串数组             |
 | `notificationsEnabled` | 系统通知总开关（布尔）                                                                                         | 同 `notificationsEnabled`  |
 | `chatAnimationEnabled` | **对话动作联动**：开启后对话时把 `animations.categories` 下的动作清单交给模型，由它按语境挑一个当场表演（布尔，默认 true） | 布尔，默认即可             |
+| `replyLanguage`        | **回复语言**：`""`（跟随用户，默认）或 `zh`/`en`/`ja`/`es`/`fr`/`de`/`ru`/`pt`                                  | 字符串                     |
+| `ttsProvider`          | **语音合成来源**：`edge`（内置，免密钥，默认）或 `breeze`（BreezeBlue 正式音色）                                 | 字符串                     |
+| `breezeApiKey`         | BreezeBlue 的 API key；空串 = 未配置（回落 `edge`）。环境变量 `BREEZE_API_KEY` 优先；**别提交进仓库**            | 字符串（首尾空白会 trim）  |
+| `breezeVoiceId`        | BreezeBlue 的 Voice ID；空串 = 用插件默认 `voc_8yud7hz7c9q2`；只校验 `voc_` 形状                                 | 字符串                     |
 
 > 覆盖语义：用户层给出即**整体替换**该字段（如写了 `animations` 就用你的整份动画池，替代默认），没写的字段回落包内默认。校验在插件加载时执行——格式错误会在 DSH 控制台显式报错，不会静默运行残缺配置。
 

@@ -119,6 +119,16 @@ export function saveUserConfig(
   if (vte !== undefined && !topFieldValid('voiceTodoEnabled', vte)) return null;
   const vne = o.voiceNotifyEnabled;
   if (vne !== undefined && !topFieldValid('voiceNotifyEnabled', vne)) return null;
+  // 回复语言与语音来源（全局）：与上面几个同语义——传了必须合法，没传走透传保留。
+  // 四项都复用读取侧的 topFieldValid，读写同一份规则。
+  const rl = o.replyLanguage;
+  if (rl !== undefined && !topFieldValid('replyLanguage', rl)) return null;
+  const tp = o.ttsProvider;
+  if (tp !== undefined && !topFieldValid('ttsProvider', tp)) return null;
+  const bk = o.breezeApiKey;
+  if (bk !== undefined && !topFieldValid('breezeApiKey', bk)) return null;
+  const bv = o.breezeVoiceId;
+  if (bv !== undefined && !topFieldValid('breezeVoiceId', bv)) return null;
   // 系统托盘开关（全局，仅桌面模式）：与上面几个全局布尔同语义——传了必须是布尔，没传走透传保留。
   const te = o.trayEnabled;
   if (te !== undefined && typeof te !== 'boolean') return null;
@@ -177,6 +187,11 @@ export function saveUserConfig(
   if (vwe !== undefined) outConfig.voiceWhisperEnabled = vwe;
   if (vte !== undefined) outConfig.voiceTodoEnabled = vte;
   if (vne !== undefined) outConfig.voiceNotifyEnabled = vne;
+  if (rl !== undefined) outConfig.replyLanguage = rl;
+  if (tp !== undefined) outConfig.ttsProvider = tp;
+  // 密钥 trim 后落盘：粘贴时带上的首尾空白不该变成「密钥无效」这种难查的故障
+  if (bk !== undefined) outConfig.breezeApiKey = String(bk).trim();
+  if (bv !== undefined) outConfig.breezeVoiceId = String(bv).trim();
   if (te !== undefined) outConfig.trayEnabled = te;
   if (ph !== undefined) outConfig.physics = ph;
   if (aw !== undefined) outConfig.animationWeights = cleanWeights(aw as Record<string, unknown>);
@@ -203,6 +218,10 @@ export function saveUserConfig(
   if (vwe !== undefined) bodyOwned.add('voiceWhisperEnabled');
   if (vte !== undefined) bodyOwned.add('voiceTodoEnabled');
   if (vne !== undefined) bodyOwned.add('voiceNotifyEnabled');
+  if (rl !== undefined) bodyOwned.add('replyLanguage');
+  if (tp !== undefined) bodyOwned.add('ttsProvider');
+  if (bk !== undefined) bodyOwned.add('breezeApiKey');
+  if (bv !== undefined) bodyOwned.add('breezeVoiceId');
   if (te !== undefined) bodyOwned.add('trayEnabled');
   if (ph !== undefined) bodyOwned.add('physics');
   if (aw !== undefined) bodyOwned.add('animationWeights');

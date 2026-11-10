@@ -124,6 +124,8 @@ export function createChatMemory(deps: ChatMemoryInput) {
       name: String(found.pet.name ?? ''),
       id: String(found.pet.id ?? ''),
       now: new Date(),
+      // 回复语言是条目级全局默认（合并器已填默认；空串 = 跟随用户）
+      language: typeof found.conf.replyLanguage === 'string' ? found.conf.replyLanguage : '',
       ...(options.historyTimes === true ? { historyTimes: true } : {}),
     });
 

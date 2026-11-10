@@ -169,6 +169,17 @@ export const ja: Record<Key, string> = {
   voiceNotifyEnabledHint:
     'タスクの完了・失敗・確認待ちのときに、設定された作業状態のセリフを読み上げます。システム通知と同じ考え方で、このページを見ていないとき（別のアプリに切り替え・フォーカスなし・最小化）にだけ読み上げます——画面を見ている間は邪魔しません。読み上げるのは設定されたセリフだけで、タスクの詳細は読みません。デフォルトはオフです。',
   voiceNameLabel: '声質',
+  voiceProviderLabel: '合成元',
+  voiceProviderHint:
+    'edge = プラグイン内蔵のオンライン音声（キー不要、声は下の4つの内蔵音声から選択）。breeze = BreezeBlue の正式な声（API キーと、コンソールで作成した Voice ID が必要）。既定は edge で、この項目を追加する前とまったく同じ動作です。',
+  'tts.edge': '内蔵音声（edge）',
+  'tts.breeze': 'BreezeBlue の声',
+  breezeApiKeyLabel: 'Breeze API キー',
+  breezeApiKeyHint:
+    'BreezeBlue のキー（brz_... の形式）。空欄 = 未設定で、その場合は内蔵 edge に切り替わりログに警告を1行残します（音声まわりが黙って止まることはありません）。ここに入れず環境変数 BREEZE_API_KEY を使うこともできます（環境変数が優先）。キーは本机のユーザー設定にのみ保存され、プラグインには同梱されません。',
+  breezeVoiceLabel: 'Breeze Voice ID',
+  breezeVoiceHint:
+    'BreezeBlue のコンソールで作成した声の id（voc_8yud7hz7c9q2 の形式）。空欄 = プラグイン内蔵の既定音声。声はコンソールで自由に作れるため列挙できず、形式だけを検証します（ホワイトリストは使いません）。',
   voiceVolumeLabel: '音量',
   voiceVolumeHint:
     '読み上げの音量（0〜1 の小数）。1 が最大音量（100%）、0 は消音です。変わるのは再生の大きさだけで、音声の再合成は行いません。4種類の音声はこの1つの音量を共有します。',
@@ -248,6 +259,18 @@ export const ja: Record<Key, string> = {
   chatImageLimitHint:
     'チャット時にモデルへ送るミーム画像一覧の最大枚数（「先頭 N 枚」= 設定の先頭に書いた N 件。優先して送りたい画像は順番を前にしてください）。一覧全体はメッセージごとに添付され、トークンは枚数に比例して増えるため、多いとそのままコストになります。先頭 N 枚に制限すると、モデルはその中からだけ選びます。0 = 制限なし（すべて送信）。内蔵デフォルトは 10。グローバルデフォルトで、すべてのペットに共通です（pet pack は自身の種類ファイルで上書きできます）。影響するのはチャットの画像選択だけです：ひとりごとは選んだ1枚だけを含めます。',
   invalidChatImageLimit: 'チャット画像の上限枚数を確認してください：0 以上の数値である必要があります（0 = 制限なし）。',
+  replyLanguageLabel: '返答の言語',
+  replyLanguageHint:
+    'ペットが話す言語です。ひとりごと・寝言・チャットの返答がこの1項目を共有します。空欄（既定）= ユーザーに合わせるで、この項目を追加する前とまったく同じ動作です。選ぶと system プロンプトに【言語】の一行が加わり、同じ値が BreezeBlue の language_code としても渡されるので、文字と発音が食い違いません。グローバル既定で全ペット共通（pet pack は自分の種類ファイルで上書き可）。',
+  'lang.follow': 'ユーザーに合わせる（既定）',
+  'lang.zh': '中国語（簡体字）',
+  'lang.en': '英語',
+  'lang.ja': '日本語',
+  'lang.es': 'スペイン語',
+  'lang.fr': 'フランス語',
+  'lang.de': 'ドイツ語',
+  'lang.ru': 'ロシア語',
+  'lang.pt': 'ポルトガル語',
   notifyTest: 'テスト通知',
   notifyTestOk: 'テスト通知を送信しました。デスクトップの右下を確認してください。',
   notifyDenyUnsupported:

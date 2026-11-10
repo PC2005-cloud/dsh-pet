@@ -71,7 +71,7 @@ dsh-pet 的宿主半侧向 DSH 自己的 Web 服务注册了**一条前缀路由
 
 | 接口                             | 功能                                                                                                                   |
 | -------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| `PUT /dsh-pet-7340/config`       | 保存用户层配置（白名单重建，用户手写的精调字段会保留）                                                                 |
+| `PUT /dsh-pet-7340/config`       | 保存用户层配置（白名单重建，用户手写的精调字段会保留）。白名单含 `replyLanguage` / `ttsProvider` / `breezeApiKey` / `breezeVoiceId`，字段语义见 `CONFIG.md` 与 `openapi.yaml` |
 | `POST /dsh-pet-7340/config`      | 用内置默认整份覆盖用户配置，即「恢复默认」                                                                             |
 | `POST /dsh-pet-7340/pet-display` | **改单只宠物的显示位置**（`web` / `desktop` / `both` / `none`），只传 `{ id, display }`                                |
 | `POST /dsh-pet-7340/pet-config`  | **按种类写回全部实例**（`{ entry, pets }`，`entry` = `pet/<名>-config.json` 的前缀）；白名单重建，顶层动画池与人设保留 |
@@ -116,6 +116,16 @@ dsh-pet 的宿主半侧向 DSH 自己的 Web 服务注册了**一条前缀路由
 | `POST /dsh-pet-7340/voice/speak` | 合成并返回 mp3：`{ text, voice?, rate? }`；同一输入命中缓存，队列最多排 3 个 |
 | `POST /dsh-pet-7340/voice/hear`  | 识别音频回文字：`{ audio }`，16kHz/单声道/PCM16 WAV 的 base64                |
 | `GET /dsh-pet-7340/voice/voices` | 可用音色列表；前端拿它渲染选择器，不要硬编码 id                              |
+
+合成来源由配置的 `ttsProvider` 决定，`voice` 的合法域随来源变化：
+
+| 来源 | 触发条件 | `voice` 合法域 | 备注 |
+| --- | --- | --- | --- |
+| 第三方实现 | 经 Cordis 服务注册了语音实现 | 整段忽略（嗓子由实现自己决定），但非法值仍按 `bad-request` 拒绝 | 优先级最高 |
+| BreezeBlue | `ttsProvider=breeze` 且配了 `breezeApiKey`（或环境变量 `BREEZE_API_KEY`） | `voc_` + 字母数字的 Voice ID；缺省用 `breezeVoiceId` | 语速换算成 Breeze 的 `speed` 倍率 |
+| 内置 edge | 其余情况（默认） | `/voice/voices` 里的四个中文音色之一；缺省 `zh-CN-XiaoxiaoNeural` | 免密钥 |
+
+`breeze` 配了却没填 key 时运行期回落 `edge` 并记一行告警；缓存键含来源与 Breeze 的语种，切换来源或回复语言不会命中旧音频。
 
 ## 十、待办事项
 

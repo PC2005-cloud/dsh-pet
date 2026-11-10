@@ -21,6 +21,7 @@ import { createDownloadReport } from './plugin/download-report.ts';
 import { createWorkStatusBridge } from './plugin/work-status-bridge.ts';
 import { registerTodoReminders } from './plugin/todo-reminders.ts';
 import { createVoiceService } from './voice/speak.ts';
+import { readVoiceSettings } from './voice/tts-config.ts';
 import { createHearService } from './voice/hear.ts';
 import { TODO_FILE_NAME, TodoStore } from './todo/store.ts';
 import { join } from 'node:path';
@@ -105,8 +106,16 @@ export function apply(ctx: any): void {
     ...sessionNotify,
     ctx,
     todos,
-    // 语音合成：缓存落 userRoot，失败只留日志，不打断宿主
-    voice: createVoiceService({ userRoot, log }),
+    // 语音合成：缓存落 userRoot，失败只留日志，不打断宿主。
+    // Breeze 参数每次合成现读配置（`breeze` 是回调），这样设置页保存后立刻生效，不必重启。
+    voice: createVoiceService({
+      userRoot,
+      log,
+      breeze: () => {
+        const settings = readVoiceSettings(readAllConfig(configPaths).main);
+        return settings.provider === 'breeze' ? settings.breeze : undefined;
+      },
+    }),
     // 语音识别：能力来自宿主（DSH 的 speechToText），没启用时服务自己在调用时回 unsupported
     speech: createHearService({ speechToText: () => setup.optionalService('speechToText') }),
   };

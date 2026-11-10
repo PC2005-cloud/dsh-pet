@@ -113,6 +113,44 @@ describe('composeSystemPrompt —— 分段拼装', () => {
     assert.equal(out, prompt + '\n你的名字是“蓝毛”。');
   });
 
+  test('language 缺省 / 空串 → 不插【语言】（旧配置行为不变）', () => {
+    for (const language of [undefined, '']) {
+      const out = composeSystemPrompt({ prompt: '你是小女仆', name: '蓝毛', id: 'main', now: NOW, language });
+      assert.ok(!out.includes('【语言】'));
+      assert.equal(out.split('\n').length, 3, '不传语言时仍是三段');
+    }
+  });
+
+  test('language 有值 → 名字之后、时间之前插一行【语言】', () => {
+    const out = composeSystemPrompt({ prompt: '你是小女仆', name: '蓝毛', id: 'main', now: NOW, language: 'en' });
+    const lines = out.split('\n');
+    assert.equal(lines.length, 4, '多出且只多出一行');
+    assert.equal(lines[1], '你的名字是“蓝毛”。');
+    assert.ok(lines[2].startsWith('【语言】'), `第三行必须是【语言】：${lines[2]}`);
+    assert.ok(lines[3].startsWith('【当下】'), '时间背景仍在【语言】之后');
+  });
+
+  test('language 非法 → 当作没写，不加【语言】', () => {
+    const out = composeSystemPrompt({ prompt: '', name: '蓝毛', id: 'main', now: NOW, language: 'xx' });
+    assert.equal(out.split('\n').length, 2);
+  });
+
+  test('language 与 historyTimes 同用 → 顺序是人设 / 名字 / 语言 / 时间 / 历史', () => {
+    const out = composeSystemPrompt({
+      prompt: '你是小女仆',
+      name: '蓝毛',
+      id: 'main',
+      now: NOW,
+      language: 'ja',
+      historyTimes: true,
+    });
+    const lines = out.split('\n');
+    assert.equal(lines.length, 5);
+    assert.ok(lines[2].startsWith('【语言】'));
+    assert.ok(lines[3].startsWith('【当下】'));
+    assert.ok(lines[4].startsWith('【历史】'));
+  });
+
   test('时间背景每次现算：同一秒之外的两个时刻产出不同的时间行', () => {
     const a = composeSystemPrompt({ prompt: '', name: '蓝毛', id: 'main', now: new Date(2026, 9, 21, 9, 0) });
     const b = composeSystemPrompt({ prompt: '', name: '蓝毛', id: 'main', now: new Date(2026, 9, 21, 21, 0) });

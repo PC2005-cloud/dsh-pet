@@ -42,6 +42,13 @@ function pickGlobals(main) {
     voiceEnabled: source.voiceEnabled === true,
     voiceName: typeof source.voiceName === 'string' && source.voiceName ? source.voiceName : (VOICES[1] ? VOICES[1].id : ''),
     voiceVolume: typeof source.voiceVolume === 'number' ? source.voiceVolume : 1,
+    // 合成来源：非法值按内置默认显示，与宿主读取侧同一口径（写回时宿主照样会校验）
+    ttsProvider: TTS_PROVIDERS.indexOf(source.ttsProvider) >= 0 ? source.ttsProvider : 'edge',
+    // 密钥与音色是用户粘贴的自由串：空 / 缺都按「未配置」处理，不猜
+    breezeApiKey: typeof source.breezeApiKey === 'string' ? source.breezeApiKey : '',
+    breezeVoiceId: typeof source.breezeVoiceId === 'string' && source.breezeVoiceId ? source.breezeVoiceId : BREEZE_DEFAULT_VOICE,
+    // 回复语言：空串是合法值（跟随用户），只有非字符串才回落到空
+    replyLanguage: typeof source.replyLanguage === 'string' ? source.replyLanguage : '',
     voiceWhisperEnabled: source.voiceWhisperEnabled !== false,
     voiceTodoEnabled: source.voiceTodoEnabled !== false,
     // 与 voiceTodo/voiceWhisper 的 !== false 写法不同：本项默认关，字段缺失时不能显示成已勾选，
@@ -131,6 +138,10 @@ function petsBody() {
     voiceWhisperEnabled: state.globals.voiceWhisperEnabled,
     voiceTodoEnabled: state.globals.voiceTodoEnabled,
     voiceNotifyEnabled: state.globals.voiceNotifyEnabled,
+    ttsProvider: state.globals.ttsProvider,
+    breezeApiKey: state.globals.breezeApiKey,
+    breezeVoiceId: state.globals.breezeVoiceId,
+    replyLanguage: state.globals.replyLanguage,
     physics: physicsBody(),
     font: state.globals.font,
     chatMemoryRounds: state.globals.chatMemoryRounds,

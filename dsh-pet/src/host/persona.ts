@@ -1,14 +1,16 @@
 /**
  * 人设拼装（宿主半侧，纯逻辑）：碎碎念与对话共用的 system 提示词只在这一处拼好。
  *
- * 四段，顺序固定：人设正文（实例 whisperPrompt → 条目 whisperPrompt → 空串）、名字声明、
- * 时间背景（timeContextOf 现算，不缓存）、历史时间说明（仅在对话且有历史时追加）。
+ * 分段固定：人设正文（实例 whisperPrompt → 条目 whisperPrompt → 空串）、名字声明、
+ * 【语言】（配置了回复语言才加）、时间背景（timeContextOf 现算，不缓存）、
+ * 历史时间说明（仅在对话且有历史时追加）。
  * 不碰 IO、不读时钟，Date 由调用方传入；也不负责取字段与
  * 发起生成（index.ts 的 petSystemPrompt 只做「取字段 → 调这里」）。
  * 必须始终成立：拼装点唯一——不给名字与时间开占位符配置，否则等于出现第二个拼装点。
  * @module dsh-pet/src/host/persona
  */
 import { timeContextOf } from './time-context.ts';
+import { replyLanguageLine } from '../shared/reply-language.ts';
 
 /**
  * 历史时间说明：历史里 user 消息带 `[月日 时:分]` 前缀时追加，让模型知道那些时刻可以用来算跨度。
@@ -42,6 +44,8 @@ export interface SystemPromptParts {
   id: string;
   /** 生成这一刻（生产传 new Date()，测试传固定日期） */
   now: Date;
+  /** 回复语言（ISO 639-1）；空串或缺省 = 跟随用户，不加【语言】段 */
+  language?: string;
   /** 历史消息是否带时间前缀；缺省 false（碎碎念没有历史，不该出现【历史】段） */
   historyTimes?: boolean;
 }
@@ -56,7 +60,9 @@ export interface SystemPromptParts {
 export function composeSystemPrompt(parts: SystemPromptParts): string {
   const name = String(parts.name || parts.id);
   const nameLine = name ? '你的名字是“' + name + '”。' : '';
-  const lines = [parts.prompt, nameLine].filter((line) => line !== '');
+  // 【语言】紧跟名字：它约束的是「这个角色怎么说话」，与时间背景无关，也不该被时间挤到后面
+  const languageLine = replyLanguageLine(parts.language);
+  const lines = [parts.prompt, nameLine, languageLine].filter((line) => line !== '');
   const time = timeContextOf(parts.now);
   if (time) {
     lines.push(time);

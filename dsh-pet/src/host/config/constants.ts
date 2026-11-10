@@ -44,7 +44,7 @@ export function isValidPetId(value: string): boolean {
 /**
  * 「全局默认 + 种类可覆盖」的顶层字段白名单：这些是用户级成本 / 偏好 / 环境 / 节奏参数
  * （chatMemoryRounds、两个模型、两个配图开关、对话动作联动开关与张数上限、eventsRefreshSec、
- * physics、confineToScreen、font、animationWeights），
+ * physics、confineToScreen、font、animationWeights、回复语言与语音来源），
  * 不是「这个种类长什么样」，所以用户层写一次应对所有条目生效；种类文件仍可在自己顶层覆盖。
  * 人设是例外：实例级 pets[].whisperPrompt 优先，回落由消费端做（./persona 的 petPersona）。
  */
@@ -53,6 +53,10 @@ export const GLOBAL_DEFAULT_KEYS = [
   'animationWeights',
   'font',
   'confineToScreen',
+  'replyLanguage',
+  'ttsProvider',
+  'breezeApiKey',
+  'breezeVoiceId',
   'voiceEnabled',
   'voiceName',
   'voiceVolume',

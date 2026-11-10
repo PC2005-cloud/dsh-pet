@@ -170,6 +170,17 @@ export const en: Record<Key, string> = {
   voiceNotifyEnabledHint:
     'Speaks a configured work-status line when a task completes, fails, or waits for your confirmation. Like system notifications, it only speaks while you are away from this page (switched away, unfocused, minimized) — no interruption while you are looking at the screen. Only the configured line is spoken, never the task detail. Off by default.',
   voiceNameLabel: 'Voice',
+  voiceProviderLabel: 'Synthesis source',
+  voiceProviderHint:
+    'edge = the plugin’s built-in online voice (no key needed; the voice is one of the four built-in ones below); breeze = a real BreezeBlue voice (needs an API key and a Voice ID you created there). Default edge — exactly the behaviour before this option existed.',
+  'tts.edge': 'Built-in voice (edge)',
+  'tts.breeze': 'BreezeBlue voice',
+  breezeApiKeyLabel: 'Breeze API key',
+  breezeApiKeyHint:
+    'Your BreezeBlue key (looks like brz_...). Empty = not configured; the plugin then falls back to built-in edge and logs one warning instead of letting the whole voice chain fail silently. You can also leave this empty and set the BREEZE_API_KEY environment variable instead (the variable wins). The key is stored only in your local user config and never shipped with the plugin.',
+  breezeVoiceLabel: 'Breeze Voice ID',
+  breezeVoiceHint:
+    'The voice id you created in the BreezeBlue console (looks like voc_8yud7hz7c9q2). Empty = use the plugin’s default voice. Voices are created by you in the console and cannot be enumerated, so only the shape is checked — never an allowlist.',
   voiceVolumeLabel: 'Volume',
   voiceVolumeHint:
     'Playback volume as a 0–1 decimal: 1 is full volume (100%), 0 is muted. Changes loudness only and never re-synthesizes audio, so adjusting it costs nothing extra. All four kinds of speech share this one volume.',
@@ -253,6 +264,18 @@ export const en: Record<Key, string> = {
   chatImageLimitHint:
     'How many memes at most are listed to the model during chat ("first N" = the first N you wrote in the config, so move the ones you want sent to the front). That whole list is attached to every message and tokens grow linearly with the count, so a long list is pure burn; capping it to the first N makes the model pick only among those. 0 = no limit (send everything). Built-in default 10. Global default, shared by every pet (a pet pack may override it in its own kind file). Chat only — a whisper carries just the one meme it drew.',
   invalidChatImageLimit: 'Check the chat image limit: it must be a number ≥ 0 (0 = no limit).',
+  replyLanguageLabel: 'Reply language',
+  replyLanguageHint:
+    'Which language the pet speaks: whispers, sleep-talk and chat replies all share it. Empty (default) = follow the user, exactly as before this option existed. Once set, a 【language】 line is added to the system prompt, and the same value is passed to BreezeBlue as language_code so the text and the accent always match. Global default, shared by every pet (a pet pack may override it in its own kind file).',
+  'lang.follow': 'Follow the user (default)',
+  'lang.zh': 'Chinese (Simplified)',
+  'lang.en': 'English',
+  'lang.ja': 'Japanese',
+  'lang.es': 'Spanish',
+  'lang.fr': 'French',
+  'lang.de': 'German',
+  'lang.ru': 'Russian',
+  'lang.pt': 'Portuguese',
   notifyTest: 'Test notification',
   notifyTestOk: 'Test notification sent — check the bottom-right of your desktop.',
   notifyDenyUnsupported: 'System notifications are not supported in this environment (no Notification API).',

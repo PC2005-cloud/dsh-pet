@@ -6,6 +6,9 @@
  * @module dsh-pet/src/host/config/validate
  */
 import { FONT_SIZE_MAX, FONT_SIZE_MIN } from '../../shared/fonts.ts';
+import { normalizeReplyLanguage } from '../../shared/reply-language.ts';
+import { normalizeTtsProvider } from '../../shared/voice-provider.ts';
+import { isBreezeVoiceId } from '../voice/breeze.ts';
 import { isKnownVoice } from '../voice/voices.ts';
 import { FONT_FAMILY_SET } from './constants.ts';
 
@@ -199,6 +202,21 @@ export function topFieldValid(key: string, value: unknown): boolean {
     case 'voiceNotifyEnabled':
       // 工作状态播报开关（全局布尔）：只决定完成 / 出错 / 等确认三档念不念，不影响系统通知弹窗
       return typeof value === 'boolean';
+    case 'replyLanguage':
+      // 回复语言：空串 = 跟随用户（默认），其余必须是 ISO 639-1 白名单之一；写错即非法并回落跟随用户
+      return normalizeReplyLanguage(value) !== undefined;
+    case 'ttsProvider':
+      // 合成来源：edge（内置，免密钥）或 breeze（BreezeBlue 正式音色）；写错即非法并回落 edge
+      return normalizeTtsProvider(value) !== undefined;
+    case 'breezeApiKey':
+      // BreezeBlue 密钥：允许空串（= 未配置，运行期回落 edge）；非空时只接受无空格的可打印串。
+      // 首尾空白先 trim 再判——粘贴常带一个换行，那不是用户的错；中间有空白则一定是贴错了。
+      // 不校验前缀：上游前缀会变，写死 brz_ 只会在换格式时误伤。
+      if (typeof value !== 'string') return false;
+      return /^\S{0,512}$/.test(value.trim());
+    case 'breezeVoiceId':
+      // Breeze 音色 id：允许空串（= 用默认音色）；非空必须是 voc_ 形状（音色由用户在控制台自建，无法枚举）
+      return typeof value === 'string' && (value.trim() === '' || isBreezeVoiceId(value.trim()));
     case 'chatImageEnabled':
       return typeof value === 'boolean';
     case 'chatAnimationEnabled':

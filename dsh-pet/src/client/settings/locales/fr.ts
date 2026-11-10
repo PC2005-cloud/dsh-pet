@@ -172,6 +172,17 @@ export const fr: Record<Key, string> = {
   voiceNotifyEnabledHint:
     "Lit une réplique d'état de travail configurée quand une tâche se termine, échoue ou attend votre confirmation. Comme les notifications système, elle n'est lue que lorsque vous n'êtes pas sur cette page (autre application, sans focus, réduite) — aucune interruption pendant que vous regardez l'écran. Seule la réplique configurée est lue, jamais le détail de la tâche. Désactivé par défaut.",
   voiceNameLabel: 'Voix',
+  voiceProviderLabel: 'Source de synthèse',
+  voiceProviderHint:
+    'edge = la voix en ligne intégrée du plugin (aucune clé ; la voix est l’une des quatre intégrées ci-dessous) ; breeze = une vraie voix BreezeBlue (nécessite une clé d’API et un Voice ID créé là-bas). Par défaut edge — exactement le comportement d’avant cette option.',
+  'tts.edge': 'Voix intégrée (edge)',
+  'tts.breeze': 'Voix BreezeBlue',
+  breezeApiKeyLabel: 'Clé d’API Breeze',
+  breezeApiKeyHint:
+    'Votre clé BreezeBlue (de la forme brz_...). Vide = non configurée ; le plugin retombe alors sur edge intégré et laisse un avertissement dans le journal, plutôt que de laisser toute la chaîne vocale échouer en silence. Vous pouvez aussi laisser ce champ vide et utiliser la variable d’environnement BREEZE_API_KEY (elle est prioritaire). La clé n’est stockée que dans votre configuration utilisateur locale et n’est jamais livrée avec le plugin.',
+  breezeVoiceLabel: 'Breeze Voice ID',
+  breezeVoiceHint:
+    'L’id de la voix que vous avez créée dans la console BreezeBlue (de la forme voc_8yud7hz7c9q2). Vide = utiliser la voix par défaut du plugin. Les voix sont créées par vous dans la console et ne peuvent pas être énumérées : seule la forme est vérifiée, jamais une liste blanche.',
   voiceVolumeLabel: 'Volume',
   voiceVolumeHint:
     'Volume de lecture en décimal 0–1 : 1 correspond au volume maximal (100 %), 0 coupe le son. Seule l’intensité change et l’audio n’est pas resynthétisé, donc le régler ne coûte rien de plus. Les quatre types de parole partagent ce même volume.',
@@ -257,6 +268,18 @@ export const fr: Record<Key, string> = {
   chatImageLimitHint:
     'Nombre maximal de mèmes proposés au modèle pendant la discussion (« N premiers » = les N premières entrées de la configuration ; déplacez en tête celles que vous voulez voir partir en priorité). Toute la liste est jointe à chaque message et les tokens croissent linéairement avec le nombre, donc une longue liste coûte cher ; la limiter aux N premières restreint le choix du modèle à celles-là. 0 = aucune limite (tout envoyer). Valeur intégrée par défaut : 10. Valeur globale par défaut, partagée par tous les compagnons (un pet pack peut la remplacer dans son propre fichier de type). Discussion uniquement — un murmure ne porte que le mème tiré.',
   invalidChatImageLimit: "Vérifiez la limite d'images de discussion : il faut un nombre ≥ 0 (0 = aucune limite).",
+  replyLanguageLabel: 'Langue de réponse',
+  replyLanguageHint:
+    'La langue dans laquelle parle la mascotte : murmures, paroles de sommeil et réponses du chat partagent cette option. Vide (par défaut) = suivre l’utilisateur, exactement comme avant l’ajout de cette option. Une fois choisie, une ligne 【langue】 est ajoutée au prompt système et la même valeur est transmise à BreezeBlue comme language_code, pour que le texte et l’accent concordent toujours. Valeur globale par défaut, partagée par toutes les mascottes (un pet pack peut la remplacer dans son propre fichier).',
+  'lang.follow': 'Suivre l’utilisateur (par défaut)',
+  'lang.zh': 'Chinois (simplifié)',
+  'lang.en': 'Anglais',
+  'lang.ja': 'Japonais',
+  'lang.es': 'Espagnol',
+  'lang.fr': 'Français',
+  'lang.de': 'Allemand',
+  'lang.ru': 'Russe',
+  'lang.pt': 'Portugais',
   notifyTest: 'Tester la notification',
   notifyTestOk: 'Notification de test envoyée — regardez en bas à droite de votre bureau.',
   notifyDenyUnsupported:

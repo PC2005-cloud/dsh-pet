@@ -171,6 +171,17 @@ export const de: Record<Key, string> = {
   voiceNotifyEnabledHint:
     'Spricht eine konfigurierte Arbeitsstatus-Zeile, wenn eine Aufgabe abgeschlossen ist, fehlschlägt oder auf Ihre Bestätigung wartet. Wie Systembenachrichtigungen wird nur gesprochen, während Sie nicht auf dieser Seite sind (weggewechselt, ohne Fokus, minimiert) – keine Unterbrechung, während Sie auf den Bildschirm schauen. Nur die konfigurierte Zeile wird gesprochen, nie das Aufgabendetail. Standardmäßig aus.',
   voiceNameLabel: 'Stimme',
+  voiceProviderLabel: 'Synthesequelle',
+  voiceProviderHint:
+    'edge = die eingebaute Online-Stimme des Plugins (kein Schlüssel nötig; die Stimme ist eine der vier eingebauten unten); breeze = eine echte BreezeBlue-Stimme (braucht einen API-Schlüssel und eine dort erstellte Voice ID). Standard ist edge — genau das Verhalten vor dieser Option.',
+  'tts.edge': 'Eingebaute Stimme (edge)',
+  'tts.breeze': 'BreezeBlue-Stimme',
+  breezeApiKeyLabel: 'Breeze-API-Schlüssel',
+  breezeApiKeyHint:
+    'Dein BreezeBlue-Schlüssel (Form brz_...). Leer = nicht konfiguriert; das Plugin fällt dann auf die eingebaute edge-Stimme zurück und schreibt eine Warnung ins Log, statt die ganze Sprachkette stillschweigend ausfallen zu lassen. Du kannst das Feld auch leer lassen und stattdessen die Umgebungsvariable BREEZE_API_KEY setzen (sie hat Vorrang). Der Schlüssel liegt nur in deiner lokalen Benutzerkonfiguration und wird nie mit dem Plugin ausgeliefert.',
+  breezeVoiceLabel: 'Breeze Voice ID',
+  breezeVoiceHint:
+    'Die id der Stimme, die du in der BreezeBlue-Konsole erstellt hast (Form voc_8yud7hz7c9q2). Leer = Standardstimme des Plugins. Stimmen legst du selbst in der Konsole an, sie lassen sich nicht aufzählen — daher wird nur die Form geprüft, niemals eine Whitelist.',
   voiceVolumeLabel: 'Lautstärke',
   voiceVolumeHint:
     'Wiedergabelautstärke als Dezimalzahl 0–1: 1 ist die maximale Lautstärke (100 %), 0 ist stumm. Ändert nur die Lautheit und synthetisiert kein Audio neu, kostet also nichts extra. Alle vier Arten von Sprachausgabe teilen sich diese eine Lautstärke.',
@@ -253,6 +264,18 @@ export const de: Record<Key, string> = {
   chatImageLimitHint:
     'Wie viele Memes beim Chat höchstens an das Modell gelistet werden („erste N" = die ersten N in der Konfiguration; was bevorzugt gesendet werden soll, nach vorne verschieben). Die ganze Liste wird an jede Nachricht angehängt, Token wachsen linear mit der Anzahl – eine lange Liste kostet nur. Mit der Grenze auf die ersten N wählt das Modell nur daraus. 0 = keine Grenze (alles senden). Integrierter Standard 10. Globaler Standard für alle Pets (ein Pet-Pack kann ihn in seiner Art-Datei überschreiben). Nur Chat-Auswahl: Flüstern führt nur das gezogene Meme mit.',
   invalidChatImageLimit: 'Bitte das Limit für Chat-Bilder prüfen: Zahl ≥ 0 erforderlich (0 = keine Grenze).',
+  replyLanguageLabel: 'Antwortsprache',
+  replyLanguageHint:
+    'In welcher Sprache das Haustier spricht: Flüstern, Schlafgerede und Chat-Antworten teilen sich diese Option. Leer (Standard) = dem Benutzer folgen, genau wie vor dieser Option. Sobald gesetzt, kommt eine 【Sprache】-Zeile in den System-Prompt, und derselbe Wert geht als language_code an BreezeBlue — Text und Akzent passen so immer zusammen. Globaler Standard für alle Haustiere (ein pet pack kann ihn in seiner eigenen Datei überschreiben).',
+  'lang.follow': 'Dem Benutzer folgen (Standard)',
+  'lang.zh': 'Chinesisch (vereinfacht)',
+  'lang.en': 'Englisch',
+  'lang.ja': 'Japanisch',
+  'lang.es': 'Spanisch',
+  'lang.fr': 'Französisch',
+  'lang.de': 'Deutsch',
+  'lang.ru': 'Russisch',
+  'lang.pt': 'Portugiesisch',
   notifyTest: 'Testbenachrichtigung',
   notifyTestOk: 'Testbenachrichtigung gesendet – bitte unten rechts auf dem Desktop prüfen.',
   notifyDenyUnsupported:

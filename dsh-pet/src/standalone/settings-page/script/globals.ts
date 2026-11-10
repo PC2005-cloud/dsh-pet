@@ -32,14 +32,31 @@ function globalFlagsCard() {
 
 function voiceCard() {
   const g = state.globals;
-  return card('语音', '四类语音各一个开关，互不从属；音色与音量共用。', [
+  // Breeze 的两项只在选中 breeze 时插入：填了也不生效的输入框只会让人以为配置没保存。
+  const breezeRows = g.ttsProvider === 'breeze' ? [
+    textField('g-breeze-key', 'Breeze API Key', g.breezeApiKey, (value) => setGlobal('breezeApiKey', value), {
+      placeholder: 'brz_...',
+      hint: '留空 = 未配置，运行期回落内置 edge 并记一行告警。也可改用环境变量 BREEZE_API_KEY（优先）。',
+    }),
+    textField('g-breeze-voice', 'Breeze Voice ID', g.breezeVoiceId, (value) => setGlobal('breezeVoiceId', value), {
+      placeholder: 'voc_...',
+      hint: '留空 = 用插件内置默认音色。音色由你在 Breeze 控制台自建，插件无法枚举，只校验形状。',
+    }),
+  ] : [];
+  return card('语音', '四类语音各一个开关，互不从属；合成来源、音色与音量共用。', [
     toggleRow('g-voice', '手动播报', '右键菜单与斜杠命令触发的碎碎念、对话回复念出来。', g.voiceEnabled, (value) => setGlobal('voiceEnabled', value)),
+    selectField('g-tts-provider', '合成来源', g.ttsProvider,
+      [{ value: 'edge', label: '内置语音（edge）' }, { value: 'breeze', label: 'BreezeBlue 正式音色' }],
+      (value) => { setGlobal('ttsProvider', value); renderPetsPanel(); },
+      'edge = 免密钥的内置语音；breeze = BreezeBlue 正式音色（需要 API Key 与 Voice ID）。'
+    ),
+  ].concat(breezeRows, [
     selectField('g-voice-name', '音色', g.voiceName, VOICES.map((voice) => ({ value: voice.id, label: voice.name + ' · ' + voice.tag })), (value) => setGlobal('voiceName', value)),
     numberField('g-voice-volume', '音量（0–1）', g.voiceVolume, (value) => setGlobal('voiceVolume', clampNumber(value, 0, 1, 1)), { min: 0, max: 1, step: 0.05 }),
     toggleRow('g-voice-whisper', '周期碎碎念也念出来', '定时生成的那句碎碎念念出来。', g.voiceWhisperEnabled, (value) => setGlobal('voiceWhisperEnabled', value)),
     toggleRow('g-voice-todo', '待办提醒也念出来', '到点的待办提醒念出来。', g.voiceTodoEnabled, (value) => setGlobal('voiceTodoEnabled', value)),
     toggleRow('g-voice-notify', '通知播报', '任务完成、出错、等你确认时念一句配置的工作状态文案；页面被藏起来也照样念。', g.voiceNotifyEnabled, (value) => setGlobal('voiceNotifyEnabled', value)),
-  ]);
+  ]));
 }
 
 function fontCard() {
@@ -100,6 +117,13 @@ function modelCard() {
       numberField('g-memory', '对话记忆轮数', g.chatMemoryRounds, (value) => setGlobal('chatMemoryRounds', Math.round(clampNumber(value, 0, 100, 0))), { min: 0, max: 100, step: 1, hint: '0 表示不带历史。' }),
       numberField('g-image-limit', '配图张数上限', g.chatImageLimit, (value) => setGlobal('chatImageLimit', Math.round(clampNumber(value, 0, 50, 0))), { min: 0, max: 50, step: 1, hint: '0 表示不限制。' }),
     ]),
+    selectField('g-reply-language', '回复语言', g.replyLanguage,
+      [{ value: '', label: '跟随用户（默认）' }].concat(
+        REPLY_LANGUAGES.map((id) => ({ value: id, label: REPLY_LANGUAGE_LABELS[id] || id }))
+      ),
+      (value) => setGlobal('replyLanguage', value),
+      '碎碎念、梦话与对话回复共用这一项；留空 = 跟随用户。语音播报也用它当 BreezeBlue 的 language_code。'
+    ),
   ]);
 }
 

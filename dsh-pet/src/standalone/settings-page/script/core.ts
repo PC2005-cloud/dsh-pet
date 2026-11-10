@@ -12,6 +12,14 @@
 export interface ScriptConsts {
   /** 音色白名单（来自 host/voice/voices.ts）。 */
   readonly voices: readonly { readonly id: string; readonly name: string; readonly tag: string }[];
+  /** 可选合成来源（来自 shared/voice-provider.ts）。 */
+  readonly ttsProviders: readonly string[];
+  /** 可选回复语言（来自 shared/reply-language.ts；不含「跟随用户」）。 */
+  readonly replyLanguages: readonly string[];
+  /** 回复语言的中文称呼（来自 shared/reply-language.ts）：下拉标签与提示词共用一份。 */
+  readonly replyLanguageLabels: Readonly<Record<string, string>>;
+  /** BreezeBlue 默认音色（来自 shared/voice-provider.ts）。 */
+  readonly breezeVoiceId: string;
   /** 字体预设 id（来自 shared/fonts.ts）。 */
   readonly fonts: readonly string[];
   /** 显示档（来自 shared/config.ts）。 */
@@ -39,6 +47,10 @@ const TOKEN = new URLSearchParams(location.hash.slice(1)).get('token') || '';
 history.replaceState(null, '', location.pathname);
 const API = ${JSON.stringify(routePath)};
 const VOICES = ${JSON.stringify(consts.voices)};
+const TTS_PROVIDERS = ${JSON.stringify(consts.ttsProviders)};
+const REPLY_LANGUAGES = ${JSON.stringify(consts.replyLanguages)};
+const REPLY_LANGUAGE_LABELS = ${JSON.stringify(consts.replyLanguageLabels)};
+const BREEZE_DEFAULT_VOICE = ${JSON.stringify(consts.breezeVoiceId)};
 const FONT_IDS = ${JSON.stringify(consts.fonts)};
 const DISPLAYS = ${JSON.stringify(consts.displays)};
 const CORNERS = ${JSON.stringify(consts.corners)};

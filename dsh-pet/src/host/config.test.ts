@@ -1568,3 +1568,57 @@ describe('removeRoundsByTs —— 按轮删除（一轮两条共享 ts，成对�
     assert.equal(r.removed, 4);
   });
 });
+describe('saveUserConfig —— 回复语言与 Breeze 四项（白名单 + 透传保留）', () => {
+  test('随请求体写入（设置页的回复语言下拉与 Breeze 两组输入）', () => {
+    const out = saveOnce({
+      pets: PETS,
+      replyLanguage: 'ja',
+      ttsProvider: 'breeze',
+      breezeApiKey: 'brz_test',
+      breezeVoiceId: 'voc_aaaabbbb',
+    });
+    assert.equal(out?.replyLanguage, 'ja');
+    assert.equal(out?.ttsProvider, 'breeze');
+    assert.equal(out?.breezeApiKey, 'brz_test');
+    assert.equal(out?.breezeVoiceId, 'voc_aaaabbbb');
+  });
+
+  test('空串是合法值：跟随用户 / 未配置密钥 / 用默认音色', () => {
+    const out = saveOnce({ pets: PETS, replyLanguage: '', breezeApiKey: '', breezeVoiceId: '' });
+    assert.equal(out?.replyLanguage, '', '空串不能被当成「没传」而走透传');
+    assert.equal(out?.breezeApiKey, '');
+    assert.equal(out?.breezeVoiceId, '');
+  });
+
+  test('密钥与音色 trim 后落盘（粘贴带进来的首尾空白不该变成鉴权失败）', () => {
+    const out = saveOnce({ pets: PETS, breezeApiKey: '  brz_x  ', breezeVoiceId: '  voc_aaaabbbb  ' });
+    assert.equal(out?.breezeApiKey, 'brz_x');
+    assert.equal(out?.breezeVoiceId, 'voc_aaaabbbb');
+  });
+
+  test('未传时透传磁盘旧值；磁盘上也没有则不凭空造字段', () => {
+    const kept = saveOnce({ pets: PETS }, { pets: PETS, replyLanguage: 'en', ttsProvider: 'breeze' });
+    assert.equal(kept?.replyLanguage, 'en', '未传时必须原样保留磁盘上的手改值');
+    assert.equal(kept?.ttsProvider, 'breeze');
+    const fresh = saveOnce({ pets: PETS }) ?? {};
+    for (const key of ['replyLanguage', 'ttsProvider', 'breezeApiKey', 'breezeVoiceId']) {
+      assert.equal(key in fresh, false, '磁盘上也没有时不得凭空写入');
+    }
+  });
+
+  test('非法值 → 整体拒绝（与读取侧 topFieldValid 同一套规则）', () => {
+    const bad: Array<[string, Record<string, unknown>]> = [
+      ['回复语言越界', { replyLanguage: 'zh-CN' }],
+      ['回复语言非字符串', { replyLanguage: 42 }],
+      ['来源越界', { ttsProvider: 'azure' }],
+      ['密钥带空白', { breezeApiKey: 'brz a' }],
+      ['密钥过长', { breezeApiKey: 'k'.repeat(513) }],
+      ['密钥非字符串', { breezeApiKey: 42 }],
+      ['音色不符合 voc_ 形状', { breezeVoiceId: 'zh-CN-XiaoxiaoNeural' }],
+      ['音色非字符串', { breezeVoiceId: {} }],
+    ];
+    for (const [name, extra] of bad) {
+      assert.equal(saveOnce({ pets: PETS, ...extra }), null, `${name} 必须被拒绝`);
+    }
+  });
+});

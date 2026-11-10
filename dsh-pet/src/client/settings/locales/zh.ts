@@ -159,6 +159,17 @@ export const zh = {
   voiceNotifyEnabledHint:
     '任务完成、出错、等你确认时念一句该档位配置的工作状态文案。和系统通知同一取向：用户不在本页（切走、失焦、最小化）时才念，正看着屏幕时不打扰。只念配置里的台词，不念任务详情。默认关闭。',
   voiceNameLabel: '音色',
+  voiceProviderLabel: '合成来源',
+  voiceProviderHint:
+    'edge = 插件自带在线语音（免密钥，音色是下面四个内置音色）；breeze = BreezeBlue 的正式音色（要填 API Key 与你自建的 Voice ID）。默认 edge，与加这一项之前完全一致。',
+  'tts.edge': '内置语音（edge）',
+  'tts.breeze': 'BreezeBlue 正式音色',
+  breezeApiKeyLabel: 'Breeze API Key',
+  breezeApiKeyHint:
+    'BreezeBlue 的密钥（形如 brz_...）。留空 = 未配置，此时会回落内置 edge 并在日志里留一行告警，不会让整条语音链静默失效。也可以不填这里，改用环境变量 BREEZE_API_KEY（环境变量优先）。密钥只存在本机用户配置里，不会随插件提交。',
+  breezeVoiceLabel: 'Breeze Voice ID',
+  breezeVoiceHint:
+    '你在 BreezeBlue 控制台自建的音色 id（形如 voc_8yud7hz7c9q2）。留空 = 用插件内置默认音色。音色由你在控制台自建，插件无法枚举，所以只校验形状、不做白名单。',
   voiceVolumeLabel: '音量',
   voiceVolumeHint:
     '播报音量，0–1 的小数：1 是最大音量（100%），0 是静音。只改播放响度，不会重新合成音频，调它不额外花钱。四类语音共用这一个音量。',
@@ -232,6 +243,18 @@ export const zh = {
   chatImageLimitHint:
     '对话时发给模型的表情包清单最多几张（「前 N 张」= 配置里写在前面的那 N 条，想让哪几张优先被发出去就把顺序往前挪）。整张清单是每条消息都要附的，token 随张数线性增长——张数一多就是纯烧钱，限制成前 N 张，模型只从这几张里挑。0 = 不限制（全部发）。内置默认 10。全局默认，所有宠物共用（pet pack 可在自己种类文件里覆盖）。只影响对话选图：碎碎念只带抽中的那一张。',
   invalidChatImageLimit: '请检查对话配图张数上限：需为 ≥ 0 的数字（0 = 不限制）。',
+  replyLanguageLabel: '回复语言',
+  replyLanguageHint:
+    '桌宠说话用哪种语言：碎碎念、梦话与对话回复共用这一项。留空（默认）= 跟随用户，行为与加这一项之前完全一致。选定后会把一条【语言】要求加进 system 提示词；语音播报也用它当 BreezeBlue 的 language_code，文字与口音不会不一致。全局默认，所有宠物共用（pet pack 可在自己种类文件里覆盖）。',
+  'lang.follow': '跟随用户（默认）',
+  'lang.zh': '简体中文',
+  'lang.en': '英语',
+  'lang.ja': '日语',
+  'lang.es': '西班牙语',
+  'lang.fr': '法语',
+  'lang.de': '德语',
+  'lang.ru': '俄语',
+  'lang.pt': '葡萄牙语',
   notifyTest: '测试弹窗',
   notifyTestOk: '测试通知已发送，请查看桌面右下角。',
   notifyDenyUnsupported: '当前环境不支持系统通知（浏览器无 Notification API）。',

@@ -1877,8 +1877,9 @@ paths:
           `whisperEnabled`/`workStatusEnabled`/`fixedEnabled`/`display`/`position`，以及顶层
           `notificationsEnabled`/`clickSoundEnabled`/`whisperImageEnabled`/`chatImageEnabled`/
           `chatAnimationEnabled`/`confineToScreen`/`trayEnabled`/`voiceEnabled`/`voiceName`/`voiceWhisperEnabled`/
-          `voiceTodoEnabled`/`voiceNotifyEnabled`/`physics`/`font`/`whisperModel`/`chatModel`/`chatMemoryRounds`/
-          `chatImageLimit`。
+          `voiceTodoEnabled`/`voiceNotifyEnabled`/`voiceVolume`/`replyLanguage`/`ttsProvider`/`breezeApiKey`/
+          `breezeVoiceId`/`physics`/`font`/`whisperModel`/`chatModel`/`chatMemoryRounds`/`chatImageLimit`/
+          `animationWeights`。
           其余字段会沿用磁盘上用户文件里的原值（透传保留），所以设置页保存
           **不会抹掉**你手写的精调配置（`whisperPrompt`/`memes`/`eventsRefreshSec` 等）。
           白名单字段也只在请求体**真的传了**时才算白名单：没传就走透传，不会被抹成默认值。
@@ -2447,7 +2448,12 @@ paths:
                   maxLength: 500
                 voice:
                   type: string
-                  description: 音色 id，必须来自 `/voice/voices`；缺省 `zh-CN-XiaoxiaoNeural`。
+                  description: |
+                    音色 id。合法域跟随配置里的 `ttsProvider`：`edge`（默认）时必须是 `/voice/voices`
+                    里的四个中文音色之一，缺省 `zh-CN-XiaoxiaoNeural`；`breeze` 时改为 `voc_` 形状的
+                    BreezeBlue 音色 id，缺省用配置的 `breezeVoiceId`；此模式下若传的是 edge 白名单音色
+                    （端上按配置原样回传 `voiceName` 就会这样），按「未指定」处理而不是报错。
+                    第三方实现注册后整段忽略本字段（嗓子由它自己决定），但非法值仍按 `bad-request` 拒绝。
                 rate:
                   type: string
                   description: prosody 语速表达式，如 `+0%` / `-10%`；允许 -50%..+100%，缺省 `+0%`。
@@ -2484,7 +2490,10 @@ paths:
       tags: [Voice]
       operationId: getVoices
       summary: 列出可用音色
-      description: 与 `/voice/speak` 的白名单同源；前端据此渲染音色选择器，不要硬编码 id。
+      description: |
+        与 `/voice/speak` 在 `ttsProvider=edge` 时的白名单同源；前端据此渲染音色选择器，不要硬编码 id。
+        这份清单只含内置语音的音色：`ttsProvider=breeze` 时音色由用户在 Breeze 控制台自建，
+        插件无法枚举，设置页改为让用户直接填 Voice ID。
       responses:
         "200":
           description: 音色列表。
@@ -4393,8 +4402,9 @@ components:
         voiceName:
           type: string
           description: |
-            音色 id，白名单为 `/voice/voices` 里的四个中文音色之一；写错或留空即配置错误，
-            告警并回落到 `zh-CN-XiaoyiNeural`。设置页「语音播报」卡的音色下拉写的就是它。
+            音色 id。合法域跟随 `ttsProvider`：`edge` 时必须是 `/voice/voices` 里的四个中文音色之一，
+            写错或留空即配置错误，告警并回落到 `zh-CN-XiaoyiNeural`；`breeze` 时改为 BreezeBlue 的
+            `voc_` 形状（见 `breezeVoiceId`，通常留空即可）。设置页「语音播报」卡的音色下拉写的就是它。
         voiceVolume:
           type: number
           minimum: 0
@@ -4418,6 +4428,36 @@ components:
             工作状态播报要不要念出来（全局默认）：任务完成 / 出错 / 等你确认时念一句该档位配置的
             工作状态文案；和系统通知同一取向，用户不在本页时才念。只念配置的台词，不念 `task`。
             设置页「语音播报」卡里的「通知播报」开关写的就是它。缺失默认 `false`。
+        replyLanguage:
+          type: string
+          description: |
+            回复语言（全局默认）：碎碎念、梦话与对话回复共用的语言。空串 = 跟随用户（默认，行为不变），
+            其余取值为 ISO 639-1：`zh`/`en`/`ja`/`es`/`fr`/`de`/`ru`/`pt`。
+            非空时会在 system 提示词里追加一行【语言】，并同时作为 BreezeBlue 的 `language_code`。
+            写错即配置错误，告警并回落到跟随用户。设置页「AI 模型与对话上下文」卡的下拉写的就是它。
+          enum: ["", zh, en, ja, es, fr, de, ru, pt]
+        ttsProvider:
+          type: string
+          description: |
+            语音合成来源（全局默认）：`edge` = 内置在线语音（免密钥，默认）；`breeze` = BreezeBlue 正式音色
+            （需要 `breezeApiKey` 或环境变量 `BREEZE_API_KEY`）。写错即配置错误并回落 `edge`；
+            选了 `breeze` 但没配密钥时运行期回落 `edge` 并记一行告警，不会让整条语音链静默失效。
+            第三方经 Cordis 注册的实现优先级高于两者，注册后本字段不改变实际来源。
+        breezeApiKey:
+          type: string
+          description: |
+            BreezeBlue 的 API key。空串 = 未配置（默认，运行期回落 `edge`）；首尾空白会 trim 后使用，
+            中间不得有空白，长度上限 512。不校验前缀（上游前缀可能变）。
+            环境变量 `BREEZE_API_KEY` 优先于这里的值——临时验证或 CI 不必改盘上配置。
+            这是密钥：读取接口不会回显，日志与错误信息里也不会出现。**不要把它提交进仓库。**
+          maxLength: 512
+        breezeVoiceId:
+          type: string
+          description: |
+            BreezeBlue 的音色 id，形状为 `voc_` + 字母数字（如 `voc_8yud7hz7c9q2`）。
+            空串 = 使用插件内置默认音色（即上面这个 id）。音色由用户在 Breeze 控制台自建，插件无法枚举，
+            因此只做形状校验、不做白名单。
+          pattern: "^$|^voc_[A-Za-z0-9]{4,64}$"
         chatMemoryRounds:
           type: integer
           minimum: 0

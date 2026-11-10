@@ -9,6 +9,12 @@ import { ROUTE_PATH } from '../shared/constants.ts';
 import { avatarUrl } from '../shared/avatar.ts';
 import { DEFAULT_FONT } from '../shared/fonts.ts';
 import { DEFAULT_PHYSICS } from '../shared/physics.ts';
+import {
+  BREEZE_DEFAULT_VOICE_ID,
+  DEFAULT_TTS_PROVIDER,
+  normalizeTtsProvider,
+  type TtsProvider,
+} from '../shared/voice-provider.ts';
 import type { FontConfig, ModelSelection, PhysicsParams, Weights } from '../shared/types.ts';
 import type { FunctionComponent } from 'react';
 import { requestNotificationPermission } from './notify.ts';
@@ -159,6 +165,13 @@ export function makePetConfigSection(
     const [voiceWhisperEnabled, setVoiceWhisperEnabled] = useState(false);
     const [voiceTodoEnabled, setVoiceTodoEnabled] = useState(false);
     const [voiceNotifyEnabled, setVoiceNotifyEnabled] = useState(false);
+    // 合成来源（edge / breeze）与 BreezeBlue 参数：与音色同属语音配置，随「保存」整包写入。
+    // 初值即内置默认，加载成功后由成品值覆盖；来源非法时按 edge 显示，不把脏值回写。
+    const [ttsProvider, setTtsProvider] = useState<TtsProvider>(DEFAULT_TTS_PROVIDER);
+    const [breezeApiKey, setBreezeApiKey] = useState('');
+    const [breezeVoiceId, setBreezeVoiceId] = useState(BREEZE_DEFAULT_VOICE_ID);
+    // 回复语言（全局默认）：空串 = 跟随用户，行为与加这个字段之前完全一致。
+    const [replyLanguage, setReplyLanguage] = useState('');
     // 可选音色：来自宿主 /voice/voices，拉不到就留空——下拉只显示当前值，绝不硬编码音色 id。
     const [voiceOptions, setVoiceOptions] = useState<VoiceOption[]>([]);
     // 物理参数（全局）：只改本地状态，随「保存」整包写入；初值仅占位，成品加载成功后才允许编辑与保存。
@@ -200,6 +213,12 @@ export function makePetConfigSection(
         if (patch.voiceWhisperEnabled !== undefined) setVoiceWhisperEnabled(patch.voiceWhisperEnabled);
         if (patch.voiceTodoEnabled !== undefined) setVoiceTodoEnabled(patch.voiceTodoEnabled);
         if (patch.voiceNotifyEnabled !== undefined) setVoiceNotifyEnabled(patch.voiceNotifyEnabled);
+        // 来源走一次归一化：成品里理论上已合法，但读回脏值时按 edge 显示好过让下拉空着
+        if (patch.ttsProvider !== undefined)
+          setTtsProvider(normalizeTtsProvider(patch.ttsProvider) ?? DEFAULT_TTS_PROVIDER);
+        if (patch.breezeApiKey !== undefined) setBreezeApiKey(patch.breezeApiKey);
+        if (patch.breezeVoiceId !== undefined) setBreezeVoiceId(patch.breezeVoiceId || BREEZE_DEFAULT_VOICE_ID);
+        if (patch.replyLanguage !== undefined) setReplyLanguage(patch.replyLanguage);
         if (patch.physics !== undefined) setPhysics(patch.physics);
         if (patch.font !== undefined) setFont(patch.font);
         if (patch.animationWeights !== undefined) setWeights(patch.animationWeights);
@@ -313,6 +332,10 @@ export function makePetConfigSection(
         voiceWhisperEnabled,
         voiceTodoEnabled,
         voiceNotifyEnabled,
+        ttsProvider,
+        breezeApiKey,
+        breezeVoiceId,
+        replyLanguage,
         physics,
         whisperModel,
         chatModel,
@@ -393,6 +416,9 @@ export function makePetConfigSection(
           busy,
           enabled: voiceEnabled,
           voiceName,
+          provider: ttsProvider,
+          breezeApiKey,
+          breezeVoiceId,
           volume: voiceVolume,
           voices: voiceOptions,
           whisperEnabled: voiceWhisperEnabled,
@@ -400,6 +426,9 @@ export function makePetConfigSection(
           notifyEnabled: voiceNotifyEnabled,
           onToggle: setVoiceEnabled,
           onVoiceChange: setVoiceName,
+          onProviderChange: setTtsProvider,
+          onBreezeApiKeyChange: setBreezeApiKey,
+          onBreezeVoiceIdChange: setBreezeVoiceId,
           onVolumeChange: setVoiceVolume,
           onWhisperToggle: setVoiceWhisperEnabled,
           onTodoToggle: setVoiceTodoEnabled,
@@ -415,8 +444,10 @@ export function makePetConfigSection(
           onModelChange: setModel,
           chatMemory,
           chatImageLimit,
+          replyLanguage,
           onChatMemoryChange: setChatMemory,
           onChatImageLimitChange: setChatImageLimit,
+          onReplyLanguageChange: setReplyLanguage,
           values: chatFlags,
           onFlagChange: setChatFlag,
         }),

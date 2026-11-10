@@ -242,6 +242,8 @@ describe('buildSaveBody —— 请求体字段', () => {
     } as unknown as SaveFields;
     assert.deepEqual(Object.keys(buildSaveBody(fields)).sort(), [
       'animationWeights',
+      'breezeApiKey',
+      'breezeVoiceId',
       'chatAnimationEnabled',
       'chatImageEnabled',
       'chatImageLimit',
@@ -253,7 +255,9 @@ describe('buildSaveBody —— 请求体字段', () => {
       'notificationsEnabled',
       'pets',
       'physics',
+      'replyLanguage',
       'trayEnabled',
+      'ttsProvider',
       'voiceEnabled',
       'voiceName',
       'voiceNotifyEnabled',
@@ -281,10 +285,18 @@ describe('buildSaveBody —— 请求体字段', () => {
       chatMemoryRounds: 0,
       chatImageLimit: 3,
       font: { size: 20 },
+      replyLanguage: 'en',
+      ttsProvider: 'breeze',
+      breezeApiKey: 'brz_test',
+      breezeVoiceId: 'voc_8yud7hz7c9q2',
     } as unknown as SaveFields;
     const body = buildSaveBody(fields);
     assert.equal(body.chatMemoryRounds, 0);
     assert.deepEqual(body.physics, { gravity: 3 });
     assert.equal(body.notificationsEnabled, false);
+    assert.equal(body.replyLanguage, 'en');
+    assert.equal(body.ttsProvider, 'breeze');
+    assert.equal(body.breezeApiKey, 'brz_test');
+    assert.equal(body.breezeVoiceId, 'voc_8yud7hz7c9q2');
   });
 });

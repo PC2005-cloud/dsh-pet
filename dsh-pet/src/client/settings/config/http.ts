@@ -49,6 +49,14 @@ export interface SaveFields {
   voiceTodoEnabled: boolean;
   /** 工作状态播报要不要念出来（任务完成 / 出错 / 等确认时念一句配置台词）。 */
   voiceNotifyEnabled: boolean;
+  /** 回复语言：空串 = 跟随用户，其余为 ISO 639-1。 */
+  replyLanguage: string;
+  /** 合成来源：edge 或 breeze。 */
+  ttsProvider: string;
+  /** BreezeBlue 密钥（空串 = 未配置）。 */
+  breezeApiKey: string;
+  /** BreezeBlue 音色 id（空串 = 用插件默认）。 */
+  breezeVoiceId: string;
   physics: PhysicsParams;
   whisperModel: ModelSelection;
   chatModel: ModelSelection;
@@ -88,6 +96,10 @@ export function buildSaveBody(fields: SaveFields): Record<string, unknown> {
     voiceWhisperEnabled: fields.voiceWhisperEnabled,
     voiceTodoEnabled: fields.voiceTodoEnabled,
     voiceNotifyEnabled: fields.voiceNotifyEnabled,
+    replyLanguage: fields.replyLanguage,
+    ttsProvider: fields.ttsProvider,
+    breezeApiKey: fields.breezeApiKey,
+    breezeVoiceId: fields.breezeVoiceId,
     physics: fields.physics,
     whisperModel: fields.whisperModel,
     chatModel: fields.chatModel,
