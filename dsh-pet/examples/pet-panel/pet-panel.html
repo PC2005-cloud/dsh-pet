@@ -22,8 +22,9 @@
   .pet { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px; }
   .pet.off { opacity:.55; }
   .pet .top { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
-  .pet .avatar { width:44px; height:44px; border-radius:8px; background:linear-gradient(135deg,var(--accent),#c46bff); display:flex; align-items:center; justify-content:center; font-size:16px; overflow:hidden; flex-shrink:0; }
+  .pet .avatar { width:44px; height:44px; border-radius:8px; background:linear-gradient(135deg,var(--accent),#c46bff); display:flex; align-items:center; justify-content:center; font-size:16px; overflow:hidden; flex-shrink:0; position:relative; cursor:pointer; }
   .pet .avatar img { width:100%; height:100%; object-fit:cover; }
+  .pet .avatar .badge { position:absolute; right:0; top:0; background:var(--accent); color:#fff; font-size:10px; padding:1px 4px; border-radius:0 0 0 6px; }
   .pet .name { font-weight:700; font-size:15px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .pet .id { font-size:11px; color:var(--dim); margin-left:auto; }
   .pet .row { display:flex; align-items:center; justify-content:space-between; font-size:13px; margin:6px 0; }
@@ -44,6 +45,20 @@
   .footer { color:var(--dim); font-size:12px; margin-top:30px; text-align:center; }
   .toast { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:#333; color:#fff; padding:10px 18px; border-radius:8px; font-size:14px; opacity:0; transition:.3s; z-index:99; }
   .toast.show { opacity:1; }
+  .modal { position:fixed; inset:0; background:rgba(0,0,0,.55); display:flex; align-items:center; justify-content:center; z-index:100; }
+  .modal-box { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:18px; width:min(420px,92vw); max-height:80vh; overflow:auto; }
+  .modal-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
+  .modal-head .x { padding:2px 8px; }
+  .icon-current { display:flex; align-items:center; gap:10px; margin-bottom:12px; }
+  .icon-current img { width:64px; height:64px; border-radius:10px; object-fit:cover; background:var(--line); }
+  .icon-current span { font-size:12px; color:var(--dim); }
+  .icon-actions { display:flex; gap:8px; margin-bottom:12px; }
+  .icon-actions .btn { cursor:pointer; }
+  .icon-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; max-height:280px; overflow:auto; }
+  .icon-grid img { width:100%; aspect-ratio:1; object-fit:cover; border-radius:8px; cursor:pointer; border:2px solid transparent; }
+  .icon-grid img:hover { border-color:var(--accent); }
+  .icon-grid img.sel { border-color:var(--accent); }
+  .dim { color:var(--dim); font-size:12px; grid-column:1/-1; }
   .formrow { display:flex; gap:8px; }
   .formrow input { flex:1; }
   .chatbox input[type=text], .chatbox textarea { background:#1f1a30; border:1px solid var(--line); color:var(--text); padding:8px 10px; border-radius:8px; font-size:14px; box-sizing:border-box; }
@@ -109,6 +124,19 @@
 </div>
 <div class="toast" id="toast"></div>
 
+<div class="modal" id="iconModal" style="display:none">
+  <div class="modal-box">
+    <div class="modal-head"><b>自定义图标 — <span id="iconPetName"></span></b><button class="btn x" onclick="closeIconEditor()">✕</button></div>
+    <div class="icon-current"><img id="iconPreview" alt="当前图标"><span>点击头像即可修改</span></div>
+    <div class="icon-actions">
+      <label class="btn">上传图片<input type="file" id="iconFile" accept="image/*" style="display:none" onchange="iconUpload(this)"></label>
+      <button class="btn" onclick="iconReset()">恢复默认</button>
+    </div>
+    <div class="icon-grid" id="iconGrid"><span class="dim">加载配图中…</span></div>
+    <div class="footnote">点下面任意一张配图设为图标；也可上传本地图片。</div>
+  </div>
+</div>
+
 <script>
 let PETS = [];
 const $ = (id) => document.getElementById(id);
@@ -144,7 +172,7 @@ function renderPets() {
     const on = p.display !== 'none';
     card.innerHTML = `
       <div class="top">
-        <div class="avatar"><img src="/api/preview/${esc(p.id)}" onerror="this.style.display='none'" alt="${esc(p.name)}"></div>
+        <div class="avatar" title="点击自定义图标" onclick="openIconEditor('${esc(p.id)}','${esc(p.name)}')"><img src="/api/preview/${esc(p.id)}" onerror="this.style.display='none'" alt="${esc(p.name)}">${p.hasCustomIcon ? '<span class="badge">✎</span>' : ''}</div>
         <div class="name">${esc(p.name)}</div>
         <div class="id">${esc(p.id)}</div>
       </div>
@@ -243,6 +271,74 @@ async function setFlag(key, on) {
     setTimeout(loadPets, 1200);
   } catch (e) { toast('错误: ' + e.message); }
   finally { busy = false; }
+}
+
+// ===== 图标自定义 =====
+let iconPetId = null;
+async function openIconEditor(id, name) {
+  iconPetId = id;
+  $('iconPetName').textContent = name + '（' + id + '）';
+  $('iconPreview').src = '/api/preview/' + encodeURIComponent(id) + '?t=' + Date.now();
+  $('iconModal').style.display = 'flex';
+  const g = $('iconGrid');
+  g.innerHTML = '<span class="dim">加载配图中…</span>';
+  try {
+    const r = await fetch('/api/icon-memes/' + encodeURIComponent(id));
+    const j = await r.json();
+    g.innerHTML = '';
+    if (!j.memes || j.memes.length === 0) { g.innerHTML = '<span class="dim">该桌宠没有配图，可上传本地图片。</span>'; return; }
+    for (const m of j.memes) {
+      const im = document.createElement('img');
+      im.src = '/api/preview/' + encodeURIComponent(id) + '?meme=' + encodeURIComponent(m) + '&t=' + Date.now();
+      im.title = m;
+      im.onerror = () => im.remove();
+      im.onclick = () => iconPick(m);
+      g.appendChild(im);
+    }
+  } catch (e) { g.innerHTML = '<span class="dim">加载失败: ' + esc(e.message) + '</span>'; }
+}
+function closeIconEditor() { $('iconModal').style.display = 'none'; iconPetId = null; }
+
+async function iconPick(name) {
+  if (!iconPetId) return;
+  try {
+    const r = await fetch('/api/icon/' + encodeURIComponent(iconPetId) + '/meme', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) });
+    const j = await r.json();
+    if (j.ok === false) { toast('设置失败: ' + (j.message || '')); return; }
+    toast('已设为图标：' + name);
+    $('iconPreview').src = '/api/preview/' + encodeURIComponent(iconPetId) + '?t=' + Date.now();
+    await loadPets(true);
+  } catch (e) { toast('错误: ' + e.message); }
+}
+
+async function iconUpload(input) {
+  const f = input.files && input.files[0];
+  if (!f || !iconPetId) return;
+  const reader = new FileReader();
+  reader.onload = async () => {
+    try {
+      const r = await fetch('/api/icon/' + encodeURIComponent(iconPetId), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ data: reader.result, ext: '.' + (f.name.split('.').pop() || 'png').toLowerCase() }) });
+      const j = await r.json();
+      if (j.ok === false) { toast('上传失败: ' + (j.message || '')); return; }
+      toast('已上传自定义图标');
+      $('iconPreview').src = '/api/preview/' + encodeURIComponent(iconPetId) + '?t=' + Date.now();
+      await loadPets(true);
+    } catch (e) { toast('错误: ' + e.message); }
+  };
+  reader.readAsDataURL(f);
+  input.value = '';
+}
+
+async function iconReset() {
+  if (!iconPetId) return;
+  try {
+    const r = await fetch('/api/icon/' + encodeURIComponent(iconPetId), { method: 'DELETE' });
+    const j = await r.json();
+    if (j.ok === false) { toast('恢复失败: ' + (j.message || '')); return; }
+    toast('已恢复默认图标');
+    $('iconPreview').src = '/api/preview/' + encodeURIComponent(iconPetId) + '?t=' + Date.now();
+    await loadPets(true);
+  } catch (e) { toast('错误: ' + e.message); }
 }
 
 async function loadFlags() {

@@ -91,6 +91,17 @@ function firstPetImage(id) {
   return null;
 }
 
+// 自定义图标路径：pet/<id>-icon.<ext>（存在则优先于默认首图）
+function customIconPath(id) {
+  for (const ext of ['.png', '.webp', '.gif', '.jpg', '.jpeg']) {
+    const f = path.join(PET_DIR, id + '-icon' + ext);
+    if (fs.existsSync(f)) return f;
+  }
+  return null;
+}
+function iconImage(id) { return customIconPath(id) || firstPetImage(id); }
+function hasCustomIcon(id) { return Boolean(customIconPath(id)); }
+
 // 修改宠物大小：main 宠直接改 main-config.jsonc（保注释），其他宠改 pet/<id>-config.json
 function setPetSize(id, size) {
   size = Math.max(50, Math.min(600, parseInt(size, 10)));
@@ -150,13 +161,19 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // API: 宠物预览图——返回该宠第一张 AI娘配图（pet/<id>-memes/ 下的图）
+  // API: 宠物预览图——优先自定义图标，其次第一张 AI娘配图；?meme=<名> 可显示指定配图
   if (p.startsWith('/api/preview/')) {
     const petId = decodeURIComponent(p.slice('/api/preview/'.length));
-    const img = firstPetImage(petId);
+    let img = null;
+    const meme = url.searchParams.get('meme');
+    if (meme) {
+      const f = path.join(PET_DIR, petId + '-memes', path.basename(meme));
+      if (fs.existsSync(f)) img = f;
+    }
+    if (!img) img = iconImage(petId);
     if (!img) { res.writeHead(404, { 'content-type': 'text/plain' }); res.end('no preview'); return; }
     const ext = path.extname(img).toLowerCase();
-    const type = ext === '.webp' ? 'image/webp' : ext === '.gif' ? 'image/gif' : 'image/png';
+    const type = ext === '.webp' ? 'image/webp' : ext === '.gif' ? 'image/gif' : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : 'image/png';
     fs.readFile(img, (err, data) => {
       if (err) { res.writeHead(404, { 'content-type': 'text/plain' }); res.end('read fail'); return; }
       res.writeHead(200, { 'content-type': type, 'Cache-Control': 'no-cache' });
@@ -167,8 +184,72 @@ const server = http.createServer(async (req, res) => {
 
   // API: 宠物列表（直接读配置文件）
   if (p === '/api/pets') {
+    const pets = readPets().map((x) => ({ ...x, hasCustomIcon: hasCustomIcon(x.id) }));
     res.writeHead(200, { 'content-type': 'application/json' });
-    res.end(JSON.stringify({ pets: readPets() }));
+    res.end(JSON.stringify({ pets }));
+    return;
+  }
+
+  // API: 自定义图标——上传/选图/删除
+  //   GET  /api/icon-memes/<id>         列出该宠可选配图（文件名列表）
+  //   POST /api/icon/<id>               body { data: base64, ext: 'png' } 保存自定义图标
+  //   POST /api/icon/<id>/meme          body { name: 'xxx.png' } 用配图作图标（复制到 <id>-icon）
+  //   DELETE /api/icon/<id>             删除自定义图标（恢复默认首图）
+  if (p.startsWith('/api/icon-memes/')) {
+    const id = decodeURIComponent(p.slice('/api/icon-memes/'.length));
+    const dir = path.join(PET_DIR, id + '-memes');
+    let list = [];
+    try { list = fs.readdirSync(dir).filter((f) => /\.(png|webp|gif|jpg|jpeg)$/i.test(f)).sort(); } catch (e) { /* 无图 */ }
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ ok: true, memes: list }));
+    return;
+  }
+  if (p.startsWith('/api/icon/')) {
+    const rest = p.slice('/api/icon/'.length);
+    const slash = rest.indexOf('/');
+    const id = decodeURIComponent(slash === -1 ? rest : rest.slice(0, slash));
+    const sub = slash === -1 ? '' : rest.slice(slash + 1);
+    const body = await new Promise((r) => { let d = ''; req.on('data', (c) => d += c); req.on('end', () => r(d)); });
+    const parsed = JSON.parse(body || '{}');
+    const safeId = /^[A-Za-z0-9_-]+$/.test(id) ? id : '';
+    if (!safeId) { res.writeHead(400, { 'content-type': 'application/json' }); res.end(JSON.stringify({ ok: false, message: 'id 非法' })); return; }
+    const writeIcon = (buf, ext) => {
+      try {
+        for (const e of ['.png', '.webp', '.gif', '.jpg', '.jpeg']) { const old = path.join(PET_DIR, safeId + '-icon' + e); if (fs.existsSync(old)) fs.unlinkSync(old); }
+        fs.writeFileSync(path.join(PET_DIR, safeId + '-icon' + (ext || '.png')), buf);
+        return { ok: true };
+      } catch (e) { return { ok: false, message: '写图标失败: ' + e.message }; }
+    };
+    if (req.method === 'DELETE' && sub === '') {
+      let removed = false;
+      for (const e of ['.png', '.webp', '.gif', '.jpg', '.jpeg']) { const f = path.join(PET_DIR, safeId + '-icon' + e); if (fs.existsSync(f)) { fs.unlinkSync(f); removed = true; } }
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, removed }));
+      return;
+    }
+    if (req.method === 'POST' && sub === 'meme') {
+      const name = String(parsed.name || '');
+      const src = path.join(PET_DIR, safeId + '-memes', name);
+      if (!fs.existsSync(src) || !/\.(png|webp|gif|jpg|jpeg)$/i.test(name)) { res.writeHead(400, { 'content-type': 'application/json' }); res.end(JSON.stringify({ ok: false, message: '配图不存在' })); return; }
+      const ext = path.extname(name).toLowerCase();
+      const out = writeIcon(fs.readFileSync(src), ext);
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify(out));
+      return;
+    }
+    if (req.method === 'POST' && sub === '') {
+      const data = String(parsed.data || '');
+      const b64 = data.replace(/^data:[^;]+;base64,/, '');
+      const buf = Buffer.from(b64, 'base64');
+      if (buf.length === 0) { res.writeHead(400, { 'content-type': 'application/json' }); res.end(JSON.stringify({ ok: false, message: '图片数据为空' })); return; }
+      const ext = /\.(webp|gif|jpg|jpeg)$/i.test(String(parsed.ext || '')) ? String(parsed.ext).toLowerCase() : '.png';
+      const out = writeIcon(buf, ext);
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify(out));
+      return;
+    }
+    res.writeHead(400, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ ok: false, message: '未知图标操作' }));
     return;
   }
 
