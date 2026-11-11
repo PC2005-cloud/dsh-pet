@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🎀 桌宠控制面板</title>
+<style>
+  :root { --bg:#1a1626; --card:#262036; --line:#3a3153; --accent:#8a5cff; --ok:#4dbf7a; --bad:#ff6b8a; --text:#efeaff; --dim:#9a90b8; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font-family:"Segoe UI","Microsoft YaHei",sans-serif; min-height:100vh; }
+  .wrap { max-width:860px; margin:0 auto; padding:24px 16px 60px; }
+  h1 { font-size:22px; margin:0 0 4px; }
+  .sub { color:var(--dim); font-size:13px; margin-bottom:20px; }
+  .bar { display:flex; gap:10px; align-items:center; margin-bottom:18px; }
+  .btn { background:var(--accent); border:none; color:#fff; padding:8px 16px; border-radius:8px; cursor:pointer; font-size:14px; }
+  .btn:hover { filter:brightness(1.1); }
+  .btn.ghost { background:transparent; border:1px solid var(--line); color:var(--text); }
+  .status { font-size:12px; color:var(--dim); margin-left:auto; }
+  .sec { margin-bottom:24px; }
+  .sec h2 { font-size:15px; margin:0 0 10px; color:var(--dim); font-weight:600; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:12px; }
+  .pet { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px; }
+  .pet.off { opacity:.55; }
+  .pet .top { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
+  .pet .avatar { width:32px; height:32px; border-radius:8px; background:linear-gradient(135deg,var(--accent),#c46bff); display:flex; align-items:center; justify-content:center; font-size:16px; }
+  .pet .name { font-weight:700; font-size:15px; }
+  .pet .id { font-size:11px; color:var(--dim); margin-left:auto; }
+  .pet .row { display:flex; align-items:center; justify-content:space-between; font-size:13px; margin:6px 0; }
+  .pet .row label { color:var(--dim); }
+  .switch { position:relative; width:40px; height:22px; }
+  .switch input { opacity:0; width:0; height:0; }
+  .switch .slider { position:absolute; inset:0; background:#4a4362; border-radius:22px; cursor:pointer; transition:.2s; }
+  .switch .slider::before { content:""; position:absolute; width:16px; height:16px; left:3px; top:3px; background:#fff; border-radius:50%; transition:.2s; }
+  .switch input:checked + .slider { background:var(--ok); }
+  .switch input:checked + .slider::before { transform:translateX(18px); }
+  .range { width:100%; accent-color:var(--accent); }
+  .chatbox { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px; }
+  .chatbox select, .chatbox input[type=text] { background:#1f1a30; border:1px solid var(--line); color:var(--text); padding:8px 10px; border-radius:8px; font-size:14px; }
+  .chatbox .inputrow { display:flex; gap:8px; margin-top:10px; }
+  .chatbox .inputrow input[type=text] { flex:1; }
+  .reply { margin-top:12px; padding:10px; background:#1f1a30; border-radius:8px; font-size:14px; line-height:1.6; min-height:44px; white-space:pre-wrap; }
+  .reply .who { color:var(--accent); font-weight:600; }
+  .footer { color:var(--dim); font-size:12px; margin-top:30px; text-align:center; }
+  .toast { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:#333; color:#fff; padding:10px 18px; border-radius:8px; font-size:14px; opacity:0; transition:.3s; z-index:99; }
+  .toast.show { opacity:1; }
+  .formrow { display:flex; gap:8px; }
+  .formrow input { flex:1; }
+  .chatbox input[type=text], .chatbox textarea { background:#1f1a30; border:1px solid var(--line); color:var(--text); padding:8px 10px; border-radius:8px; font-size:14px; box-sizing:border-box; }
+  .footnote { font-size:12px; color:var(--dim); margin-top:8px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🎀 桌宠控制面板</h1>
+  <div class="sub">选择使用哪只桌宠、调整大小、聊天；更多工具（新增宠物/表情包动作）陆续加入。</div>
+  <div class="bar">
+    <button class="btn" onclick="loadPets()">🔄 刷新</button>
+    <button class="btn ghost" onclick="reloadAll()">🔁 重载桌宠</button>
+    <span class="status" id="status">加载中…</span>
+  </div>
+
+  <div class="sec">
+    <h2>桌宠列表</h2>
+    <div class="grid" id="pets"></div>
+  </div>
+
+  <div class="sec">
+    <h2>聊天</h2>
+    <div class="chatbox">
+      <select id="chatPet"></select>
+      <div class="inputrow">
+        <input type="text" id="chatText" placeholder="对选中的桌宠说点什么…" onkeydown="if(event.key==='Enter')sendChat()">
+        <button class="btn" onclick="sendChat()">发送</button>
+      </div>
+      <div class="reply" id="chatReply">选择一个桌宠，说句话试试～</div>
+    </div>
+  </div>
+
+  <div class="sec">
+    <h2>表情包 / 动作</h2>
+    <div class="chatbox">
+      <div class="row" style="margin-bottom:10px">
+        <label>聊天时配表情包（图片）</label>
+        <div class="switch"><input type="checkbox" id="flagImage" onchange="setFlag('chatImageEnabled', this.checked)"><span class="slider"></span></div>
+      </div>
+      <div class="row">
+        <label>聊天时带动画动作</label>
+        <div class="switch"><input type="checkbox" id="flagAnime" onchange="setFlag('chatAnimationEnabled', this.checked)"><span class="slider"></span></div>
+      </div>
+      <div class="footnote">注：这两项在群聊回复脚本里默认关闭；这里是全局开关，改动后重载桌宠生效。</div>
+    </div>
+  </div>
+
+  <div class="sec">
+    <h2>新增桌宠</h2>
+    <div class="chatbox">
+      <div class="formrow">
+        <input type="text" id="npId" placeholder="id（如 character7）" style="flex:1">
+        <input type="text" id="npName" placeholder="名字（如 Kimi）" style="flex:1">
+      </div>
+      <input type="text" id="npModel" placeholder="Ollama 模型名（如 gemma3:4b，用于聊天）" style="margin-top:8px;width:100%">
+      <textarea id="npPrompt" placeholder="人设提示词（whisperPrompt，可选）" rows="3" style="margin-top:8px;width:100%;background:#1f1a30;border:1px solid var(--line);color:var(--text);padding:8px 10px;border-radius:8px;font-family:inherit;font-size:13px"></textarea>
+      <div style="margin-top:10px"><button class="btn" onclick="addPet()">➕ 新增桌宠</button></div>
+    </div>
+  </div>
+
+  <div class="footer">控制面板 · 本地服务 127.0.0.1:3090 · 代理到桌宠引擎</div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+let PETS = [];
+const $ = (id) => document.getElementById(id);
+function toast(msg) { const t = $('toast'); t.textContent = msg; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 2000); }
+
+async function loadPets() {
+  $('status').textContent = '加载中…';
+  try {
+    const r = await fetch('/api/pets');
+    const j = await r.json();
+    PETS = j.pets || [];
+    renderPets();
+    fillChatSelect();
+    $('status').textContent = '共 ' + PETS.length + ' 只桌宠';
+  } catch (e) {
+    $('status').textContent = '加载失败: ' + e.message;
+  }
+}
+
+function renderPets() {
+  const g = $('pets');
+  g.innerHTML = '';
+  for (const p of PETS) {
+    const card = document.createElement('div');
+    card.className = 'pet' + (p.display === 'none' ? ' off' : '');
+    const on = p.display !== 'none';
+    card.innerHTML = `
+      <div class="top">
+        <div class="avatar">🎀</div>
+        <div class="name">${esc(p.name)}</div>
+        <div class="id">${esc(p.id)}</div>
+      </div>
+      <div class="row">
+        <label>使用</label>
+        <div class="switch"><input type="checkbox" ${on ? 'checked' : ''} onchange="togglePet('${esc(p.id)}', this.checked)"><span class="slider"></span></div>
+      </div>
+      <div class="row">
+        <label>大小 ${p.size}</label>
+      </div>
+      <input class="range" type="range" min="80" max="400" step="10" value="${p.size}" onchange="setSize('${esc(p.id)}', this.value)" oninput="this.previousElementSibling.lastElementChild.textContent='大小 '+this.value">
+    `;
+    g.appendChild(card);
+  }
+}
+
+function fillChatSelect() {
+  const sel = $('chatPet');
+  sel.innerHTML = '';
+  for (const p of PETS) {
+    const o = document.createElement('option');
+    o.value = p.id;
+    o.textContent = p.name + ' (' + p.id + ')';
+    sel.appendChild(o);
+  }
+}
+
+async function togglePet(id, on) {
+  try {
+    const r = await fetch('/api/pet-display', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, display: on ? 'desktop' : 'none' }) });
+    const j = await r.json();
+    if (j && j.ok === false) { toast('切换失败: ' + (j.message || '')); return; }
+    toast((on ? '已开启 ' : '已关闭 ') + id);
+    loadPets();
+  } catch (e) { toast('错误: ' + e.message); }
+}
+
+async function setSize(id, size) {
+  try {
+    const r = await fetch('/api/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pets: [{ id, size: parseInt(size, 10) }] }) });
+    const j = await r.json();
+    if (j && j.ok === false) { toast('大小设置失败: ' + (j.message || '')); return; }
+    toast(id + ' 大小已设为 ' + size);
+  } catch (e) { toast('错误: ' + e.message); }
+}
+
+async function reloadAll() {
+  try {
+    await fetch('/api/reload', { method: 'POST' });
+    toast('已请求重载桌宠');
+    setTimeout(loadPets, 1500);
+  } catch (e) { toast('错误: ' + e.message); }
+}
+
+async function sendChat() {
+  const pet = $('chatPet').value;
+  const text = $('chatText').value.trim();
+  if (!pet || !text) { toast('选个桌宠、说句话'); return; }
+  $('chatReply').textContent = '等待 ' + pet + ' 回复…';
+  try {
+    const r = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pet, text }) });
+    const j = await r.json();
+    if (j.ok === false) { $('chatReply').innerHTML = '<span class="who">' + esc(pet) + '</span>：<span style="color:var(--bad)">' + esc(j.message || j.reason || '失败') + '</span>'; return; }
+    $('chatReply').innerHTML = '<span class="who">' + esc(pet) + '</span>：' + esc(j.text || '');
+  } catch (e) { $('chatReply').textContent = '错误: ' + e.message; }
+}
+
+function esc(s) { return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+
+async function setFlag(key, on) {
+  try {
+    const r = await fetch('/api/flags', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ [key]: on }) });
+    const j = await r.json();
+    if (j.ok === false) { toast('设置失败: ' + (j.message || '')); loadFlags(); return; }
+    toast((on ? '已开启 ' : '已关闭 ') + key);
+    loadFlags();
+    setTimeout(loadPets, 1200);
+  } catch (e) { toast('错误: ' + e.message); }
+}
+
+async function loadFlags() {
+  try {
+    const r = await fetch('/api/flags');
+    const j = await r.json();
+    if (j.ok === false) return;
+    $('flagImage').checked = !!j.chatImageEnabled;
+    $('flagAnime').checked = !!j.chatAnimationEnabled;
+  } catch (e) { /* 忽略 */ }
+}
+
+async function addPet() {
+  const id = $('npId').value.trim();
+  const name = $('npName').value.trim();
+  const model = $('npModel').value.trim();
+  const prompt = $('npPrompt').value.trim();
+  if (!id) { toast('请填 id'); return; }
+  try {
+    const r = await fetch('/api/add-pet', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, name, model, prompt }) });
+    const j = await r.json();
+    if (j.ok === false) { toast('新增失败: ' + (j.message || '')); return; }
+    toast('已新增桌宠 ' + id + '，正在重载…');
+    $('npId').value = ''; $('npName').value = ''; $('npModel').value = ''; $('npPrompt').value = '';
+    setTimeout(loadPets, 1500);
+  } catch (e) { toast('错误: ' + e.message); }
+}
+
+loadPets();
+loadFlags();
+</script>
+</body>
+</html>
