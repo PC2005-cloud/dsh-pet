@@ -76,7 +76,8 @@ export function mountBaifan(ctx: BaifanContext, host: HTMLElement): () => void {
   return () => {
     menu.dispose();
     window.clearInterval(timer);
-    void show.halt('');
+    // React 卸载钩子是同步的；演出会立即撤销后续动作，放锁回执在后台完成。
+    void show.dispose();
     // 先发 DELETE 再 abort：abort 会让这次删除立刻失败，留下一条到 TTL 才消失的菜单项。
     void fetch(ROUTE + '/menu/item?owner=' + encodeURIComponent(OWNER), { method: 'DELETE' }).catch(() => {});
     abort.abort();

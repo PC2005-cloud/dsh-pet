@@ -37,6 +37,11 @@ function writeStored(petId: string, lock: string | null): void {
   }
 }
 
+/** 只清理仍归这一场所有的接管标记。 */
+function clearStoredIfOwned(petId: string, lease: string): void {
+  if (readStored(petId) === lease) writeStored(petId, null);
+}
+
 /**
  * 造锁管理器。
  *
@@ -66,20 +71,32 @@ export function createLock(transport: Transport, petId: string, alive: () => boo
     // 1) 先试「我自己的旧锁」（刷新页面留下的）
     const stored = readStored(petId);
     if (stored !== null) {
+      // 接管尝试独占旧标记，避免卸载/重挂期间另一个实例续用同一租约。
+      clearStoredIfOwned(petId, stored);
       const renewed = await transport.call('POST', path, { lockId: stored });
       if (renewed.ok === true) {
         lockId = String(renewed.lockId);
         lost = false;
+        if (!alive() || readStored(petId) !== null) {
+          await abandonLateLease();
+          throw new Halted();
+        }
+        writeStored(petId, lockId);
         return;
       }
-      writeStored(petId, null);
+      if (!alive() || readStored(petId) !== null) throw new Halted();
     }
 
     // 2) 新建
+    const beforeCreate = readStored(petId);
     const created = await transport.call('POST', path, { ttl: CFG.lockTtl });
     if (created.ok === true) {
       lockId = String(created.lockId);
       lost = false;
+      if (!alive() || readStored(petId) !== beforeCreate) {
+        await abandonLateLease();
+        throw new Halted();
+      }
       writeStored(petId, lockId);
       return;
     }
@@ -100,10 +117,16 @@ export function createLock(transport: Transport, petId: string, alive: () => boo
       if (performance.now() > deadline) break;
       await new Promise((resolve) => window.setTimeout(resolve, 1500));
       if (!alive()) throw new Halted();
+      const beforeRetry = readStored(petId);
+      if (beforeRetry !== null) throw new Halted();
       const retry = await transport.call('POST', path, { ttl: CFG.lockTtl });
       if (retry.ok === true) {
         lockId = String(retry.lockId);
         lost = false;
+        if (!alive() || readStored(petId) !== beforeRetry) {
+          await abandonLateLease();
+          throw new Halted();
+        }
         writeStored(petId, lockId);
         return;
       }
@@ -138,17 +161,28 @@ export function createLock(transport: Transport, petId: string, alive: () => boo
     timer = 0;
   }
 
+  /** 迟到租约若已由其他实例保存同一 ID，不得释放对方正在使用的锁。 */
+  async function abandonLateLease(): Promise<void> {
+    if (lockId !== null && readStored(petId) === lockId) {
+      lockId = null;
+      return;
+    }
+    await release();
+  }
+
   /** 放锁（收场用）；放不掉也没关系，TTL 到点自己失效。 */
   async function release(): Promise<void> {
+    stopRenew();
     const lease = lockId;
     lockId = null;
     if (lease === null) return;
+    // 同步撤销接管标记：新挂载不能在远端放锁期间续用旧租约。
+    clearStoredIfOwned(petId, lease);
     try {
       await transport.call('POST', '/lock/release?pet=' + encodeURIComponent(petId), { lockId: lease });
     } catch {
       // 交给 TTL
     }
-    writeStored(petId, null);
   }
 
   /**
@@ -161,7 +195,7 @@ export function createLock(transport: Transport, petId: string, alive: () => boo
     const lease = lockId;
     if (lease === null) return;
     lockId = null;
-    writeStored(petId, null);
+    clearStoredIfOwned(petId, lease);
     try {
       if (navigator.sendBeacon !== undefined) {
         const body = JSON.stringify({ lockId: lease });

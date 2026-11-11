@@ -20,6 +20,8 @@ export interface Show {
   start: (petId: string, assets: ActivityAssets) => void;
   /** 收场：停一切、清干净、放锁。幂等。 */
   halt: (reason?: string) => Promise<void>;
+  /** 卸载并等待本场释放资源；此后不能再开演。 */
+  dispose: () => Promise<void>;
   /** 这一场是否在跑；菜单用它避免重复开演。 */
   isRunning: () => boolean;
 }
@@ -77,8 +79,11 @@ export function createShow(deps: ShowDeps): Show {
   /** 吃满多少份吹一次牛。 */
   const FULL_EVERY = 5;
 
-  /** 本场代次：每次开演 +1，旧场收尾时不能动新的一场。 */
+  /** 请求代次：停止与重开都会撤销尚未接管的请求。 */
   let showGen = 0;
+  /** 上一场完全收尾后才允许下一场接管共享的表现状态。 */
+  let activeRun: Promise<void> | null = null;
+  let sceneAbort: AbortController | null = null;
   /** 这一场用的五段动画地址（按被点宠物所属条目的配置算出来）。 */
   let current: ActivityAssets = { chase: '', descend: '', eatBall: '', eatBowl: '', expect: '' };
   /** 掉饭定时器。 */
@@ -89,7 +94,23 @@ export function createShow(deps: ShowDeps): Show {
   /** 行为是否还该继续。 */
   const alive = (): boolean => running && !disposed && lock !== null && !lock.isLost();
   const enc = (s: string): string => encodeURIComponent(s);
-  const sleep = (ms: number): Promise<void> => new Promise((resolve) => window.setTimeout(resolve, ms));
+  const sleep = (ms: number): Promise<void> =>
+    new Promise((resolve, reject) => {
+      const signal = sceneAbort?.signal;
+      if (signal === undefined || signal.aborted) {
+        reject(new Halted());
+        return;
+      }
+      const abort = (): void => {
+        window.clearTimeout(timer);
+        reject(new Halted());
+      };
+      const timer = window.setTimeout(() => {
+        signal.removeEventListener('abort', abort);
+        resolve();
+      }, ms);
+      signal.addEventListener('abort', abort, { once: true });
+    });
   const pickLine = (pool: readonly string[]): string => pool[Math.floor(Math.random() * pool.length)] ?? '';
 
   /** 让桌宠说一句：`anim: false` 必须给，否则渲染端会联动 whisper 动画把正在播的顶掉。 */
@@ -261,7 +282,9 @@ export function createShow(deps: ShowDeps): Show {
         if (token !== side.token || !alive()) return;
         id = await playAnim(current.chase, dir).catch(() => null);
       }
-    })();
+    })().catch((error: unknown) => {
+      if (!(error instanceof Halted)) console.warn('[dsh-pet] 吃白饭动画接力失败', error);
+    });
     return started;
   }
 
@@ -430,7 +453,7 @@ export function createShow(deps: ShowDeps): Show {
   }
 
   /** 跑完整场演出。 */
-  async function runShow(): Promise<void> {
+  async function runShow(generation: number): Promise<void> {
     running = true;
     eaten = 0;
     side.token += 1;
@@ -440,13 +463,14 @@ export function createShow(deps: ShowDeps): Show {
 
     try {
       await lock?.acquire();
+      if (disposed || generation !== showGen || !running) throw new Halted();
       lock?.startRenew();
       say(pickLine(LINES.start), 2200);
       await phaseWalk();
       await phaseExpect();
       await phaseChase(showGen);
     } catch (error) {
-      if (error instanceof Halted) {
+      if (error instanceof Halted || disposed || generation !== showGen) {
         // 正常收场（丢锁 / 卸载）
       } else if (lock?.isLost() === true) {
         scene.toast('锁丢了，表演结束');
@@ -455,15 +479,16 @@ export function createShow(deps: ShowDeps): Show {
         console.warn('[dsh-pet] 吃白饭异常', error);
       }
     } finally {
-      await halt(lock?.isLost() === true ? '用户接管，已收场' : '');
+      await stopScene(lock?.isLost() === true ? '用户接管，已收场' : '');
     }
   }
 
   /** 收场：停一切、清干净、放锁；幂等，丢锁与卸载都会走到这儿。 */
-  async function halt(reason?: string): Promise<void> {
+  async function stopScene(reason?: string): Promise<void> {
     const wasRunning = running;
     running = false;
     phase = 'idle';
+    sceneAbort?.abort();
     // 把还挂在半路的请求切掉：不然它们会带着旧令牌回来继续动这只宠物
     transport.attach(null);
     if (spawnTimer !== 0) {
@@ -480,30 +505,52 @@ export function createShow(deps: ShowDeps): Show {
     if (reason !== undefined && reason !== '' && (wasRunning || lease !== null)) scene.toast(reason);
   }
 
+  /** 停止本次请求，并等待迟到的取锁回执释放其租约。 */
+  async function halt(reason?: string): Promise<void> {
+    showGen += 1;
+    const pending = activeRun;
+    await stopScene(reason);
+    await pending;
+  }
+
   /** 开一场；先彻底收掉上一场（含放锁），再起新的。 */
   function start(nextPetId: string, assets: ActivityAssets): void {
-    if (running || lock?.id() != null) {
-      void halt('重新开始').then(() => begin(nextPetId, assets));
-      return;
-    }
-    begin(nextPetId, assets);
+    if (disposed) return;
+    const generation = ++showGen;
+    const pending = activeRun;
+    void stopScene('重新开始')
+      .then(async () => {
+        await pending;
+        if (disposed || generation !== showGen) return;
+        begin(nextPetId, assets, generation);
+      })
+      .catch((error: unknown) => console.warn('[dsh-pet] 吃白饭重启失败', error));
   }
 
   /** 真正开演：重建这一场的锁、取消信号与素材地址。 */
-  function begin(nextPetId: string, assets: ActivityAssets): void {
+  function begin(nextPetId: string, assets: ActivityAssets, generation: number): void {
     petId = nextPetId;
     current = assets;
-    showGen += 1;
-    disposed = false;
     lock?.stopRenew();
     lock = createLock(transport, petId, alive, scene.toast);
-    transport.attach(new AbortController());
+    sceneAbort = new AbortController();
+    transport.attach(sceneAbort);
     scene.toast('吃白饭 —— 开饭了');
-    void runShow();
+    const task = runShow(generation);
+    activeRun = task;
+    void task
+      .finally(() => {
+        if (activeRun === task) activeRun = null;
+      })
+      .catch((error: unknown) => console.warn('[dsh-pet] 吃白饭收场失败', error));
   }
 
   return {
     halt,
+    dispose: async () => {
+      disposed = true;
+      await halt();
+    },
     isRunning: () => running,
     start,
   };

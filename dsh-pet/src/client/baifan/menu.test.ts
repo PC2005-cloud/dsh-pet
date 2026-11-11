@@ -53,6 +53,7 @@ function fakeShow(): { show: Show; starts: Array<{ petId: string; assets: Activi
       starts.push({ petId, assets });
     },
     halt: async () => {},
+    dispose: async () => {},
     isRunning: () => false,
   };
   return { show, starts };
