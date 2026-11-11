@@ -12,6 +12,8 @@
 
 前提：桌宠 standalone 引擎已在运行（默认监听 `127.0.0.1:3080`，路由前缀 `/dsh-pet-7340/`）。
 
+**Windows 一键启动**：双击 `pet-panel-launch.vbs` —— 若面板服务没在跑会自动拉起，再打开浏览器。
+
 ```bash
 node pet-panel-server.js        # 默认端口 3090
 node pet-panel-server.js 3100   # 指定端口
@@ -19,12 +21,16 @@ node pet-panel-server.js 3100   # 指定端口
 
 然后浏览器打开：<http://127.0.0.1:3090/>
 
+> 开机自启：把 `pet-panel-launch.vbs` 的快捷方式放进 `shell:startup`，并以 `serveronly` 参数调用（只保服务常驻、不开浏览器）。
+
 ## 原理
 
 - `pet-panel-server.js`：本地小服务器，读取 `~/.dsh/dsh-pet/` 下的配置
   （`main-config.jsonc` + `pet/*-config.json`），并把聊天/开关/保存代理到桌宠引擎，
   自动带上 `standalone-runtime.json` 里的 token。
-- `pet-panel.html`：纯前端单页（无框架），调面板服务器的 `/api/*`。
+- `pet-panel.html`：纯前端单页（无框架），调面板服务器的 `/api/*`；每 4 秒自动刷新，页面 `no-store` 防旧缓存。
+- 每只桌宠右键菜单有「打开控制面板」入口（`runtime/electron-helper/sprite/menu.js` 的 `open-panel` 动作），
+  点击即在系统浏览器打开本面板。
 
 ## 说明
 
