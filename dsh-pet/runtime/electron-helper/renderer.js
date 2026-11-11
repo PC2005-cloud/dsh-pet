@@ -152,5 +152,8 @@ window.addEventListener('resize', () => {
   }
 });
 
+// 1/255 alpha 修正滤镜：开关是共享常量 PET_ALPHA_FIX_ENABLED，静态样式表读不到它，
+// 所以在这里把开关落成 class（样式在 index.html 的 html.pet-alpha-fix）。
+if (S.PET_ALPHA_FIX_ENABLED) document.documentElement.classList.add('pet-alpha-fix');
 injectAssets();
 void boot();

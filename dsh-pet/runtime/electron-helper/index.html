@@ -51,9 +51,11 @@
         pointer-events: none;
         opacity: 0;
         transition: opacity 0.18s ease;
-        /* WebM 的「透明」背景实测 alpha 恒为 1/255（109 个素材逐一验证），
-           Chromium 按 0.4% 不透明度合成，浅色底上就是一层淡灰矩形。
-           扣掉一档即精确归零；本体只降一档（≤1/255），不可见。 */
+      }
+      /* 1/255 修正：WebM 的「透明」背景实测 alpha 恒为 1/255（109 个素材逐一验证），Chromium 按
+         0.4% 不透明度合成，浅色底上就是一层淡灰矩形；扣掉一档即精确归零。开关是共享常量
+         PET_ALPHA_FIX_ENABLED——静态样式表读不到它，由 renderer.js 挂 class。 */
+      html.pet-alpha-fix video.pet-video {
         filter: url(#dsh-pet-alpha-fix);
       }
       video.pet-video.is-front {

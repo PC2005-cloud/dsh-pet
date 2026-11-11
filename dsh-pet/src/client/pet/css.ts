@@ -4,9 +4,12 @@
  * 注入按 `data-plugin-css` 去重：同一页面重复挂载不会长第二份样式。
  * @module dsh-pet/src/client/pet/css
  */
-import { ROUTE_PATH } from '../../shared/constants.ts';
+import { PET_ALPHA_FIX_ENABLED, ROUTE_PATH } from '../../shared/constants.ts';
 import { MENU_CSS } from '../../shared/menu.ts';
 import { TOOLTIP_CSS } from '../../shared/tooltip.ts';
+
+/** 视频的 alpha 修正声明（带前导分号）：开关关闭时为空串，样式表里不留 filter。 */
+const ALPHA_FIX_FILTER = PET_ALPHA_FIX_ENABLED ? ';filter:url(#dsh-pet-alpha-fix)' : '';
 
 /** 宠物页面样式表。 */
 const PET_CSS = [
@@ -16,8 +19,8 @@ const PET_CSS = [
   '.dsh-pet-root[data-corner="top-right"]{right:var(--dsh-pet-mx,24px);top:var(--dsh-pet-my,0)}',
   '.dsh-pet-root[data-corner="top-left"]{left:var(--dsh-pet-mx,24px);top:var(--dsh-pet-my,0)}',
   '.dsh-pet-stage{position:relative;width:var(--dsh-pet-size,462px);height:calc(var(--dsh-pet-size,462px)*9/16);pointer-events:none}',
-  // 与桌面 helper 同一条修正，滤镜定义见 ensureAlphaFilter。
-  '.dsh-pet-video{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;pointer-events:none;opacity:0;transition:opacity .18s ease;transform-origin:center;filter:url(#dsh-pet-alpha-fix)}',
+  // 与桌面 helper 同一条修正（开关是共享常量 PET_ALPHA_FIX_ENABLED），滤镜定义见 ensureAlphaFilter。
+  `.dsh-pet-video{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;pointer-events:none;opacity:0;transition:opacity .18s ease;transform-origin:center${ALPHA_FIX_FILTER}}`,
   '.dsh-pet-video.is-front{opacity:1}',
   // 触屏拖拽必需：缺 touch-action:none 时浏览器会把手势判成滚动并触发 pointercancel；
   // 两条 -webkit-* 抑制长按选中与 iOS 长按系统菜单。
@@ -74,5 +77,5 @@ export function injectPetCss(): void {
   tag.dataset.pluginCss = cssTag;
   tag.textContent = PET_CSS;
   document.head.appendChild(tag);
-  ensureAlphaFilter();
+  if (PET_ALPHA_FIX_ENABLED) ensureAlphaFilter();
 }
