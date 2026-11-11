@@ -31,6 +31,7 @@ const {
   spriteHitRect,
   pointerZone,
   decideWindowIgnore,
+  leavesBody,
 } = require(helper + 'pointer-target.js');
 
 /** 包内文件源码（守卫用；相对 src/host/ 解析） */
@@ -118,6 +119,21 @@ describe('decideWindowIgnore —— 兜底通道的判定规则（issue #55 报�
   test('窗口尺寸未落定（renderer 首帧上报前）不误判：极小矩形内不产生"可交互"', () => {
     const tiny = { x: 0, y: 0, width: 4, height: 4 };
     assert.equal(decideWindowIgnore(tiny, { x: 0, y: 0 }, true), true);
+  });
+});
+
+describe('leavesBody —— 悬浮提示的补发收起条件（issue #333）', () => {
+  test('身体 → 余量区/窗外：算离开，主进程据此通知渲染端收起提示', () => {
+    assert.equal(leavesBody('body', 'margin'), true);
+    assert.equal(leavesBody('body', 'outside'), true);
+  });
+
+  test('其余翻转都不算离开：仍在身体内、余量区/窗外的互相翻转、首拍没有上一拍', () => {
+    assert.equal(leavesBody('body', 'body'), false);
+    assert.equal(leavesBody('margin', 'outside'), false);
+    assert.equal(leavesBody('outside', 'body'), false);
+    assert.equal(leavesBody(undefined, 'body'), false);
+    assert.equal(leavesBody(undefined, 'outside'), false);
   });
 });
 

@@ -257,6 +257,12 @@ Object.assign(PetSprite.prototype, {
       { signal: ac.signal },
     );
 
+    // 主进程兜底：宠物自己走开、或窗口被别的窗口接走时页面收不到 mousemove，提示会一直亮着；
+    // 主进程按光标轮询判定「刚离开身体」后通知这里收起（setTip 幂等，与 mousemove 判定不冲突）。
+    if (window.petBridge && typeof window.petBridge.onPointerLeft === 'function') {
+      window.petBridge.onPointerLeft(() => this.setTip(false));
+    }
+
     this.subscribeCollision();
   },
 

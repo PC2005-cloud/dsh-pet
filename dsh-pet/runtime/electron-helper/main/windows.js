@@ -7,7 +7,7 @@
  * @module dsh-pet/runtime/electron-helper/main/windows
  */
 const path = require('node:path');
-const { pointerZone, decideWindowIgnore } = require('../pointer-target.js');
+const { pointerZone, decideWindowIgnore, leavesBody } = require('../pointer-target.js');
 const { TOPMOST_WATCHDOG_ENABLED, TOPMOST_WATCHDOG_TICK_MS } = require('../topmost-watchdog.js');
 const { TASKBAR_WATCHDOG_TICK_MS, shouldRunTaskbarWatchdog } = require('../taskbar-watchdog.js');
 
@@ -56,6 +56,8 @@ function createWindows({
   const inputRegions = new Map();
   /** 每窗口「光标停在余量区且非 busy」的连续时长（ms）：到点由兜底通道强制恢复穿透 */
   const offBodyMs = new Map();
+  /** 每窗口上一拍的光标分区：识别「刚离开身体」，据此向渲染端补发收起悬浮提示的通知 */
+  const lastPointerZone = new Map();
   /** 宠物间碰撞 broker 状态：petId -> { x, y, vx, vy, size, bottomPad } */
   const petStates = new Map();
   /** 冒烟期间暂停兜底泵：它按真实光标翻转，会干扰冒烟对渲染端通道的断言 */
@@ -169,6 +171,11 @@ function createWindows({
       const point = dpi.currentPointer();
       const margin = winMargins.get(win.id);
       const zone = pointerZone(bounds, point, margin);
+      // 提示只在渲染端的 mousemove 里收起；宠物自己走开或窗口被别的窗口接走时没有 mousemove，
+      // 由这一拍补发通知。busy（拖拽/菜单/弹窗）期间提示本就不该显示，不发，免得松手瞬间误收。
+      const prevZone = lastPointerZone.get(win.id);
+      lastPointerZone.set(win.id, zone);
+      if (!busy && leavesBody(prevZone, zone)) win.webContents.send('pet:pointer-left');
       const nextMs = !busy && zone === 'margin' ? (offBodyMs.get(win.id) ?? 0) + POINTER_POLL_MS : 0;
       offBodyMs.set(win.id, nextMs);
       const next = decideWindowIgnore(bounds, point, ignoring, busy, nextMs, inputRegions.get(win.id), margin);
@@ -267,6 +274,7 @@ function createWindows({
       inputBusy.delete(win.id);
       inputRegions.delete(win.id);
       offBodyMs.delete(win.id);
+      lastPointerZone.delete(win.id);
     });
     win.loadFile(path.join(helperDir, 'index.html'), { query: windowQuery(pet, geo, scale) }).catch((error) => {
       console.error(`[dsh-pet-desktop-helper] page load failed (${pet.id}):`, error);

@@ -78,4 +78,9 @@ contextBridge.exposeInMainWorld('petBridge', {
   onDisplays(cb) {
     ipcRenderer.on('pet:displays', (e, geo) => cb(geo));
   },
+  // 主进程兜底：宠物自己走开、或窗口被别的窗口接走时，渲染端收不到 mousemove，悬浮提示会一直亮着；
+  // 主进程按光标轮询判定「刚离开身体」后通知这里收起。
+  onPointerLeft(cb) {
+    ipcRenderer.on('pet:pointer-left', () => cb());
+  },
 });

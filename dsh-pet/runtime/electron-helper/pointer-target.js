@@ -99,6 +99,20 @@ function decideWindowIgnore(bounds, point, ignoring, busy, offBodyMs = 0, input,
   return ignoring; // 余量区：保持（菜单/弹窗由 busy 覆盖）
 }
 
+/**
+ * 这一拍是否「刚离开身体」：主进程据此通知渲染端收起悬浮提示。
+ *
+ * 提示只在渲染端的 mousemove 里收起，而宠物自己走开、或窗口被别的窗口接走时都没有 mousemove，
+ * 收起只能靠不依赖事件的光标轮询补。
+ *
+ * @param prevZone - 上一拍的分区；首拍没有上一拍时为 undefined。
+ * @param zone - 这一拍的分区。
+ * @returns 仅 body → 非 body 为 true。
+ */
+function leavesBody(prevZone, zone) {
+  return prevZone === 'body' && zone !== 'body';
+}
+
 module.exports = {
   HIT_BOX,
   CANVAS_H,
@@ -109,4 +123,5 @@ module.exports = {
   spriteHitRect,
   pointerZone,
   decideWindowIgnore,
+  leavesBody,
 };
