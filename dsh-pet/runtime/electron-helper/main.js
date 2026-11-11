@@ -329,6 +329,8 @@ app.on('before-quit', () => {
 });
 
 app.on('window-all-closed', () => {
+  // 主屏缩放自查是「先关窗、再建窗」，两个动作之间窗口数会短暂为 0；新窗口已建好就不算真的全关
+  if (petWindows.state.windows.size > 0) return;
   // 托盘常驻：桌面上没有宠物也要留着，否则「全关掉」就再也切不回来
   if (tray.exists()) return;
   // 应用模式：窗口是被重建钩子关掉的，不是用户要退出——留着进程等下一次重建
