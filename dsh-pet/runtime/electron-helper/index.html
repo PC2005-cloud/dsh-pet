@@ -22,10 +22,12 @@
         font-family: 'Microsoft YaHei UI', 'Segoe UI', sans-serif;
         user-select: none;
       }
+      /* 宠物画布必须与窗口内容区重合：主进程按 winOffset 算命中区，假定 #root 原点就是窗口内容原点。
+         body 里的行内节点（如 alpha 滤镜的 0×0 SVG）会生成行盒把它整体顶下一行（约 20px），
+         画面与命中区会同时错位，所以这里绝对定位、脱离 body 流。 */
       #root {
-        position: relative;
-        width: 100%;
-        height: 100%;
+        position: absolute;
+        inset: 0;
       }
       /* 宠物 sprite：绝对定位在画布内，由 renderer 按角落/边距或拖拽位置计算 left/top */
       .pet-sprite {
