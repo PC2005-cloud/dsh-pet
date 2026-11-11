@@ -115,6 +115,7 @@ const $ = (id) => document.getElementById(id);
 function toast(msg) { const t = $('toast'); t.textContent = msg; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 2000); }
 
 let busy = false;
+let lastPetsJson = '';
 async function loadPets(silent) {
   if (!silent) $('status').textContent = '加载中…';
   try {
