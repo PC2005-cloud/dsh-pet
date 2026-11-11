@@ -98,9 +98,20 @@ export function tailForTrim(content: Buffer, keepBytes: number): Buffer {
   return content.subarray(content.length - keepBytes);
 }
 
-/** 一行日志的最终形态：`<ISO 时间> [级别] 正文`（正文里的换行保留，便于堆栈可读）。 */
+/** 本地时间的 ISO 形式（尾带偏移，如 `2026-11-11T16:40:58.123+08:00`）：日志要按用户所在时区读。 */
+function localIso(now: Date): string {
+  const pad = (value: number, width = 2): string => String(Math.abs(Math.floor(value))).padStart(width, '0');
+  const offsetMin = -now.getTimezoneOffset(); // getTimezoneOffset 的符号与常规偏移相反（东八区为 -480）
+  return (
+    `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T` +
+    `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}.${pad(now.getMilliseconds(), 3)}` +
+    `${offsetMin >= 0 ? '+' : '-'}${pad(offsetMin / 60)}:${pad(offsetMin % 60)}`
+  );
+}
+
+/** 一行日志的最终形态：`<本地时间+偏移> [级别] 正文`（正文里的换行保留，便于堆栈可读）。 */
 export function formatLogLine(level: LogLevel, message: string, now: Date): string {
-  return `${now.toISOString()} [${level}] ${message}\n`;
+  return `${localIso(now)} [${level}] ${message}\n`;
 }
 
 /** 创建一个文件日志出口：日志同时转发给 `base`，落盘按批量与大小上限处理。 */

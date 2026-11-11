@@ -32,11 +32,12 @@ after(() => {
 });
 
 describe('纯函数', () => {
-  test('formatLogLine：ISO 时间 + 级别 + 正文 + 换行', () => {
-    assert.equal(
-      formatLogLine('warn', '出事了', new Date('2026-10-23T11:52:25.123Z')),
-      '2026-10-23T11:52:25.123Z [warn] 出事了\n',
-    );
+  test('formatLogLine：本地时间+偏移 + 级别 + 正文 + 换行', () => {
+    const now = new Date('2026-10-23T11:52:25.123Z');
+    const line = formatLogLine('warn', '出事了', now);
+    assert.match(line, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}[+-]\d{2}:\d{2} \[warn\] 出事了\n$/);
+    // 同一时刻往返：偏移方向写错会在这里露馅（按本地时间+偏移解析回来必须与 now 逐毫秒相等）
+    assert.equal(new Date(line.slice(0, 29)).getTime(), now.getTime());
   });
 
   test('redactSensitive：令牌、站点 URL 片段一律打码', () => {
