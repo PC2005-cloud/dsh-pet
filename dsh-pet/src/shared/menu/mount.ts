@@ -15,7 +15,8 @@ function isBranchNode(n: MenuNode): n is MenuBranch {
 /** 挂载一个系统风格右键菜单（级联子菜单）到 document.body，位置为视口坐标。
  *  结构：根容器零尺寸，每级面板平级挂载、按触发项屏幕位置贴边定位（优先父面板右侧，
  *  放不下翻到父面板左侧，且不与任何已展开面板重叠）。
- *  级联：指针在菜单树内绝不自动收起，整体离开（root mouseleave，软 200ms）才关闭整棵菜单。
+ *  级联：悬停分支展开子面板，移到同面板的非分支项收起子面板；指针在菜单树内移动不关闭整棵菜单，
+ *  整体离开（root mouseleave，软 200ms）才关闭。
  *  clamp：允许占用的矩形（视口局部坐标）；桌面传「窗口 ∩ 工作区」——宠物贴边时窗口外扩的部分
  *  会被 OS 裁掉，约束进去即可完整显示，窗口与宠物零移动。 */
 export function mountContextMenu(opts: {
@@ -114,6 +115,11 @@ export function mountContextMenu(opts: {
           showPanel(childPanel, item);
         });
       } else {
+        // 叶子项不展开子菜单；进入时收起同面板已展开的子面板链，否则它会一直挂着
+        item.addEventListener('mouseenter', () => {
+          const prev = openChild.get(panel);
+          if (prev) hideChain(prev);
+        });
         // 缩略图必须在 label 之前：菜单项是 flex 行，图片靠左、文字紧随其后。
         // 只给配图叶子带 thumb，其余项结构不变（不占位、不改变行高）。
         if (node.thumb) {
