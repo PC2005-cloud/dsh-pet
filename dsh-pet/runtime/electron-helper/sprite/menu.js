@@ -10,6 +10,9 @@
 // 菜单首项文案随宿主形态变：桌面应用唤起主窗口，独立模式打开本机 AI 设置页，web 宿主打开站点。
 const OPEN_LABEL = { desktop: '打开软件', standalone: '打开 AI 设置', web: '打开网站' };
 
+// 桌宠控制面板地址（examples/pet-panel 的服务）；不设置则右键菜单不出现「打开控制面板」。
+const PANEL_URL = 'http://127.0.0.1:3090/';
+
 /** 睡觉拒绝台词的气泡时长（ms）：比默认 10s 略短，它只是「被打扰了」的一句回绝。 */
 const SLEEP_REFUSE_BUBBLE_MS = 8000;
 
@@ -36,6 +39,8 @@ Object.assign(PetSprite.prototype, {
       { label: '碎碎念', action: 'whisper' },
       { label: '对话', action: 'chat', hint: S.CHAT_HOTKEY_HINT },
     ];
+    // 「打开控制面板」：桌宠控制面板（examples/pet-panel）入口，排在对话之后、配图之前。
+    if (PANEL_URL) tools.push({ label: '打开控制面板', action: 'open-panel' });
     // 「配图」：与浏览器端同一份分支（纳入对话的配图 / 其他），点一张就用它说一句；没有可用图时
     // 返回 null，整项不出现。数据来自拍平层吹入的条目级字段（this.pet.memes / chatImageEnabled /
     // chatImageLimit），与网页端同一个 flattenConfigPets；缩略图走 BASE 的 /pic/memes 绝对地址
@@ -129,6 +134,11 @@ Object.assign(PetSprite.prototype, {
     }
     if (leaf.action === 'chat') {
       this.showChatFromMenu(); // 打开对话弹窗（记忆经 host /chat 读写，浏览器/桌面同一实例共享）
+      return;
+    }
+    if (leaf.action === 'open-panel') {
+      // 打开桌宠控制面板：交给系统默认浏览器（等效网页里 Ctrl+点击链接），不建专属窗口。
+      if (PANEL_URL && window.petBridge) window.petBridge.openDshSite(PANEL_URL);
       return;
     }
     if (leaf.action === 'todo') {
