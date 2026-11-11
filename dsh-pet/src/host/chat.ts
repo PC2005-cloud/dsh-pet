@@ -19,6 +19,7 @@ import { defaultLog } from './log-file.ts';
 import { extractChatImage, memeCatalog, type MemeEntry } from './memes.ts';
 import { modelCandidates, modelLabel, type ModelRef } from './model-selection.ts';
 import { historyStampOf } from './time-context.ts';
+import { tidyReplyText } from './persona.ts';
 
 /** 生成失败原因（与 shared/whisper.ts 的 WhisperState 失败分支同构）。 */
 export type ChatGenerateResult =
@@ -215,9 +216,12 @@ async function generateWith(ctx: { llm?: unknown }, once: GenerateOnce): Promise
       }),
     ],
     system,
-    // 不显式限 maxTokens：与碎碎念同因——推理模型把思考计入预算，显式小上限会截断正文；
-    // 不传由 dsh-llm 按适配器 defaultMaxTokens 兜底，对话短回复输出仍短。
-    temperature: 1,
+    // 短回复定制：显式压小 maxTokens + 频率/存在惩罚，配合 tidyReplyText 硬截 20 字，
+    // 让“每句 ≤20 字、无 emoji”不依赖小模型自觉（小模型易复读/长篇）。
+    maxTokens: 24,
+    temperature: 0.7,
+    frequencyPenalty: 1.5,
+    presencePenalty: 0.4,
     // 统一关闭深度思考：闲聊对话不需要推理（与碎碎念同一约束；仅模型声明支持时传）
     ...(supportsOff ? { reasoningEffort: ReasoningEffortId('off') } : {}),
     signal: deadline,
@@ -235,12 +239,14 @@ async function generateWith(ctx: { llm?: unknown }, once: GenerateOnce): Promise
       message: e instanceof Error ? e.message : String(e),
     };
   }
-  const text = assembler
-    .blocks()
-    .filter((b) => b.type === 'text')
-    .map((b) => ('text' in b ? (b as { text: string }).text : ''))
-    .join('')
-    .trim();
+  const text = tidyReplyText(
+    assembler
+      .blocks()
+      .filter((b) => b.type === 'text')
+      .map((b) => ('text' in b ? (b as { text: string }).text : ''))
+      .join('')
+      .trim(),
+  );
   if (!text) return { ok: false, reason: 'generate-error', message: noTextReason(assembler.finish) };
   if (!wantImage && !wantAction) return { ok: true, text };
   // 先剥动作再剥配图：两种标记互不依赖，顺序不影响结果；动作的无效名称也会被剥（见 extractChatAction）。

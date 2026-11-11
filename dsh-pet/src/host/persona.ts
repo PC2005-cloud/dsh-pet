@@ -19,6 +19,34 @@ import { timeContextOf } from './time-context.ts';
 const HISTORY_TIMES_LINE =
   '【历史】对话记录里，主人的话前面标着 [月日 时:分]，那是那句话发生的时刻；它只是记录里的时间标注，不是你的说话格式。判断“多久以前”“隔了几天”时按它换算，别把隔了很久的话当成刚说过的。你的回复直接从正文开始，不要写时间、不要加方括号前缀。';
 
+/** 统一说话要求：贴吧网友风 + 一句话 + ≤20 字 + 无 emoji + 无 Markdown。加到每条 system 末尾，压掉小模型的长篇大论。 */
+const CHAT_STYLE_LINE =
+  '【说话要求】回话要像贴吧网友聊天：就一句话、口语、接地气、可以吐槽；最多二十个字。禁止输出思考过程、禁止用 Markdown 或 HTML 标签（标题/列表/表格/代码块/<xxx>）、禁止重复、禁止长篇大论、禁止分析用户、禁止加颜文字/表情符号/emoji/图片。';
+
+/** 安全边界：可以有黑色幽默和犀利吐槽，但必须用中文、文明用语；禁止色情/性描写/脏话/血腥暴力/侮辱用户。 */
+const CHAT_SAFE_LINE =
+  '【边界】可以有黑色幽默和犀利吐槽，但必须用中文、文明用语；禁止色情、禁止性描写、禁止脏话、禁止血腥暴力、禁止侮辱攻击用户。';
+
+/**
+ * 回复收尾清理：剥离 emoji / 颜文字，并硬截断到 20 字（优先在标点处断句）。
+ * 保证“每句 ≤20 字、无表情包”不依赖小模型自觉。
+ */
+export function tidyReplyText(s: string): string {
+  let t = String(s ?? '');
+  t = t.replace(
+    /[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{FE0F}\u{200D}\u{2190}-\u{21FF}\u{25A0}-\u{25FF}]/gu,
+    '',
+  );
+  t = t.replace(/[（(][＾^▽ω∀｡◕‿◕｀´︿•́₃•̀ㅂㅅ￣﹏＞＜~☆★]+[^（()）]{0,6}[）)]/gu, '');
+  t = t.replace(/\s+/g, ' ').trim();
+  if (t.length > 20) {
+    const cut = t.slice(0, 20);
+    const m = cut.match(/^.*[。！？!?，、～~；;]/);
+    t = m ? m[0] : cut.replace(/[\u4e00-\u9fa5A-Za-z0-9]$/, '');
+  }
+  return t;
+}
+
 /**
  * 某宠物最终生效的人设正文（不含名字与时间）：实例 whisperPrompt → 条目 whisperPrompt → 空串。
  *
@@ -57,6 +85,8 @@ export function composeSystemPrompt(parts: SystemPromptParts): string {
   const name = String(parts.name || parts.id);
   const nameLine = name ? '你的名字是“' + name + '”。' : '';
   const lines = [parts.prompt, nameLine].filter((line) => line !== '');
+  lines.push(CHAT_STYLE_LINE);
+  lines.push(CHAT_SAFE_LINE);
   const time = timeContextOf(parts.now);
   if (time) {
     lines.push(time);
