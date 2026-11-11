@@ -29,6 +29,8 @@ const OWN = 'PETPACK-OWN-ASSET';
 const MAIN = 'MAIN-POOL-ASSET';
 /** 用户表情包目录（共享链）里的图 */
 const SHARED_PIC = 'SHARED-MEME-BYTES';
+/** 用户 pic 目录里的图：覆盖包内同名通知图标的标记内容 */
+const USER_PIC = 'USER-PIC-OVERRIDE';
 /** pet pack 独占表情包目录里的图 */
 const OWN_PIC = 'PETPACK-OWN-MEME';
 /** 中文名 pet pack（仓库明确支持中文名，标识符校验不得用 ASCII 白名单） */
@@ -79,11 +81,16 @@ before(() => {
   writeFileSync(join(userRoot, 'memes', '共用图.png'), SHARED_PIC);
   mkdirSync(join(userRoot, 'pet', `${CN_PET}-memes`), { recursive: true });
   writeFileSync(join(userRoot, 'pet', `${CN_PET}-memes`, '自家图.png'), OWN_PIC);
+  // 用户 pic 目录：覆盖包内通知图标（升级重装不会碰用户目录）
+  mkdirSync(join(userRoot, 'pic'), { recursive: true });
+  writeFileSync(join(userRoot, 'pic', 'notify-done.png'), USER_PIC);
   // 用户根之外的诱饵：目录名以 -animation / -memes 结尾，正是旧漏洞能读到的东西
   mkdirSync(join(dir, 'outside-animation'), { recursive: true });
   writeFileSync(join(dir, 'outside-animation', 'leak.webm'), SECRET);
   mkdirSync(join(dir, 'outside-memes'), { recursive: true });
   writeFileSync(join(dir, 'outside-memes', 'leak.png'), SECRET);
+  mkdirSync(join(dir, 'outside-pic'), { recursive: true });
+  writeFileSync(join(dir, 'outside-pic', 'leak.png'), SECRET);
 
   savedHome = process.env.DSH_HOME;
   savedElectron = process.env.DSH_PET_ELECTRON_PATH;
@@ -561,9 +568,23 @@ describe('pic/memes 路由 —— 表情包素材归属（与 thumb 同一套语
     assert.equal((await call('/dsh-pet-7340/pic/memes/main/nope.png')).status, 404);
   });
 
-  test('通知图标（/pic/<名>.png）不受影响：仍只从包内 assets/pic 取', async () => {
-    // 源码形态下包内 assets 不可达 → 404（关键是不被 memes 分支吞掉）
+  test('通知图标（/pic/<名>.png）不被 memes 分支吞掉：两层都没有 → 404', async () => {
+    // 源码形态下包内 assets 不可达、用户 pic 目录里也没有 logo.png → 404
     assert.equal((await call('/dsh-pet-7340/pic/logo.png')).status, 404);
+  });
+});
+
+describe('pic 路由 —— 静态图的用户层覆盖（插件升级不冲掉自定义图标）', () => {
+  test('用户 pic 目录有同名文件：优先于包内，返回用户那份', async () => {
+    const r = await call('/dsh-pet-7340/pic/notify-done.png');
+    assert.equal(r.status, 200);
+    assert.equal(r.body, USER_PIC);
+  });
+
+  test('用户层同样不可穿越：反斜杠 ../ 不越出用户根', async () => {
+    const r = await call('/dsh-pet-7340/pic/..%5C..%5Coutside-pic%5Cleak.png');
+    assert.equal(r.status, 404);
+    assert.equal(r.body.includes(SECRET), false, '越根内容不得出现在响应体里');
   });
 });
 

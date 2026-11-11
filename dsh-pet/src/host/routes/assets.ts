@@ -1,7 +1,7 @@
 /**
  * 静态素材：/font、/pic（含表情包链）、/sound、/thumb 的取文件与路径守卫。
  *
- * 不决定素材归属，只按给定目录链查找。
+ * 不决定素材归属，只按各 scope 的固定次序查找（用户层优先、包内兜底）。
  * 依赖（PetRouteDeps）显式传入，模块内不读全局、不建状态。
  * @module dsh-pet/src/host/routes/assets
  */
@@ -16,7 +16,7 @@ import type { RouteResult } from '../http.ts';
 
 /** 静态素材领域：未命中返回 undefined，命中返回应答。 */
 export async function handleAssetsRoutes(deps: PetRouteDeps, input: RouteInput): Promise<RouteResult | undefined> {
-  const { assetRootFor, memeDirsFor, petConfigDir, userRootFor } = deps;
+  const { assetRootFor, memeDirsFor, petConfigDir, userRoot, userRootFor } = deps;
   const { rest, url } = input;
 
   // 动画素材：/thumb/<素材根>/<file>，扩展名 webm（默认）/ mov（macOS 定制）。
@@ -55,7 +55,8 @@ export async function handleAssetsRoutes(deps: PetRouteDeps, input: RouteInput):
     return { kind: 'file', file: fontFile, contentType: MIME[ext] ?? 'application/octet-stream' };
   }
 
-  // 通知图标：/pic/<file> → 包内 assets/pic（方形 png，系统通知 icon 用）。
+  // 通知图标、拖拽光标、玩法图：/pic/<file> → 用户层 $DSH_HOME/dsh-pet/pic/ 优先，包内 assets/pic 兜底。
+  // 用户层是为了自定义图标能活过插件升级——升级重装会把包内 assets 还原成内置那套。
   // 表情包：/pic/memes/<素材根>/<名称>.png → 按素材根走 memeDirsFor 的目录链，与 /thumb 同一套
   // 归属语义；名称含中文，URL 段已在上方解码。旧的两段形式 /pic/memes/<名称>.png 保留，
   // 等价于素材根 main 的目录链。
@@ -79,8 +80,10 @@ export async function handleAssetsRoutes(deps: PetRouteDeps, input: RouteInput):
       const ext = picFile.slice(picFile.lastIndexOf('.')).toLowerCase();
       return { kind: 'file', file: picFile, contentType: MIME[ext] ?? 'application/octet-stream' };
     }
-    const picRoot = join(PACKAGE_ROOT, 'assets', 'pic');
-    const picFile = resolveExisting(picRoot, restParts.join('/'));
+    const picRel = restParts.join('/');
+    // 两层同一道守卫：resolveExisting 只放行根目录内的相对路径，用户层不额外开口子
+    const picFile =
+      resolveExisting(join(userRoot, 'pic'), picRel) ?? resolveExisting(join(PACKAGE_ROOT, 'assets', 'pic'), picRel);
     if (picFile === undefined) return { kind: 'text', status: 404, body: 'dsh-pet: pic not found' };
     const ext = picFile.slice(picFile.lastIndexOf('.')).toLowerCase();
     return { kind: 'file', file: picFile, contentType: MIME[ext] ?? 'application/octet-stream' };
