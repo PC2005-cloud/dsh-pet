@@ -99,15 +99,31 @@ export async function queryWeather(city: string, deps: QueryWeatherDeps = {}): P
   return snapshot;
 }
 
-/** 城市名 → 坐标；命中缓存时不再发请求。 */
+/** 城市名 → 坐标；命中缓存时不再发请求；带行政区后缀查不到时去掉后缀再试一次。 */
 async function geocode(city: string, deps: QueryWeatherDeps): Promise<Place | null> {
   const now = deps.now ?? Date.now;
   const hit = geoCache.get(city);
   if (hit !== undefined && now() - hit.at < GEO_TTL_MS) return hit.place;
+  // 上游地名库不认行政区后缀：实测「南昌市」零命中、「南昌」一条命中，IP 定位给的名字正好带「市」
+  const bare = withoutAdminSuffix(city);
+  const place = (await searchPlace(city, deps)) ?? (bare === city ? null : await searchPlace(bare, deps));
+  if (place === null) return null;
+  rememberPlace(city, place, now());
+  return place;
+}
+
+/** 去掉「市 / 县 / 区 / 旗」后缀；去掉后不足两个字就原样返回（免得把「沙市」削成「沙」）。 */
+function withoutAdminSuffix(city: string): string {
+  const trimmed = city.replace(/[市县区旗]$/u, '');
+  return trimmed.length >= 2 ? trimmed : city;
+}
+
+/** 一次地名搜索：取第一条结果的坐标与中文名。 */
+async function searchPlace(name: string, deps: QueryWeatherDeps): Promise<Place | null> {
   let body: Record<string, unknown> | undefined;
   try {
     body = recordOf(
-      await fetchJson(GEOCODE_URL + encodeURIComponent(city), {
+      await fetchJson(GEOCODE_URL + encodeURIComponent(name), {
         label: 'open-meteo-geocoding',
         fetchImpl: deps.fetchImpl,
         sleep: deps.sleep,
@@ -122,9 +138,7 @@ async function geocode(city: string, deps: QueryWeatherDeps): Promise<Place | nu
   const latitude = numberOrUndefined(first?.latitude);
   const longitude = numberOrUndefined(first?.longitude);
   if (latitude === undefined || longitude === undefined) return null;
-  const place: Place = { name: textOf(first?.name) ?? city, latitude, longitude };
-  rememberPlace(city, place, now());
-  return place;
+  return { name: textOf(first?.name) ?? name, latitude, longitude };
 }
 
 /** 拉当前天气；任一必备字段缺失或非数值都算查询失败。 */

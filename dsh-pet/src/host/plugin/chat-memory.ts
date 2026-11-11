@@ -8,6 +8,7 @@
 import { join } from 'node:path';
 import { generateChat, type ChatMemoryMessage } from '../chat.ts';
 import { chatActionNames } from '../chat-action.ts';
+import { currentEnvironment, type EnvironmentFacts } from '../environment.ts';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { composeSystemPrompt, petPersona } from '../persona.ts';
 import { findPetInstance, readAllConfig, removeRoundsByTs, sliceMemoryRounds } from '../config.ts';
@@ -113,11 +114,12 @@ export function createChatMemory(deps: ChatMemoryInput) {
   /** 某宠物的最终人设 system：实例级 `pets[].whisperPrompt` 优先，没写回落到所属条目的那份。
    *  拼装在 ./persona（纯函数）：人设正文 + 名字声明 + 一行时间背景，时间每次现算；
    *  对话路径传 `{ historyTimes: true }` 追加【历史】说明，碎碎念没有历史，不传。
+   *  `env` 是城市与天气：对话、碎碎念、梦话都传——它们说的是同一只宠物此刻的处境。
    *  收 `findPetInstance` 的命中结果而不是 (petId, cfg)：调用方都已解析过，再查只会多一处
    *  「查不到就兜底 main」的不可达分支。 */
   const petSystemPrompt = (
     found: { conf: Record<string, unknown>; pet: Record<string, unknown> },
-    options: { historyTimes?: boolean } = {},
+    options: { historyTimes?: boolean; env?: EnvironmentFacts } = {},
   ): string =>
     composeSystemPrompt({
       prompt: petPersona(found.conf, found.pet),
@@ -125,6 +127,7 @@ export function createChatMemory(deps: ChatMemoryInput) {
       id: String(found.pet.id ?? ''),
       now: new Date(),
       ...(options.historyTimes === true ? { historyTimes: true } : {}),
+      ...(options.env !== undefined ? { env: options.env } : {}),
     });
 
   /** 对话记忆轮数（1 轮 = 1 问 1 答）：该宠物所属条目的 chatMemoryRounds（合并器已填默认）。
@@ -225,7 +228,7 @@ export function createChatMemory(deps: ChatMemoryInput) {
     const manualVoiceOn = cfg.main?.voiceEnabled === true;
     const voiceOff = kind === 'whisper' ? !whisperVoiceOn : !manualVoiceOn;
     const target = voiceOff ? undefined : (voiceTo ?? voiceTargetFor(found.pet));
-    const system = petSystemPrompt(found);
+    const system = petSystemPrompt(found, { env: await currentEnvironment() });
     // 池只算一次：点名的图与随机抽图共用同一份（含文件存在性判定）。
     const pool = readMemePool(found.conf.memes, memeDirsFor(found.entry));
     // 点名了却没命中 = 配置写错或图已被删：明确失败，不静默换成另一张（点了 A 却看到 B 会以为坏了）。
@@ -274,7 +277,7 @@ export function createChatMemory(deps: ChatMemoryInput) {
     const cfg = readAllConfig(configPaths);
     const found = findPetInstance(cfg, petId);
     if (!found) return false;
-    const system = petSystemPrompt(found);
+    const system = petSystemPrompt(found, { env: await currentEnvironment() });
     const result = await generateWhisper(ctx, {
       system,
       preferred: configuredModel(found.conf, 'whisperModel'),
@@ -304,8 +307,10 @@ export function createChatMemory(deps: ChatMemoryInput) {
   ): Promise<
     | { ok: true; text: string; image?: string }
     | { ok: false; reason: 'provider-missing' | 'generate-error' | 'unknown-pet'; message?: string }
-  > =>
-    withMemoryLock(async () => {
+  > => {
+    // 环境（城市 + 天气）在锁外查：它是网络往返，压进 withMemoryLock 会把别的对话一起堵住
+    const env = await currentEnvironment();
+    return withMemoryLock(async () => {
       const cfg = readAllConfig(configPaths);
       const found = findPetInstance(cfg, petId);
       // 宠物在「校验那次读」与这里之间被删了——本函数还要先排 withMemoryLock 的串行队列，
@@ -337,7 +342,7 @@ export function createChatMemory(deps: ChatMemoryInput) {
       const list = sliceMemoryRounds(entry.messages, rounds);
       // 人设：实例级 whisperPrompt 优先，没写回落所属条目（与碎碎念同一拼装）。
       // 有历史才追加【历史】段：没有历史时那段话在描述不存在的前缀，只会误导模型。
-      const system = petSystemPrompt(found, { historyTimes: list.length > 0 });
+      const system = petSystemPrompt(found, { historyTimes: list.length > 0, env });
       // 图片只记尺寸与字节数（不记 base64）：模型不支持读图时 dsh-llm 会把它投影成占位文本，靠这行日志定位
       if (image !== undefined) {
         log.info(
@@ -407,6 +412,7 @@ export function createChatMemory(deps: ChatMemoryInput) {
       // 同一份文本随返回值带出（叶子照写，不是二选一）
       return { ok: true as const, text: generated.text, ...(generated.image ? { image: generated.image } : {}) };
     });
+  };
 
   /** 删除某只宠物的对话记忆：`ts` 缺省 = 清空全部，给了 ts = 只删命中的轮（一轮两条共享 ts，成对删）。
    *  与对话共用同一条串行队列——删除不会插进一次回复的读-改-写中间，也不会被它覆盖写回。

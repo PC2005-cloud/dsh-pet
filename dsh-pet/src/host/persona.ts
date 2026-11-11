@@ -8,7 +8,7 @@
  * 必须始终成立：拼装点唯一——不给名字与时间开占位符配置，否则等于出现第二个拼装点。
  * @module dsh-pet/src/host/persona
  */
-import { timeContextOf } from './time-context.ts';
+import { timeContextOf, type TimeContextEnv } from './time-context.ts';
 
 /**
  * 历史时间说明：历史里 user 消息带 `[月日 时:分]` 前缀时追加，让模型知道那些时刻可以用来算跨度。
@@ -44,6 +44,8 @@ export interface SystemPromptParts {
   now: Date;
   /** 历史消息是否带时间前缀；缺省 false（碎碎念没有历史，不该出现【历史】段） */
   historyTimes?: boolean;
+  /** 时间行附带的环境事实（城市与天气）；缺省 = 只写时间，与加入环境前一致 */
+  env?: TimeContextEnv;
 }
 
 /**
@@ -57,7 +59,7 @@ export function composeSystemPrompt(parts: SystemPromptParts): string {
   const name = String(parts.name || parts.id);
   const nameLine = name ? '你的名字是“' + name + '”。' : '';
   const lines = [parts.prompt, nameLine].filter((line) => line !== '');
-  const time = timeContextOf(parts.now);
+  const time = timeContextOf(parts.now, parts.env);
   if (time) {
     lines.push(time);
     // 【历史】跟着时间背景走：它整句都在引用“现在”，没有时间背景时不成立

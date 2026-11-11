@@ -19,7 +19,9 @@ export type FetchJsonErrorCode = 'timeout' | 'http-status' | 'bad-json' | 'netwo
 /** 抓取失败；`code` 供调用方分支，`message` 只含端点名与状态码。 */
 export class FetchJsonError extends Error {
   /** 失败分类。 */
-  readonly code: FetchJsonErrorCode;
+  // declare：只声明字段、不产出类字段代码。es2020 产物会把类字段降级成 defineProperty，
+  // 进而拖出一条 `@oxc-project/runtime` 裸 import，装好的用户 import 插件时直接 ERR_MODULE_NOT_FOUND。
+  declare readonly code: FetchJsonErrorCode;
 
   /**
    * @param code - 失败分类。

@@ -92,7 +92,18 @@ describe('queryWeather —— 查询路径', () => {
     const snapshot = await queryWeather('不存在的城市', { fetchImpl: fake.impl, sleep: NO_SLEEP });
 
     assert.equal(snapshot, null);
-    assert.equal(fake.calls.length, 1, '地名查不到就不该再查天气');
+    assert.equal(fake.calls.length, 2, '带“市”字查不到会去掉后缀再试一次，但不该去查天气');
+  });
+
+  test('带“市”字查不到：去掉后缀重试，命中后照样取到天气', async () => {
+    resetWeatherCache();
+    const fake = fakeFetch([() => json({ results: [] }), () => json(SHENZHEN), () => json(CURRENT)]);
+
+    const snapshot = await queryWeather('深圳市', { fetchImpl: fake.impl, sleep: NO_SLEEP });
+
+    assert.equal(snapshot?.city, '深圳', '应拿到去掉后缀后的命中结果');
+    assert.equal(snapshot?.summary, '阴');
+    assert.ok(decodeURIComponent(fake.calls[1]).includes('name=深圳'), '第二次搜索应是不带“市”的名字');
   });
 
   test('天气字段非法：返回 null，不把非法值当 0', async () => {
