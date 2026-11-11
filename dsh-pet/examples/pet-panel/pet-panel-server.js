@@ -61,6 +61,36 @@ function readPets() {
   return [...map.values()];
 }
 
+// 触发桌宠重生成：/pet-display 同值调用会 requestRestart，重生成所有桌宠窗口。
+// （/desktop/reload 在该 engine 版本被路由到 thumb 而失效，故统一用 /pet-display。）
+function triggerRespawn() {
+  const pets = readPets();
+  const target = pets.find((p) => p.display !== 'none');
+  if (target) proxyEngine('/pet-display', 'POST', { id: target.id, display: target.display }).catch(() => {});
+}
+
+// 取某只宠的第一张 AI娘配图路径（pet/<id>-memes/ 下）
+function firstPetImage(id) {
+  let cfg = null;
+  try {
+    if (id === 'main') {
+      cfg = JSON.parse(fs.readFileSync(MAIN, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, ''));
+    } else {
+      cfg = JSON.parse(fs.readFileSync(path.join(PET_DIR, id + '-config.json'), 'utf8'));
+    }
+  } catch (e) { return null; }
+  const memes = cfg && cfg.memes;
+  if (!memes) return null;
+  const keys = Object.keys(memes);
+  if (keys.length === 0) return null;
+  const dir = path.join(PET_DIR, id + '-memes');
+  for (const ext of ['.png', '.webp', '.gif', '.jpg']) {
+    const f = path.join(dir, keys[0] + ext);
+    if (fs.existsSync(f)) return f;
+  }
+  return null;
+}
+
 // 修改宠物大小：main 宠直接改 main-config.jsonc（保注释），其他宠改 pet/<id>-config.json
 function setPetSize(id, size) {
   size = Math.max(50, Math.min(600, parseInt(size, 10)));
@@ -105,12 +135,31 @@ const server = http.createServer(async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  // 关键：禁止浏览器缓存，保证面板永远拿到最新页面/数据
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
   if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
 
   if (p === '/' || p === '/index.html') {
     fs.readFile(PANEL, (err, data) => {
       if (err) { res.writeHead(500, { 'content-type': 'text/plain' }); res.end('面板文件缺失: ' + PANEL); return; }
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+      res.end(data);
+    });
+    return;
+  }
+
+  // API: 宠物预览图——返回该宠第一张 AI娘配图（pet/<id>-memes/ 下的图）
+  if (p.startsWith('/api/preview/')) {
+    const petId = decodeURIComponent(p.slice('/api/preview/'.length));
+    const img = firstPetImage(petId);
+    if (!img) { res.writeHead(404, { 'content-type': 'text/plain' }); res.end('no preview'); return; }
+    const ext = path.extname(img).toLowerCase();
+    const type = ext === '.webp' ? 'image/webp' : ext === '.gif' ? 'image/gif' : 'image/png';
+    fs.readFile(img, (err, data) => {
+      if (err) { res.writeHead(404, { 'content-type': 'text/plain' }); res.end('read fail'); return; }
+      res.writeHead(200, { 'content-type': type, 'Cache-Control': 'no-cache' });
       res.end(data);
     });
     return;
@@ -157,8 +206,9 @@ const server = http.createServer(async (req, res) => {
         const changed = setPetSize(x.id, x.size);
         out.push({ id: x.id, ok: changed.ok, message: changed.message });
       }
-      // 变更后触发重载
-      if (out.some((x) => x.ok)) proxyEngine('/desktop/reload', 'POST', {}).catch(() => {});
+      // 触发重生成：/pet-display 同值调用会 requestRestart，重生成含新 size 的桌宠窗口
+      // （/desktop/reload 在该 engine 版本被路由到 thumb 而失效，故不用它）
+      if (out.some((x) => x.ok)) triggerRespawn();
       res.writeHead(200, { 'content-type': 'application/json' });
       res.end(JSON.stringify({ ok: out.every((x) => x.ok), results: out }));
       return;
@@ -194,7 +244,7 @@ const server = http.createServer(async (req, res) => {
       voiceEnabled: false,
     };
     fs.writeFileSync(file, JSON.stringify(cfg, null, 2), 'utf8');
-    proxyEngine('/desktop/reload', 'POST', {}).catch(() => {});
+    triggerRespawn();
     res.writeHead(200, { 'content-type': 'application/json' });
     res.end(JSON.stringify({ ok: true, id }));
     return;
@@ -223,7 +273,7 @@ const server = http.createServer(async (req, res) => {
         }
       }
       fs.writeFileSync(MAIN, src, 'utf8');
-      proxyEngine('/desktop/reload', 'POST', {}).catch(() => {});
+      triggerRespawn();
       res.writeHead(200, { 'content-type': 'application/json' });
       res.end(JSON.stringify({ ok: true }));
       return;
@@ -236,9 +286,9 @@ const server = http.createServer(async (req, res) => {
 
   // API: 重载桌宠
   if (p === '/api/reload') {
-    const result = await proxyEngine('/desktop/reload', 'POST', {});
-    res.writeHead(result.status, { 'content-type': 'application/json' });
-    res.end(JSON.stringify(result.json));
+    triggerRespawn();
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ ok: true, reloading: true }));
     return;
   }
 

@@ -22,8 +22,9 @@
   .pet { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px; }
   .pet.off { opacity:.55; }
   .pet .top { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
-  .pet .avatar { width:32px; height:32px; border-radius:8px; background:linear-gradient(135deg,var(--accent),#c46bff); display:flex; align-items:center; justify-content:center; font-size:16px; }
-  .pet .name { font-weight:700; font-size:15px; }
+  .pet .avatar { width:44px; height:44px; border-radius:8px; background:linear-gradient(135deg,var(--accent),#c46bff); display:flex; align-items:center; justify-content:center; font-size:16px; overflow:hidden; flex-shrink:0; }
+  .pet .avatar img { width:100%; height:100%; object-fit:cover; }
+  .pet .name { font-weight:700; font-size:15px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .pet .id { font-size:11px; color:var(--dim); margin-left:auto; }
   .pet .row { display:flex; align-items:center; justify-content:space-between; font-size:13px; margin:6px 0; }
   .pet .row label { color:var(--dim); }
@@ -81,11 +82,11 @@
     <div class="chatbox">
       <div class="row" style="margin-bottom:10px">
         <label>聊天时配表情包（图片）</label>
-        <div class="switch"><input type="checkbox" id="flagImage" onchange="setFlag('chatImageEnabled', this.checked)"><span class="slider"></span></div>
+        <label class="switch"><input type="checkbox" id="flagImage" onchange="setFlag('chatImageEnabled', this.checked)"><span class="slider"></span></label>
       </div>
       <div class="row">
         <label>聊天时带动画动作</label>
-        <div class="switch"><input type="checkbox" id="flagAnime" onchange="setFlag('chatAnimationEnabled', this.checked)"><span class="slider"></span></div>
+        <label class="switch"><input type="checkbox" id="flagAnime" onchange="setFlag('chatAnimationEnabled', this.checked)"><span class="slider"></span></label>
       </div>
       <div class="footnote">注：这两项在群聊回复脚本里默认关闭；这里是全局开关，改动后重载桌宠生效。</div>
     </div>
@@ -113,17 +114,23 @@ let PETS = [];
 const $ = (id) => document.getElementById(id);
 function toast(msg) { const t = $('toast'); t.textContent = msg; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 2000); }
 
-async function loadPets() {
-  $('status').textContent = '加载中…';
+let busy = false;
+async function loadPets(silent) {
+  if (!silent) $('status').textContent = '加载中…';
   try {
     const r = await fetch('/api/pets');
     const j = await r.json();
     PETS = j.pets || [];
-    renderPets();
-    fillChatSelect();
-    $('status').textContent = '共 ' + PETS.length + ' 只桌宠';
+    const json = JSON.stringify(PETS);
+    if (busy && silent) { lastPetsJson = json; return; }
+    if (json !== lastPetsJson || !silent) {
+      lastPetsJson = json;
+      renderPets();
+      fillChatSelect();
+    }
+    if (!silent) $('status').textContent = '共 ' + PETS.length + ' 只桌宠';
   } catch (e) {
-    $('status').textContent = '加载失败: ' + e.message;
+    if (!silent) $('status').textContent = '加载失败: ' + e.message;
   }
 }
 
@@ -136,13 +143,13 @@ function renderPets() {
     const on = p.display !== 'none';
     card.innerHTML = `
       <div class="top">
-        <div class="avatar">🎀</div>
+        <div class="avatar"><img src="/api/preview/${esc(p.id)}" onerror="this.style.display='none'" alt="${esc(p.name)}"></div>
         <div class="name">${esc(p.name)}</div>
         <div class="id">${esc(p.id)}</div>
       </div>
       <div class="row">
         <label>使用</label>
-        <div class="switch"><input type="checkbox" ${on ? 'checked' : ''} onchange="togglePet('${esc(p.id)}', this.checked)"><span class="slider"></span></div>
+        <label class="switch"><input type="checkbox" ${on ? 'checked' : ''} onchange="togglePet('${esc(p.id)}', this.checked)"><span class="slider"></span></label>
       </div>
       <div class="row">
         <label>大小 ${p.size}</label>
@@ -155,6 +162,7 @@ function renderPets() {
 
 function fillChatSelect() {
   const sel = $('chatPet');
+  const prev = sel.value;
   sel.innerHTML = '';
   for (const p of PETS) {
     const o = document.createElement('option');
@@ -162,25 +170,42 @@ function fillChatSelect() {
     o.textContent = p.name + ' (' + p.id + ')';
     sel.appendChild(o);
   }
+  if (prev && [...sel.options].some((o) => o.value === prev)) sel.value = prev;
+  else if (sel.options.length) sel.value = sel.options[0].value;
+}
+
+// 自动刷新：每 4 秒刷新宠物列表与全局开关，让面板始终反映当前状态
+let autoTimer = null;
+function startAutoRefresh() {
+  if (autoTimer) clearInterval(autoTimer);
+  autoTimer = setInterval(() => { loadPets(true); loadFlags(); }, 4000);
 }
 
 async function togglePet(id, on) {
+  busy = true;
+  // 乐观更新：立即在 UI 反映（避免切换进行中自动刷新把复选框重置）
+  const pet = PETS.find((p) => p.id === id);
+  if (pet) { pet.display = on ? 'desktop' : 'none'; renderPets(); }
   try {
     const r = await fetch('/api/pet-display', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, display: on ? 'desktop' : 'none' }) });
     const j = await r.json();
     if (j && j.ok === false) { toast('切换失败: ' + (j.message || '')); return; }
     toast((on ? '已开启 ' : '已关闭 ') + id);
-    loadPets();
+    await loadPets(true);
   } catch (e) { toast('错误: ' + e.message); }
+  finally { busy = false; }
 }
 
 async function setSize(id, size) {
+  busy = true;
   try {
     const r = await fetch('/api/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pets: [{ id, size: parseInt(size, 10) }] }) });
     const j = await r.json();
     if (j && j.ok === false) { toast('大小设置失败: ' + (j.message || '')); return; }
     toast(id + ' 大小已设为 ' + size);
+    await loadPets(true);
   } catch (e) { toast('错误: ' + e.message); }
+  finally { busy = false; }
 }
 
 async function reloadAll() {
@@ -207,6 +232,7 @@ async function sendChat() {
 function esc(s) { return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 
 async function setFlag(key, on) {
+  busy = true;
   try {
     const r = await fetch('/api/flags', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ [key]: on }) });
     const j = await r.json();
@@ -215,6 +241,7 @@ async function setFlag(key, on) {
     loadFlags();
     setTimeout(loadPets, 1200);
   } catch (e) { toast('错误: ' + e.message); }
+  finally { busy = false; }
 }
 
 async function loadFlags() {
@@ -245,6 +272,7 @@ async function addPet() {
 
 loadPets();
 loadFlags();
+startAutoRefresh();
 </script>
 </body>
 </html>
