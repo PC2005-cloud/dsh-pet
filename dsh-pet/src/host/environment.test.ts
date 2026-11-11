@@ -54,7 +54,7 @@ describe('currentEnvironment —— 能拿到什么就给什么', () => {
 
     const facts = await currentEnvironment({ fetchImpl: fake.impl, sleep: NO_SLEEP });
 
-    assert.equal(facts.place, '南昌市');
+    assert.equal(facts.place, '江西省南昌市', '地点短语应带上省，给城市猜错留兜底');
     assert.equal(facts.weather?.summary, '阴');
     assert.equal(facts.weather?.temperatureC, 13.1);
     assert.equal(fake.calls.length, 3, '两次定位 + 两次天气里的一次成功，共三次');
@@ -71,13 +71,54 @@ describe('currentEnvironment —— 能拿到什么就给什么', () => {
     assert.equal(fake.calls.length, 2, 'ip-api 与 ipwho.is 各一次，没有城市就不查天气');
   });
 
-  test('城市查到但天气查不到：只返回城市', async () => {
+  test('城市查到但天气查不到：只返回地点', async () => {
     resetCityCache();
     resetWeatherCache();
     const fake = fakeFetch([() => json(IP_API_OK), () => json({ results: [] })]);
 
     const facts = await currentEnvironment({ fetchImpl: fake.impl, sleep: NO_SLEEP });
 
-    assert.deepEqual(facts, { place: '南昌市' });
+    assert.deepEqual(facts, { place: '江西省南昌市' });
+  });
+});
+
+describe('currentEnvironment —— 地点短语拼装', () => {
+  test('省与市互相包含：只留带后缀的那个，不写成“北京市北京”', async () => {
+    resetCityCache();
+    resetWeatherCache();
+    const fake = fakeFetch([
+      () => json({ status: 'success', city: '北京', regionName: '北京市', country: '中国' }),
+      () => json({ results: [] }),
+    ]);
+
+    const facts = await currentEnvironment({ fetchImpl: fake.impl, sleep: NO_SLEEP });
+
+    assert.equal(facts.place, '北京市');
+  });
+
+  test('省为空：只写城市', async () => {
+    resetCityCache();
+    resetWeatherCache();
+    const fake = fakeFetch([
+      () => json({ status: 'success', city: '南昌市', regionName: '', country: '中国' }),
+      () => json({ results: [] }),
+    ]);
+
+    const facts = await currentEnvironment({ fetchImpl: fake.impl, sleep: NO_SLEEP });
+
+    assert.equal(facts.place, '南昌市');
+  });
+
+  test('英文地名之间补一个空格', async () => {
+    resetCityCache();
+    resetWeatherCache();
+    const fake = fakeFetch([
+      () => json({ status: 'success', city: 'Nanchang', regionName: 'Jiangxi', country: 'China' }),
+      () => json({ results: [] }),
+    ]);
+
+    const facts = await currentEnvironment({ fetchImpl: fake.impl, sleep: NO_SLEEP });
+
+    assert.equal(facts.place, 'Jiangxi Nanchang');
   });
 });

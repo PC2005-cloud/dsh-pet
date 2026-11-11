@@ -129,7 +129,7 @@ describe('queryWeather —— 查询路径', () => {
 });
 
 describe('queryWeather —— 缓存', () => {
-  test('10 分钟内重复查同一城市：只打地名与天气各一次', async () => {
+  test('1 小时内重复查同一城市：只打地名与天气各一次', async () => {
     resetWeatherCache();
     const fake = fakeFetch([() => json(SHENZHEN), () => json(CURRENT)]);
     let clock = 1_700_000_000_000;
@@ -149,7 +149,7 @@ describe('queryWeather —— 缓存', () => {
     const now = () => clock;
 
     await queryWeather('深圳', { fetchImpl: fake.impl, sleep: NO_SLEEP, now });
-    clock += 11 * 60 * 1000;
+    clock += 61 * 60 * 1000;
     await queryWeather('深圳', { fetchImpl: fake.impl, sleep: NO_SLEEP, now });
 
     assert.equal(fake.calls.length, 3, '坐标仍有效，只该重查天气');
