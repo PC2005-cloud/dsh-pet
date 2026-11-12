@@ -172,6 +172,18 @@ describe('createMenuActions —— 配图碎碎念', () => {
     const url = captured.urls[0] ?? '';
     assert.match(url, /\/environment\?pet=pet-1&surface=any&fresh=1$/, '必须强制刷新：' + url);
   });
+
+  test('查看余额：POST /balance 带上 pet 与 surface，只让被点的那只弹', async () => {
+    const captured = captureFetch();
+    try {
+      harness().actions.run({ label: '查看余额', action: 'show-balance' } as MenuLeaf);
+      await new Promise((resolve) => setImmediate(resolve));
+    } finally {
+      captured.restore();
+    }
+    assert.equal(captured.urls.length, 1, '一次点击只该发一次请求');
+    assert.match(captured.urls[0] ?? '', /\/balance\?pet=pet-1&surface=any$/, '应带归属参数：' + captured.urls[0]);
+  });
 });
 
 describe('createMenuActions —— 睡觉闸门（渲染端拒绝）', () => {

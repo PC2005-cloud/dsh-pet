@@ -305,8 +305,28 @@ paths:
           因为"刷新动作本身"完成了。要区分请读 `sections.balance.data.ok`。
         - 写入时会带上 `manual: true` 标记（只在本次刷新是用户主动触发时），
           消费端据此决定"余额不可用时要不要必弹文字说明"。
+        - 带 `?pet=` 时，叶子另带 `petId`：**只有这只宠物**弹气泡与档位动画；不带则不写归属，
+          所有开启余额的宠物照常显示（斜杠命令与周期刷新都走这条）。
         - 常规的周期刷新由宿主**自己的定时器**完成（周期来自配置
           `eventsRefreshSec.balance`，默认 1800 秒），前端不需要轮询它。
+      parameters:
+        - name: pet
+          in: query
+          required: false
+          description: |
+            目标宠物 id。给了就必须存在，并依次过显示端（`surface`）与占用锁门禁；
+            睡觉门禁由分发器统一处理（睡着时回 `sleeping`）。
+          schema:
+            type: string
+        - name: surface
+          in: query
+          required: false
+          description: |
+            显示端。带 `pet` 时**必填**（`web` / `desktop` / `both` / `any`），缺省或非法回 `bad-request`。
+            不带 `pet` 时该参数无效。
+          schema:
+            type: string
+            enum: [web, desktop, both, any]
       responses:
         "200":
           description: 刷新动作已完成（不代表余额可用）

@@ -128,8 +128,8 @@ export interface PetRouteDeps {
   readonly thumbUserRoot: string;
   /** 用户表情包目录。 */
   readonly memesUserRoot: string;
-  /** 刷新余额（manual 表示用户主动触发）。 */
-  readonly refreshBalance: (manual?: boolean) => Promise<void>;
+  /** 刷新余额（manual 表示用户主动触发；petId 表示这次只让该宠物显示，缺省不写归属）。 */
+  readonly refreshBalance: (manual?: boolean, petId?: string) => Promise<void>;
   /** 查此刻的环境（城市 + 天气）；fresh 为真时跳过缓存强制重查。 */
   readonly environment: (opts?: { fresh?: boolean }) => Promise<EnvironmentFacts>;
   /** 生成一条碎碎念；image 给了就用这张图（需在池内），缺省 = 按配置随机抽一张或纯文本。

@@ -159,14 +159,18 @@ export function resolveLeafPath(path: string): LeafTarget | null {
   return isPetLeafName(name) ? { where: 'pet', name, petId: rest.slice(0, dot) } : null;
 }
 
-/** 类型收窄：余额叶子 → `{ state, manual }`。
+/** 类型收窄：余额叶子 → `{ state, manual, petId? }`。
  *  manual = 这次写入是手动触发的（/balance 命令、桌面「查看余额」菜单），由宿主在写入时标记，
- *  消费端据此决定余额不可用时要不要必弹文字说明。形状非法 → null，消费端跳过这一拍。 */
-export function readBalance(leaf: StateLeaf): { state: BalanceState; manual: boolean } | null {
+ *  消费端据此决定余额不可用时要不要必弹文字说明。
+ *  petId = 这次刷新「给谁看」（右键菜单点的那只）；缺省 = 不带归属，所有开了余额的宠物都照常显示。
+ *  形状非法 → null，消费端跳过这一拍。 */
+export function readBalance(leaf: StateLeaf): { state: BalanceState; manual: boolean; petId?: string } | null {
   const state = toBalanceState(leaf.data);
   if (!state) return null;
   const manual = (leaf.data as { manual?: unknown }).manual === true;
-  return { state, manual };
+  const rawPetId = (leaf.data as { petId?: unknown }).petId;
+  const petId = typeof rawPetId === 'string' && rawPetId !== '' ? rawPetId : undefined;
+  return petId === undefined ? { state, manual } : { state, manual, petId };
 }
 
 /** 说话指令（`pets.<id>.say` 的两种形态）。

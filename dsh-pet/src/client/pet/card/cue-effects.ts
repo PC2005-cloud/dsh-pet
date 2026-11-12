@@ -40,6 +40,7 @@ export function createCueEffects(rt: CueEffectsRuntime) {
 
   return function useCueEffects(hub: CardHub, props: PetCardProps): void {
     const { balance, balanceManual, balanceNoticeTick, balanceTick } = props;
+    const { balancePetId } = props;
     const { env, envTick } = props;
     const { animCue, animCueTick, posCue, posCueTick, say, sayTick, throwCue, throwCueTick } = props;
     const { workStatus, workStatusTick } = props;
@@ -62,6 +63,9 @@ export function createCueEffects(rt: CueEffectsRuntime) {
       const card = hub.card;
       if (balanceTick === 0 || balanceTick === prevBalanceRef.current) return;
       prevBalanceRef.current = balanceTick;
+      // 归属过滤：这次刷新点名了别的宠物 → 本宠物只更新数据，不弹气泡也不播档位动画。
+      // 先消费 tick 再判：归属期过去后这一拍不再补播（事件是瞬时的）。
+      if (balancePetId !== undefined && balancePetId !== cfg.id) return;
       // 占用锁：自动余额不看，手动请求照常；tick 消费之后再判，占用期间这一拍就当过去。
       if (hub.ownAnim.isFrozen() && !balanceManual) return;
       // 睡觉一票否决：睡着一律不播，手动请求也不打断睡姿（与桌面端同一口径）。
@@ -98,6 +102,8 @@ export function createCueEffects(rt: CueEffectsRuntime) {
       if (!cfg.balanceEnabled && !balanceManual) return; // 自动轮询受开关门控，手动请求无条件通过。
       if (balanceNoticeTick === 0 || balanceNoticeTick === prevNoticeRef.current) return;
       prevNoticeRef.current = balanceNoticeTick;
+      // 归属过滤：不可用说明也只说给被点的那只（缺省则照旧全员）
+      if (balancePetId !== undefined && balancePetId !== hub.cfg().id) return;
       // 占用锁：自动来源不看，手动请求照常；睡觉一票否决，手动也不弹。
       if (hub.ownAnim.isFrozen() && !balanceManual) return;
       if (hub.sleeping()) return;

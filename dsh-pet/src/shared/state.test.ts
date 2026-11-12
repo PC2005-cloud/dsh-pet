@@ -201,6 +201,14 @@ describe('readBalance —— 余额叶子 → 客户端视图', () => {
     assert.equal(notBool?.manual, false, '只有严格 true 才算');
   });
 
+  test('petId 归属：非空字符串才带出，缺省 / 空串 / 非字符串都不写这个键', () => {
+    const data = { ok: false as const, provider: 'p', reason: 'unsupported' as const };
+    assert.equal(readBalance({ counter: 1, data: { ...data, petId: 'main' } })?.petId, 'main');
+    assert.equal('petId' in (readBalance({ counter: 1, data }) ?? {}), false, '不带归属时不该造这个键');
+    assert.equal(readBalance({ counter: 1, data: { ...data, petId: '' } })?.petId, undefined);
+    assert.equal(readBalance({ counter: 1, data: { ...data, petId: 42 } })?.petId, undefined);
+  });
+
   test('脏数据 → null（消费端跳过这一拍，不抛）', () => {
     assert.equal(readBalance({ counter: 1, data: null }), null);
     assert.equal(readBalance({ counter: 1, data: 'nope' }), null);

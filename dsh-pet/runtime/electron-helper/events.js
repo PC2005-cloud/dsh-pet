@@ -303,10 +303,16 @@ PetSprite.prototype.showEnvNow = function showEnvNow(state) {
 
 // 余额不可用 → 文字说明气泡（周期轮询与手动 /balance 共用这一条路径，判定在 shared）：
 // explicit（手动触发）一律弹；自动轮询只在原因（含服务商）变化时弹一次，避免反复刷同一句话。
-function applyBalanceNotice(state, explicit) {
+// petId 给了就只弹给那只（右键菜单点的那只），缺省照旧全员。
+function applyBalanceNotice(state, explicit, petId) {
   const notice = S.decideBalanceNotice(state, balanceNoticeKey, explicit);
   balanceNoticeKey = notice.key;
-  if (notice.show) for (const s of sprites) s.showBalanceNotice(state, explicit);
+  if (notice.show) {
+    for (const s of sprites) {
+      if (petId !== undefined && petId !== s.pet.id) continue;
+      s.showBalanceNotice(state, explicit);
+    }
+  }
   // 未登记服务商是配置事实（已由气泡说明），不再刷 console；其余原因照旧显式报错，绝不伪造余额
   if (state.reason !== 'unsupported') {
     console.error('[dsh-pet] 余额查询失败 reason=' + state.reason + (state.message ? ' ' + state.message : ''));
@@ -321,7 +327,8 @@ let stateSince;
 /** 宿主支持长轮询吗？响应带 counter = 支持；不带 = 老宿主（会立刻返回全量，必须退避） */
 let stateLongPoll = true;
 
-/** 余额叶子 → 展示（成功播档位动画 + 气泡；不可用按 shared 判定弹文字说明） */
+/** 余额叶子 → 展示（成功播档位动画 + 气泡；不可用按 shared 判定弹文字说明）。
+ *  叶子带 petId 时只给那只宠物（右键菜单点的那只），不带则所有开了余额的照常显示。 */
 function applyBalanceLeaf(leaf) {
   const hit = S.readBalance(leaf);
   if (!hit) return;
@@ -330,10 +337,14 @@ function applyBalanceLeaf(leaf) {
   if (hit.state.ok) {
     balanceTick++;
     // 睡着一律不播：档位动画与气泡都不更新，手动请求也不例外（睡姿优先）
-    for (const s of sprites) if (!s.sleeping) s.onBalanceTick(hit.state, balanceTick, hit.manual);
+    for (const s of sprites) {
+      if (s.sleeping) continue;
+      if (hit.petId !== undefined && hit.petId !== s.pet.id) continue;
+      s.onBalanceTick(hit.state, balanceTick, hit.manual);
+    }
   } else {
     // 不可用：manual（用户主动要的）一律弹，周期刷新只在原因变化时弹一次
-    applyBalanceNotice(hit.state, hit.manual);
+    applyBalanceNotice(hit.state, hit.manual, hit.petId);
   }
 }
 

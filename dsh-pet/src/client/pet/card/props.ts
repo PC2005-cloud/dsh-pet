@@ -24,6 +24,8 @@ export interface PetCardProps {
   balanceNoticeTick: number;
   /** 本次余额是否由用户手动请求；手动请求即使关闭 balanceEnabled 也答复。 */
   balanceManual: boolean;
+  /** 本次余额「给谁看」：有值且不是本宠物时只更新数据、不弹气泡；缺省 = 不分组。 */
+  balancePetId?: string;
   /** 最近一次环境结果；只有 petId 与本宠物相符时容器才传（环境是机器级事实，一只一份气泡）。 */
   env?: EnvState;
   /** 环境叶子变化次数。 */

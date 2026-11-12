@@ -185,8 +185,9 @@ Object.assign(PetSprite.prototype, {
   // 「查看余额」菜单：POST 动作让宿主刷新余额。结果这里什么都不用做——写叶子会让版本号变，
   // 挂着的长轮询那一拍立刻返回并展示（同一展示路径）。数据只有一个出口（S），菜单只负责让它刷新。
   // 不做 balanceEnabled 门控：手动请求不受开关限制，关了余额的宠物被点一次也该看到数据。
+  // 带 pet：这次只让被点的那只弹（宿主写进叶子的归属）；surface=desktop = 本窗口就是桌面端。
   showBalanceFromMenu() {
-    S.postAction(BALANCE_URL)
+    S.postAction(BALANCE_URL + '?pet=' + encodeURIComponent(this.pet.id) + '&surface=desktop')
       .then((ok) => {
         if (!ok) console.warn('[dsh-pet] 菜单查看余额：刷新动作未成功');
       })

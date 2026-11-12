@@ -70,11 +70,18 @@ export function createBalancePoll(deps: BalancePollInput) {
    *
    * @param manual - 这次刷新是否由用户触发（/balance 命令、桌面「查看余额」菜单）；标记随数据写进
    *   叶子，前端据此决定余额不可用时是否必弹文字说明（周期刷新只在原因变化时弹一次）。
+   * @param petId - 这次刷新「给谁看」（右键菜单点的那只）。缺省 = 不写归属，
+   *   所有开了余额的宠物都照常显示；周期刷新与 /balance 命令都走这条。
    */
-  const refreshBalance = async (manual = false): Promise<void> => {
+  const refreshBalance = async (manual = false, petId?: string): Promise<void> => {
     // 开始 + 结果各一行：否则 logs.txt 里既看不出「有没有查」，也看不出「查了但余额没变」。
-    log.info(`[dsh-pet] 余额刷新开始（${manual ? '手动' : '周期'}）`);
-    const mark = <T>(v: T): T | (T & { manual: true }) => (manual ? { ...v, manual: true } : v);
+    log.info(`[dsh-pet] 余额刷新开始（${manual ? '手动' : '周期'}${petId === undefined ? '' : ' pet=' + petId}）`);
+    // manual 与 petId 都只在有时才补键：叶子形状是对外契约，多余的 undefined 键会被严格比对打回
+    const mark = <T>(v: T): T & { manual?: true; petId?: string } => ({
+      ...v,
+      ...(manual ? { manual: true as const } : {}),
+      ...(petId === undefined ? {} : { petId }),
+    });
     try {
       // 独立模式自己选余额服务商、自己持密钥：它的 provider 不是聊天用的那个，
       // 也不能经 DSH 的 credential store 解析，所以优先走 standaloneAi 交出来的凭证。
