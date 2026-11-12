@@ -130,16 +130,17 @@ describe('composeSystemPrompt —— 环境段（城市与天气）', () => {
       id: 'main',
       now: NOW,
       env: {
-        place: '南昌市',
+        region: '江西省',
+        city: '南昌市',
         weather: { summary: '阴', temperatureC: 13.1, apparentC: 12.9, humidityPercent: 84, windKph: 2 },
       },
     });
-    assert.ok(out.includes('你在南昌市（按网络粗估，不一定准）'), `实际：${out}`);
+    assert.ok(out.includes('你在江西省南昌市（按网络粗估，不一定准）'), `实际：${out}`);
     assert.ok(out.includes('外面阴，气温 13.1°C'));
   });
 
   test('只有城市：给出“没查到”的交代，不写任何温度', () => {
-    const out = composeSystemPrompt({ prompt: '', name: '蓝毛', id: 'main', now: NOW, env: { place: '南昌市' } });
+    const out = composeSystemPrompt({ prompt: '', name: '蓝毛', id: 'main', now: NOW, env: { city: '南昌市' } });
     assert.ok(out.includes('外面的天气这次没查到'));
     assert.ok(!out.includes('气温'), '没有数据时不该出现气温');
   });

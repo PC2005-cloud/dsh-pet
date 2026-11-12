@@ -114,7 +114,7 @@ export function takeChanged(s: PollState, baseline: Record<string, number>): Sta
 }
 
 /** `sections.<名>` 里会被消费端分发的那几个叶子。 */
-export type SectionLeafName = 'config' | 'balance' | 'workStatus' | 'notify' | 'menu' | 'focusSession';
+export type SectionLeafName = 'config' | 'balance' | 'workStatus' | 'notify' | 'menu' | 'focusSession' | 'env';
 
 /** `pets.<id>.<名>` 里会被消费端分发的那几个叶子。 */
 export type PetLeafName = 'say' | 'anim' | 'position' | 'throw' | 'lock' | 'sleep';
@@ -124,7 +124,7 @@ export type LeafTarget =
   { where: 'section'; name: SectionLeafName } | { where: 'pet'; name: PetLeafName; petId: string };
 
 /** 分段叶子名的全集；新增 section 叶子时与 {@link SectionLeafName} 一起改。 */
-const SECTION_LEAF_NAMES = ['config', 'balance', 'workStatus', 'notify', 'menu', 'focusSession'] as const;
+const SECTION_LEAF_NAMES = ['config', 'balance', 'workStatus', 'notify', 'menu', 'focusSession', 'env'] as const;
 
 /** 宠物叶子名的全集；新增宠物叶子时与 {@link PetLeafName} 一起改。 */
 const PET_LEAF_NAMES = ['say', 'anim', 'position', 'throw', 'lock', 'sleep'] as const;
@@ -228,6 +228,86 @@ export function readSay(leaf: StateLeaf): SayCue | null {
  *  与余额不同没有「手动」标记：工作状态永远由 DSH 事件驱动，没有用户主动要的那条路。 */
 export function readWorkStatus(leaf: StateLeaf): WorkStatusSnapshot | null {
   return toWorkStatus(leaf.data);
+}
+
+/** `sections.env` 的天气段：字段与宿主的 WeatherSnapshot 同形，只留渲染用得到的。 */
+export interface EnvWeather {
+  /** 天气站点名（地名搜索返回的中文名，可能与 IP 给的城市差一个字）。 */
+  readonly city: string;
+  /** 天气短语（如“阴”）。 */
+  readonly summary: string;
+  /** 气温（°C）。 */
+  readonly temperatureC: number;
+  /** 体感温度（°C）。 */
+  readonly apparentC: number;
+  /** 相对湿度（%）。 */
+  readonly humidityPercent: number;
+  /** 风速（km/h）。 */
+  readonly windKph: number;
+  /** WMO 天气码，渲染层可据此配图标。 */
+  readonly code: number;
+  /** 观测时刻（站点当地时间，ISO 字符串）。 */
+  readonly observedAt: string;
+}
+
+/** `/environment` 写进 `sections.env` 的内容。 */
+export interface EnvState {
+  /** 省 / 州；IP 库没给时缺省。 */
+  readonly region?: string;
+  /** 市；整条定位失败时可能只有省或都没有。 */
+  readonly city?: string;
+  /** 当前天气；查不到时缺省。 */
+  readonly weather?: EnvWeather;
+  /** 只有这只宠物点亮环境气泡。 */
+  readonly petId: string;
+  /** 写入时刻（ms）。 */
+  readonly ts: number;
+}
+
+/** 类型收窄：环境叶子 → EnvState（形状非法 → null，消费端跳过这一拍）。 */
+export function readEnv(leaf: StateLeaf): EnvState | null {
+  if (!leaf.data || typeof leaf.data !== 'object') return null;
+  const d = leaf.data as { region?: unknown; city?: unknown; weather?: unknown; petId?: unknown; ts?: unknown };
+  if (typeof d.petId !== 'string' || d.petId === '') return null;
+  if (typeof d.ts !== 'number' || !Number.isFinite(d.ts)) return null;
+  const weather = d.weather === undefined ? undefined : envWeatherOf(d.weather);
+  // 写了 weather 但形状不对：整拍跳过，别让半个天气渲染成「0°C」
+  if (d.weather !== undefined && weather === undefined) return null;
+  return {
+    ...(typeof d.region === 'string' && d.region !== '' ? { region: d.region } : {}),
+    ...(typeof d.city === 'string' && d.city !== '' ? { city: d.city } : {}),
+    ...(weather === undefined ? {} : { weather }),
+    petId: d.petId,
+    ts: d.ts,
+  };
+}
+
+/** 天气段收窄：任一必备字段缺失或非法 → undefined。 */
+function envWeatherOf(value: unknown): EnvWeather | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const w = value as Record<string, unknown>;
+  const num = (v: unknown): number | undefined => (typeof v === 'number' && Number.isFinite(v) ? v : undefined);
+  const city = typeof w.city === 'string' ? w.city : undefined;
+  const summary = typeof w.summary === 'string' ? w.summary : undefined;
+  const observedAt = typeof w.observedAt === 'string' ? w.observedAt : undefined;
+  const temperatureC = num(w.temperatureC);
+  const apparentC = num(w.apparentC);
+  const humidityPercent = num(w.humidityPercent);
+  const windKph = num(w.windKph);
+  const code = num(w.code);
+  if (
+    city === undefined ||
+    summary === undefined ||
+    observedAt === undefined ||
+    temperatureC === undefined ||
+    apparentC === undefined ||
+    humidityPercent === undefined ||
+    windKph === undefined ||
+    code === undefined
+  ) {
+    return undefined;
+  }
+  return { city, summary, temperatureC, apparentC, humidityPercent, windKph, code, observedAt };
 }
 
 /** 朝向：left = 素材原样，right = 镜像（渲染端贴 scaleX(-1)）。

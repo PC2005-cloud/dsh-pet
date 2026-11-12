@@ -217,6 +217,7 @@ describe('/state + /balance —— 轮询统一状态与余额动作端点', () 
     assert.deepEqual(Object.keys(body.sections).sort(), [
       'balance',
       'config',
+      'env',
       'focusSession',
       'menu',
       'notify',

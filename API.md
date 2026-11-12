@@ -52,6 +52,7 @@ dsh-pet 的宿主半侧向 DSH 自己的 Web 服务注册了**一条前缀路由
 | `GET /dsh-pet-7340/chat/memory`        | 列出**已删宠物**残留的对话历史（宠物删了但历史还在，`GET /chat` 读不到）；只给条数与最后时间                                                                                                                                                             |
 | `DELETE /dsh-pet-7340/chat/memory`     | 一次清空这些残留历史                                                                                                                                                                                                                                     |
 | `POST /dsh-pet-7340/balance`           | 立即刷新一次余额（可见效果同样是弹气泡 + 档位动画）                                                                                                                                                                                                      |
+| `POST /dsh-pet-7340/environment`       | **查环境**：城市 + 天气；带 `?pet=`（需 `surface=`）时写进 `sections.env`，`?fresh=1` 跳过缓存 |
 
 ## 四、让它做动作
 
@@ -136,7 +137,7 @@ dsh-pet 的宿主半侧向 DSH 自己的 Web 服务注册了**一条前缀路由
 {
   "counter": 1755000000007,   // 整份 S 的版本号 = 最后一次写入的编号（顶层，不是叶子）
   "sections": {               // 全局段：所有端共享一份
-    "balance": {…}, "workStatus": {…}, "notify": {…}, "config": {…}, "menu": {…}, "focusSession": {…}
+    "balance": {…}, "workStatus": {…}, "notify": {…}, "config": {…}, "menu": {…}, "focusSession": {…}, "env": {…}
   },
   "pets": {                   // 每只宠物各自一份；键是宠物 id（可含点号，勿切分）
     "main": { "say": {…}, "anim": {…}, "position": {…}, "throw": {…}, "lock": {…}, "sleep": {…} }
@@ -145,12 +146,6 @@ dsh-pet 的宿主半侧向 DSH 自己的 Web 服务注册了**一条前缀路由
 ```
 
 每个 `{…}` 是一个叶子 `{ counter, data }`：**`counter` 变了就表示它更新了**（唯一判据）。
-
-`pets.<id>.anim` 是动作指令：`{ name }` 或 `{ url }` 二选一，可选 `playbackId` / `facing`；
-对话动作联动写的也是它，形状与 `POST /anim` 完全一致。
-
-`pets.<id>.sleep` 与 `lock` 一样是**状态不是指令**：`{ sleeping: true, start, loop, end }` 时它在睡，
-三段名字由宿主挑定（渲染端照播）；`{ sleeping: false }` 是醒着。
 
 **长轮询**：`?since=<上次的顶层 counter>&timeout=<ms>`（成对必填，上限 10s）。有字段改变就
 **立刻返回**，否则一直挂到 `timeout` 到点；返回体与不带参数时一样。

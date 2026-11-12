@@ -5,6 +5,7 @@
  */
 import { createHostSetup } from './plugin/setup.ts';
 import { readAllConfig } from './config.ts';
+import { currentEnvironment } from './environment.ts';
 import { createHttpRoute, registerHttpRoute } from './plugin/http-route.ts';
 import { registerLifecycle } from './plugin/lifecycle.ts';
 import { registerChatCommand } from './plugin/command-chat.ts';
@@ -105,6 +106,8 @@ export function apply(ctx: any): void {
     ...sessionNotify,
     ctx,
     todos,
+    // 环境查询：/environment 与 system 时间行共用同一个取数口
+    environment: (opts?: { fresh?: boolean }) => currentEnvironment({ force: opts?.fresh === true }),
     // 语音合成：缓存落 userRoot，失败只留日志，不打断宿主
     voice: createVoiceService({ userRoot, log }),
     // 语音识别：能力来自宿主（DSH 的 speechToText），没启用时服务自己在调用时回 unsupported

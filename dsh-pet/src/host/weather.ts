@@ -17,6 +17,8 @@ export interface QueryWeatherDeps {
   readonly sleep?: (ms: number) => Promise<void>;
   /** 注入的时钟（ms）；缺省 `Date.now`，用于缓存判定。 */
   readonly now?: () => number;
+  /** 跳过坐标与天气两级缓存的读取强制重查；成功后照旧覆盖缓存，失败不动旧值。 */
+  readonly force?: boolean;
 }
 
 /** 当前天气快照，字段全部来自 Open-Meteo 的 `current` 段。 */
@@ -91,7 +93,12 @@ export async function queryWeather(city: string, deps: QueryWeatherDeps = {}): P
   if (place === null) return null;
   const key = place.latitude.toFixed(4) + ',' + place.longitude.toFixed(4);
   const now = deps.now ?? Date.now;
-  if (weatherCache !== null && weatherCache.key === key && now() - weatherCache.at < WEATHER_TTL_MS) {
+  if (
+    deps.force !== true &&
+    weatherCache !== null &&
+    weatherCache.key === key &&
+    now() - weatherCache.at < WEATHER_TTL_MS
+  ) {
     return weatherCache.value;
   }
   const snapshot = await fetchCurrent(place, deps);
@@ -103,7 +110,7 @@ export async function queryWeather(city: string, deps: QueryWeatherDeps = {}): P
 async function geocode(city: string, deps: QueryWeatherDeps): Promise<Place | null> {
   const now = deps.now ?? Date.now;
   const hit = geoCache.get(city);
-  if (hit !== undefined && now() - hit.at < GEO_TTL_MS) return hit.place;
+  if (deps.force !== true && hit !== undefined && now() - hit.at < GEO_TTL_MS) return hit.place;
   // 上游地名库不认行政区后缀：实测「南昌市」零命中、「南昌」一条命中，IP 定位给的名字正好带「市」
   const bare = withoutAdminSuffix(city);
   const place = (await searchPlace(city, deps)) ?? (bare === city ? null : await searchPlace(bare, deps));

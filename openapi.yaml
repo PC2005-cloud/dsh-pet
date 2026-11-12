@@ -317,6 +317,63 @@ paths:
         "405":
           $ref: "#/components/responses/MethodNotAllowed"
 
+  /dsh-pet-7340/environment:
+    post:
+      tags: [Action]
+      operationId: queryEnvironment
+      summary: 查一次此刻的城市与天气
+      description: |
+        查这台机器此刻所在的城市（IP 定位，免 key）与当前天气（Open-Meteo，免 key）。
+
+        - `?pet=` 缺省 = **纯查询**：只返回数据，不写 S。
+        - 带 `pet` 时必须存在，并依次过显示端（`surface`）与占用锁两道门禁；睡觉门禁由分发器
+          统一处理（睡着时回 `sleeping` 与拒绝台词）。通过后把结果写进 `sections.env`，
+          叶子里的 `petId` 决定哪只宠物点亮环境气泡。
+        - `?fresh=1` 跳过三级缓存（城市 6 小时 / 坐标 7 天 / 天气 1 小时）强制重查，
+          成功后覆盖缓存；其它情况走缓存，通常不产生网络请求。
+        - 查不到不是错误：仍返回 `ok: true`，只是省略 `region` / `city` / `weather` 里拿不到的那几个。
+      parameters:
+        - name: pet
+          in: query
+          required: false
+          description: |
+            目标宠物 id。缺省 = 纯查询（不写 S、不带 `petId`）；给了就必须存在并过门禁。
+          schema:
+            type: string
+        - name: fresh
+          in: query
+          required: false
+          description: |
+            `1` = 跳过缓存强制重查（右键菜单「查询天气」固定带它）。缺省或其它值 = 走缓存。
+          schema:
+            type: string
+            enum: ["0", "1"]
+        - name: surface
+          in: query
+          required: false
+          description: |
+            显示端。带 `pet` 时**必填**（`web` / `desktop` / `both` / `any`），用于判定该宠物是否显示在这一端；
+            缺省或非法回 `bad-request`。不带 `pet` 时该参数无效。
+          schema:
+            type: string
+            enum: [web, desktop, both, any]
+      responses:
+        "200":
+          description: |
+            查询结果。HTTP 状态码恒为 200（除 405）：业务失败通过 `ok: false` 表达。
+
+            `reason` 取值：`unknown-pet`（宠物不存在）、`pet-not-displayed`（该宠物当前不在这一端）、
+            `locked`（正被第三方占用）、`sleeping`（正在睡觉，附拒绝台词）、
+            `generate-error`（读配置失败）。
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/EnvironmentResponse"
+                  - $ref: "#/components/schemas/FailureResponse"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+
   /dsh-pet-7340/focus-session:
     post:
       tags: [Action]
@@ -3306,6 +3363,59 @@ components:
       description: |
         生成成功。文本**仍然**照旧写进 `pets.<id>.say`——其它消费端（网页、桌面、第三方监听）
         继续从 `/state` 读；返回值只是让发起的这一方省一次往返，不改变任何现有展示链路。
+
+    EnvironmentWeather:
+      type: object
+      required: [city, summary, temperatureC, apparentC, humidityPercent, windKph, code, observedAt]
+      properties:
+        city:
+          type: string
+          description: 天气站点名（地名搜索返回的中文名，可能与 IP 给的城市差一个字）。
+        summary:
+          type: string
+          description: 天气短语，如「阴」。
+        temperatureC:
+          type: number
+          description: 气温（°C）。
+        apparentC:
+          type: number
+          description: 体感温度（°C）。
+        humidityPercent:
+          type: number
+          description: 相对湿度（%）。
+        windKph:
+          type: number
+          description: 风速（km/h）。
+        code:
+          type: integer
+          description: WMO 天气码（渲染层可据此配图标）。
+        observedAt:
+          type: string
+          description: 观测时刻，站点当地时间（ISO 字符串，不带时区后缀）。
+      description: 当前天气快照，字段与宿主 `WeatherSnapshot` 同形。
+
+    EnvironmentResponse:
+      type: object
+      required: [ok]
+      properties:
+        ok:
+          type: boolean
+          const: true
+        region:
+          type: string
+          description: 省 / 州，如「江西省」；IP 库没给时不出现。
+        city:
+          type: string
+          description: 市，如「南昌市」；定位失败时不出现。
+        weather:
+          $ref: "#/components/schemas/EnvironmentWeather"
+        petId:
+          type: string
+          description: |
+            只在带 `?pet=` 时出现：结果已写进 `sections.env`，这只宠物据此点亮环境气泡。
+      description: |
+        查询结果。省市两段分开给，拼成一句话或换成富渲染都是消费方的事。
+        拿不到的字段一律省略，不用 `null` 占位。
 
     FailureResponse:
       type: object

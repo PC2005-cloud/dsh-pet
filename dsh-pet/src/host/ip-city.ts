@@ -16,6 +16,8 @@ export interface LocateCityDeps {
   readonly sleep?: (ms: number) => Promise<void>;
   /** 注入的时钟（ms）；缺省 `Date.now`，用于缓存判定。 */
   readonly now?: () => number;
+  /** 跳过缓存读取强制重查；成功后照旧覆盖缓存，失败不动旧值。 */
+  readonly force?: boolean;
 }
 
 /** 定位结果：只有 IP 库给出的大致位置。 */
@@ -57,7 +59,7 @@ export function resetCityCache(): void {
  */
 export async function locateCity(deps: LocateCityDeps = {}): Promise<CityLocation | null> {
   const now = deps.now ?? Date.now;
-  if (cached !== null && now() - cached.at < CACHE_TTL_MS) return cached.value;
+  if (deps.force !== true && cached !== null && now() - cached.at < CACHE_TTL_MS) return cached.value;
   if (inFlight !== null) return inFlight;
   const pending = locateFresh(deps).finally(() => {
     inFlight = null;

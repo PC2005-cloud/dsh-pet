@@ -23,8 +23,10 @@ import { dayOfYear, dayOfYearOf, entriesAt } from './lunar.ts';
 
 /** 时间行里附带的环境事实（城市与天气）。 */
 export interface TimeContextEnv {
-  /** 城市名；缺省 = 不知道在哪，连“你在……”一起省掉。 */
-  readonly place?: string;
+  /** 省 / 州（如“江西省”）；缺省 = 不知道省份，地点只写城市。 */
+  readonly region?: string;
+  /** 市（如“南昌市”）；缺省 = 不知道在哪，连“你在……”一起省掉。 */
+  readonly city?: string;
   /** 此刻天气；缺省 = 没有可用天气，只写一句“这次没查到”的交代，防止模型自己编。 */
   readonly weather?: WeatherFacts;
 }
@@ -129,6 +131,24 @@ function numText(value: number): string {
   return Number.isInteger(value) ? String(value) : value.toFixed(1);
 }
 
+/**
+ * 地点短语：省 + 市。
+ *
+ * 省市互相包含时只留一个（“北京市 / 北京”不该写成“北京市北京”），拉丁文地名之间补空格。
+ * 拼装留给提示词这一层：宿主的 /environment 只给两段原始数据。
+ *
+ * @param region - 省 / 州；空串或缺省表示没有这一段。
+ * @param city - 市；空串或缺省表示不知道在哪。
+ * @returns 展示用地点；城市未知时 undefined。
+ */
+function placeTextOf(region: string | undefined, city: string | undefined): string | undefined {
+  if (city === undefined || city === '') return undefined;
+  if (region === undefined || region === '' || region === city) return city;
+  if (region.includes(city)) return region;
+  if (city.includes(region)) return city;
+  return /[\u4e00-\u9fa5]$/u.test(region) ? region + city : region + ' ' + city;
+}
+
 /** 天气从句：有数据时拼一句口语，没有时给出“别编”的交代。 */
 function weatherClauseOf(weather: WeatherFacts | undefined): string {
   if (weather === undefined) return '外面的天气这次没查到，主人问起就说不知道、别编';
@@ -152,7 +172,7 @@ function weatherClauseOf(weather: WeatherFacts | undefined): string {
  * @param date - 当前时刻（生产调用方传 new Date()；测试传固定日期）。
  * @param env - 可选的环境事实：传了就多写地点与天气，不传则与加入环境前逐字一致。
  * @returns 形如
- *   `【当下】你在南昌市（按网络粗估，不一定准），现在是2026年10月8日星期四 21:32，晚上，工作日，外面阴，气温 13.1°C，体感 12.9°C，湿度 84%，风速 2 km/h。这只是背景，……`
+ *   `【当下】你在江西省南昌市（按网络粗估，不一定准），现在是2026年10月8日星期四 21:32，晚上，工作日，外面阴，气温 13.1°C，体感 12.9°C，湿度 84%，风速 2 km/h。这只是背景，……`
  *   无节日时中间那一段省略；非法 Date → 空串（调用方据此不加这一行）。
  */
 export function timeContextOf(date: Date, env?: TimeContextEnv): string {
@@ -162,7 +182,8 @@ export function timeContextOf(date: Date, env?: TimeContextEnv): string {
   const hour = date.getHours();
   const holiday = holidayClauseOf(date);
   // 地点带“粗估”括号：城市来自 IP 而不是主人亲口说的，不说明的话模型会当成事实报出来
-  const place = env?.place ? '你在' + env.place + '（按网络粗估，不一定准），' : '';
+  const placeName = placeTextOf(env?.region, env?.city);
+  const place = placeName === undefined ? '' : '你在' + placeName + '（按网络粗估，不一定准），';
   const weather = env === undefined ? '' : '，' + weatherClauseOf(env.weather);
   return (
     '【当下】' +

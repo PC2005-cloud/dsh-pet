@@ -1,11 +1,12 @@
 /**
- * 此刻的环境事实：城市（IP 定位）与天气（Open-Meteo），拼进 system 的时间行。
+ * 此刻的环境事实：城市（IP 定位）与天气（Open-Meteo），供 system 时间行与 /environment 共用。
  *
- * 只负责“能拿到什么就给什么”，从不抛错——查不到就少写一段，对话不能因为查天气失败而失败。
+ * 只负责“能拿到什么就给什么”，从不抛错——查不到就少一段，对话不能因为查天气失败而失败。
+ * force 时跳过三级缓存的读取强制重查，成功后照常覆盖缓存。
  * 天气的新鲜度由 ./weather 自己的 1 小时缓存兜住，这里不再做第二层超龄判断。
  * @module dsh-pet/src/host/environment
  */
-import { locateCity, type CityLocation } from './ip-city.ts';
+import { locateCity } from './ip-city.ts';
 import { queryWeather, type WeatherSnapshot } from './weather.ts';
 
 /** 可注入的依赖（测试用）。 */
@@ -16,51 +17,36 @@ export interface EnvironmentDeps {
   readonly sleep?: (ms: number) => Promise<void>;
   /** 注入的时钟（ms）；缺省 `Date.now`。 */
   readonly now?: () => number;
+  /** 跳过缓存读取强制重查。 */
+  readonly force?: boolean;
 }
 
-/** 时间行要用的环境事实；两个字段都可能缺省。 */
+/** 环境事实：省市两段分开给，拼成一句话是消费方的事。 */
 export interface EnvironmentFacts {
-  /** 地点短语（省 + 市）；IP 定位不到时缺省，时间行会省掉“你在……”那半句。 */
-  readonly place?: string;
-  /** 可用的当前天气；查不到时缺省，时间行会写“这次没查到”的交代。 */
+  /** 省 / 州，如“江西省”；IP 库没给时缺省。 */
+  readonly region?: string;
+  /** 市，如“南昌市”；IP 定位不到时整条结果为空。 */
+  readonly city?: string;
+  /** 可用的当前天气；查不到时缺省。 */
   readonly weather?: WeatherSnapshot;
-}
-
-/**
- * 地点短语：省 + 市。
- *
- * 省是城市猜错时的兜底（IP 库给城市常错、给省通常对），也用来消重名城市；
- * 省市互相包含时只留一个（“北京市 / 北京”不该写成“北京市北京”）。
- * 拉丁文地名之间补一个空格，中文之间直接连写。
- *
- * @param located - IP 定位结果。
- * @returns 展示用地点；城市为空时返回 undefined。
- */
-function placeTextOf(located: CityLocation): string | undefined {
-  const city = located.city;
-  if (city === '') return undefined;
-  const region = located.region;
-  if (region === '' || region === city) return city;
-  if (region.includes(city)) return region;
-  if (city.includes(region)) return city;
-  return /[\u4e00-\u9fa5]$/u.test(region) ? region + city : region + ' ' + city;
 }
 
 /**
  * 查一次此刻的环境。
  *
- * @param deps - 注入的 fetch、等待与时钟。
- * @returns 城市与天气；都没有时是空对象（时间行据此只写时间本身）。
+ * @param deps - 注入的 fetch、等待、时钟与 force。
+ * @returns 城市与天气；都没有时是空对象（调用方据此少写几段）。
  */
 export async function currentEnvironment(deps: EnvironmentDeps = {}): Promise<EnvironmentFacts> {
   try {
     const located = await locateCity(deps);
     if (located === null) return {};
-    const place = placeTextOf(located);
-    if (place === undefined) return {};
     const weather = await queryWeather(located.city, deps);
-    // exactOptionalPropertyTypes 未开，但这里仍按“有才写键”来塞，避免把 undefined 当值传下去
-    return weather === null ? { place } : { place, weather };
+    return {
+      ...(located.region === '' ? {} : { region: located.region }),
+      city: located.city,
+      ...(weather === null ? {} : { weather }),
+    };
   } catch {
     // 两条查询都自带兜底，走到这里只可能是意料外的事：宁可不写，也别让这一句对话挂掉
     return {};
