@@ -29,6 +29,8 @@ const fsPromises = require('node:fs/promises');
 // Linux 专用：X11 指针实时查询。穿透窗收不到鼠标事件，Chromium 的 screen.getCursorScreenPoint()
 // 在 X11 上会冻结在旧坐标，兜底轮询必须直接问 X server（见 x11-pointer.js）。
 const { createLinuxPointer } = require('./x11-pointer.js');
+// Linux 固定输入区域：窗口不再翻 setIgnoreMouseEvents，输入区由 X Shape 静态限定
+const { createX11InputShape } = require('./x11-input-shape.js');
 // 置顶看门狗：WS_EX_TOPMOST 只是样式位，不等于窗口真的在置顶带（见 topmost-watchdog.js 头部）
 const {
   TOPMOST_WATCHDOG_TICK_MS,
@@ -55,6 +57,8 @@ const { dshHomeDir, resolveUserDataDir } = require('./main/user-data.js');
 
 /** Linux 指针提供者：仅在 Linux 创建；查询失败时 get() 返回 null（调用方回退 Electron 原生 API） */
 const linuxPointer = process.platform === 'linux' ? createLinuxPointer() : null;
+/** Linux/X11 固定输入区域写入器；其它平台为 null，保留原有 setIgnoreMouseEvents 兜底 */
+const x11Shape = process.platform === 'linux' ? createX11InputShape() : null;
 
 // 允许无用户手势直接播放（余额动画等）
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
@@ -222,6 +226,7 @@ const petWindows = createWindows({
   shouldReassertTopmost,
   topmostLevel,
   taskbarWatchdogEnabled: taskbarWatchdogEnabledFromEnv(process.env.DSH_PET_TASKBAR_WATCHDOG),
+  x11Shape,
 });
 /** 托盘：显示开关与退出入口。 */
 const tray = createTray({
@@ -290,6 +295,7 @@ app.whenReady().then(() => {
   // 托盘：不 await（建窗与建托盘互不依赖），内部自己等 bridge 回调服务就绪
   void tray.start();
 
+  // Linux 固定输入区域路径仍需要光标轮询来补发「提示收起」通知；输入区翻转由 X Shape 接管
   linuxPointer?.start();
   petWindows.create();
 
@@ -320,6 +326,7 @@ app.whenReady().then(() => {
 // 宿主改 display 时是 SIGTERM/SIGKILL 硬杀，Windows 上拦不到，所以这条只覆盖优雅退出。
 app.on('before-quit', () => {
   petWindows.stopTaskbarWatchdog();
+  x11Shape?.close();
   if (!tray.exists()) return;
   try {
     tray.destroy();

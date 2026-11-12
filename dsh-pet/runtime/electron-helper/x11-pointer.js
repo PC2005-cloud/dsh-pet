@@ -329,7 +329,7 @@ function createLinuxPointer(options = {}) {
   };
 }
 
-module.exports = { createLinuxPointer, parseRoot };
+module.exports = { createLinuxPointer, parseRoot, handshake };
 
 if (require.main === module) {
   createLinuxPointer()
