@@ -22,6 +22,8 @@ function input(overrides: Partial<BubbleSlotInput> = {}): BubbleSlotInput {
     balanceAvailable: true,
     balanceEnabled: true,
     balanceManual: false,
+    envOn: false,
+    envAvailable: true,
     todoOn: false,
     ...overrides,
   };
@@ -35,6 +37,24 @@ const customState = (pages: number): BalanceState => ({
   custom: { views: Array.from({ length: pages }, () => ({ tag: 'div', text: '页' })) },
 });
 const failedState: BalanceState = { provider: 'test', ok: false, reason: 'fetch-error' };
+
+describe('decideBubbleSlot —— 环境气泡的位置', () => {
+  test('环境排在余额之后：两者都点亮时由余额占槽', () => {
+    assert.equal(decideBubbleSlot(input({ balanceOn: true, envOn: true })), 'balance');
+  });
+
+  test('环境压过非终态工作气泡', () => {
+    assert.equal(decideBubbleSlot(input({ envOn: true, workOn: true, workText: '干活中' })), 'env');
+  });
+
+  test('还没有环境数据：环境槽位不成立', () => {
+    assert.equal(decideBubbleSlot(input({ envOn: true, envAvailable: false })), 'none');
+  });
+
+  test('说话压过环境（用户正看着一句回复时不切换）', () => {
+    assert.equal(decideBubbleSlot(input({ envOn: true, whisperOn: true, whisperText: '嗨' })), 'whisper');
+  });
+});
 
 describe('decideBubbleSlot —— 同一时刻只挂一个气泡', () => {
   test('都没有点亮：返回 none', () => {

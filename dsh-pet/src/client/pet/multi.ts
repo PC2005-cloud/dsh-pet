@@ -16,6 +16,7 @@ import {
   flattenCounters,
   readAnim,
   readBalance,
+  readEnv,
   readLock,
   readPosition,
   readSay,
@@ -29,6 +30,7 @@ import { fontStackOf } from '../../shared/fonts.ts';
 import type { Pet } from '../../shared/types.ts';
 import type { BalanceState } from '../../shared/balance/index.ts';
 import type {
+  EnvState,
   LockState,
   PetFacing,
   PetLeafName,
@@ -77,6 +79,9 @@ export function createPetMulti(
     const [balanceNoticeTick, setBalanceNoticeTick] = useState(0);
     // 本次余额是否由用户手动请求；手动请求无条件弹，开关只关自动。
     const [balanceManual, setBalanceManual] = useState(false);
+    // 环境结果：机器级一份，`petId` 决定哪只宠物点亮环境气泡。
+    const [env, setEnv] = useState<EnvState | null>(null);
+    const [envTick, setEnvTick] = useState(0);
     // 上次已提示的不可用原因，自动轮询只在原因变化时再弹。
     const noticeKeyRef = useRef<string | null>(null);
     // 余额结果统一入口；存 ref 是为了让 /state effect 的依赖保持 [ready]。
@@ -230,6 +235,16 @@ export function createPetMulti(
             }
             return;
           }
+          case 'env': {
+            // 用户点了「查询天气」：叶子带 petId，只有那只宠物点亮气泡。
+            // 不是状态而是事件——首拉不补（页面重新加载不该重放一次查询）。
+            const hit = readEnv(leaf);
+            if (hit) {
+              setEnv(hit);
+              setEnvTick((t) => t + 1);
+            }
+            return;
+          }
           case 'notify':
             // 系统通知：单槽，由 host 决定保留哪一条，内部有开关与权限门。
             notifyFromFrame(leaf.data);
@@ -360,6 +375,9 @@ export function createPetMulti(
             balanceTick,
             balanceNoticeTick,
             balanceManual,
+            // 环境是机器级一份：只有 petId 对得上的那只宠物收到，其余传 undefined 不弹气泡
+            env: env !== null && env.petId === p.id ? env : undefined,
+            envTick,
             workStatus: workOn ? workStatus : null,
             workStatusTick: workOn ? workStatusTick : 0,
             onFocusSession: jumpToSession,

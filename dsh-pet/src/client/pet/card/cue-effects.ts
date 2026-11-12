@@ -1,5 +1,5 @@
 /**
- * 指令处理：余额、余额不可用、工作状态、说话、点播、位置、抛掷七条指令各一个消费函数。
+ * 指令处理：余额、余额不可用、环境、工作状态、说话、点播、位置、抛掷八条指令各一个消费函数。
  * 不负责判定口径（余额档位、工作状态索引、播完分支分别属于 shared 与动画链），也不持有驱动。
  * 依赖卡运行时与当帧 props；每条指令自带「这一拍是否已消费」的守卫。
  * 不变量：只有计数器变化才动手；占用锁生效时自动来源整拍丢弃，显式指令不挡。
@@ -40,11 +40,13 @@ export function createCueEffects(rt: CueEffectsRuntime) {
 
   return function useCueEffects(hub: CardHub, props: PetCardProps): void {
     const { balance, balanceManual, balanceNoticeTick, balanceTick } = props;
+    const { env, envTick } = props;
     const { animCue, animCueTick, posCue, posCueTick, say, sayTick, throwCue, throwCueTick } = props;
     const { workStatus, workStatusTick } = props;
 
     const prevBalanceRef = useRef(0);
     const prevNoticeRef = useRef(0);
+    const prevEnvRef = useRef(0);
     const prevWorkRef = useRef(0);
     // 调试日志：上一档位，null 表示空闲，undefined 表示启动后尚未触发。
     const prevWorkStateRef = useRef<string | null | undefined>(undefined);
@@ -101,6 +103,17 @@ export function createCueEffects(rt: CueEffectsRuntime) {
       if (hub.sleeping()) return;
       if (!balance || balance.ok) return;
       hub.bubbles.showBalance();
+    };
+
+    /** 环境结果：用户点「查询天气」后宿主写叶子，这里点亮环境气泡。
+     *  睡着不弹（不打断睡姿）；占用锁不挡——它是用户主动点的一次性查询。 */
+    const consumeEnv = (): void => {
+      if (envTick === 0 || envTick === prevEnvRef.current) return;
+      prevEnvRef.current = envTick;
+      // 环境是机器级一份，叶子里的 petId 决定谁弹；对不上的宠物整拍丢弃
+      if (env === undefined || env.petId !== hub.cfg().id) return;
+      if (hub.sleeping()) return;
+      hub.bubbles.showEnv();
     };
 
     /** 工作状态联动：按档位播动画并弹文本气泡；回空闲时收起气泡并改播完即停。 */
@@ -216,13 +229,14 @@ export function createCueEffects(rt: CueEffectsRuntime) {
     useEffect(() => {
       consumeBalance();
       consumeBalanceNotice();
+      consumeEnv();
       consumeWorkStatus();
       consumeSay();
       consumeAnimCue();
       consumePosCue();
       consumeThrowCue();
-      // 守卫函数每渲染重建，但只读 ref 与当拍的 props；进依赖会让每个渲染都重跑七个守卫。
-      // eslint-disable-next-line react-hooks/exhaustive-deps -- 变化原因只有这七个计数器
-    }, [balanceTick, balanceNoticeTick, workStatusTick, sayTick, animCueTick, posCueTick, throwCueTick]);
+      // 守卫函数每渲染重建，但只读 ref 与当拍的 props；进依赖会让每个渲染都重跑八个守卫。
+      // eslint-disable-next-line react-hooks/exhaustive-deps -- 变化原因只有这八个计数器
+    }, [balanceTick, balanceNoticeTick, envTick, workStatusTick, sayTick, animCueTick, posCueTick, throwCueTick]);
   };
 }

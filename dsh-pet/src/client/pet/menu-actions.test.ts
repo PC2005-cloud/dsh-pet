@@ -159,6 +159,19 @@ describe('createMenuActions —— 配图碎碎念', () => {
     assert.equal(captured.urls.length, 1);
     assert.doesNotMatch(captured.urls[0] ?? '', /image=/, '没点名具体图就不该带 image 参数');
   });
+
+  test('查询天气：POST /environment，带 pet、surface=any 与 fresh=1', async () => {
+    const captured = captureFetch();
+    try {
+      harness().actions.run({ label: '查询天气', action: 'show-environment' } as MenuLeaf);
+      await new Promise((resolve) => setImmediate(resolve));
+    } finally {
+      captured.restore();
+    }
+    assert.equal(captured.urls.length, 1, '一次点击只该发一次请求');
+    const url = captured.urls[0] ?? '';
+    assert.match(url, /\/environment\?pet=pet-1&surface=any&fresh=1$/, '必须强制刷新：' + url);
+  });
 });
 
 describe('createMenuActions —— 睡觉闸门（渲染端拒绝）', () => {

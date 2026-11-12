@@ -24,6 +24,9 @@ import type { Dispatch, ReactNode, SetStateAction } from 'react';
 import type * as ReactNS from 'react';
 import type { jsx } from 'react/jsx-runtime';
 import { ROUTE_PATH } from '../shared/constants.ts';
+import type { EnvState } from '../shared/state.ts';
+import { envBubbleView } from '../shared/env-view.ts';
+import type { EnvIconShape } from '../shared/env-icon.ts';
 
 /** 气泡内联样式：白色半透明圆泡加底部小尾巴，盒子尺寸锚字号 `--f`，位置锚宠物尺寸。
  *  width:max-content 不可省：left:50% 的绝对定位盒可用宽度只有包含块一半，shrink-to-fit
@@ -99,6 +102,17 @@ const bubbleCss = [
   '.dsh-pet-bubble .pet-bub-usage-bar{display:flex;height:calc(var(--f)*0.3);border-radius:calc(var(--f)*0.15);overflow:hidden;background:rgba(43,43,43,.1);margin:calc(var(--f)*0.05) 0}',
   '.dsh-pet-bubble .pet-bub-usage-bar-in{display:block;height:100%;background:#3f6ea8}',
   '.dsh-pet-bubble .pet-bub-usage-bar-out{display:block;height:100%;background:#b4703c}',
+  // 环境气泡：主区（图标 + 大字气温 + 中文短语）、三行键值、脚注。键值行复用余额的
+  // .pet-bub-row / .pet-bub-sub / .pet-bub-val，只补主区与脚注两种新排版。
+  '.dsh-pet-bubble .pet-env-main{display:flex;align-items:center;gap:calc(var(--f)*0.4)}',
+  '.dsh-pet-bubble .pet-env-icon{color:#5f7f9e;display:block}',
+  '.dsh-pet-bubble .pet-env-icon svg{width:calc(var(--f)*1.55);height:calc(var(--f)*1.55);display:block}',
+  '.dsh-pet-bubble .pet-env-temp{font-size:calc(var(--f)*1.75);line-height:1.1;font-weight:700;letter-spacing:-.02em;' +
+    'font-variant-numeric:tabular-nums;color:#1f1f1f}',
+  '.dsh-pet-bubble .pet-env-summary{font-size:calc(var(--f)*0.95);color:rgba(43,43,43,.68);' +
+    'align-self:flex-end;padding-bottom:calc(var(--f)*0.22)}',
+  '.dsh-pet-bubble .pet-env-foot{margin-top:calc(var(--f)*0.3);padding-top:calc(var(--f)*0.18);' +
+    'border-top:1px solid rgba(43,43,43,.1);font-size:calc(var(--f)*0.6);color:rgba(43,43,43,.45)}',
 ].join('\n');
 
 /** 注入气泡样式，每页只注入一次。 */
@@ -378,9 +392,73 @@ export function makeWhisperBubble(rt: { h: typeof jsx }): (props: {
   };
 }
 
+/** 环境气泡：视图与文案来自 shared 的 envBubbleView，这里只把行映射成 React 节点。
+ *
+ *  主区是天气图标 + 大字气温 + 中文短语，下面三行键值（体感 / 湿度 / 风速），脚注给观测时刻；
+ *  没有天气数据时退化成一行「暂时查不到天气」——不画空数值，也不猜。
+ *  图标几何由 {@link envBubbleView} 带出，描边颜色跟气泡内的次级灰同色系。
+ */
+export function makeEnvBubble(rt: { h: typeof jsx }): (props: { state: EnvState; on: boolean }) => ReactNode {
+  const { h } = rt;
+  injectBubbleCss();
+
+  /** 形状 → SVG 子节点。 */
+  const shapeNode = (shape: EnvIconShape, key: number): ReactNode => {
+    if (shape.kind === 'path') return h('path', { key, d: shape.d });
+    if (shape.kind === 'line') return h('line', { key, x1: shape.x1, y1: shape.y1, x2: shape.x2, y2: shape.y2 });
+    return h('circle', { key, cx: shape.cx, cy: shape.cy, r: shape.r });
+  };
+
+  return function EnvBubble({ state, on }: { state: EnvState; on: boolean }) {
+    const view = envBubbleView(state);
+    const body: ReactNode[] = [h('div', { key: 'title', className: 'pet-bub-title', children: view.title })];
+    if (view.emptyText !== undefined) {
+      body.push(h('div', { key: 'none', className: 'pet-bub-row', children: view.emptyText }));
+    } else {
+      body.push(
+        h('div', {
+          key: 'main',
+          className: 'pet-env-main',
+          children: [
+            h('span', {
+              key: 'icon',
+              className: 'pet-env-icon',
+              children: h('svg', {
+                viewBox: '0 0 24 24',
+                fill: 'none',
+                stroke: 'currentColor',
+                // SVG 属性必须驼峰：kebab-case 在 React 里会走 attribute 透传并告警
+                strokeWidth: 1.7,
+                strokeLinecap: 'round',
+                strokeLinejoin: 'round',
+                children: (view.icon ?? []).map((shape, i) => shapeNode(shape, i)),
+              }),
+            }),
+            h('span', { key: 'temp', className: 'pet-env-temp', children: view.temperature }),
+            h('span', { key: 'summary', className: 'pet-env-summary', children: view.summary }),
+          ],
+        }),
+        ...view.rows.map((row, i) =>
+          h('div', {
+            key: 'row' + i,
+            className: 'pet-bub-row',
+            children: [
+              h('span', { key: 'k', className: 'pet-bub-sub', children: row.label }),
+              h('span', { key: 'v', className: 'pet-bub-val', children: row.value }),
+            ],
+          }),
+        ),
+        view.footer === undefined ? null : h('div', { key: 'foot', className: 'pet-env-foot', children: view.footer }),
+      );
+    }
+    return h('div', { className: 'dsh-pet-bubble' + (on ? ' is-on' : ''), children: body });
+  };
+}
 /** 语音状态角标：只在手动触发的播报上出现，右下角绝对定位，不参与文字排版。
- *  `failed` 用静音喇叭——「本该有声却没响」，不是系统告警，所以不上警告符号。 */
-function voiceBadgeNode(h: typeof jsx, state: 'loading' | 'ready' | 'failed'): ReactNode {
+ *  `failed` 用静音喇叭——「本该有声却没响」，不是系统告警，所以不上警告符号。 */ function voiceBadgeNode(
+  h: typeof jsx,
+  state: 'loading' | 'ready' | 'failed',
+): ReactNode {
   return h('span', {
     key: 'voice',
     className:

@@ -161,6 +161,56 @@
         color: #d94f3d;
         font-size: calc(var(--f) * 0.7692);
       }
+      /* ---- 环境气泡（天气）：与网页端气泡的同名规则数值逐条对应 ---- */
+      .pet-bub-title {
+        font-size: calc(var(--f) * 0.7692);
+        color: rgba(43, 43, 43, 0.6);
+        margin-bottom: calc(var(--f) * 0.24);
+      }
+      .pet-bub-val {
+        font-size: calc(var(--f) * 0.7692);
+        font-weight: 650;
+        font-variant-numeric: tabular-nums;
+        color: #1f1f1f;
+      }
+      .pet-bub-row .pet-bub-val {
+        white-space: nowrap;
+      }
+      .pet-env-main {
+        display: flex;
+        align-items: center;
+        gap: calc(var(--f) * 0.4);
+      }
+      .pet-env-icon {
+        color: #5f7f9e;
+        display: block;
+      }
+      .pet-env-icon svg {
+        width: calc(var(--f) * 1.55);
+        height: calc(var(--f) * 1.55);
+        display: block;
+      }
+      .pet-env-temp {
+        font-size: calc(var(--f) * 1.75);
+        line-height: 1.1;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+        font-variant-numeric: tabular-nums;
+        color: #1f1f1f;
+      }
+      .pet-env-summary {
+        font-size: calc(var(--f) * 0.95);
+        color: rgba(43, 43, 43, 0.68);
+        align-self: flex-end;
+        padding-bottom: calc(var(--f) * 0.22);
+      }
+      .pet-env-foot {
+        margin-top: calc(var(--f) * 0.3);
+        padding-top: calc(var(--f) * 0.18);
+        border-top: 1px solid rgba(43, 43, 43, 0.1);
+        font-size: calc(var(--f) * 0.6);
+        color: rgba(43, 43, 43, 0.45);
+      }
       .pet-bub-tier {
         font-weight: 700;
       }

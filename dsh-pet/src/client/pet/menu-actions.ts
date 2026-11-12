@@ -145,6 +145,13 @@ export function createMenuActions(deps: MenuActionDeps): MenuActions {
       fireAction(ROUTE_PATH + '/balance', '余额刷新动作');
       return;
     }
+    if (leaf.action === 'show-environment') {
+      // 与余额同一套：宿主强制刷新并写 sections.env，气泡由 /state 驱动。
+      // surface=any：点菜单的这一端不一定就是渲染端，宿主只按 petId 记给气泡。
+      console.info('[dsh-pet] 菜单查询天气 pet=' + petId);
+      fireAction(ROUTE_PATH + '/environment?pet=' + encodeURIComponent(petId) + '&surface=any&fresh=1', '天气查询动作');
+      return;
+    }
     if (leaf.action === 'whisper') {
       // 手动碎碎念：文本随长轮询送达，不受 whisperEnabled 限制；surface 必填，本页面就是网页端。
       console.info('[dsh-pet] 菜单触发碎碎念 pet=' + petId + (leaf.image ? ' image=' + leaf.image : ''));

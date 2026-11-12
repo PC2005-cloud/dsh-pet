@@ -77,6 +77,10 @@ Object.assign(PetSprite.prototype, {
     this.balanceState = null; // 最近一次余额读数（展开态按页现算窗口明细与用量；balanceView 只是收起态的行）
     this.balanceViewIndex = 0; // 当前页：点一下切下一页（windows 是收起 / 窗口明细 / 用量，有用量才有第三页；custom 是 views.length 页）
     this.balanceFadeTimer = null; // 展开/收起的淡出等待（250ms 后才换内容，避免硬切）
+    // 环境气泡（查询天气）：读数、显隐与自己的计时器（与余额共用 bubbleTimer 会互相清掉）
+    this.envState = null;
+    this.envOn = false;
+    this.envTimer = null;
     this.prevTick = 0;
     // 说话（碎碎念/命令气泡/对话回复）：文本与配图由容器统一轮询 /state 后经 showWhisper 送进来。
     this.whisperOn = false;

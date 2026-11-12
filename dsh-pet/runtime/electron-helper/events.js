@@ -282,6 +282,23 @@ PetSprite.prototype.toggleBalanceDetail = function toggleBalanceDetail() {
   }, BUBBLE_DURATION_MS);
 };
 
+// 环境气泡（查询天气）：宿主写完 sections.env 后由 applyEnvLeaf 调到这里。
+// 睡着不弹（睡姿优先）；占用锁不挡——用户主动点的一次性查询，与手动余额同口径。
+// 计时器用自己的 envTimer：与余额共用 bubbleTimer 会互相提前收起。
+PetSprite.prototype.showEnvNow = function showEnvNow(state) {
+  if (!state || state.petId !== this.pet.id) return;
+  if (this.sleeping) return;
+  this.envState = state;
+  this.envOn = true;
+  this.renderBubble();
+  if (this.envTimer !== null) window.clearTimeout(this.envTimer);
+  this.envTimer = window.setTimeout(() => {
+    this.envTimer = null;
+    this.envOn = false;
+    this.renderBubble();
+  }, BUBBLE_DURATION_MS);
+};
+
 // 轮询组装：容器统一拉取与触发，与浏览器端同一套路径。
 
 // 余额不可用 → 文字说明气泡（周期轮询与手动 /balance 共用这一条路径，判定在 shared）：
@@ -318,6 +335,14 @@ function applyBalanceLeaf(leaf) {
     // 不可用：manual（用户主动要的）一律弹，周期刷新只在原因变化时弹一次
     applyBalanceNotice(hit.state, hit.manual);
   }
+}
+
+/** 环境叶子 → 对应宠物弹环境气泡。`petId` 是叶子写的「谁弹」，本窗口只装一只，按 id 命中。
+ *  睡着不弹（不打断睡姿）；占用锁不挡——它是用户点「查询天气」发起的一次性查询。 */
+function applyEnvLeaf(leaf) {
+  const state = S.readEnv(leaf);
+  if (!state) return;
+  for (const s of sprites) s.showEnvNow(state);
 }
 
 /** 说话叶子 → 对应宠物播说话动画 + 气泡。`kind: 'clear'` = 收起气泡，其余 = 弹一个气泡。 */
@@ -447,6 +472,7 @@ async function pollStateOnce() {
     for (const change of S.takeChanged(s, stateBaseline)) {
       if (change.leaf.data === null) continue;
       if (change.path === 'sections.balance') applyBalanceLeaf(change.leaf);
+      else if (change.path === 'sections.env') applyEnvLeaf(change.leaf);
       else if (change.path === 'sections.workStatus') applyWorkStatusLeaf(change.leaf);
       else if (change.path === 'sections.menu') applyMenuLeaf(change.leaf);
       else if (change.path.startsWith('pets.') && change.path.endsWith('.say')) {

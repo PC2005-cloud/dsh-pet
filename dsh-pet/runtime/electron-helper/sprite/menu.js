@@ -31,6 +31,8 @@ Object.assign(PetSprite.prototype, {
       },
       // 「查看余额」无条件显示：关了 balanceEnabled 的宠物也能点，手动请求不受开关限制，点了一定给答复。
       { label: '查看余额', action: 'show-balance' },
+      // 「查询天气」与余额同一类：宿主强制刷新并写 sections.env，气泡由 /state 驱动。
+      { label: '查询天气', action: 'show-environment' },
       // 「待办事项」是待办面板的唯一入口（单击宠物不再弹面板），排在余额之后。
       { label: '待办事项', action: 'todo', hint: S.TODO_HOTKEY_HINT },
       { label: '碎碎念', action: 'whisper' },
@@ -117,6 +119,10 @@ Object.assign(PetSprite.prototype, {
       this.showBalanceFromMenu(); // 立即拉余额并展示（无需等 1s 触发轮询，展示路径与周期触发一致）
       return;
     }
+    if (leaf.action === 'show-environment') {
+      this.showEnvironmentFromMenu(); // 强制刷新并展示（绕过宿主缓存，理由见该方法注释）
+      return;
+    }
     if (leaf.action === 'sleep' || leaf.action === 'wake') {
       // 只发请求，画面等 sleep 叶子回来才动：三段名与时机都由宿主/渲染端状态机决定（见 setSleep）
       this.postSleepAction(leaf.action);
@@ -186,6 +192,19 @@ Object.assign(PetSprite.prototype, {
       })
       .catch((e) => {
         console.error('[dsh-pet] 菜单查看余额异常', e);
+      });
+  },
+
+  // 「查询天气」菜单：与余额同一条路——POST 动作让宿主强制刷新并写 sections.env，
+  // 本端什么都不用做，叶子变了由轮询分发到 showEnvNow。fresh=1 是用户点这个按钮的唯一意义：
+  // 平时对话走缓存（天气 1 小时），手动查必须拿现在的。
+  showEnvironmentFromMenu() {
+    S.postAction(ENVIRONMENT_URL + '?pet=' + encodeURIComponent(this.pet.id) + '&surface=desktop&fresh=1')
+      .then((ok) => {
+        if (!ok) console.warn('[dsh-pet] 菜单查询天气：刷新动作未成功 pet=' + this.pet.id);
+      })
+      .catch((e) => {
+        console.error('[dsh-pet] 菜单查询天气异常', e);
       });
   },
 
