@@ -68,7 +68,7 @@ function parseSpeakInput(raw: unknown): ParseResult {
   if (typeof rate !== 'string' || !RATE_PATTERN.test(rate)) {
     return { ok: false, message: 'rate must look like +0% or -10%' };
   }
-  const percent = Number(rate.slice(1, -1));
+  const percent = Number(rate.slice(0, -1));
   if (!Number.isFinite(percent) || percent < RATE_MIN_PERCENT || percent > RATE_MAX_PERCENT) {
     return { ok: false, message: `rate out of range (${RATE_MIN_PERCENT}%..+${RATE_MAX_PERCENT}%)` };
   }
