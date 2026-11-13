@@ -7,6 +7,7 @@
 import { findPetInstance, flattenPetList, readAllConfig } from '../config.ts';
 import { isDisplayed } from '../surface.ts';
 import { automaticWhisperSchedule } from '../whisper-policy.ts';
+import { clampPeriodSec } from './period.ts';
 import type { BalancePoll } from './balance-poll.ts';
 import type { ChatMemory } from './chat-memory.ts';
 import type { PetLookup } from './pet-lookup.ts';
@@ -254,6 +255,9 @@ export function registerLoops(deps: LoopsInput): void {
         for (const petId of sleep.ids()) {
           const found = findPetInstance(cfg, petId);
           if (!found) continue;
+          // 与碎碎念同口径：关掉碎碎念的宠物不再有任何后台生成，配置上不显示的也不生成（#237）。
+          // 放在 min 之前：被跳过的宠物不该把整拍的周期拖住。不推进 lastTalkAt——重新可见后下一拍立刻补一句。
+          if (!shouldSleepTalk(found.pet)) continue;
           const sec = sleepTalkPeriodSec(found.conf);
           min = Math.min(min, sec);
           if (now - (lastTalkAt.get(petId) ?? 0) < sec * 1000) continue;
@@ -280,9 +284,23 @@ export function registerLoops(deps: LoopsInput): void {
   }, 'dsh-pet: sleep talk poll');
 }
 
+/**
+ * 这只宠物这一刻该不该说梦话。
+ *
+ * 两道判定与碎碎念同口径：宠物自己关掉碎碎念就不再有任何后台生成；配置上不显示的
+ * 宠物也不生成——用户选「都不显示」就是不用了，后台继续调模型纯属白烧额度（#237）。
+ *
+ * @param pet - 成品配置拍平后的宠物条目。
+ * @returns 两道判定都通过时为 true。
+ * @internal
+ */
+export function shouldSleepTalk(pet: Record<string, unknown>): boolean {
+  if (pet.whisperEnabled !== true) return false;
+  return isDisplayed(String(pet.display ?? ''));
+}
+
 /** 梦话周期（秒）：条目级 eventsRefreshSec.sleepTalk，读不到按 60 兜底（与配置注释同一口径）。 */
 function sleepTalkPeriodSec(conf: Record<string, unknown>): number {
   const table = conf.eventsRefreshSec as Record<string, unknown> | undefined;
-  const sec = Number(table?.sleepTalk);
-  return Number.isFinite(sec) && sec > 0 ? sec : SLEEP_TALK_DEFAULT_SEC;
+  return clampPeriodSec(table?.sleepTalk, SLEEP_TALK_DEFAULT_SEC);
 }

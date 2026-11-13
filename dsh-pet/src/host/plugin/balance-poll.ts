@@ -11,6 +11,7 @@ import { join } from 'node:path';
 import { PACKAGE_ROOT } from '../paths.ts';
 import { queryBalance } from '../balance/index.ts';
 import { credentialRef } from '@deepseek-ai/dsh-credentials';
+import { clampPeriodSec } from './period.ts';
 import type { ChatMemory } from './chat-memory.ts';
 import type { HostSetup } from './setup.ts';
 import type { HostContext } from './context.ts';
@@ -36,16 +37,14 @@ export function createBalancePoll(deps: BalancePollInput) {
   /** 余额刷新周期（秒）：成品 main 条目的 eventsRefreshSec.balance（合并器已填默认；非法兜底 1800） */
   const balancePeriodSec = (cfg: Record<string, Record<string, unknown>>): number => {
     const ers = cfg.main?.eventsRefreshSec as Record<string, unknown> | undefined;
-    const n = Number(ers?.balance);
-    return Number.isFinite(n) && n > 0 ? n : 1800;
+    return clampPeriodSec(ers?.balance, 1800);
   };
 
   /** 碎碎念周期（秒）：该宠物所属条目的 eventsRefreshSec.whisper（合并器已填默认；非法兜底 300）。
    *  收已解析的条目配置：唯一调用方是周期调度，它的 petId 就是从同一份 cfg 拍平出来的。 */
   const whisperPeriodSec = (conf: Record<string, unknown>): number => {
     const ers = conf.eventsRefreshSec as Record<string, unknown> | undefined;
-    const n = Number(ers?.whisper);
-    return Number.isFinite(n) && n > 0 ? n : 300;
+    return clampPeriodSec(ers?.whisper, 300);
   };
 
   /**
