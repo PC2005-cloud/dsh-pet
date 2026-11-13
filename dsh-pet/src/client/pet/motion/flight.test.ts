@@ -57,10 +57,10 @@ function withFakeFrames() {
   };
 }
 
-/** 造一套依赖：记录提交的位置、落地挤压与被写的盒子；可指定 id、共享站场与物理参数。 */
+/** 造一套依赖：记录提交的位置、落地挤压与被写的盒子；可指定槽键、共享站场与物理参数。 */
 function harness(
   opts: {
-    petId?: string;
+    slotKey?: string;
     arena?: { slots: Record<string, PetCollisionSlot> };
     physics?: PhysicsParams;
   } = {},
@@ -78,7 +78,7 @@ function harness(
     viewport: () => viewport,
     physics: () => physics,
     arena: () => arena,
-    petId: opts.petId ?? 'main',
+    slotKey: opts.slotKey ?? 'main',
     box: () => box,
     setBox: (next) => {
       box = next;
@@ -237,10 +237,10 @@ describe('createFlight —— 两只互撞不放大速度', () => {
       const arena = { slots: {} as Record<string, PetCollisionSlot> };
       // 零重力：只验水平对撞，别把落地竖直速度算进峰值。
       const physics: PhysicsParams = { ...DEFAULT_PHYSICS, gravity: 0, petCollision: true };
-      const a = harness({ petId: 'a', arena, physics });
-      const b = harness({ petId: 'b', arena, physics });
-      const register = (petId: string, target: ReturnType<typeof harness>): void => {
-        arena.slots[petId] = {
+      const a = harness({ slotKey: 'a', arena, physics });
+      const b = harness({ slotKey: 'b', arena, physics });
+      const register = (slotKey: string, target: ReturnType<typeof harness>): void => {
+        arena.slots[slotKey] = {
           size: metrics.size,
           bottomPad: metrics.bottomPad,
           getBox: () => target.box(),

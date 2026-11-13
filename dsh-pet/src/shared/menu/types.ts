@@ -14,7 +14,9 @@ export interface MenuLeaf {
   anim?: string;
   /** 自定义动作：打开网站 / 查看余额 / 查询天气 / 立即碎碎念 / 打开对话弹窗 / 打开待办面板 / 回到初始位置 /
    *  重载配置（桌面端专属，重启桌面 Helper 并按最新配置重建窗口）/ 改显示位置（目标值见 display，
-   *  两端都注入）/ 第三方菜单项（只把 owner 与 label 上报给注册方，具体做什么由它决定）。
+   *  两端都注入）/ 第三方菜单项（只把 owner 与 label 上报给注册方，具体做什么由它决定）/
+   *  有丝分裂四条（mitosis-clear 清掉本体的全部分身、mitosis-delete 只删自己、
+   *  mitosis-normal 与 mitosis-collide 切分裂模式；仅网页端注入，桌面 Helper 没有分身）。
    *  手动触发均不受 whisperEnabled 影响——那个字段只关自动轮询。 */
   action?:
     | 'open-site'
@@ -28,7 +30,11 @@ export interface MenuLeaf {
     | 'set-display'
     | 'sleep'
     | 'wake'
-    | 'third-party';
+    | 'third-party'
+    | 'mitosis-clear'
+    | 'mitosis-delete'
+    | 'mitosis-normal'
+    | 'mitosis-collide';
   /** set-display 的目标显示位置（与设置页的下拉框同一套取值） */
   display?: PetDisplay;
   /** third-party：注册它的 owner（身份键，只用于回传，不显示）；同一个 owner 的项收在同一分组下，

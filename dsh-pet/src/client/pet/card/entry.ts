@@ -30,12 +30,14 @@ import {
 } from '../../../shared/menu.ts';
 import { ROUTE_PATH } from '../../../shared/constants.ts';
 import { TOOLTIP_GAP_RATIO, tooltipPlacement } from '../../../shared/tooltip.ts';
+import { cloneBranch, mainBranch } from '../mitosis/menu.ts';
 import type { MenuMoreItem } from '../../../shared/menu.ts';
 import type { CardLive } from './live.ts';
 import type { CardMotion } from './motion.ts';
 import type { CardStateApi } from './state.ts';
 import type { Drag } from '../motion/drag.ts';
 import type { MenuActions } from '../menu-actions.ts';
+import type { MitosisCardProps } from './props.ts';
 import type { RuntimePet } from '../types.ts';
 import type * as ReactNS from 'react';
 
@@ -71,6 +73,8 @@ export interface CardEntryInput {
   tipRef: ReactNS.MutableRefObject<HTMLDivElement | null>;
   /** 舞台节点：对话弹窗贴命中区右上角。 */
   stage: () => HTMLDivElement | null;
+  /** 有丝分裂身份：分身只有「删除我」，本体在菜单尾部追加清除与模式；缺省 = 不参与分裂。 */
+  mitosis?: MitosisCardProps;
 }
 
 /** 浮层入口对外的读写面。 */
@@ -99,8 +103,20 @@ export function createCardEntry(rt: CardEntryRuntime) {
   const { useEffect, useRef } = rt;
 
   return function useCardEntry(input: CardEntryInput): CardEntry {
-    const { card, cfgRef, drag, live, menuItemsRef, motion, runMenuAction, showTodo, stage, tipRef, toggleTodo } =
-      input;
+    const {
+      card,
+      cfgRef,
+      drag,
+      live,
+      menuItemsRef,
+      mitosis,
+      motion,
+      runMenuAction,
+      showTodo,
+      stage,
+      tipRef,
+      toggleTodo,
+    } = input;
     // 右键菜单与对话弹窗当前的句柄，卸载或重开前清理。对话弹窗还要按住说话遥控开录/收尾。
     const menuRef = useRef<{ close: () => void } | null>(null);
     const chatRef = useRef<ChatDialogMount | null>(null);
@@ -260,19 +276,23 @@ export function createCardEntry(rt: CardEntryRuntime) {
     screenshotRef.current = screenshot;
     // 全局快捷键要能遥控这一只：登记开关窗、开关录音，卸载时摘掉。
     // 句柄里全走 ref，卡片重渲染不会让登记表拿到过期闭包；cfgRef 本身也是稳定引用，列进依赖只为满足规则。
+    // 分身不登记：句柄表按宠物 id 分桶，分身与本体同 id，登记上去只会互相顶掉。
+    const isClone = mitosis?.role === 'clone';
     useEffect(
       () =>
-        registerPetChatHandle(cfgRef.current.id, {
-          open: () => openChatOrFocusRef.current(),
-          // close 走弹窗自己的 onClose，句柄随之置空，isOpen 立刻转假。
-          close: () => chatRef.current?.close(),
-          isOpen: () => chatRef.current !== null,
-          startHear: () => startChatHearRef.current(),
-          stopHear: () => stopChatHearRef.current(),
-          isHearing: () => chatRef.current?.isHearing() ?? false,
-          screenshot: () => screenshotRef.current(),
-        }),
-      [cfgRef],
+        isClone
+          ? () => {}
+          : registerPetChatHandle(cfgRef.current.id, {
+              open: () => openChatOrFocusRef.current(),
+              // close 走弹窗自己的 onClose，句柄随之置空，isOpen 立刻转假。
+              close: () => chatRef.current?.close(),
+              isOpen: () => chatRef.current !== null,
+              startHear: () => startChatHearRef.current(),
+              stopHear: () => stopChatHearRef.current(),
+              isHearing: () => chatRef.current?.isHearing() ?? false,
+              screenshot: () => screenshotRef.current(),
+            }),
+      [cfgRef, isClone],
     );
     // 悬停键共用一次挂载：L 开对话、按住 M 说话、S 截图、Z 切换睡/醒、D 开关待办、1-4 切显示位置。
     // 全部只在鼠标停在这只宠物上时生效；按住说话另有一条——焦点在宠物自己的弹窗里也算，
@@ -367,12 +387,17 @@ export function createCardEntry(rt: CardEntryRuntime) {
         displayMenuBranch(),
         { label: '回到初始位置', action: 'home' },
       ];
-      const tree: MenuNode[] = [
-        ...tools,
-        ...buildMenuTree(cfgRef.current.animations),
-        ...tail,
-        ...(more ? [more] : []),
-      ];
+      // 分身只有一条「删除我」：余额、天气、显示位置这些归本体管，两份菜单不共用一棵树。
+      const tree: MenuNode[] = isClone
+        ? cloneBranch()
+        : [
+            ...tools,
+            ...buildMenuTree(cfgRef.current.animations),
+            ...tail,
+            // 有丝分裂两条挂在「回到初始位置」之后、「更多」之前：功能开关类条目统一收在树尾，不插进动作树。
+            ...(mitosis === undefined || mitosis.role !== 'main' ? [] : mainBranch(mitosis.mode, mitosis.cloneCount)),
+            ...(more ? [more] : []),
+          ];
       if (!tree.length) return;
       e.preventDefault();
       e.stopPropagation(); // 不触碰 DSH 页面的菜单与右键处理。

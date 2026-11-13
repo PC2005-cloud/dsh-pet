@@ -27,8 +27,8 @@ export interface CollisionMetrics {
 export interface PetCollisionDeps {
   /** 碰撞站场。 */
   arena(): { slots: Record<string, PetCollisionSlot> };
-  /** 本宠物 id：跳过自己。 */
-  petId: string;
+  /** 本宠物的站场槽键：跳过自己。 */
+  slotKey: string;
   /** 撞到别的宠物：入参是法向相对速度（px/s），供触觉反馈换算强度。 */
   onPetImpact(speed: number): void;
 }
@@ -58,7 +58,7 @@ export function createPetCollision(deps: PetCollisionDeps): PetCollisionResolver
     const slots = deps.arena().slots;
     const myBody = bodyPixelBox({ x: state.x, y: state.y, size: metrics.size, bottomPad: metrics.bottomPad });
     for (const slotId of Object.keys(slots)) {
-      if (slotId === deps.petId) continue;
+      if (slotId === deps.slotKey) continue;
       const slot = slots[slotId];
       const otherBox = slot.getBox();
       if (!otherBox) continue;

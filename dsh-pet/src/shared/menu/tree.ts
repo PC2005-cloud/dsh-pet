@@ -11,8 +11,20 @@ import type { MenuBranch, MenuLeaf, MenuMoreItem, MenuNode } from './types.ts';
 
 /** 睡着时仍然放行的菜单动作：维护类、「叫醒它」本身，以及第三方菜单项。
  *  第三方要做什么由它自己决定——真去驱动宠物时会带占用锁调接口，宿主闸门在那一层再判
- *  （锁优先）。在渲染端先拦掉，等于让「更多」里的第三方入口在睡觉时整体失效。 */
-const SLEEP_ALLOWED_ACTIONS: readonly string[] = ['sleep', 'wake', 'home', 'set-display', 'reload', 'third-party'];
+ *  （锁优先）。在渲染端先拦掉，等于让「更多」里的第三方入口在睡觉时整体失效。
+ *  有丝分裂四条同属维护类：删分身与切模式都不打扰任何还在睡的本体。 */
+const SLEEP_ALLOWED_ACTIONS: readonly string[] = [
+  'sleep',
+  'wake',
+  'home',
+  'set-display',
+  'reload',
+  'third-party',
+  'mitosis-clear',
+  'mitosis-delete',
+  'mitosis-normal',
+  'mitosis-collide',
+];
 
 /** 该菜单动作在睡着时是否放行（两端共用：对话弹窗、待办面板、动作点播都是渲染端行为，宿主闸门拦不到）。 */
 export const isSleepAllowedAction = (action: string | undefined): boolean =>

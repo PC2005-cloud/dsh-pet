@@ -8,7 +8,7 @@
  */
 import { type PhysicsParams, type Rect } from '../types.ts';
 import { indexAtPoint, nearestIndex, rectBottom, rectRight } from '../displays.ts';
-import { DEFAULT_PHYSICS, MAX_STEP_DT, SUBSTEP_MAX, SUBSTEP_PX } from './constants.ts';
+import { DEFAULT_PHYSICS, MAX_STEP_DT, REST_TANGENT, SUBSTEP_MAX, SUBSTEP_PX } from './constants.ts';
 import { type ContactEdge, isRestingOnContacts, resolveContact } from './contact.ts';
 
 /** 一次轨迹采样（t = performance.now() 时间戳 ms；x/y = 指针绝对坐标 px）。 */
@@ -99,8 +99,41 @@ export interface GravityVector {
   readonly gy: number;
 }
 
+/** 空气阻力这一步保留多少速度：与 groundFriction 同一口径的线性衰减。
+ *  缺省与非正值一律按 1（不衰减）：配置里手写成负数不能把阻力变成加速器，
+ *  否则无重力的分身会越漂越快，空中静止那条判定也永远等不到。 */
+const dragFactor = (airDrag: number | undefined, dt: number): number => {
+  if (airDrag === undefined || airDrag <= 0) return 1;
+  const k = 1 - airDrag * dt;
+  return k < 0 ? 0 : k;
+};
+
+/** 半步积分：重力加速 → 空气阻力 → 位移。阻力缺省（k=1）时与不写这一行的结果逐位相同。 */
+const advance = (s: ThrowState, dt: number, g: GravityVector, physics: PhysicsParams): ThrowState => {
+  const k = dragFactor(physics.airDrag, dt);
+  const vx = (s.vx + g.gx * dt) * k;
+  const vy = (s.vy + g.gy * dt) * k;
+  return { x: s.x + vx * dt, y: s.y + vy * dt, vx, vy };
+};
+
+/** 空中是否已停住：开了空气阻力、本步没碰到任何面、重力为零且速度低于切向静止阈值。
+ *  阻力只会把速度指数衰减到零，永远走不到「贴住某个面」，不判这一条就会留下一批每帧空转的飞行循环。
+ *  没开阻力时恒为 false——无重力的空中本来就不该出现静止。 */
+const isRestingInAir = (
+  contacts: readonly ContactEdge[],
+  speed: { readonly vx: number; readonly vy: number },
+  physics: PhysicsParams,
+  g: GravityVector,
+): boolean =>
+  contacts.length === 0 &&
+  (physics.airDrag ?? 0) > 0 &&
+  g.gx === 0 &&
+  g.gy === 0 &&
+  Math.hypot(speed.vx, speed.vy) < REST_TANGENT;
+
 /** 抛体单步积分与边界反弹。返回值带上两个标志：bounced = 本步是否碰边或落地，
- *  atRest = 所有接触面都已贴住且切向低速，调用方应停止循环；contacts = 本步接触到的边。
+ *  atRest = 所有接触面都已贴住且切向低速（开了空气阻力时，无重力空里的低速也算），调用方应停止循环；
+ *  contacts = 本步接触到的边。
  *  physics 取成品配置的物理参数，缺失时用默认值兜底；gravity 覆盖重力方向与大小（缺省竖直向下）。 */
 export const throwStep = (
   s: ThrowState,
@@ -111,11 +144,7 @@ export const throwStep = (
 ): ThrowState & { bounced: boolean; atRest: boolean; hit: ThrowHit | null; contacts: ContactEdge[] } => {
   const dt = Math.min(Math.max(dtRaw, 0), MAX_STEP_DT);
   const g: GravityVector = gravity ?? { gx: 0, gy: physics.gravity };
-  let { x, y, vx, vy } = s;
-  vx += g.gx * dt;
-  vy += g.gy * dt;
-  x += vx * dt;
-  y += vy * dt;
+  let { x, y, vx, vy } = advance(s, dt, g, physics);
   let bounced = false;
   let hit: ThrowHit | null = null;
   const contacts: ContactEdge[] = [];
@@ -157,7 +186,16 @@ export const throwStep = (
     vy = out.vy;
     bounced = true;
   }
-  return { x, y, vx, vy, bounced, atRest: isRestingOnContacts(contacts, { vx, vy }), hit, contacts };
+  return {
+    x,
+    y,
+    vx,
+    vy,
+    bounced,
+    atRest: isRestingOnContacts(contacts, { vx, vy }) || isRestingInAir(contacts, { vx, vy }, physics, g),
+    hit,
+    contacts,
+  };
 };
 
 /** 多屏抛掷步进：物理与 throwStep 同一套，区别是边界取自身体中心所在屏，越界后多问一句越界侧有没有屏。
@@ -184,11 +222,7 @@ export const throwStepRegion = (
 } => {
   const dt = Math.min(Math.max(dtRaw, 0), MAX_STEP_DT);
   const g: GravityVector = gravity ?? { gx: 0, gy: physics.gravity };
-  let { x, y, vx, vy } = s;
-  vx += g.gx * dt;
-  vy += g.gy * dt;
-  x += vx * dt;
-  y += vy * dt;
+  let { x, y, vx, vy } = advance(s, dt, g, physics);
   if (space.areas.length === 0) {
     return { x, y, vx, vy, screen: -1, bounced: false, atRest: false, hit: null, contacts: [] };
   }
@@ -269,7 +303,7 @@ export const throwStepRegion = (
     vy,
     screen: cur,
     bounced,
-    atRest: isRestingOnContacts(contacts, { vx, vy }),
+    atRest: isRestingOnContacts(contacts, { vx, vy }) || isRestingInAir(contacts, { vx, vy }, physics, g),
     hit,
     contacts,
   };

@@ -1,5 +1,5 @@
 /**
- * 抛体单步的边界撞击上报与四向接触：钉住「撞哪条边」「撞前速度」以及墙 / 顶也带摩擦。
+ * 抛体单步的边界撞击上报、四向接触与空气阻力：钉住「撞哪条边」「撞前速度」以及墙 / 顶也带摩擦。
  *
  * hit 只服务触觉与强度换算；contacts 与 atRest 决定何时停帧。
  * 新用例统一关掉重力或取整数值，避免浮点噪声干扰断言。
@@ -98,5 +98,56 @@ describe('throwStep —— 四向摩擦与贴面静止', () => {
     const res = throwStep({ x: 300, y: 543.75, vx: 10, vy: 0 }, 1 / 60, BOUNDS, DEFAULT_PHYSICS);
     assert.deepEqual(res.contacts, ['floor']);
     assert.equal(res.atRest, true);
+  });
+});
+
+describe('throwStep —— 空气阻力与空中静止', () => {
+  test('未配置 airDrag：速度一步不减，位置照常积分（现状逐位不变）', () => {
+    const res = throwStep({ x: 300, y: 100, vx: -500, vy: 0 }, 0.01, BOUNDS, DEFAULT_PHYSICS, NO_GRAVITY);
+    near(res.vx, -500, '缺键不该引入任何衰减');
+    near(res.x, 295, '位移 = 速度×dt');
+    assert.equal(res.atRest, false);
+  });
+
+  test('开了 airDrag：速度按 (1-airDrag·dt) 衰减，位移用衰减后的速度', () => {
+    const physics = { ...DEFAULT_PHYSICS, gravity: 0, airDrag: 0.5 };
+    const res = throwStep({ x: 300, y: 100, vx: -500, vy: 0 }, 0.01, BOUNDS, physics, NO_GRAVITY);
+    near(res.vx, -497.5, '一步保留 99.5%');
+    near(res.x, 295.025, '位移按衰减后的速度积分');
+  });
+
+  test('阻力极大：衰减系数夹到零，不把速度翻成反向', () => {
+    const physics = { ...DEFAULT_PHYSICS, gravity: 0, airDrag: 100 };
+    const res = throwStep({ x: 300, y: 300, vx: -500, vy: 200 }, 0.05, BOUNDS, physics, NO_GRAVITY);
+    near(res.vx, 0, '水平速度应被吃干');
+    near(res.vy, 0, '竖直速度应被吃干');
+    assert.equal(res.atRest, true, '无重力无接触且速度归零，应判空中停住');
+  });
+
+  test('无重力 + 无接触 + 开阻力 + 低速：atRest 成立，飞行循环能收', () => {
+    const physics = { ...DEFAULT_PHYSICS, gravity: 0, airDrag: 0.45 };
+    const res = throwStep({ x: 300, y: 300, vx: 14, vy: 0 }, 1 / 60, BOUNDS, physics, NO_GRAVITY);
+    assert.deepEqual(res.contacts, []);
+    assert.equal(res.atRest, true);
+  });
+
+  test('同样低速但没开阻力：空中不算静止（不改变无阻力时的行为）', () => {
+    const physics = { ...DEFAULT_PHYSICS, gravity: 0 };
+    const res = throwStep({ x: 300, y: 300, vx: 14, vy: 0 }, 1 / 60, BOUNDS, physics, NO_GRAVITY);
+    assert.equal(res.atRest, false);
+  });
+
+  test('阻力写成负数：按无阻力处理，不会把速度放大', () => {
+    const physics = { ...DEFAULT_PHYSICS, gravity: 0, airDrag: -5 };
+    const res = throwStep({ x: 300, y: 300, vx: -500, vy: 0 }, 0.01, BOUNDS, physics, NO_GRAVITY);
+    near(res.vx, -500, '负值不该变成加速器');
+    assert.equal(res.atRest, false, '没真开阻力时空中低速判定不参与');
+  });
+
+  test('有重力时低速也不判空中静止：还会继续掉，交给接触判定', () => {
+    const physics = { ...DEFAULT_PHYSICS, airDrag: 0.45 };
+    const res = throwStep({ x: 300, y: 300, vx: 0, vy: 0 }, 0.01, BOUNDS, physics);
+    assert.ok(Math.hypot(res.vx, res.vy) < 15, `本步速度应低于阈值，实际 ${Math.hypot(res.vx, res.vy)}`);
+    assert.equal(res.atRest, false);
   });
 });

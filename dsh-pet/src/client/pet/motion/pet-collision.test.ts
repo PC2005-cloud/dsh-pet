@@ -29,7 +29,7 @@ function makeResolver(slots: Record<string, PetCollisionSlot>) {
   const impacts: number[] = [];
   const resolve = createPetCollision({
     arena: () => ({ slots }),
-    petId: 'me',
+    slotKey: 'me',
     onPetImpact: (speed) => impacts.push(speed),
   });
   return { impacts, resolve };

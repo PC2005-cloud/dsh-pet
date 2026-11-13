@@ -40,8 +40,8 @@ export interface CardMotionInput {
   metrics: FlightMetrics;
   /** 该宠物的走位池。 */
   moves: MovesConfig;
-  /** 本宠物 id：碰撞槽键与飞行排除自己都用它。 */
-  petId: string;
+  /** 本宠物的站场槽键：注册碰撞槽与飞行排除自己都用它（本体 = 宠物 id，分身 = 实例键）。 */
+  slotKey: string;
   /** 宠物根节点。 */
   root: () => HTMLDivElement | null;
   /** 落位后提交归一化中心，交给 React 重排。 */
@@ -88,7 +88,7 @@ export function createCardMotion(rt: CardMotionRuntime) {
   const { useEffect, useRef } = rt;
 
   return function useCardMotion(input: CardMotionInput): CardMotion {
-    const { arena, card, cfgRef, live, metrics, moves, petId, root, setAnim, setOnce, setCustomPos } = input;
+    const { arena, card, cfgRef, live, metrics, moves, root, setAnim, setOnce, setCustomPos, slotKey } = input;
 
     /** 当帧走位参数：走位驱动长期持有，每渲染就地更新，避免把尺寸与动画池闭包进旧实例。 */
     const motionRef = useRef<FlightMetrics>(metrics);
@@ -159,7 +159,7 @@ export function createCardMotion(rt: CardMotionRuntime) {
       viewport: () => ({ width: window.innerWidth, height: window.innerHeight }),
       physics: () => cfgRef.current.physics,
       arena: () => arena.current,
-      petId,
+      slotKey,
       box: () => boxRef.current,
       setBox: (box) => {
         boxRef.current = box;
@@ -300,7 +300,7 @@ export function createCardMotion(rt: CardMotionRuntime) {
     const { size, bottomPad } = metrics;
     useEffect(() => {
       const arenaSlots = arena.current.slots;
-      arenaSlots[petId] = {
+      arenaSlots[slotKey] = {
         size,
         bottomPad,
         getBox: () => {
@@ -312,10 +312,10 @@ export function createCardMotion(rt: CardMotionRuntime) {
         applyVelocity: (vx, vy) => applyVelocityRef.current(vx, vy, 'set'),
       };
       return () => {
-        delete arenaSlots[petId];
+        delete arenaSlots[slotKey];
       };
-      // eslint-disable-next-line react-hooks/exhaustive-deps -- 依赖由碰撞注册身份 petId/size/bottomPad/arena 决定：applyVelocity 只经 applyVelocityRef 转发、不捕获渲染期状态；补上它会让碰撞槽每渲染注销重注册
-    }, [petId, size, bottomPad, arena]);
+      // eslint-disable-next-line react-hooks/exhaustive-deps -- 依赖由碰撞注册身份 slotKey/size/bottomPad/arena 决定：applyVelocity 只经 applyVelocityRef 转发、不捕获渲染期状态；补上它会让碰撞槽每渲染注销重注册
+    }, [slotKey, size, bottomPad, arena]);
 
     const center = (): { x: number; y: number } => ({ x: currentCenterX(), y: currentCenterY() });
 

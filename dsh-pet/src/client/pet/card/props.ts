@@ -10,6 +10,8 @@ import type { PetCollisionSlot } from '../../../shared/physics.ts';
 import type { LockState, PositionMode, SayCue, PetFacing, SleepState, EnvState } from '../../../shared/state.ts';
 import type { MenuMoreItem } from '../../../shared/menu.ts';
 import type { WorkStatusSnapshot } from '../../../shared/work-status.ts';
+import type { MitosisMode, MitosisRole } from '../mitosis/rules.ts';
+import type { Center } from '../motion/geometry.ts';
 import type { RuntimePet } from '../types.ts';
 
 /** 一张宠物卡的渲染输入。 */
@@ -64,4 +66,32 @@ export interface PetCardProps {
   menuItemsRef: ReactNS.MutableRefObject<MenuMoreItem[]>;
   /** 宠物间碰撞站场。 */
   arena: ReactNS.MutableRefObject<{ slots: Record<string, PetCollisionSlot> }>;
+  /** 有丝分裂身份与通道；缺省 = 这张卡不参与分裂（没开分裂时就是缺省）。 */
+  mitosis?: MitosisCardProps;
+  /** 分身出生点（归一化中心）：首次渲染就按它定位，之后照常拖拽与飞行。本体不传。 */
+  initialPos?: Center;
+}
+
+/** 一张卡在「有丝分裂」里的身份：本体与分身共用同一个宿主宠物 id，差别全在这里。
+ *  分身只在渲染期存在——刷新回到一只；宿主侧的说话、点播、位置、抛掷、锁与睡觉仍按本体那一只分发，
+ *  天然扇出到所有分身，所以这里不需要第二条总线。 */
+export interface MitosisCardProps {
+  /** 本体还是分身：决定菜单、描边、气泡归属与是否登记全局对话句柄。 */
+  role: MitosisRole;
+  /** 当前模式：写进 data-mitosis-mode，碰撞模式的描边范围不同。 */
+  mode: MitosisMode;
+  /** 碰撞站场槽键（也是 React key）：本体 = 宠物 id，分身 = `<id>~m<seq>`。 */
+  slotKey: string;
+  /** 角标数字（本体 1、分身 2..N）；null = 现在只有一只，不画。 */
+  badge: number | null;
+  /** 本体现在有几只分身：只用于菜单文案。 */
+  cloneCount: number;
+  /** 记一次点击：连够次数由容器分裂。只有本体带。 */
+  onTap?: (now: number) => void;
+  /** 清掉本体的全部分身。只有本体带。 */
+  onClear?: () => void;
+  /** 切分裂模式。只有本体带。 */
+  onMode?: (mode: MitosisMode) => void;
+  /** 分身删掉自己。只有分身带。 */
+  onDelete?: () => void;
 }

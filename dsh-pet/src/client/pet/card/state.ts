@@ -87,7 +87,7 @@ export interface CardStateRuntime {
   useRef: <T>(initial: T) => ReactNS.MutableRefObject<T>;
 }
 
-/** 初始值：尺寸、首播动画、角落与边距都来自成品配置。 */
+/** 初始值：尺寸、首播动画、角落与边距都来自成品配置，出生位置只有分身带。 */
 export interface CardStateInit {
   /** 宠物宽度（px）。 */
   size: number;
@@ -97,6 +97,8 @@ export interface CardStateInit {
   corner: Corner;
   /** 角落边距（px）。 */
   margin: { x: number; y: number };
+  /** 出生位置：分身带着随机点进来；本体不传，仍按角落定位。 */
+  pos?: Center | null;
 }
 
 /**
@@ -115,7 +117,7 @@ export function createCardState(rt: CardStateRuntime) {
     const [cuePlayback, setCuePlayback] = useState<string | null>(null);
     const [facing, setFacing] = useState<PetFacing>('left');
     const [tipOn, setTipOn] = useState(false);
-    const [customPos, setCustomPos] = useState<Center | null>(null);
+    const [customPos, setCustomPos] = useState<Center | null>(init.pos ?? null);
     const [size, setSize] = useState(init.size);
     const [corner, setCorner] = useState<Corner>(init.corner);
     const [margin, setMargin] = useState(init.margin);

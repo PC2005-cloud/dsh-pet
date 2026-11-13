@@ -10,6 +10,7 @@ import { ROUTE_PATH } from '../../shared/constants.ts';
 import type { Animations } from '../../shared/types.ts';
 import { postAction } from '../../shared/state.ts';
 import { setMenuClick } from '../menu-service.ts';
+import type { MitosisMode } from './mitosis/rules.ts';
 
 /** 菜单派发的依赖。 */
 export interface MenuActionDeps {
@@ -49,6 +50,12 @@ export interface MenuActionDeps {
   say?: (text: string) => void;
   /** 睡觉拒绝台词池（条目级配置）。缺省 = 静默拒绝，不弹文字。 */
   sleepRefuseTexts?: () => string[];
+  /** 有丝分裂：清掉本体的全部分身（分身与没开分裂的卡不接）。缺省 = 菜单里没有这一项。 */
+  clearClones?: () => void;
+  /** 有丝分裂：分身删掉自己。缺省 = 这张卡不是分身。 */
+  deleteClone?: () => void;
+  /** 有丝分裂：切换分裂模式。缺省 = 不支持。 */
+  setMitosisMode?: (mode: MitosisMode) => void;
 }
 
 /** 睡着时仍然放行的菜单动作由 shared/menu 的 isSleepAllowedAction 判定（两端共用一份）。 */
@@ -175,6 +182,16 @@ export function createMenuActions(deps: MenuActionDeps): MenuActions {
       if (!display) return;
       console.info('[dsh-pet] 菜单切换显示位置 pet=' + petId + ' display=' + display);
       void switchDisplay(deps, display);
+      return;
+    }
+    if (leaf.action === 'mitosis-clear' || leaf.action === 'mitosis-delete') {
+      // 分身名单是渲染期的事：不发请求、不写宿主，容器改名单即可（日志在 use-mitosis 里）。
+      if (leaf.action === 'mitosis-clear') deps.clearClones?.();
+      else deps.deleteClone?.();
+      return;
+    }
+    if (leaf.action === 'mitosis-normal' || leaf.action === 'mitosis-collide') {
+      deps.setMitosisMode?.(leaf.action === 'mitosis-normal' ? 'normal' : 'collide');
       return;
     }
     if (leaf.action === 'home') {

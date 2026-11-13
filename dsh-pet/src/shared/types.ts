@@ -169,6 +169,9 @@ export interface PhysicsParams {
   restitution: number;
   /** 接触面切向摩擦（/s）：撞墙、落地、撞顶后沿接触面方向的速度衰减率，0 = 四面都像冰面 */
   groundFriction: number;
+  /** 空气阻力（/s）：每一步对整体速度按它衰减，与是否接触无关；0、负值或缺键 = 无阻力（现状）。
+   *  无重力时它是唯一能把速度降到零的量——空中静止判定只在它开启后生效。 */
+  airDrag?: number;
   /** 顶部是否反弹：false = 顶部无边界，抛掷可飞出屏幕顶部（重力仍会拉回落） */
   ceilingBounce: boolean;
   /** 总力度（拖拽与抛掷的输出增益）：弹簧 K/C、甩抛初速与软上限整体 ×p（1.0 = 现状，必须 > 0） */

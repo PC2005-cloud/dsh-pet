@@ -32,6 +32,9 @@ import type { CardViewProps } from './view.ts';
 import type { PetCardProps } from './props.ts';
 import type { PetRuntime } from '../types.ts';
 
+/** 分身的空回执：与 {@link makePlaybackReporter} 的产物同签名，什么都不发。 */
+const NO_PLAYBACK_REPORT = (): void => {};
+
 /**
  * 造卡片装配根的工厂：组件级单例（气泡、状态、指令、动画流）都在这里建一次。
  *
@@ -63,8 +66,21 @@ export function createCardRuntime(rt: PetRuntime) {
   const useCardEntry = createCardEntry({ useEffect, useRef });
 
   return function useCardRuntime(props: PetCardProps): CardViewProps {
-    const { arena, balance, balanceManual, cfg, env, lock, lockTick, menuItemsRef, sleep, sleepTick, workStatus } =
-      props;
+    const {
+      arena,
+      balance,
+      balanceManual,
+      cfg,
+      env,
+      initialPos,
+      lock,
+      lockTick,
+      menuItemsRef,
+      mitosis,
+      sleep,
+      sleepTick,
+      workStatus,
+    } = props;
     const { onFocusSession } = props;
 
     // 实际渲染宽度：百分比只在挂载与配置变更时按当次视口宽解析一次，拖窗口不跟随。
@@ -77,9 +93,13 @@ export function createCardRuntime(rt: PetRuntime) {
       corner: cfg.position.corner,
       margin: { x: cfg.position.marginX, y: cfg.position.marginY },
       size: effectiveSizePx,
+      pos: initialPos,
     });
     const { actions, state } = card;
     const { corner, customPos, facing, margin, size, tipOn } = state;
+
+    // 分身与本体共用同一个宿主宠物 id：差别只在渲染期身份（槽键、菜单、角标）与出生位置。
+    const isClone = mitosis?.role === 'clone';
 
     // 驱动实例与跨关注点入口：创建顺序见模块头，填充只在本函数内。
     const liveRef = useRef<CardLive>({} as CardLive);
@@ -92,6 +112,9 @@ export function createCardRuntime(rt: PetRuntime) {
     cfgRef.current = cfg;
     const workStatusRef = useRef(workStatus);
     workStatusRef.current = workStatus;
+    // 分裂通道每次渲染都是新闭包；菜单派发器只建一次，只能在点击那一刻经 ref 现读。
+    const mitosisRef = useRef(mitosis);
+    mitosisRef.current = mitosis;
 
     // DOM 节点：视图挂载后才有值，驱动全部经取值函数读。
     const rootRef = useRef<HTMLDivElement | null>(null);
@@ -101,7 +124,8 @@ export function createCardRuntime(rt: PetRuntime) {
     const tipRef = useRef<HTMLDivElement | null>(null);
 
     // 回执在 playback-report.ts：地址、请求体与失败日志都在那里，这里只要一个函数。
-    const reportPlayback = makePlaybackReporter({ petId: cfg.id });
+    // 分身不报：点播编号属于本体那一只，多只同报会把一条播成 N 次。
+    const reportPlayback = isClone ? NO_PLAYBACK_REPORT : makePlaybackReporter({ petId: cfg.id });
 
     // 尺寸与派生几何；度量系数在 motion/geometry.ts，这里只解构使用。
     const { halfW, halfH, bottomPad, sideAllow } = derivePetMetrics(size);
@@ -120,9 +144,10 @@ export function createCardRuntime(rt: PetRuntime) {
       actions.setMargin({ x: cfg.position.marginX, y: cfg.position.marginY });
       // 改位置是明确的「放这里」：清掉会话内的拖拽位置，让配置重新生效——
       // 这也是设置页把跑出视口的宠物叫回来的通道。只调大小不在此列，不该丢位置。
-      actions.setCustomPos(null);
-      // eslint-disable-next-line react-hooks/exhaustive-deps -- setter 稳定，变化原因只有这三个位置字段
-    }, [cfg.position.corner, cfg.position.marginX, cfg.position.marginY]);
+      // 分身不跟：它没有角落语义（出生点随机、之后归用户摆），配置一改就把一群分身叫回角落。
+      if (!isClone) actions.setCustomPos(null);
+      // eslint-disable-next-line react-hooks/exhaustive-deps -- setter 稳定，变化原因只有这三个位置字段与卡片身份（每实例恒定）
+    }, [cfg.position.corner, cfg.position.marginX, cfg.position.marginY, isClone]);
 
     // 四种气泡的单槽：显隐、停留计时与优先级都在 bubble-slots，这里只喂视图输入。
     const bubbles = useBubbleSlots({
@@ -158,11 +183,12 @@ export function createCardRuntime(rt: PetRuntime) {
       live: liveRef,
       metrics: { bottomPad, halfH, halfW, sideAllow, size },
       moves: petAnims.moves,
-      petId: cfg.id,
       root: () => rootRef.current,
       setAnim: actions.setAnim,
       setCustomPos: actions.setCustomPos,
       setOnce: actions.setOnce,
+      // 本体占自己那格、分身各占一格：同键会让互撞先跳过对方，一群分身就互相穿过去了。
+      slotKey: mitosis?.slotKey ?? cfg.id,
     });
 
     const drag = useCardDrag({
@@ -186,6 +212,7 @@ export function createCardRuntime(rt: PetRuntime) {
       drag,
       live: liveRef,
       menuItemsRef,
+      mitosis,
       motion,
       runMenuAction: (leaf, playbackId, keepFacing) => menuActionsRef.current?.run(leaf, playbackId, keepFacing),
       showTodo: bubbles.showTodo,
@@ -199,6 +226,9 @@ export function createCardRuntime(rt: PetRuntime) {
     menuActionsRef.current ??= createMenuActions({
       animations: () => cfgRef.current.animations,
       applyMerged: (merged) => petBridge.reload(merged),
+      // 有丝分裂的转发都经 mitosisRef 现读：派发器只建一次，名单与模式是每次渲染的新闭包。
+      clearClones: () => mitosisRef.current?.onClear?.(),
+      deleteClone: () => mitosisRef.current?.onDelete?.(),
       faceLeft: () => actions.setFacing('left'),
       isFacingRight: () => card.facingRef.current === 'right',
       openChat: () => entryRef.current?.openChat(),
@@ -211,6 +241,7 @@ export function createCardRuntime(rt: PetRuntime) {
       },
       report: reportPlayback,
       resetPosition: () => actions.setCustomPos(null),
+      setMitosisMode: (mode) => mitosisRef.current?.onMode?.(mode),
       // 睡觉：菜单在点击那一刻就要能拒绝（对话弹窗、待办面板、动作点播都是纯前端行为，宿主拦不到）
       say: (text) => liveRef.current.flow?.speak(text, undefined, undefined, undefined, false),
       locked: () => ownAnim.isFrozen(),
@@ -300,6 +331,8 @@ export function createCardRuntime(rt: PetRuntime) {
       marginX: margin.x,
       marginY: margin.y,
       name: cfg.name,
+      // 分裂标记：只把视图需要的三个值传下去，回调留在装配根这一侧。
+      mitosis: mitosis === undefined ? undefined : { badge: mitosis.badge, mode: mitosis.mode, role: mitosis.role },
       onClick: () => {
         // 拖拽守卫必须在睡觉分支之前：指针捕获后浏览器一定会在松手时补发一次 click，
         // 它不是点击（拖了多久都一样）。醒着时这条由 drag.onClick 内部判，睡觉分支绕过了那里。
@@ -316,6 +349,8 @@ export function createCardRuntime(rt: PetRuntime) {
         }
         // 入睡过渡里被点：这次入睡作废，按普通点击处理（挤压 + 音效 + 点击回应），不再播「起来」
         if (phase === 'start') void postAction(ROUTE_PATH + '/wake?pet=' + encodeURIComponent(cfg.id));
+        // 连点够次数由容器分裂；睡着与刚拖完都走不到这里（上面两道守卫先返回）。
+        mitosis?.onTap?.(performance.now());
         drag.onClick();
       },
       onContextMenu: entry.handleContextMenu,

@@ -3,6 +3,7 @@
  *
  * 四条契约：内置动作各走各的端点和回调；点播移动动画优先走真实位移，挪不动才退化成纯播放；
  * 文字类动画点播前强制朝左（keepFacing 时跳过）；移动系统接管点播时如实回 failed/busy。
+ * 另加一条：有丝分裂四条只把意图转交容器，一个请求都不发，且睡着时按维护类放行。
  */
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -259,5 +260,67 @@ describe('createMenuActions —— 宿主指令不按「用户点击」判睡觉
     });
     actions.run({ anim: 'idle1', label: 'idle1' } as MenuLeaf, undefined, false, true);
     assert.deepEqual(calls, ['stopMove', 'playOnce:idle1:null']);
+  });
+});
+
+describe('createMenuActions —— 有丝分裂', () => {
+  /** 分身名单与模式都是渲染期的事：这四条一次请求都不该发，故把 fetch 钉成「发了就记一笔」。 */
+  function captureFetch(): { urls: string[]; restore: () => void } {
+    const urls: string[] = [];
+    const original = globalThis.fetch;
+    globalThis.fetch = (async (input: unknown) => {
+      urls.push(String(input));
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    }) as typeof globalThis.fetch;
+    return { urls, restore: () => (globalThis.fetch = original) };
+  }
+
+  test('清除与删除各走各的回调，一个请求都不发', async () => {
+    const captured = captureFetch();
+    const calls: string[] = [];
+    try {
+      const { actions } = harness({
+        clearClones: () => calls.push('clear'),
+        deleteClone: () => calls.push('delete'),
+      });
+      actions.run({ label: '清除所有分裂体', action: 'mitosis-clear' } as MenuLeaf);
+      actions.run({ label: '删除我', action: 'mitosis-delete' } as MenuLeaf);
+      await new Promise((resolve) => setImmediate(resolve));
+    } finally {
+      captured.restore();
+    }
+    assert.deepEqual(calls, ['clear', 'delete']);
+    assert.deepEqual(captured.urls, []);
+  });
+
+  test('模式两条分别映射成 normal / collide', () => {
+    const modes: string[] = [];
+    const { actions } = harness({ setMitosisMode: (mode) => modes.push(mode) });
+    actions.run({ label: '普通模式', action: 'mitosis-normal' } as MenuLeaf);
+    actions.run({ label: '碰撞模式', action: 'mitosis-collide' } as MenuLeaf);
+    assert.deepEqual(modes, ['normal', 'collide']);
+  });
+
+  test('容器没接线时四条都当无事发生（不分身就不该报错）', () => {
+    const { actions, calls } = harness();
+    for (const action of ['mitosis-clear', 'mitosis-delete', 'mitosis-normal', 'mitosis-collide'] as const) {
+      actions.run({ label: action, action } as MenuLeaf);
+    }
+    assert.deepEqual(calls, []);
+  });
+
+  test('睡着时四条照旧放行（与回到初始位置同属维护类）', () => {
+    const calls: string[] = [];
+    const { actions } = harness({
+      sleeping: () => true,
+      locked: () => false,
+      say: (text) => calls.push('say:' + text),
+      sleepRefuseTexts: () => ['别吵'],
+      clearClones: () => calls.push('clear'),
+      setMitosisMode: (mode) => calls.push('mode:' + mode),
+    });
+    actions.run({ label: '清除所有分裂体', action: 'mitosis-clear' } as MenuLeaf);
+    actions.run({ label: '碰撞模式', action: 'mitosis-collide' } as MenuLeaf);
+    assert.deepEqual(calls, ['clear', 'mode:collide']);
   });
 });

@@ -45,8 +45,8 @@ export interface FlightDeps {
   physics(): PhysicsParams;
   /** 宠物间碰撞站场。 */
   arena(): { slots: Record<string, PetCollisionSlot> };
-  /** 本宠物 id：碰撞时用来跳过自己。 */
-  petId: string;
+  /** 本宠物在站场里的槽键：互撞时用来跳过自己（分裂分身与本体同宠物 id，但各占一个槽）。 */
+  slotKey: string;
   /** 当前包围盒位置。 */
   box(): BoxPoint | null;
   /** 写回包围盒位置（每帧调用）。 */
@@ -125,7 +125,7 @@ export function createFlight(deps: FlightDeps): Flight {
   /** 互撞结算：规则在 pet-collision，这里只把撞击转成触觉回调。 */
   const resolveCollisions: PetCollisionResolver = createPetCollision({
     arena: deps.arena,
-    petId: deps.petId,
+    slotKey: deps.slotKey,
     onPetImpact: (speed) => deps.onImpact?.({ kind: 'pet', speed }),
   });
 

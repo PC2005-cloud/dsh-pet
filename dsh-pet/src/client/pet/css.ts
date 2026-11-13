@@ -27,6 +27,13 @@ const PET_CSS = [
   `.dsh-pet-hit{position:absolute;pointer-events:auto;cursor:url("${ROUTE_PATH}/pic/cursor-grab.png") 16 16, grab;z-index:1;touch-action:none;-webkit-user-select:none;-webkit-touch-callout:none}`,
   `.dsh-pet-hit.dragging{cursor:url("${ROUTE_PATH}/pic/cursor-grabbing.png") 16 16, grabbing}`,
   '@media (prefers-reduced-motion: reduce){.dsh-pet-video{transition:none}}',
+  // 有丝分裂：本体描边呼吸 + 全家编号角标。角标只由 data-mitosis 决定，不占命中框。
+  '.dsh-pet-root[data-mitosis="main"] .dsh-pet-stage::after{content:"";position:absolute;inset:5% 18% 3% 18%;border:1.5px solid rgba(74,168,255,.78);border-radius:calc(var(--dsh-pet-size,462px)*0.06);box-shadow:0 0 3px 1px rgba(74,168,255,.45),0 0 8px 2px rgba(40,110,255,.14),inset 0 0 4px rgba(74,168,255,.16);pointer-events:none;z-index:2;animation:dsh-pet-mitosis-glow 2.8s ease-in-out infinite}',
+  '@keyframes dsh-pet-mitosis-glow{0%,100%{opacity:.5}50%{opacity:1}}',
+  // 碰撞模式：本体是那颗会撞别人的，框收到躯干上，撞上了才看得准。
+  '.dsh-pet-root[data-mitosis="main"][data-mitosis-mode="collide"] .dsh-pet-stage::after{inset:10% 26% 5% 26%;border-radius:calc(var(--dsh-pet-size,462px)*0.05)}',
+  '.dsh-pet-cnum{position:absolute;left:50%;bottom:calc(var(--dsh-pet-size,462px)*-0.055);transform:translateX(-50%);z-index:5;font:800 max(14px,calc(var(--dsh-pet-size,462px)*0.07))/1 "Microsoft YaHei UI","Segoe UI",sans-serif;color:#fff;text-shadow:0 2px 6px rgba(0,0,0,.95),0 0 10px rgba(0,0,0,.8);pointer-events:none;letter-spacing:-.5px;white-space:nowrap}',
+  '@media (prefers-reduced-motion: reduce){.dsh-pet-root[data-mitosis="main"] .dsh-pet-stage::after{animation:none}}',
   // 统一右键菜单样式，与桌面注入同一份。
   MENU_CSS,
   // 悬浮提示样式，与桌面注入同一份。

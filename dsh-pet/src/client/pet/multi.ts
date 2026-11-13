@@ -1,6 +1,7 @@
 /**
  * 多开容器：拉一次成品配置、长轮询 /state 叶子，再把指令分发给对应的宠物卡。
  * 只做「配置 → 渲染列表」与「叶子 → 每只宠物」的分发，不解释叶子语义、不画 DOM。
+ * 有丝分裂也在这里落地：分身是本体的又一张卡，宿主身份仍是本体那一只，所以指令天然扇出、机器事实只发一份。
  * 必须始终成立：首拉只记基线，之后 counter 变化才分发；配置形状异常时显式报错，绝不用空列表清空。
  * @module dsh-pet/src/client/pet/multi
  */
@@ -47,6 +48,8 @@ import type { WorkStatusSnapshot } from '../../shared/work-status.ts';
 import type { PetCardProps } from './card/props.ts';
 import type { PetRuntime, RuntimePet } from './types.ts';
 import { setClickSoundEnabled } from './click-sound.ts';
+import { badgeOf, clonePhysics, cloneWeightsOf, mainPhysics } from './mitosis/rules.ts';
+import { createUseMitosis } from './mitosis/use-mitosis.ts';
 import { setSurface, setVoiceConfig, setVoiceNotifyEnabled } from '../../shared/voice.ts';
 import { runStatePoll } from './state-poll.ts';
 import { setMenuItems } from '../menu-service.ts';
@@ -67,10 +70,13 @@ export function createPetMulti(
   Card: FunctionComponent<PetCardProps>,
 ): () => ReactNode {
   const { h, useState, useEffect, useRef } = rt;
+  const useMitosis = createUseMitosis(rt);
 
   return function PetMulti() {
     const [pets, setPets] = useState<Pet[]>([]);
     const [ready, setReady] = useState(false);
+    // 有丝分裂：连点在本体上结算，分身只是这份名单多渲染出来的几张卡。
+    const mitosis = useMitosis();
     // 碰撞站场：每只 PetCard 注册槽位，纯 ref 同步，不触发重渲染。
     const arenaRef = useRef<{ slots: Record<string, PetCollisionSlot> }>({ slots: {} });
     // 余额状态：容器统一拉取，PetCard 共享；两个 tick 分别驱动动画与文字说明。
@@ -368,23 +374,13 @@ export function createPetMulti(
     }, [ready]);
 
     return ready
-      ? visiblePets.map((p) => {
+      ? visiblePets.flatMap((p) => {
           // 未启用工作状态联动：在分发处就断掉，下游（动画恢复、播完判定、气泡）不必各判一次。
           const workOn = p.workStatusEnabled;
-          return h(Card, {
-            key: p.id,
-            cfg: p as RuntimePet,
-            balance,
-            balanceTick,
-            balanceNoticeTick,
-            balanceManual,
-            balancePetId,
-            // 环境是机器级一份：只有 petId 对得上的那只宠物收到，其余传 undefined 不弹气泡
-            env: env !== null && env.petId === p.id ? env : undefined,
-            envTick,
-            workStatus: workOn ? workStatus : null,
-            workStatusTick: workOn ? workStatusTick : 0,
-            onFocusSession: jumpToSession,
+          const cfg = p as RuntimePet;
+          const clones = mitosis.clonesOf(p.id);
+          // 分身与本体同宿主身份：指令叶子按 petId 扇出，一份 cue 同时喂给这一家子。
+          const cues = {
             say: sayRef.current[p.id],
             sayTick,
             animCue: animCueRef.current[p.id],
@@ -399,7 +395,63 @@ export function createPetMulti(
             sleepTick,
             menuItemsRef,
             arena: arenaRef,
+            onFocusSession: jumpToSession,
+          };
+          const main = h(Card, {
+            ...cues,
+            key: p.id,
+            cfg: { ...cfg, physics: mainPhysics(cfg.physics, mitosis.mode) },
+            balance,
+            balanceTick,
+            balanceNoticeTick,
+            balanceManual,
+            balancePetId,
+            // 环境是机器级一份：只有 petId 对得上的那只宠物收到，其余传 undefined 不弹气泡
+            env: env !== null && env.petId === p.id ? env : undefined,
+            envTick,
+            workStatus: workOn ? workStatus : null,
+            workStatusTick: workOn ? workStatusTick : 0,
+            mitosis: {
+              role: 'main',
+              slotKey: p.id,
+              mode: mitosis.mode,
+              badge: clones.length > 0 ? badgeOf(0) : null,
+              cloneCount: clones.length,
+              onTap: (now: number) => mitosis.tap(p.id, now),
+              onClear: () => mitosis.clear(p.id),
+              onMode: mitosis.setMode,
+            },
           });
+          // 机器事实（余额、环境、工作状态）一只一份，分身只接指令，免得同一句话被念 N 遍。
+          const extras = clones.map((c) =>
+            h(Card, {
+              ...cues,
+              key: c.instanceKey,
+              cfg: {
+                ...cfg,
+                animationWeights: cloneWeightsOf(cfg.animationWeights),
+                physics: clonePhysics(cfg.physics, mitosis.mode),
+              },
+              initialPos: c.spot,
+              balance: null,
+              balanceTick: 0,
+              balanceNoticeTick: 0,
+              balanceManual: false,
+              env: undefined,
+              envTick: 0,
+              workStatus: null,
+              workStatusTick: 0,
+              mitosis: {
+                role: 'clone',
+                slotKey: c.instanceKey,
+                mode: mitosis.mode,
+                badge: badgeOf(c.seq),
+                cloneCount: 0,
+                onDelete: () => mitosis.remove(p.id, c.instanceKey),
+              },
+            }),
+          );
+          return [main, ...extras];
         })
       : null;
   };

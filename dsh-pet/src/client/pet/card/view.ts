@@ -1,5 +1,5 @@
 /**
- * 宠物卡的 DOM 结构：根节点、舞台与两路视频、命中区、气泡槽、悬浮提示。
+ * 宠物卡的 DOM 结构：根节点、舞台与两路视频、命中区、气泡槽、分裂角标、悬浮提示。
  * 不持有状态、不做判定：尺寸变量、定位样式与事件回调都由 PetCard 当帧传入，这里只按顺序拼装。
  * 依赖注入的 h、pet/motion/geometry 的命中区样式与 shared/tooltip 的类名。
  * 不变量：命中区在 stage 内，气泡与提示是根节点的直接子节点——三者的定位都相对根节点。
@@ -11,6 +11,7 @@ import type { CSSProperties, ReactNode } from 'react';
 import type * as ReactNS from 'react';
 import type { jsx } from 'react/jsx-runtime';
 import type { Corner } from '../../../shared/types.ts';
+import type { MitosisMode, MitosisRole } from '../mitosis/rules.ts';
 
 /** 宠物卡视图的渲染输入：全部是当帧的值、ref 与事件回调。 */
 export interface CardViewProps {
@@ -48,6 +49,8 @@ export interface CardViewProps {
   tipOn: boolean;
   /** 宠物名：悬浮提示内容，同时作为命中区的无障碍名称。 */
   name: string;
+  /** 有丝分裂标记：根节点的 data 属性与角标数字；缺省 = 这张卡不参与分裂。 */
+  mitosis?: { role: MitosisRole; mode: MitosisMode; badge: number | null };
   /** 点击命中区。 */
   onClick(e: ReactNS.MouseEvent<HTMLDivElement>): void;
   /** 按下：开启指针捕获与拖拽。 */
@@ -82,6 +85,8 @@ export function makeCardView(rt: { h: typeof jsx }) {
       className: 'dsh-pet-root',
       'data-corner': props.corner,
       'data-facing': props.facing,
+      'data-mitosis': props.mitosis?.role,
+      'data-mitosis-mode': props.mitosis?.mode,
       style: Object.assign(
         {
           '--dsh-pet-size': props.size + 'px',
@@ -119,6 +124,10 @@ export function makeCardView(rt: { h: typeof jsx }) {
             }),
           ],
         }),
+        // 分裂角标：本体 1、分身 2..N；只有一只时不传 badge，节点也不挂。
+        typeof props.mitosis?.badge === 'number'
+          ? h('div', { className: 'dsh-pet-cnum', 'aria-hidden': 'true', children: String(props.mitosis.badge) })
+          : null,
         // 悬浮提示常驻只切 class，挂卸节点吃不到淡入过渡；坐标由 placeTip 直接写 style。
         // pointer-events:none 见 TOOLTIP_CSS，否则会挡住命中区导致 enter/leave 闪烁。
         h('div', {
