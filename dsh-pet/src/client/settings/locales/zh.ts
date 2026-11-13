@@ -126,7 +126,11 @@ export const zh = {
   lastOfKind: '「{entry}」只剩这一只，删掉就没有这个种类了。要彻底移除请直接删除该角色包文件。',
   savePartial: '主宠物已保存，但 {names} 没能写回：检查该角色包配置是否合法、目录是否可写。',
   notifyToggle: '系统通知',
-  notifyToggleHint: '对话完成 / 生成失败 / 权限申请 / 用户选择，在窗口失焦时弹出系统级通知（桌面右下角）。',
+  notifyToggleHint:
+    '对话完成 / 生成失败 / 权限申请 / 用户选择时弹出系统级通知（桌面右下角）。默认只在窗口失焦时弹，看本页时不打扰。',
+  notifyWhenFocusedToggle: '前台聚焦时也提醒',
+  notifyWhenFocusedToggleHint:
+    '开着本页、窗口也在前台时，照样弹系统通知、照样播报工作状态语音。默认关闭——想在前台也不漏掉完成与报错时打开。',
   clickSoundToggle: '点击音效',
   clickSoundToggleHint:
     '点一下宠物播一声内置音效（assets/sound/click-duck.wav，音量 0.5；100ms 内的连续点击只响一次，多开也不会叠音）。关掉即完全静音。随「保存」写入用户配置。',

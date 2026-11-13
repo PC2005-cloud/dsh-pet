@@ -251,6 +251,7 @@ describe('buildSaveBody —— 请求体字段', () => {
       'confineToScreen',
       'font',
       'notificationsEnabled',
+      'notifyWhenFocused',
       'pets',
       'physics',
       'trayEnabled',

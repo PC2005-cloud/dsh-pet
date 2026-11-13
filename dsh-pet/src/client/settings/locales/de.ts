@@ -136,7 +136,10 @@ export const de: Record<Key, string> = {
     'Haupt-Pets gespeichert, aber {names} konnten nicht zurückgeschrieben werden: Prüfen Sie, ob die Pack-Konfiguration gültig und das Verzeichnis beschreibbar ist.',
   notifyToggle: 'Systembenachrichtigungen',
   notifyToggleHint:
-    'System-Toasts (unten rechts auf dem Desktop) bei Abschluss einer Konversation, Fehlern, Berechtigungsanfragen und Rückfragen – nur wenn das Fenster nicht fokussiert ist.',
+    'System-Toasts (unten rechts auf dem Desktop) bei Abschluss einer Konversation, Fehlern, Berechtigungsanfragen und Rückfragen. Standardmäßig nur, wenn das Fenster nicht fokussiert ist.',
+  notifyWhenFocusedToggle: 'Auch bei Fokus benachrichtigen',
+  notifyWhenFocusedToggleHint:
+    'Zeigt Toasts und liest Arbeitsstatus-Zeilen auch dann vor, wenn diese Seite sichtbar und das Fenster fokussiert ist. Standardmäßig aus – einschalten, wenn Abschlüsse und Fehler auch beim Hinsehen nicht verloren gehen sollen.',
   clickSoundToggle: 'Klick-Sound',
   clickSoundToggleHint:
     'Beim Klick auf ein Pet ertönt der integrierte Klick-Sound (assets/sound/click-duck.wav, Lautstärke 0.5); Klicks innerhalb von 100 ms werden nur einmal abgespielt, auch bei mehreren Pets überlagert sich nichts. Aus = völlig stumm. Wird beim „Speichern" in die Benutzerkonfiguration geschrieben.',

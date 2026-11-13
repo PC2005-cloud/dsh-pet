@@ -19,6 +19,8 @@ export interface MainConfigPatch {
   /** 条目级人设正文，作为实例人设「留空时跟随什么」的预览。 */
   entryPrompt?: string;
   notificationsEnabled?: boolean;
+  /** 前台聚焦时也提醒；缺省表示这次响应里没有可信值。 */
+  notifyWhenFocused?: boolean;
   clickSoundEnabled?: boolean;
   whisperImageEnabled?: boolean;
   chatImageEnabled?: boolean;
@@ -79,6 +81,7 @@ export function readMainConfig(merged: MergedConfig): MainConfigPatch | null {
   };
   if (typeof main.whisperPrompt === 'string') patch.entryPrompt = main.whisperPrompt;
   if (typeof main.notificationsEnabled === 'boolean') patch.notificationsEnabled = main.notificationsEnabled;
+  if (typeof main.notifyWhenFocused === 'boolean') patch.notifyWhenFocused = main.notifyWhenFocused;
   if (typeof main.clickSoundEnabled === 'boolean') patch.clickSoundEnabled = main.clickSoundEnabled;
   if (typeof main.whisperImageEnabled === 'boolean') patch.whisperImageEnabled = main.whisperImageEnabled;
   if (typeof main.chatImageEnabled === 'boolean') patch.chatImageEnabled = main.chatImageEnabled;

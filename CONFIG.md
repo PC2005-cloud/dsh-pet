@@ -49,6 +49,7 @@ DSH 设置 → 「桌宠配置」：
 | `sleepEndTexts`        | **醒来台词**（条目级，随机挑一句；播「起来」时弹气泡）                                                         | 非空字符串数组             |
 | `sleepRefuseTexts`     | **睡着被打扰时的拒绝台词**（条目级，随机挑一句）                                                               | 非空字符串数组             |
 | `notificationsEnabled` | 系统通知总开关（布尔）                                                                                         | 同 `notificationsEnabled`  |
+| `notifyWhenFocused`    | **前台聚焦时也提醒**：true = 页面可见且有焦点时照样弹通知、照样播报工作状态语音（布尔，默认 false）             | 布尔，默认即可             |
 | `chatAnimationEnabled` | **对话动作联动**：开启后对话时把 `animations.categories` 下的动作清单交给模型，由它按语境挑一个当场表演（布尔，默认 true） | 布尔，默认即可             |
 
 > 覆盖语义：用户层给出即**整体替换**该字段（如写了 `animations` 就用你的整份动画池，替代默认），没写的字段回落包内默认。校验在插件加载时执行——格式错误会在 DSH 控制台显式报错，不会静默运行残缺配置。
@@ -72,6 +73,7 @@ $DSH_HOME/dsh-pet/
 // pet/pig-config.json —— 与 main-config.jsonc 同构的完整配置
 {
   "notificationsEnabled": true,
+  "notifyWhenFocused": false,
   "pets": [
     {
       "id": "pig1", // 实例 id（可多只；不必等于文件名前缀）

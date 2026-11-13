@@ -208,6 +208,9 @@ export interface FontConfig {
 export interface ClientConfig {
   /** 系统通知总开关：true = 对话完成 / 生成失败 / 输出截断 / 权限申请 / 用户选择时弹出通知；缺失即配置错误 */
   notificationsEnabled: boolean;
+  /** 前台聚焦时也提醒：true = 页面可见且持有焦点时照常弹通知、照常播报工作状态语音；
+   *  false（默认）= 只在走开或被遮住时提醒。缺这个键按 false 处理，旧配置行为不变。 */
+  notifyWhenFocused: boolean;
   /** 点击音效开关：true = 点击宠物时播放内置 click-duck.wav（音量 0.5、100ms 内去重），false = 静音。
    *  内置默认 false（默认静音，不突袭既有用户）。只读 main 条目这一份，pet pack 不单独覆盖。 */
   clickSoundEnabled: boolean;

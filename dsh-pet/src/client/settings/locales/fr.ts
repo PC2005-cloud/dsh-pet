@@ -137,7 +137,10 @@ export const fr: Record<Key, string> = {
     "Compagnons principaux enregistrés, mais {names} n'ont pas pu être écrits : vérifiez que la configuration du pack est valide et que le dossier est accessible en écriture.",
   notifyToggle: 'Notifications système',
   notifyToggleHint:
-    "Notifications du système d'exploitation (en bas à droite du bureau) pour la fin d'une conversation, les échecs, les demandes de permission et les questions — uniquement lorsque cette fenêtre n'a pas le focus.",
+    "Notifications du système d'exploitation (en bas à droite du bureau) pour la fin d'une conversation, les échecs, les demandes de permission et les questions. Par défaut, uniquement lorsque cette fenêtre n'a pas le focus.",
+  notifyWhenFocusedToggle: 'Notifier aussi au premier plan',
+  notifyWhenFocusedToggleHint:
+    "Affiche les notifications et lit les lignes d'état du travail même lorsque cette page est visible et que la fenêtre a le focus. Désactivé par défaut — activez-le pour ne pas manquer les fins et les échecs pendant que vous regardez la fenêtre.",
   clickSoundToggle: 'Son au clic',
   clickSoundToggleHint:
     "Joue le son intégré (assets/sound/click-duck.wav, volume 0,5) quand on clique sur un compagnon ; les clics répétés en moins de 100 ms ne sonnent qu'une fois, donc plusieurs compagnons ne se superposent jamais. Désactivez-le pour un silence total. Écrit dans la configuration utilisateur avec « Enregistrer ».",

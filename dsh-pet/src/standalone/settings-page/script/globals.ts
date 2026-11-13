@@ -21,6 +21,7 @@ function globalFlagsCard() {
   const g = state.globals;
   return card('全局开关', '对所有宠物生效；保存后立即写盘。', [
     toggleRow('g-notify', '系统通知', '对话完成、生成失败、权限申请等事件弹出系统通知。', g.notificationsEnabled, (value) => setGlobal('notificationsEnabled', value)),
+    toggleRow('g-notify-focused', '前台聚焦时也提醒', '开着本页、窗口在前台时照样弹通知、照样播报工作状态语音。默认关闭。', g.notifyWhenFocused, (value) => setGlobal('notifyWhenFocused', value)),
     toggleRow('g-click', '点击音效', '点击宠物时播放内置音效。', g.clickSoundEnabled, (value) => setGlobal('clickSoundEnabled', value)),
     toggleRow('g-whisper-image', '碎碎念配图', '碎碎念时允许模型挑一张表情包。', g.whisperImageEnabled, (value) => setGlobal('whisperImageEnabled', value)),
     toggleRow('g-chat-image', '对话配图', '对话时把表情包清单交给模型按语境选图。', g.chatImageEnabled, (value) => setGlobal('chatImageEnabled', value)),

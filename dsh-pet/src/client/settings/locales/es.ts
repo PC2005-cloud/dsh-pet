@@ -139,7 +139,10 @@ export const es: Record<Key, string> = {
     'Las mascotas principales se guardaron, pero {names} no se pudo escribir de vuelta: revisa que la configuración del pack sea válida y que el directorio tenga permisos de escritura.',
   notifyToggle: 'Notificaciones del sistema',
   notifyToggleHint:
-    'Avisos del sistema operativo (abajo a la derecha del escritorio) al completarse una conversación, si falla la generación, cuando se solicita permiso o cuando hay que elegir; solo mientras esta ventana no tiene el foco.',
+    'Avisos del sistema operativo (abajo a la derecha del escritorio) al completarse una conversación, si falla la generación, cuando se solicita permiso o cuando hay que elegir. Por defecto solo mientras esta ventana no tiene el foco.',
+  notifyWhenFocusedToggle: 'Avisar también con el foco',
+  notifyWhenFocusedToggleHint:
+    'Muestra avisos y lee el estado del trabajo también cuando esta página está visible y la ventana tiene el foco. Desactivado por defecto: actívalo si no quieres perderte finalizaciones y errores mientras miras la ventana.',
   clickSoundToggle: 'Sonido al hacer clic',
   clickSoundToggleHint:
     'Reproduce el sonido de clic integrado (assets/sound/click-duck.wav, volumen 0.5) al hacer clic en una mascota; los clics repetidos en menos de 100 ms solo suenan una vez, así que varias mascotas nunca se superponen. Desactívalo para silencio total. Se escribe en la configuración del usuario al Guardar.',

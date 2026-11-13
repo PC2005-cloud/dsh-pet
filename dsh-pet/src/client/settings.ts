@@ -139,6 +139,8 @@ export function makePetConfigSection(
     // 不做即时写入：PUT /config 会重启桌面 Helper，全部桌面宠物窗口重建（拖拽落点清空、宠物跳回角落）。
     // 引擎重读放在保存成功后（persist 里调 reloadNotifications），保存后即时生效、无需刷新。
     const [notifyEnabled, setNotifyEnabled] = useState(true);
+    // 前台聚焦时也提醒：默认关（维持「不打扰」），与通知开关相邻，随「保存」整包写入。
+    const [notifyWhenFocused, setNotifyWhenFocused] = useState(false);
     // 点击音效开关：同通知开关，随「保存」整包写入；初值 true 是内置默认，加载效应会用成品值覆盖。
     const [clickSound, setClickSound] = useState(true);
     // 表情包配图开关（全局）：切换只改本地状态，随「保存」一起提交。
@@ -188,6 +190,7 @@ export function makePetConfigSection(
         if (entries === null || patch === null) throw new Error('Invalid config response');
         replace(entries);
         if (patch.notificationsEnabled !== undefined) setNotifyEnabled(patch.notificationsEnabled);
+        if (patch.notifyWhenFocused !== undefined) setNotifyWhenFocused(patch.notifyWhenFocused);
         if (patch.clickSoundEnabled !== undefined) setClickSound(patch.clickSoundEnabled);
         if (patch.whisperImageEnabled !== undefined) setWhisperImage(patch.whisperImageEnabled);
         if (patch.chatImageEnabled !== undefined) setChatImage(patch.chatImageEnabled);
@@ -260,6 +263,7 @@ export function makePetConfigSection(
     // 七个顶层开关的当前值：卡片各认自己那几项，键名与成品配置字段同名。
     const globalFlags: GlobalFlags = {
       notificationsEnabled: notifyEnabled,
+      notifyWhenFocused,
       clickSoundEnabled: clickSound,
       confineToScreen: confineScreen,
       trayEnabled,
@@ -274,6 +278,7 @@ export function makePetConfigSection(
     // 两束开关共用这张表：键名到 setter 的映射只写一遍，卡片只管回传键名。
     const flagSetters: Record<GlobalFlagKey | ChatFlagKey, (value: boolean) => void> = {
       notificationsEnabled: (value) => void toggleNotify(value),
+      notifyWhenFocused: setNotifyWhenFocused,
       clickSoundEnabled: setClickSound,
       confineToScreen: setConfineScreen,
       trayEnabled: setTrayEnabled,
@@ -301,6 +306,7 @@ export function makePetConfigSection(
         // PUT /config 只写用户主配置：只能提交 main 层实例，pack 实例走 POST /pet-config。
         pets: mainPets,
         notificationsEnabled: notifyEnabled,
+        notifyWhenFocused,
         clickSoundEnabled: clickSound,
         whisperImageEnabled: whisperImage,
         chatImageEnabled: chatImage,

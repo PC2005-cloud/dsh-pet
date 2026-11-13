@@ -136,7 +136,10 @@ export const pt: Record<Key, string> = {
     'Os pets principais foram salvos, mas {names} não pôde ser gravado: verifique se o config do pacote é válido e se a pasta permite escrita.',
   notifyToggle: 'Notificações do sistema',
   notifyToggleHint:
-    'Avisos do sistema (canto inferior direito do desktop) para fim de conversa, falhas, pedidos de permissão e perguntas — só enquanto esta janela está sem foco.',
+    'Avisos do sistema (canto inferior direito do desktop) para fim de conversa, falhas, pedidos de permissão e perguntas. Por padrão, só enquanto esta janela está sem foco.',
+  notifyWhenFocusedToggle: 'Avisar também em foco',
+  notifyWhenFocusedToggleHint:
+    'Mostra avisos e lê o status do trabalho também quando esta página está visível e a janela está em foco. Desligado por padrão — ligue se não quiser perder conclusões e erros enquanto olha a janela.',
   clickSoundToggle: 'Som de clique',
   clickSoundToggleHint:
     'Toca o som de clique embutido (assets/sound/click-duck.wav, volume 0.5) quando o pet é clicado; cliques repetidos em até 100ms tocam uma vez só, então vários pets não empilham som. Desligue para silêncio total. Gravado na configuração do usuário junto com o "Salvar".',

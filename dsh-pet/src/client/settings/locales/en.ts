@@ -135,7 +135,10 @@ export const en: Record<Key, string> = {
     'Main pets saved, but {names} could not be written back: check that the pack config is valid and the directory is writable.',
   notifyToggle: 'System notifications',
   notifyToggleHint:
-    'OS-level toasts (bottom-right of the desktop) for conversation completion, failures, permission requests, and questions — only while this window is unfocused.',
+    'OS-level toasts (bottom-right of the desktop) for conversation completion, failures, permission requests, and questions. By default they only appear while this window is unfocused.',
+  notifyWhenFocusedToggle: 'Notify while focused',
+  notifyWhenFocusedToggleHint:
+    'Also toast and speak work-status lines while this page is visible and focused. Off by default — turn it on if you do not want to miss completions and failures while looking at the window.',
   clickSoundToggle: 'Click sound',
   clickSoundToggleHint:
     'Plays the built-in click sound (assets/sound/click-duck.wav, volume 0.5) when a pet is clicked; repeated clicks within 100ms play only once, so multiple pets never stack up. Turn it off for silence. Written to the user config together with Save.',

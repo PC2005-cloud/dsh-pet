@@ -1,5 +1,6 @@
 /**
- * 系统通知引擎（浏览器半侧）：消费宿主生成的通知帧，按「聚焦不弹」发系统级 toast。
+ * 系统通知引擎（浏览器半侧）：消费宿主生成的通知帧，按「聚焦不弹」发系统级 toast；
+ * `main.notifyWhenFocused` 打开时不再做这道判断。
  * 这是独立于宠物的能力，只随 DSH 网页端走——桌面模式不做宠物无关的功能。
  * 不负责产生帧：宿主监听 DSH 事件并写进 `/state`，容器统一轮询发现 counter 变化后调 `notifyFromFrame`；
  * 中断 / 活动门等过滤也已在宿主侧完成。
@@ -35,9 +36,24 @@ function initFocusTracking(): () => void {
 }
 
 /** 用户是否在看本页（页面可见且持有焦点）。
- *  系统通知与工作状态播报共用这一条：用户在看就不打扰，走开了才提醒。 */
+ *  系统通知与工作状态播报共用这一条：用户在看就不打扰，走开了才提醒。
+ *  {@link isNotifyWhenFocused} 打开时调用方不再走这条路。 */
 export function isPageActive(): boolean {
   return pageVisible && pageFocused;
+}
+
+/**
+ * 这一次要不要提醒。
+ *
+ * 总开关由调用方先判（系统通知与工作状态播报各有一个）；这里只回答「前台提醒」这一层：
+ * 打开就提醒，关闭时只在用户走开 / 页面不可见时才提醒。
+ *
+ * @param whenFocused - 成品配置的 `main.notifyWhenFocused`。
+ * @param pageActive - 用户是否正看着本页（{@link isPageActive}）。
+ * @returns 该提醒时为 true。
+ */
+export function shouldRemind(whenFocused: boolean, pageActive: boolean): boolean {
+  return whenFocused || !pageActive;
 }
 
 /** 图标 URL；pic 路由由宿主提供（`assets/pic` → `/dsh-pet-7340/pic/<file>`）。 */
@@ -55,6 +71,14 @@ export const NOTIFY_ICONS = {
 
 /** 当前生效的总开关；运行中可被 reloadNotifications 更新，设置页保存后即时生效。 */
 let notifyEnabled = true;
+
+/** 前台聚焦时是否也提醒；同样由 reloadNotifications 更新，缺键按 false。 */
+let notifyWhenFocused = false;
+
+/** 前台聚焦时是否也提醒；系统通知与工作状态播报共用这一条。 */
+export function isNotifyWhenFocused(): boolean {
+  return notifyWhenFocused;
+}
 
 /** 会话跳转与命名：由 app.ts 注入，取不到服务时退化为不跳会话、不认会话名。 */
 export interface SessionNavigator {
@@ -124,7 +148,8 @@ export function wireNotificationClick(n: Notification, sessionId?: string): void
  * 日志只在门之后记录：被拦下的触发不产生「弹窗」日志。 */
 function toast(title: string, body?: string, icon?: string, sessionId?: string): void {
   if (!notifyEnabled) return;
-  if (isPageActive()) return;
+  // 开关关着时维持「聚焦不打扰」；打开后照常弹，不再看页面是否活跃。
+  if (!shouldRemind(notifyWhenFocused, isPageActive())) return;
   if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
   console.log('[dsh-pet] 【弹窗】' + title + (body ? '：' + body : ''));
   try {
@@ -173,21 +198,27 @@ export async function requestNotificationPermission(): Promise<PermissionResult>
   }
 }
 
-/** 读系统通知总开关（成品配置 main 条目）；拉取或解析失败时按开启处理，不阻塞。 */
-async function readNotificationsEnabled(): Promise<boolean> {
+/** 读两个通知开关（成品配置 main 条目）；拉取或解析失败时按「总开关开启、不额外提醒」处理，不阻塞。 */
+async function readNotifySettings(): Promise<{ enabled: boolean; whenFocused: boolean }> {
   try {
     const r = await fetch(ROUTE_PATH + '/config');
-    if (!r.ok) return true;
-    const d = (await r.json().catch(() => null)) as { main?: { notificationsEnabled?: unknown } } | null;
-    return typeof d?.main?.notificationsEnabled === 'boolean' ? d.main.notificationsEnabled : true;
+    if (!r.ok) return { enabled: true, whenFocused: false };
+    const d = (await r.json().catch(() => null)) as { main?: Record<string, unknown> } | null;
+    const main = d?.main;
+    return {
+      enabled: typeof main?.notificationsEnabled === 'boolean' ? main.notificationsEnabled : true,
+      whenFocused: main?.notifyWhenFocused === true,
+    };
   } catch {
-    return true;
+    return { enabled: true, whenFocused: false };
   }
 }
 
-/** 重读总开关（设置页保存开关后调用）；之后新触发的通知按新值执行，无需刷新页面。 */
+/** 重读两个开关（设置页保存开关后调用）；之后新触发的通知按新值执行，无需刷新页面。 */
 export async function reloadNotifications(): Promise<void> {
-  notifyEnabled = await readNotificationsEnabled();
+  const settings = await readNotifySettings();
+  notifyEnabled = settings.enabled;
+  notifyWhenFocused = settings.whenFocused;
 }
 
 /** 一帧通知 → toast；由容器统一轮询 `/state` 发现 `sections.notify` 变化后调用。 */
@@ -203,9 +234,10 @@ export function notifyFromFrame(frame: unknown): void {
 export function initNotify(navigator?: SessionNavigator): () => void {
   sessionNavigator = navigator;
   // 总开关读成品配置（拉取失败不阻塞，默认开启）；之后由设置页保存后 reloadNotifications 重读。
-  void readNotificationsEnabled().then((enabled) => {
-    notifyEnabled = enabled;
-    if (typeof Notification !== 'undefined' && enabled && Notification.permission === 'default') {
+  void readNotifySettings().then((settings) => {
+    notifyEnabled = settings.enabled;
+    notifyWhenFocused = settings.whenFocused;
+    if (typeof Notification !== 'undefined' && settings.enabled && Notification.permission === 'default') {
       // 兜底申请；无手势时浏览器可能压制，真正的申请在设置页开关或按钮点击处。
       void requestNotificationPermission();
     }

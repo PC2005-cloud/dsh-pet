@@ -1952,7 +1952,7 @@ paths:
 
         - **只白名单字段会被保留**：`pets[]` 的 `id`/`name`/`size`/`sizePercent`/`balanceEnabled`/
           `whisperEnabled`/`workStatusEnabled`/`fixedEnabled`/`display`/`position`，以及顶层
-          `notificationsEnabled`/`clickSoundEnabled`/`whisperImageEnabled`/`chatImageEnabled`/
+          `notificationsEnabled`/`notifyWhenFocused`/`clickSoundEnabled`/`whisperImageEnabled`/`chatImageEnabled`/
           `chatAnimationEnabled`/`confineToScreen`/`trayEnabled`/`voiceEnabled`/`voiceName`/`voiceWhisperEnabled`/
           `voiceTodoEnabled`/`voiceNotifyEnabled`/`physics`/`font`/`whisperModel`/`chatModel`/`chatMemoryRounds`/
           `chatImageLimit`。
@@ -1996,6 +1996,7 @@ paths:
                         marginX: 24
                         marginY: 24
                   notificationsEnabled: true
+                  notifyWhenFocused: false
                   whisperImageEnabled: true
                   chatImageEnabled: true
       responses:
@@ -4505,6 +4506,11 @@ components:
             $ref: "#/components/schemas/PetEntry"
         notificationsEnabled:
           type: boolean
+        notifyWhenFocused:
+          type: boolean
+          description: |
+            前台聚焦时也提醒（默认 `false`）：打开后页面可见且持有焦点时照样弹系统通知、
+            照样播报工作状态语音；缺键按 `false` 处理，旧配置行为不变。
         whisperImageEnabled:
           type: boolean
         chatImageEnabled:

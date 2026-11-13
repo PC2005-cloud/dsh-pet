@@ -90,6 +90,9 @@ export function saveUserConfig(
   }
   const ne = o.notificationsEnabled;
   if (ne !== undefined && typeof ne !== 'boolean') return null;
+  // 前台聚焦时也提醒（全局布尔，与 notificationsEnabled 同语义）：传了必须是布尔，没传走透传保留
+  const nwf = o.notifyWhenFocused;
+  if (nwf !== undefined && typeof nwf !== 'boolean') return null;
   // 点击音效开关（全局布尔，与 notificationsEnabled 同语义）：传了必须是布尔，没传走透传保留
   const cse = o.clickSoundEnabled;
   if (cse !== undefined && typeof cse !== 'boolean') return null;
@@ -166,6 +169,7 @@ export function saveUserConfig(
   // 对话历史条数）同样只在请求体真的传了时才写（未传则走下面的透传保留，不凭空造值）
   const outConfig: { pets: unknown[]; [key: string]: unknown } = { pets: out };
   if (ne !== undefined) outConfig.notificationsEnabled = ne;
+  if (nwf !== undefined) outConfig.notifyWhenFocused = nwf;
   if (cse !== undefined) outConfig.clickSoundEnabled = cse;
   if (wie !== undefined) outConfig.whisperImageEnabled = wie;
   if (cie !== undefined) outConfig.chatImageEnabled = cie;
@@ -192,6 +196,7 @@ export function saveUserConfig(
   // 否则整包调用的调用方漏传一个字段，就会把用户既有设置悄悄抹成默认。
   const bodyOwned = new Set(['pets']);
   if (ne !== undefined) bodyOwned.add('notificationsEnabled');
+  if (nwf !== undefined) bodyOwned.add('notifyWhenFocused');
   if (cse !== undefined) bodyOwned.add('clickSoundEnabled');
   if (wie !== undefined) bodyOwned.add('whisperImageEnabled');
   if (cie !== undefined) bodyOwned.add('chatImageEnabled');

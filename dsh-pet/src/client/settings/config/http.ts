@@ -30,6 +30,8 @@ export interface ConfigMeta {
 export interface SaveFields {
   pets: readonly Pet[];
   notificationsEnabled: boolean;
+  /** 前台聚焦时也提醒：默认 false，只在 main 顶层生效。 */
+  notifyWhenFocused: boolean;
   clickSoundEnabled: boolean;
   whisperImageEnabled: boolean;
   chatImageEnabled: boolean;
@@ -76,6 +78,7 @@ export function buildSaveBody(fields: SaveFields): Record<string, unknown> {
   return {
     pets: fields.pets,
     notificationsEnabled: fields.notificationsEnabled,
+    notifyWhenFocused: fields.notifyWhenFocused,
     clickSoundEnabled: fields.clickSoundEnabled,
     whisperImageEnabled: fields.whisperImageEnabled,
     chatImageEnabled: fields.chatImageEnabled,

@@ -33,6 +33,9 @@ function pickGlobals(main) {
   physicsSource = physics;
   return {
     notificationsEnabled: source.notificationsEnabled !== false,
+    // 与 voiceNotifyEnabled 同理：本项默认关，字段缺失时不能显示成已勾选，
+    // 否则设置页显示「开」而消费端拿到 undefined 当成「关」，两边打架。
+    notifyWhenFocused: source.notifyWhenFocused === true,
     clickSoundEnabled: source.clickSoundEnabled !== false,
     whisperImageEnabled: source.whisperImageEnabled === true,
     chatImageEnabled: source.chatImageEnabled === true,
@@ -119,6 +122,7 @@ function physicsBody() {
 function petsBody() {
   return Object.assign({ pets: state.pets.main }, {
     notificationsEnabled: state.globals.notificationsEnabled,
+    notifyWhenFocused: state.globals.notifyWhenFocused,
     clickSoundEnabled: state.globals.clickSoundEnabled,
     whisperImageEnabled: state.globals.whisperImageEnabled,
     chatImageEnabled: state.globals.chatImageEnabled,
