@@ -66,31 +66,36 @@ export async function fetchJson(url: string, options: FetchJsonOptions): Promise
       return await fetchOnce(fetchImpl, url, timeoutMs, options.label);
     } catch (e) {
       last = e instanceof FetchJsonError ? e : new FetchJsonError('network', options.label + ' 请求失败', e);
-      if (last.code === 'http-status' || attempt === RETRIES) break;
+      if ((last.code !== 'timeout' && last.code !== 'network') || attempt === RETRIES) break;
       await sleep(RETRY_DELAY_MS);
     }
   }
   throw last ?? new FetchJsonError('network', options.label + ' 请求失败');
 }
 
-/** 单次抓取：把超时、状态码与解析失败归成三类。 */
+/** 单次抓取：区分超时、状态码、JSON 语法与传输错误。 */
 async function fetchOnce(fetchImpl: typeof fetch, url: string, timeoutMs: number, label: string): Promise<unknown> {
+  const signal = AbortSignal.timeout(timeoutMs);
   let response: Response;
   try {
     response = await fetchImpl(url, {
-      signal: AbortSignal.timeout(timeoutMs),
+      signal,
       headers: { 'user-agent': 'dsh-pet' },
     });
   } catch (e) {
     // AbortSignal.timeout 抛出的异常 name 是 TimeoutError；其余（断网、DNS）都算网络错误
-    const timedOut = e instanceof Error && e.name === 'TimeoutError';
+    const timedOut = signal.aborted || (e instanceof Error && e.name === 'TimeoutError');
     throw new FetchJsonError(timedOut ? 'timeout' : 'network', label + (timedOut ? ' 请求超时' : ' 请求失败'), e);
   }
   if (!response.ok) throw new FetchJsonError('http-status', label + ' 返回 HTTP ' + response.status);
   try {
     return await response.json();
   } catch (e) {
-    throw new FetchJsonError('bad-json', label + ' 返回的不是 JSON', e);
+    if (signal.aborted || (e instanceof Error && e.name === 'TimeoutError')) {
+      throw new FetchJsonError('timeout', label + ' 请求超时', e);
+    }
+    if (e instanceof SyntaxError) throw new FetchJsonError('bad-json', label + ' 返回的不是 JSON', e);
+    throw new FetchJsonError('network', label + ' 响应读取失败', e);
   }
 }
 

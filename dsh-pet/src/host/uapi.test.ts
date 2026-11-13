@@ -161,3 +161,27 @@ describe('fetchUapiWeather —— 失败与缓存', () => {
     assert.equal(fake.calls.length, 2);
   });
 });
+
+describe('fetchUapiWeather —— 空数值字段', () => {
+  for (const key of ['temperature', 'humidity'] as const) {
+    for (const blank of ['', '  ']) {
+      test(`${key} 返回空字符串 ${JSON.stringify(blank)}：按缺失处理`, async () => {
+        resetUapiCache();
+        const fake = fakeFetch([() => json({ ...UAPI_OK, [key]: blank })]);
+        assert.equal(await fetchUapiWeather({ fetchImpl: fake.impl, sleep: NO_SLEEP }), null);
+      });
+    }
+  }
+  test('真实的零温度与零湿度仍保留', async () => {
+    resetUapiCache();
+    const fake = fakeFetch([() => json({ ...UAPI_OK, temperature: '0', humidity: 0 })]);
+    const hit = await fetchUapiWeather({ fetchImpl: fake.impl, sleep: NO_SLEEP });
+    assert.equal(hit?.weather.temperatureC, 0);
+    assert.equal(hit?.weather.humidityPercent, 0);
+  });
+  test('空体感温度回落到实际气温', async () => {
+    resetUapiCache();
+    const fake = fakeFetch([() => json({ ...UAPI_OK, feels_like: ' ' })]);
+    assert.equal((await fetchUapiWeather({ fetchImpl: fake.impl, sleep: NO_SLEEP }))?.weather.apparentC, 17);
+  });
+});

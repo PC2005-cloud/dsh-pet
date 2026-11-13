@@ -228,6 +228,7 @@ function textOf(value: unknown): string | undefined {
 /** 取有限数值；字符串也接受（上游偶尔把数字写成字符串）。 */
 function numberOrUndefined(value: unknown): number | undefined {
   if (typeof value !== 'number' && typeof value !== 'string') return undefined;
+  if (typeof value === 'string' && value.trim() === '') return undefined;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : undefined;
 }
