@@ -28,6 +28,9 @@ import type { EnvState } from '../shared/state.ts';
 import { envBubbleView } from '../shared/env-view.ts';
 import type { EnvIconShape } from '../shared/env-icon.ts';
 
+/** 说话气泡被戳破后的消失时长（ms），与 `.is-popping` 的 keyframes 同值：到点才允许上层收起。 */
+const WHISPER_POP_MS = 420;
+
 /** 气泡内联样式：白色半透明圆泡加底部小尾巴，盒子尺寸锚字号 `--f`，位置锚宠物尺寸。
  *  width:max-content 不可省：left:50% 的绝对定位盒可用宽度只有包含块一半，shrink-to-fit
  *  会先被卡死；先按内容取宽，再由 max-width 收口。box-sizing 钉死 content-box，避免宿主
@@ -74,8 +77,18 @@ const bubbleCss = [
   '.dsh-pet-bubble .pet-bub-tier-peak{color:#e53935}',
   '.dsh-pet-bubble .pet-bub-tier-idle{color:#2e9e4f}',
   // 展开态：每个窗口一行，进度条长度等于已用百分比。
-  // 气泡默认不挡宿主页面，只有可展开的余额气泡才开命中。
+  // 气泡默认不挡宿主页面，只有可点的气泡（余额翻页、工作状态跳会话、说话气泡戳破）才开命中。
   '.dsh-pet-bubble.is-clickable{pointer-events:auto;cursor:pointer}',
+  // 戳破：鼓一下 → 缩成小泡泡 → 模糊散掉。transform 必须带上 translateX(-50%)，否则动画一覆盖
+  // 就把居中定位丢了，气泡会横向跳半个身位；时长与 WHISPER_POP_MS 保持一致。
+  '.dsh-pet-bubble.is-popping{pointer-events:none;animation:dsh-pet-bubble-pop-out ' +
+    WHISPER_POP_MS +
+    'ms cubic-bezier(.2,.72,.3,1) forwards}',
+  '@keyframes dsh-pet-bubble-pop-out{0%{transform:translateX(-50%) scale(1);opacity:1;filter:blur(0)}' +
+    '16%{transform:translateX(-50%) scale(1.07);opacity:1;filter:blur(0)}' +
+    '34%{transform:translateX(-50%) scale(1.16);opacity:.92;filter:blur(.3px)}' +
+    '62%{transform:translateX(-50%) scale(.9);opacity:.42;filter:blur(2px)}' +
+    '100%{transform:translateX(-50%) scale(.55);opacity:0;filter:blur(7px)}}',
   // 收起态排不下「窗口名 + 条 + 百分比 + 重置」四列，展开态单独加宽并缩到 60% 字号。
   '.dsh-pet-bubble.is-expanded{--f:calc(var(--f0)*0.6);width:min(calc(var(--f)*21),100%);max-width:100%}',
   // 淡出：换内容前先透明，换完去掉这个类再淡入。
@@ -325,8 +338,14 @@ export function makeBalanceBubble(rt: {
 /** 制造碎碎念气泡组件（工厂），与余额气泡共用样式与行渲染。
  *  image 是池内名（按素材根拼路径），url 是第三方完整地址，两者互斥且由 host 判定层保证。
  *  有配图时渲染在文字上方，图片样式取自 shared 的 MEME_BUBBLE_CSS。
+ *  可点有两个来源：工作状态气泡经 `onClick` 跳会话，说话气泡经 `onPop` 被戳破；两者不会同时给。
  */
-export function makeWhisperBubble(rt: { h: typeof jsx }): (props: {
+export function makeWhisperBubble(rt: {
+  h: typeof jsx;
+  useState: <T>(init: T) => [T, Dispatch<SetStateAction<T>>];
+  useEffect: (effect: ReactNS.EffectCallback, deps?: ReactNS.DependencyList) => void;
+  useRef: <T>(initial: T) => ReactNS.MutableRefObject<T>;
+}): (props: {
   text: string;
   image?: string;
   url?: string;
@@ -335,8 +354,10 @@ export function makeWhisperBubble(rt: { h: typeof jsx }): (props: {
   voiceState?: 'idle' | 'loading' | 'ready' | 'failed';
   /** 可点时的回调；工作状态气泡用它跳会话，缺省即不可点。 */
   onClick?: (e: ReactNS.MouseEvent<HTMLDivElement>) => void;
+  /** 戳破回调：消失动画播完才调它；缺省即不可戳破。 */
+  onPop?: () => void;
 }) => ReactNode {
-  const { h } = rt;
+  const { h, useEffect, useRef, useState } = rt;
   injectBubbleCss();
   injectMemeBubbleCss();
 
@@ -348,6 +369,7 @@ export function makeWhisperBubble(rt: { h: typeof jsx }): (props: {
     on,
     voiceState = 'idle',
     onClick,
+    onPop,
   }: {
     text: string;
     image?: string;
@@ -356,7 +378,27 @@ export function makeWhisperBubble(rt: { h: typeof jsx }): (props: {
     on: boolean;
     voiceState?: 'idle' | 'loading' | 'ready' | 'failed';
     onClick?: (e: ReactNS.MouseEvent<HTMLDivElement>) => void;
+    onPop?: () => void;
   }) {
+    // 戳破中：内容仍挂着，只是正在播消失动画；动画走完才由 onPop 收掉气泡。
+    const [popping, setPopping] = useState(false);
+    const popTimerRef = useRef<number | null>(null);
+    // 换台词要撤销未到点的收起：上一条的计时不该收掉新台词。
+    useEffect(() => {
+      if (popTimerRef.current !== null) {
+        window.clearTimeout(popTimerRef.current);
+        popTimerRef.current = null;
+      }
+      setPopping(false);
+    }, [text]);
+    // 卸载时同理：卸载后再调 onPop 会对着已销毁的组件写状态。
+    useEffect(
+      () => () => {
+        if (popTimerRef.current !== null) window.clearTimeout(popTimerRef.current);
+      },
+      [],
+    );
+
     const rows = whisperBubbleView({ ok: true, text, ts: 0 });
     const key = String(image ?? '').trim();
     const href = String(url ?? '').trim();
@@ -374,19 +416,31 @@ export function makeWhisperBubble(rt: { h: typeof jsx }): (props: {
           rowsToNodes(h, rows),
         ]
       : rowsToNodes(h, rows);
+    // 两种可点语义共用命中样式：跳会话（工作气泡）与戳破（说话气泡）。
+    const interactive = onPop !== undefined || onClick !== undefined;
     return h('div', {
       className:
         'dsh-pet-bubble dsh-pet-whisper' +
         (src ? ' ' + MEME_BUBBLE_CLASS : '') +
         (on ? ' is-on' : '') +
-        (onClick ? ' is-clickable' : ''),
+        (interactive ? ' is-clickable' : '') +
+        (popping ? ' is-popping' : ''),
       // 点在气泡上不能漏到底下的宠物本体：那里是拖拽与「摸一下」的命中区。
-      onClick: onClick
-        ? (e: ReactNS.MouseEvent<HTMLDivElement>) => {
+      onClick: !interactive
+        ? undefined
+        : (e: ReactNS.MouseEvent<HTMLDivElement>) => {
             e.stopPropagation();
-            onClick(e);
-          }
-        : undefined,
+            if (popping) return; // 动画期间不重复触发
+            if (onPop === undefined) {
+              onClick?.(e);
+              return;
+            }
+            setPopping(true);
+            popTimerRef.current = window.setTimeout(() => {
+              popTimerRef.current = null;
+              onPop();
+            }, WHISPER_POP_MS);
+          },
       children: voiceState === 'idle' ? body : [body, voiceBadgeNode(h, voiceState)],
     });
   };

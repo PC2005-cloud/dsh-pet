@@ -147,6 +147,8 @@ const POSE_REPORT_URL = BASE + '/pose/report';
 // （到点读当前值推一次），否则第三方读到的永远是走位中途的位置，且没有任何报错。
 const POSE_THROTTLE_MS = 400;
 const BUBBLE_DURATION_MS = 10 * 1000; // 余额/碎碎念气泡展示时长（与浏览器一致：定时消失，与动画解耦）
+// 说话气泡戳破动画时长（ms）：与 index.html 的 popOut 同值，动画播完才真正收起气泡（与浏览器 WHISPER_POP_MS 一致）
+const WHISPER_POP_MS = 420;
 // 余额气泡换内容前的等待（ms）：与 .pet-bubble 的 opacity 过渡同为 .25s，淡出走完再换，
 // 否则内容会在半透明时被替换 = 看得见的硬切（与浏览器 bubble.ts 同值）
 const BALANCE_FADE_MS = 250;

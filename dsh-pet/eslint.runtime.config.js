@@ -85,6 +85,7 @@ const scriptGlobals = {
   POSE_REPORT_URL: 'readonly',
   POSE_THROTTLE_MS: 'readonly',
   BUBBLE_DURATION_MS: 'readonly',
+  WHISPER_POP_MS: 'readonly',
   BALANCE_FADE_MS: 'readonly',
   STATE_WAIT_MS: 'readonly',
   WINDOW_MARGIN_RATIO: 'readonly',

@@ -233,12 +233,12 @@ Object.assign(PetSprite.prototype, {
   /**
    * 本窗口是否必须保持可交互（= 我正在用这个窗口的鼠标输入）。
    *
-   * 来源是拖拽中 / 右键菜单开着 / 对话或待办弹窗开着（外加可点的余额气泡）：它们都靠窗口级鼠标事件驱动，
+   * 来源是拖拽中 / 右键菜单开着 / 对话或待办弹窗开着（外加可点的余额、工作与说话气泡）：它们都靠窗口级鼠标事件驱动，
    * 窗口一变回穿透输入链就断（拖拽定格、松手也没人报 pointerup）。
    * 这是渲染端专有的知识，主进程无从推断；同时上报控件矩形，菜单/聊天框外仍继续穿透。
    */
   inputBusy() {
-    // 可点的气泡（余额翻页、工作气泡跳会话）同样是来源：它们长在窗口里、靠窗口级 click 触发，
+    // 可点的气泡（余额翻页、工作气泡跳会话、说话气泡戳破）同样是来源：它们长在窗口里、靠窗口级 click 触发，
     // 却悬在平时穿透的余量区，正需要借 busy + 控件矩形把它们圈出来。
     return (
       this.dragState.active ||
@@ -246,7 +246,8 @@ Object.assign(PetSprite.prototype, {
       this.chatOpen ||
       this.todoOpen ||
       this.balanceClickable() ||
-      this.workClickable()
+      this.workClickable() ||
+      this.whisperClickable()
     );
   },
 
@@ -265,6 +266,11 @@ Object.assign(PetSprite.prototype, {
   /** 工作气泡此刻是否可点：它正占着气泡槽，且拿到了可跳转的会话。 */
   workClickable() {
     return this.bubbleSlot === 'work' && !!this.workSessionId;
+  },
+
+  /** 说话气泡此刻是否可点：它正占着气泡槽就有内容，点下去是戳破。 */
+  whisperClickable() {
+    return this.bubbleSlot === 'whisper' && !!this.whisperView;
   },
 
   /**

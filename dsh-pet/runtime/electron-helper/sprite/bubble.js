@@ -100,7 +100,8 @@ Object.assign(PetSprite.prototype, {
     // 展开态仅内置 windows 的窗口明细与用量页使用；custom 各页是对等页面，翻页不切紧凑字号。
     const isCustom = !!(this.balanceState && S.customViews(this.balanceState));
     const workClickable = this.workClickable();
-    const clickable = (slot === 'balance' && this.balanceClickable()) || workClickable;
+    // 说话气泡同样可点：点下去就是戳破（分流在 init.js，动作是 popWhisper）。
+    const clickable = (slot === 'balance' && this.balanceClickable()) || workClickable || this.whisperClickable();
     const expanded = slot === 'balance' && clickable && !isCustom && this.balanceViewIndex > 0;
     this.bubble.classList.toggle('is-clickable', clickable);
     this.bubble.classList.toggle('is-expanded', expanded);

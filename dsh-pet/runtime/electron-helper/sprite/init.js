@@ -168,8 +168,14 @@ Object.assign(PetSprite.prototype, {
     this.hit.setAttribute('aria-label', this.pet.name);
     this.bubble = document.createElement('div');
     this.bubble.className = 'pet-bubble';
-    // 气泡点击按当前槽位分流：工作气泡跳会话，余额气泡切页。都就地吞掉事件，别落到下面的本体命中层。
+    // 气泡点击按当前槽位分流：说话气泡戳破、工作气泡跳会话、余额气泡切页。都就地吞掉事件，别落到下面的本体命中层。
     this.bubble.addEventListener('click', (e) => {
+      if (this.whisperClickable()) {
+        e.stopPropagation();
+        e.preventDefault();
+        this.popWhisper();
+        return;
+      }
       if (this.workClickable()) {
         e.stopPropagation();
         e.preventDefault();

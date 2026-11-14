@@ -102,6 +102,8 @@ export type WhisperBubbleComponent = (props: {
   on: boolean;
   /** 可点时的回调；工作气泡用它跳会话，缺省即不可点。 */
   onClick?: (e: ReactNS.MouseEvent<HTMLDivElement>) => void;
+  /** 戳破回调；只有说话气泡给，工作状态气泡给的是 onClick。 */
+  onPop?: () => void;
 }) => ReactNode;
 
 /** 注入的 react 能力。 */
@@ -369,6 +371,8 @@ export function createBubbleSlots(rt: BubbleSlotsRuntime, components: BubbleComp
               assetRoot: input.assetRoot,
               on: whisperOn,
               voiceState,
+              // 戳破：动画播完由组件回调收起，只动气泡，不碰动画与另三种气泡。
+              onPop: clearWhisper,
             });
       }
       // 终态与非终态共用同一个组件，差别只在停留时长与优先级。

@@ -136,6 +136,39 @@
       .pet-bubble.is-on {
         opacity: 1;
       }
+      /* 戳破：鼓一下 → 缩成小泡泡 → 模糊散掉，与浏览器 overlay 同一套 keyframes。
+         transform 必须带 translateX(-50%)：气泡靠它居中，动画一覆盖就会横向跳半个身位 */
+      .pet-bubble.is-popping {
+        pointer-events: none;
+        animation: popOut 0.42s cubic-bezier(0.2, 0.72, 0.3, 1) forwards;
+      }
+      @keyframes popOut {
+        0% {
+          transform: translateX(-50%) scale(1);
+          opacity: 1;
+          filter: blur(0);
+        }
+        16% {
+          transform: translateX(-50%) scale(1.07);
+          opacity: 1;
+          filter: blur(0);
+        }
+        34% {
+          transform: translateX(-50%) scale(1.16);
+          opacity: 0.92;
+          filter: blur(0.3px);
+        }
+        62% {
+          transform: translateX(-50%) scale(0.9);
+          opacity: 0.42;
+          filter: blur(2px);
+        }
+        100% {
+          transform: translateX(-50%) scale(0.55);
+          opacity: 0;
+          filter: blur(7px);
+        }
+      }
       /* 碎碎念变体：与浏览器 overlay 一致 —— 字号缩到余额气泡的 0.75、宽度下限更窄（0.10 → 2.1978），
          上限与余额气泡相同；宽度取宽/折行规则继承 .pet-bubble，高度随行数自然增长 */
       .pet-bubble.is-whisper {

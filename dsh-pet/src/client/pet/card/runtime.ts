@@ -44,8 +44,8 @@ export function createCardRuntime(rt: PetRuntime) {
   const BalanceBubble = makeBalanceBubble({ h, useState, useEffect });
   /** 环境气泡：按天气码画图标，数据与显隐由装配根传入。 */
   const EnvBubble = makeEnvBubble({ h });
-  /** 碎碎念气泡：文本与显隐由装配根传入。 */
-  const WhisperBubble = makeWhisperBubble({ h });
+  /** 碎碎念气泡：文本与显隐由装配根传入，戳破状态在组件内部。 */
+  const WhisperBubble = makeWhisperBubble({ h, useState, useEffect, useRef });
   /** 待办气泡：面板本体挂在自己身上，关闭按钮回调装配根。 */
   const TodoBubble = makeTodoBubble({ h, useEffect, useRef });
   /** 四种气泡的单槽：显隐、停留计时与优先级都在这里。 */

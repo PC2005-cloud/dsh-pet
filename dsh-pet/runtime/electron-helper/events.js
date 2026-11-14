@@ -180,6 +180,17 @@ PetSprite.prototype.clearWhisper = function clearWhisper() {
   this.applyWhisperHold({ kind: 'clear' });
 };
 
+// 戳破说话气泡（用户点击的落点）：先播消失动画，播完再走 clearWhisper。
+// 与 clearWhisper 同一语义——只收气泡，不碰动画与另两种气泡。
+PetSprite.prototype.popWhisper = function popWhisper() {
+  if (!this.whisperClickable()) return;
+  this.bubble.classList.add('is-popping');
+  window.setTimeout(() => {
+    this.bubble.classList.remove('is-popping');
+    this.clearWhisper();
+  }, WHISPER_POP_MS);
+};
+
 // 碎碎念展示（本宠物）：随机抽 events.whisper 动画 + 弹文本气泡（与余额同一套定时语义）。
 // image 是 host 随机抽定的配图名；url 是第三方自带的完整地址：两者二选一（host 判定层保证），
 // 由字段名区分、不靠嗅探。anim === false 时整段跳过动画联动（不查池、不换源、不 stopMove），
@@ -214,6 +225,8 @@ PetSprite.prototype.showWhisper = function showWhisper(text, image, url, duratio
     this.playOnce(name);
   }
   if (duration === 0) return;
+  // 新台词要看得见：清掉上一条戳破残留的消失动画。
+  this.bubble.classList.remove('is-popping');
   this.whisperView = S.whisperBubbleView({ ok: true, text, ts: 0 });
   this.whisperText = text;
   this.whisperImage = typeof image === 'string' ? image : '';
