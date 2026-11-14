@@ -70,6 +70,7 @@ export function createCardAnimation(rt: CardAnimationRuntime) {
       currentAnim: () => card.animRef.current,
       workStatus: () => workStatusRef.current,
       facing: () => card.facingRef.current,
+      tiltDeg: () => live.current.tiltDeg ?? 0,
       report: input.report,
       clearCuePlayback: () => input.setCuePlayback(null),
       onFrontReady: (el) => {

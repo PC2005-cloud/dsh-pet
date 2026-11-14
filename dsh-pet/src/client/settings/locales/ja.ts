@@ -202,6 +202,11 @@ export const ja: Record<Key, string> = {
   'physics.throwPower': '投げる力',
   'physics.throwPowerHint':
     '> 0。バネの追従性と投げ出しの初速の全体倍率（1 = デフォルト。大きいほどよく追従し、勢いよく飛びます）',
+  'physics.flightTiltMaxDeg': '飛行の傾き上限',
+  'physics.flightTiltMaxDegHint':
+    '度。飛んでいるときの体の傾き上限。75 ≈ ほぼ横向き。0 = 傾けない（端末の傾き重力とは別）',
+  'physics.flightTiltRefSpeed': '傾きの参照速度',
+  'physics.flightTiltRefSpeedHint': 'px/s。この速度で傾き上限に達します。大きいほど満傾きにしにくい',
   physicsCeilingBounce: '天井での跳ね返り',
   physicsCeilingBounceHint: 'オフにすると、投げたペットが画面の上端を越えて飛び出せます（重力が引き戻します）',
   physicsPetCollision: 'ペット同士の衝突',
@@ -215,7 +220,8 @@ export const ja: Record<Key, string> = {
   physicsShake: '振って投げる',
   physicsShakeHint:
     '振った方向へペットを飛ばします。強さは投げる力（throwPower）に比例し、重力とは無関係なので重力 0 でも使えます。HTTPS/localhost が必要です。',
-  invalidPhysics: '物理パラメータを確認してください：重力 / 地面摩擦 ≥ 0、弾性 0～1、投げる力 > 0。',
+  invalidPhysics:
+    '物理パラメータを確認してください：重力 / 地面摩擦 ≥ 0、弾性 0～1、投げる力 > 0；傾き上限 ≥ 0、参照速度 > 0。',
   fontTitle: '外観とフォント',
   fontHint:
     'フォントの種類は、現在キャンディフォントを使用しているすべてのテキストに適用されます：ペットのバブル、ホバーツールチップ、チャットウィンドウ、スコアポップアップ。文字サイズはペットのバブルとホバーツールチップだけに適用されます（チャットウィンドウとスコアポップアップの文字サイズは変わりません）。グローバルデフォルトで、すべてのペットに共通です（pet pack は自身の種類ファイルで個別に上書きできます）。「保存」時にユーザー設定へ書き込まれ、ブラウザでは保存後すぐに反映、デスクトップでは保存でペットウィンドウが再読み込みされてから反映されます。',

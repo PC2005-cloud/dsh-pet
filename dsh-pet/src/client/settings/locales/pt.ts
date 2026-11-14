@@ -206,6 +206,12 @@ export const pt: Record<Key, string> = {
   'physics.throwPower': 'Força de arremesso',
   'physics.throwPowerHint':
     '> 0, multiplicador geral da mola que segue o cursor e da velocidade de saída (1 = padrão; maior = mais colado ao cursor e arremessos mais fortes)',
+  'physics.flightTiltMaxDeg': 'Inclinação máxima no voo',
+  'physics.flightTiltMaxDegHint':
+    'graus — quanto o corpo inclina ao voar; 75 ≈ quase de lado; 0 = sem inclinação (não relacionado à gravidade por inclinação do celular)',
+  'physics.flightTiltRefSpeed': 'Velocidade de referência da inclinação',
+  'physics.flightTiltRefSpeedHint':
+    'px/s — velocidade que atinge a inclinação máxima; maior = mais difícil inclinar por completo',
   physicsCeilingBounce: 'Quicar no teto',
   physicsCeilingBounceHint:
     'Desligado, o arremesso pode sair pelo topo da tela (a gravidade ainda traz o pet de volta)',
@@ -221,7 +227,7 @@ export const pt: Record<Key, string> = {
   physicsShakeHint:
     'Sacuda para arremessar o pet na direção do gesto; a força acompanha o throwPower. Independe da gravidade, então funciona com gravidade 0. Requer HTTPS/localhost.',
   invalidPhysics:
-    'Revise os valores de física: gravidade / atrito com o chão ≥ 0, restituição 0–1, força de arremesso > 0.',
+    'Revise os valores de física: gravidade / atrito com o chão ≥ 0, restituição 0–1, força de arremesso > 0; inclinação máx. ≥ 0, velocidade de referência > 0.',
   fontTitle: 'Aparência e fonte',
   fontHint:
     'A família vale para todo texto que hoje usa a fonte candy: balão do pet, dica ao passar o mouse, janela de conversa, popup de pontuação. O tamanho vale só para o balão do pet e a dica (as janelas de conversa e de pontuação mantêm o próprio tamanho). Padrão global, compartilhado por todos os pets (um pet pack pode sobrescrever no arquivo do próprio tipo); gravado na configuração do usuário ao "Salvar" — na hora no navegador, e no desktop quando o "Salvar" recarrega as janelas do pet.',

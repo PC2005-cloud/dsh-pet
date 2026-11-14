@@ -82,7 +82,7 @@ export function createCardRuntime(rt: PetRuntime) {
     const { corner, customPos, facing, margin, size, tipOn } = state;
 
     // 驱动实例与跨关注点入口：创建顺序见模块头，填充只在本函数内。
-    const liveRef = useRef<CardLive>({} as CardLive);
+    const liveRef = useRef<CardLive>({ tiltDeg: 0 } as CardLive);
     const menuActionsRef = useRef<MenuActions | null>(null);
     const entryRef = useRef<CardEntry | null>(null);
     const pendingSquashRef = useRef(false);

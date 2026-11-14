@@ -192,6 +192,10 @@ export const zh = {
   'physics.groundFrictionHint': '/s，撞墙 / 落地 / 撞顶后沿接触面方向的速度衰减率；0 = 四面都像冰面',
   'physics.throwPower': '总力度',
   'physics.throwPowerHint': '> 0，弹簧跟手与甩出初速的整体倍率（1 = 默认；越大越跟手、甩得越猛）',
+  'physics.flightTiltMaxDeg': '飞行倾斜上限',
+  'physics.flightTiltMaxDegHint': '度，甩出去身体最大歪多少；75 ≈ 接近横着飞；0 = 不倾斜（与手机倾斜重力无关）',
+  'physics.flightTiltRefSpeed': '倾斜参考速度',
+  'physics.flightTiltRefSpeedHint': 'px/s，达到此速度即吃满倾斜上限；越大越不容易歪满',
   physicsCeilingBounce: '顶部反弹',
   physicsCeilingBounceHint: '关掉后抛掷可飞出屏幕顶部（重力仍会把它拉回来）',
   physicsPetCollision: '宠物互撞',
@@ -204,7 +208,7 @@ export const zh = {
   physicsShake: '摇一摇抛出',
   physicsShakeHint:
     '摇一摇沿甩动方向把宠物甩出去，力度 = 基准 × 总力度；与重力无关，重力设 0 也能甩。需要 HTTPS 或 localhost。',
-  invalidPhysics: '请检查物理参数：重力 / 地面摩擦 ≥ 0，弹性 0~1，总力度 > 0。',
+  invalidPhysics: '请检查物理参数：重力 / 地面摩擦 ≥ 0，弹性 0~1，总力度 > 0；倾斜上限 ≥ 0，倾斜参考速度 > 0。',
   fontTitle: '外观与字体',
   fontHint:
     '字体种类作用于现在用软糖体的全部文字：宠物气泡、悬浮提示、对话窗、得分弹窗；字号只作用于宠物气泡与悬浮提示（对话窗与得分弹窗的字号不变）。全局默认，所有宠物共用（pet pack 可在自己种类文件里单独覆盖）；随「保存」写入用户配置，浏览器保存后即时生效，桌面端由保存重载宠物窗口后生效。',

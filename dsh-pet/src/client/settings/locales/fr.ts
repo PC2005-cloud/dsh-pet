@@ -209,6 +209,12 @@ export const fr: Record<Key, string> = {
   'physics.throwPower': 'Force de lancer',
   'physics.throwPowerHint':
     '> 0, multiplicateur global du suivi ressort et de la vitesse de lancer (1 = valeur par défaut ; plus haut = suivi plus ferme et lancers plus violents)',
+  'physics.flightTiltMaxDeg': 'Inclinaison max. en vol',
+  'physics.flightTiltMaxDegHint':
+    'degrés — à quel point le corps penche en vol ; 75 ≈ presque à l’horizontale ; 0 = pas d’inclinaison (indépendant de la gravité par inclinaison du téléphone)',
+  'physics.flightTiltRefSpeed': 'Vitesse de référence d’inclinaison',
+  'physics.flightTiltRefSpeedHint':
+    'px/s — vitesse qui atteint l’inclinaison max. ; plus haut = plus dur d’incliner à fond',
   physicsCeilingBounce: 'Rebond au plafond',
   physicsCeilingBounceHint: "Désactivé, un lancer peut sortir par le haut de l'écran (la gravité le ramène)",
   physicsPetCollision: 'Collisions entre compagnons',
@@ -224,7 +230,7 @@ export const fr: Record<Key, string> = {
   physicsShakeHint:
     'Secouez pour lancer le compagnon dans le sens du geste ; la force suit throwPower. Indépendant de la gravité, donc utilisable à gravité 0. Nécessite HTTPS/localhost.',
   invalidPhysics:
-    'Vérifiez les paramètres physiques : gravité / frottement au sol ≥ 0, rebond entre 0 et 1, force de lancer > 0.',
+    'Vérifiez les paramètres physiques : gravité / frottement au sol ≥ 0, rebond entre 0 et 1, force de lancer > 0 ; inclinaison max. ≥ 0, vitesse de référence > 0.',
   fontTitle: 'Apparence et police',
   fontHint:
     "La famille s'applique partout où la police bonbon est utilisée : bulle du compagnon, infobulle, fenêtre de discussion, fenêtre de score ; la taille ne concerne que la bulle et l'infobulle (les fenêtres de discussion et de score gardent la leur). Valeurs globales par défaut, partagées par tous les compagnons (un pet pack peut les remplacer dans son propre fichier de type) ; écrites dans la configuration utilisateur lors de l'enregistrement — immédiat dans le navigateur, et sur le bureau après rechargement des fenêtres par l'enregistrement.",

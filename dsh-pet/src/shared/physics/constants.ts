@@ -53,6 +53,12 @@ export const RESTITUTION = 0.78;
 /** 接触面切向摩擦（/s）：撞墙、落地、撞顶后沿接触面方向的速度衰减率；0 = 四面都像冰面。 */
 export const GROUND_FRICTION = 2.5;
 
+/** 飞行最大倾斜角默认（°）：接近横着飞，可后调。与 {@link ./tilt.ts} 同值，避免 constants↔tilt 循环依赖。 */
+export const FLIGHT_TILT_MAX_DEG = 75;
+
+/** 达到最大倾斜的参考速度默认（px/s）。 */
+export const FLIGHT_TILT_REF_SPEED = 1800;
+
 /** 抛掷物理的默认参数（与内置配置一致；仅作配置缺失时的兜底）。 */
 export const DEFAULT_PHYSICS: PhysicsParams = {
   gravity: GRAVITY,
@@ -64,6 +70,8 @@ export const DEFAULT_PHYSICS: PhysicsParams = {
   hapticEnabled: true,
   tiltGravity: true,
   shakeThrow: true,
+  flightTiltMaxDeg: FLIGHT_TILT_MAX_DEG,
+  flightTiltRefSpeed: FLIGHT_TILT_REF_SPEED,
 };
 
 /** 总力度默认量（throwPower=1 即现状）。 */

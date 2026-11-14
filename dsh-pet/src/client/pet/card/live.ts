@@ -26,6 +26,8 @@ export interface CardLive {
   drag: Drag;
   /** Q 弹挤压。 */
   squash: SquashDriver;
+  /** 当前飞行倾斜角（°）；抛掷每帧写入，停飞清零；换源 / squash 读它拼 transform。 */
+  tiltDeg: number;
   /** 动画流：指令处理之后创建，拖拽与本地解冻要经它恢复档位。 */
   flow: AnimationFlow | null;
   /** 当前宠物中心的视口坐标（含角落兜底）。 */

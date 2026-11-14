@@ -5,7 +5,14 @@
  * 不变量：每帧先积分、再结算互撞、最后写 DOM；互撞只写结算后的绝对速度，落定那一帧才调 commitFinal。
  * @module dsh-pet/src/client/pet/motion/flight
  */
-import { throwBounds, type GravityVector, type PetCollisionSlot, type ThrowState } from '../../../shared/physics.ts';
+import {
+  flightTiltDeg,
+  smoothTiltDeg,
+  throwBounds,
+  type GravityVector,
+  type PetCollisionSlot,
+  type ThrowState,
+} from '../../../shared/physics.ts';
 import { integrateFlight } from './flight-integrate.ts';
 import { createPetCollision, type PetCollisionResolver } from './pet-collision.ts';
 import type { BoxPoint, Center, Viewport } from './geometry.ts';
@@ -61,6 +68,8 @@ export interface FlightDeps {
   onImpact?(impact: FlightImpact): void;
   /** 体感模式下的重力向量；缺省用 physics.gravity 竖直向下。只在常驻模式里读。 */
   gravity?(): GravityVector;
+  /** 飞行身体倾斜角（°）每帧回调；停飞时会再调一次 0。缺省 = 不倾斜。 */
+  onTilt?(tiltDeg: number): void;
 }
 
 /** 飞行驱动：一个宠物一个实例。 */
@@ -138,6 +147,7 @@ export function createFlight(deps: FlightDeps): Flight {
     state = null;
     held = false;
     quietMs = 0;
+    deps.onTilt?.(0);
   };
 
   const start = (px: number, py: number, vx: number, vy: number): void => {
@@ -194,6 +204,7 @@ export function createFlight(deps: FlightDeps): Flight {
     let current: ThrowState = { x: px, y: py, vx, vy };
     let last = performance.now();
     let prevGrounded = false; // 落地挤压只在空中到地面的转换帧触发一次。
+    let tiltDeg = 0; // 本趟飞行的身体倾斜角；落定 / stop 清零。
     const rootEl = deps.root();
 
     /** 写回本帧位置：DOM、包围盒与归一化中心（后者供重渲染时按它重排）。 */
@@ -236,6 +247,12 @@ export function createFlight(deps: FlightDeps): Flight {
       // 落地挤压：只在空中到地面的转换帧触发，力度随冲击速度。
       const grounded = current.y >= bounds.maxY - 1;
       if (res.bounced && grounded && !prevGrounded) deps.onLanding(fallingVy);
+      // 倾斜：飞行追速度方向；抛掷落地后目标 0°，指数平滑回正（避免硬切卡顿）。
+      {
+        const target = !held && grounded ? 0 : flightTiltDeg(current.vx, current.vy, physics);
+        tiltDeg = smoothTiltDeg(tiltDeg, target, dt);
+        deps.onTilt?.(tiltDeg);
+      }
       prevGrounded = grounded;
       if (held) {
         // 常驻模式没有固定地面：重力为零且速度低就累计静默，到点停帧。
