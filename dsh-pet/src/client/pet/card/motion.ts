@@ -10,7 +10,7 @@ import { canReadMotionSensors, shakeImpulse, subscribeShake, subscribeTilt, tilt
 import { createPositionFollow, type PositionFollow } from '../motion/position-follow.ts';
 import { createSquashDriver, type SquashDriver } from '../motion/squash.ts';
 import { createWalk, type Walk } from '../motion/walk.ts';
-import { landingSquash, throwVelocity } from '../../../shared/physics.ts';
+import { landingSquash, petTransform, throwVelocity } from '../../../shared/physics.ts';
 import type { CardLive } from './live.ts';
 import type { CardStateApi } from './state.ts';
 import type { MovesConfig } from '../../../shared/types.ts';
@@ -99,10 +99,24 @@ export function createCardMotion(rt: CardMotionRuntime) {
     /** 包围盒：与拖拽、飞行共享，谁动谁写回。 */
     const boxRef = useRef<{ x: number; y: number } | null>(null);
 
-    // Q 弹挤压：rAF 句柄与世代号在驱动内部，镜像按当前朝向复原。
+    // 飞行倾斜角（°）：抛掷 rAF 每帧写入；stop / 落定清零。squash / 换源读它拼 transform。
+    const tiltDegRef = useRef(0);
+    // Q 弹挤压：rAF 句柄与世代号在驱动内部，镜像按当前朝向复原，并叠飞行倾斜。
     const squashRef = useRef<SquashDriver | null>(null);
-    squashRef.current ??= createSquashDriver({ facing: () => card.facingRef.current });
+    squashRef.current ??= createSquashDriver({
+      facing: () => card.facingRef.current,
+      tiltDeg: () => tiltDegRef.current,
+    });
     const squash = squashRef.current;
+    /** 把倾斜写到前台视频；squash 进行中只更新 ref，下一帧 squash 会读到。 */
+    const applyTilt = (deg: number): void => {
+      tiltDegRef.current = deg;
+      live.current.tiltDeg = deg;
+      if (squash.isActive()) return;
+      const frontEl = live.current.ownAnim?.frontVideo?.();
+      if (!frontEl) return;
+      frontEl.style.transform = petTransform({ facing: card.facingRef.current, tiltDeg: deg });
+    };
 
     /** 当前宠物中心的视口 X 坐标。 */
     const currentCenterX = (): number => {
@@ -176,6 +190,7 @@ export function createCardMotion(rt: CardMotionRuntime) {
       onImpact: (impact) => {
         haptics.hit(impact.kind, impact.speed);
       },
+      onTilt: applyTilt,
       // 只在常驻（倾斜）模式被读：倾斜没开或还没有采样时退回竖直重力，行为与关掉体感一致。
       gravity: () => {
         const physics = cfgRef.current.physics;

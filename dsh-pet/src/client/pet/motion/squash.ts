@@ -4,7 +4,7 @@
  * 尊重系统的「减少动效」：命中时不挤压，但界面照常。
  * @module dsh-pet/src/client/pet/motion/squash
  */
-import { SQ_DURATION_MS, SQ_SQUASH, squashScale } from '../../../shared/physics.ts';
+import { petTransform, SQ_DURATION_MS, SQ_SQUASH, squashScale } from '../../../shared/physics.ts';
 
 /** 挤压驱动：一个宠物一个实例。 */
 export interface SquashDriver {
@@ -12,15 +12,20 @@ export interface SquashDriver {
   start: (el: HTMLVideoElement, depth?: number) => void;
   /** 立刻复位并放弃进行中的一次。 */
   stop: () => void;
+  /** 是否正在挤压（飞行倾斜若与 squash 抢 transform，进行中只更新 ref）。 */
+  isActive: () => boolean;
 }
 
 /**
  * 造挤压驱动。
  *
- * @param o - 取值函数集合：`facing` 给当前朝向，镜像要保留，所以挤压后按它复原 `transform`。
+ * @param o - 取值函数：`facing` 给朝向；`tiltDeg` 给当前飞行倾斜（缺省 0）。
  * @returns 可反复调用的挤压驱动。
  */
-export function createSquashDriver(o: { facing: () => 'left' | 'right' }): SquashDriver {
+export function createSquashDriver(o: {
+  facing: () => 'left' | 'right';
+  tiltDeg?: () => number;
+}): SquashDriver {
   /** 进行中的 rAF；`null` = 没有挤压在跑。 */
   let frame: number | null = null;
   /** 世代号：每次开始或停止都 +1，迟到的帧据此自弃。 */
@@ -46,18 +51,22 @@ export function createSquashDriver(o: { facing: () => 'left' | 'right' }): Squas
       if (token !== current) return;
       const u = Math.min((performance.now() - t0) / SQ_DURATION_MS, 1);
       const scale = squashScale(u, depth);
-      el.style.transform = (o.facing() === 'right' ? 'scaleX(-1) ' : '') + 'scaleY(' + scale + ')';
+      el.style.transform = petTransform({
+        facing: o.facing(),
+        tiltDeg: o.tiltDeg?.() ?? 0,
+        scaleY: scale,
+      });
       if (u < 1) {
         frame = requestAnimationFrame(step);
         return;
       }
       frame = null;
       el.style.transformOrigin = origin;
-      // 恢复纯镜像；若期间换源重置过 transform，也以镜像为准。
-      el.style.transform = o.facing() === 'right' ? 'scaleX(-1)' : '';
+      // 恢复朝向 + 当前倾斜（落地路径 tilt 已是 0；若中途被打断以 getter 为准）。
+      el.style.transform = petTransform({ facing: o.facing(), tiltDeg: o.tiltDeg?.() ?? 0 });
     };
     frame = requestAnimationFrame(step);
   };
 
-  return { start, stop };
+  return { start, stop, isActive: () => frame !== null };
 }

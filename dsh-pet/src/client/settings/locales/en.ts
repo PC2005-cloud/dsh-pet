@@ -206,6 +206,11 @@ export const en: Record<Key, string> = {
   'physics.throwPower': 'Throw power',
   'physics.throwPowerHint':
     '> 0, overall multiplier for spring tracking and release speed (1 = default; higher = tighter tracking, harder throws)',
+  'physics.flightTiltMaxDeg': 'Flight tilt max',
+  'physics.flightTiltMaxDegHint':
+    'degrees — how far the body leans while flying; 75 ≈ nearly sideways; 0 = no tilt (unrelated to phone tilt-gravity)',
+  'physics.flightTiltRefSpeed': 'Tilt reference speed',
+  'physics.flightTiltRefSpeedHint': 'px/s — speed that reaches full tilt; higher = harder to lean fully',
   physicsCeilingBounce: 'Ceiling bounce',
   physicsCeilingBounceHint:
     'Turn this off to let a throw fly out through the top of the screen (gravity still pulls it back)',
@@ -220,7 +225,8 @@ export const en: Record<Key, string> = {
   physicsShake: 'Shake to throw',
   physicsShakeHint:
     'Shake to fling the pet along the shake direction; strength scales with throwPower. Independent of gravity, so it still works at gravity 0. Requires HTTPS/localhost.',
-  invalidPhysics: 'Check the physics values: gravity / ground friction ≥ 0, bounciness 0–1, throw power > 0.',
+  invalidPhysics:
+    'Check the physics values: gravity / ground friction ≥ 0, bounciness 0–1, throw power > 0; tilt max ≥ 0, tilt ref speed > 0.',
   fontTitle: 'Appearance & font',
   fontHint:
     'The family applies to every place that currently uses the candy font: pet bubble, hover tooltip, chat popup, score popup. The size applies only to the pet bubble and the hover tooltip (chat and score popups keep their own size). Global default, shared by every pet (a pet pack may override it in its own kind file); written to the user config on "Save" — instant in the browser, and on the desktop it applies once Save reloads the pet windows.',

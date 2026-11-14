@@ -90,7 +90,8 @@ Object.assign(PetSprite.prototype, {
   },
 
   /** 停止抛掷（空中被抓/点菜单/回家时定格在当前落点）。必须同时清 throwState——否则「抓住后温柔放下」
-   *  会残留最后一次飞行速度，静止的宠物点一下就被误判成飞行中。 */
+   *  会残留最后一次飞行速度，静止的宠物点一下就被误判成飞行中。
+   *  一并清飞行倾斜，避免抓住后身体还歪着。 */
   stopThrow() {
     this.throwToken++;
     if (this.throwRef !== null) {
@@ -98,6 +99,16 @@ Object.assign(PetSprite.prototype, {
       this.throwRef = null;
     }
     this.throwState = null;
+    this.applyTilt(0);
+  },
+
+  /** 把飞行倾斜写到前台视频（与 squash / facing 共用 S.petTransform） */
+  applyTilt(deg) {
+    this.tiltDeg = deg;
+    const frontEl = this.front === 0 ? this.videoA : this.videoB;
+    if (!frontEl) return;
+    if (this.squashRef !== null) return; // squash 循环自己拼 transform
+    frontEl.style.transform = S.petTransform({ facing: this.facing, tiltDeg: deg });
   },
 
   /** 抛掷驱动：重力 + 边缘反弹 + 落地摩擦，落定后写入 customPos */
@@ -161,10 +172,16 @@ Object.assign(PetSprite.prototype, {
         const frontEl = this.front === 0 ? this.videoA : this.videoB;
         this.startSquash(frontEl, S.landingSquash(fallingVy));
       }
+      // 倾斜：飞行追速度方向；落地后目标 0°，指数平滑回正（避免硬切卡顿）
+      {
+        const target = grounded ? 0 : S.flightTiltDeg(state.vx, state.vy, this.physics);
+        this.applyTilt(S.smoothTiltDeg(this.tiltDeg || 0, target, dt));
+      }
       prevGrounded = grounded;
       if (res.atRest) {
         this.throwRef = null;
         this.throwState = null;
+        this.applyTilt(0); // 落定钉死直立（平滑已基本到位）
         this.customPos = { rx: (this.pos.x + this.halfW) / VIEW.w, ry: (this.pos.y + this.halfH) / VIEW.h };
         window.__dshPetDebug.lastDragRelease = { x: this.pos.x, y: this.pos.y };
         return;
@@ -275,7 +292,8 @@ Object.assign(PetSprite.prototype, {
   },
 
   /** Q 弹挤压：前台视频垂直压扁（贴地锚定再回弹），曲线在 shared。depth = 下压幅度
-   *  （点击固定 0.55，落地按冲击速度动态取）；reduce-motion 时跳过。 */
+   *  （点击固定 0.55，落地按冲击速度动态取）；reduce-motion 时跳过。
+   *  transform 经 S.petTransform 与飞行倾斜 / 朝向拼装。 */
   startSquash(el, depth = S.SQ_SQUASH) {
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
     const token = ++this.squashToken;
@@ -287,14 +305,17 @@ Object.assign(PetSprite.prototype, {
       if (this.squashToken !== token) return;
       const u = Math.min((performance.now() - t0) / S.SQ_DURATION_MS, 1);
       const scale = S.squashScale(u, depth);
-      el.style.transform = (this.facing === 'right' ? 'scaleX(-1) ' : '') + 'scaleY(' + scale + ')';
+      el.style.transform = S.petTransform({
+        facing: this.facing,
+        tiltDeg: this.tiltDeg || 0,
+        scaleY: scale,
+      });
       if (u < 1) {
         this.squashRef = requestAnimationFrame(step);
       } else {
         this.squashRef = null;
         el.style.transformOrigin = origin;
-        // 恢复纯镜像（若期间 switchTo 重置过 transform，也以镜像为准）
-        el.style.transform = this.facing === 'right' ? 'scaleX(-1)' : '';
+        el.style.transform = S.petTransform({ facing: this.facing, tiltDeg: this.tiltDeg || 0 });
       }
     };
     this.squashRef = requestAnimationFrame(step);

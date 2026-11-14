@@ -80,7 +80,7 @@ Object.assign(PetSprite.prototype, {
       this.front = this.front === 0 ? 1 : 0;
       this.pending = null;
       this.playback = playbackId || null;
-      el.style.transform = this.facing === 'right' ? 'scaleX(-1)' : '';
+      el.style.transform = S.petTransform({ facing: this.facing, tiltDeg: this.tiltDeg || 0 });
       el.play()
         .then(() => {
           // 只有 play() 兑现才代表确实开始出画（loadeddata 只代表可解码）

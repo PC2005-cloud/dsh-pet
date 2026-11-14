@@ -207,6 +207,11 @@ export const de: Record<Key, string> = {
   'physics.throwPower': 'Wurfkraft',
   'physics.throwPowerHint':
     '> 0, Gesamtfaktor für Federfolge und Abwurfgeschwindigkeit (1 = Standard; höher = folgt enger, wirft härter)',
+  'physics.flightTiltMaxDeg': 'Flug-Neigung max.',
+  'physics.flightTiltMaxDegHint':
+    'Grad — wie weit der Körper im Flug kippt; 75 ≈ fast quer; 0 = keine Neigung (unabhängig von Handy-Schwerkraft)',
+  'physics.flightTiltRefSpeed': 'Neigungs-Referenzgeschwindigkeit',
+  'physics.flightTiltRefSpeedHint': 'px/s — Geschwindigkeit für volle Neigung; höher = schwerer voll zu kippen',
   physicsCeilingBounce: 'Deckenabprall',
   physicsCeilingBounceHint: 'Aus: Würfe können oben aus dem Bildschirm fliegen (die Schwerkraft holt sie zurück)',
   physicsPetCollision: 'Pet-Kollisionen',
@@ -220,7 +225,8 @@ export const de: Record<Key, string> = {
   physicsShake: 'Schütteln zum Werfen',
   physicsShakeHint:
     'Schütteln schleudert den Pet in Wurfrichtung; die Stärke folgt throwPower. Unabhängig von der Schwerkraft, funktioniert also auch bei 0. Benötigt HTTPS/localhost.',
-  invalidPhysics: 'Bitte Physikwerte prüfen: Schwerkraft / Bodenreibung ≥ 0, Elastizität 0–1, Wurfkraft > 0.',
+  invalidPhysics:
+    'Bitte Physikwerte prüfen: Schwerkraft / Bodenreibung ≥ 0, Elastizität 0–1, Wurfkraft > 0; Neigung max. ≥ 0, Referenzgeschwindigkeit > 0.',
   fontTitle: 'Aussehen & Schrift',
   fontHint:
     'Die Schriftart gilt für alle Texte, die derzeit die Candy-Schrift nutzen: Pet-Blase, Hover-Tooltip, Chat-Fenster, Score-Popup; die Schriftgröße gilt nur für Pet-Blase und Hover-Tooltip (Chat- und Score-Popup behalten ihre Größe). Globaler Standard für alle Pets (ein Pet-Pack kann ihn in seiner Art-Datei überschreiben); wird beim „Speichern" in die Benutzerkonfiguration geschrieben – im Browser sofort wirksam, im Desktop-Modus, sobald das Speichern die Pet-Fenster neu lädt.',

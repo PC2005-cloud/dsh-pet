@@ -186,6 +186,10 @@ export interface PhysicsParams {
    *  仅浏览器半侧生效，且要求环境有 Vibration API——iOS 与桌面端没有，静默跳过。
    *  缺省按 true；旧配置里没有这个键也算开。 */
   hapticEnabled?: boolean;
+  /** 飞行最大倾斜角（°）：速度越快身体越歪，封顶此值；缺省 = 75（接近横着飞）。与手机「倾斜控制重力」无关。 */
+  flightTiltMaxDeg?: number;
+  /** 达到最大倾斜所需参考速度（px/s）；缺省 = 1800。 */
+  flightTiltRefSpeed?: number;
 }
 
 /** 字体种类预设 id（font.family 白名单；清单与对应字体栈见 shared/fonts.ts）。 */

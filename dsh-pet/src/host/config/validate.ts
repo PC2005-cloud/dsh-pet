@@ -101,7 +101,8 @@ function weightsValid(w: unknown): boolean {
 
 /** physics 段校验：gravity ≥ 0（0 = 无重力，合法）、restitution ∈ [0,1]、groundFriction ≥ 0（均为有限数字）、
  *  ceilingBounce / petCollision 为布尔、throwPower > 0（有限数字）。
- *  hapticEnabled / tiltGravity / shakeThrow 为可选布尔（旧配置没有这几个键）。 */
+ *  hapticEnabled / tiltGravity / shakeThrow 为可选布尔（旧配置没有这几个键）。
+ *  flightTiltMaxDeg / flightTiltRefSpeed 可选：缺省合法；写了则须非负有限数（refSpeed > 0）。 */
 export function physicsValid(value: unknown): boolean {
   if (!value || typeof value !== 'object') return false;
   const p = value as Record<string, unknown>;
@@ -109,24 +110,37 @@ export function physicsValid(value: unknown): boolean {
   const r = Number(p.restitution);
   const f = Number(p.groundFriction);
   const tp = Number(p.throwPower);
-  return (
-    Number.isFinite(g) &&
-    g >= 0 &&
-    Number.isFinite(r) &&
-    r >= 0 &&
-    r <= 1 &&
-    Number.isFinite(f) &&
-    f >= 0 &&
-    typeof p.ceilingBounce === 'boolean' &&
-    Number.isFinite(tp) &&
-    tp > 0 &&
-    typeof p.petCollision === 'boolean' &&
-    // 可选：旧配置（与手写配置）没有这三个键，各按默认处理（三个都按开处理），
-    // 缺键不算整段非法。
-    (p.hapticEnabled === undefined || typeof p.hapticEnabled === 'boolean') &&
-    (p.tiltGravity === undefined || typeof p.tiltGravity === 'boolean') &&
-    (p.shakeThrow === undefined || typeof p.shakeThrow === 'boolean')
-  );
+  if (
+    !(
+      Number.isFinite(g) &&
+      g >= 0 &&
+      Number.isFinite(r) &&
+      r >= 0 &&
+      r <= 1 &&
+      Number.isFinite(f) &&
+      f >= 0 &&
+      typeof p.ceilingBounce === 'boolean' &&
+      Number.isFinite(tp) &&
+      tp > 0 &&
+      typeof p.petCollision === 'boolean' &&
+      // 可选：旧配置（与手写配置）没有这三个键，各按默认处理（三个都按开处理），
+      // 缺键不算整段非法。
+      (p.hapticEnabled === undefined || typeof p.hapticEnabled === 'boolean') &&
+      (p.tiltGravity === undefined || typeof p.tiltGravity === 'boolean') &&
+      (p.shakeThrow === undefined || typeof p.shakeThrow === 'boolean')
+    )
+  ) {
+    return false;
+  }
+  if (p.flightTiltMaxDeg !== undefined) {
+    const n = Number(p.flightTiltMaxDeg);
+    if (!Number.isFinite(n) || n < 0) return false;
+  }
+  if (p.flightTiltRefSpeed !== undefined) {
+    const n = Number(p.flightTiltRefSpeed);
+    if (!Number.isFinite(n) || n <= 0) return false;
+  }
+  return true;
 }
 
 /** font 段校验：family ∈ 预设白名单、size 为区间内的有限数字、followPet 为布尔。

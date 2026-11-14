@@ -220,6 +220,9 @@
   // shakeThrow：摇一摇抛出。true（默认）= 摇一摇沿甩动方向把宠物甩出去（力度 = 基准 × throwPower），
   //   与重力大小无关，gravity=0 时也能甩；false = 关闭。
   //   两个体感开关都只在 HTTPS / localhost 下有效（传感器 API 只在安全上下文存在）。
+  // flightTiltMaxDeg：飞行最大倾斜角（°）。甩出去速度越快身体越歪，封顶此值；75 ≈ 接近横着飞。
+  //   与 tiltGravity（手机倾斜改重力方向）无关。0 = 不倾斜。可后调。
+  // flightTiltRefSpeed：达到最大倾斜所需参考速度（px/s）；|v| 到此即吃满 maxDeg。
   "physics": {
     "gravity": 1400,
     "restitution": 0.78,
@@ -229,7 +232,9 @@
     "petCollision": true,
     "hapticEnabled": true,
     "tiltGravity": true,
-    "shakeThrow": true
+    "shakeThrow": true,
+    "flightTiltMaxDeg": 75,
+    "flightTiltRefSpeed": 1800
   },
   // ===================== 字体（全局默认，所有宠物共用；种类文件顶层可覆盖） =====================
   // family：字体种类（预设 id，必须在白名单内，写错即配置错误 → 告警并取默认 candy）。

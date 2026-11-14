@@ -210,6 +210,11 @@ export const es: Record<Key, string> = {
   'physics.throwPower': 'Fuerza de lanzamiento',
   'physics.throwPowerHint':
     '> 0, multiplicador general del seguimiento con resorte y de la velocidad de salida (1 = predeterminado; más alto = sigue más pegado y lanza más fuerte)',
+  'physics.flightTiltMaxDeg': 'Inclinación máxima en vuelo',
+  'physics.flightTiltMaxDegHint':
+    'grados — cuánto se inclina el cuerpo al volar; 75 ≈ casi de lado; 0 = sin inclinación (no relacionado con la gravedad por inclinación del móvil)',
+  'physics.flightTiltRefSpeed': 'Velocidad de referencia de inclinación',
+  'physics.flightTiltRefSpeedHint': 'px/s — velocidad a la que se alcanza la inclinación máxima; más alto = más difícil inclinarse del todo',
   physicsCeilingBounce: 'Rebote en el techo',
   physicsCeilingBounceHint:
     'Desactívalo para que un lanzamiento pueda salir por la parte superior de la pantalla (la gravedad sigue tirando de él hacia abajo)',
@@ -225,7 +230,7 @@ export const es: Record<Key, string> = {
   physicsShakeHint:
     'Agita para lanzar la mascota en la dirección del gesto; la fuerza escala con throwPower. No depende de la gravedad, así que funciona con gravedad 0. Requiere HTTPS/localhost.',
   invalidPhysics:
-    'Revisa los parámetros de física: gravedad / fricción con el suelo ≥ 0, rebote 0–1, fuerza de lanzamiento > 0.',
+    'Revisa los parámetros de física: gravedad / fricción con el suelo ≥ 0, rebote 0–1, fuerza de lanzamiento > 0; inclinación máx. ≥ 0, velocidad de referencia > 0.',
   fontTitle: 'Apariencia y fuente',
   fontHint:
     'La familia se aplica a todos los textos que ahora usan la fuente candy: globo de la mascota, tooltip al pasar el cursor, ventana de chat y ventana de puntuación. El tamaño solo se aplica al globo de la mascota y al tooltip (las ventanas de chat y de puntuación conservan su tamaño). Valor predeterminado global, compartido por todas las mascotas (un pet pack puede sobrescribirlo en el archivo de su propio tipo); se escribe en la configuración del usuario al "Guardar": al instante en el navegador y, en el escritorio, cuando Guardar recarga las ventanas de mascotas.',
