@@ -108,8 +108,16 @@ export function apply(ctx: any): void {
     todos,
     // 环境查询：/environment 与 system 时间行共用同一个取数口
     environment: (opts?: { fresh?: boolean }) => currentEnvironment({ force: opts?.fresh === true }),
-    // 语音合成：缓存落 userRoot，失败只留日志，不打断宿主
-    voice: createVoiceService({ userRoot, log }),
+    // 语音合成：缓存落 userRoot，失败只留日志，不打断宿主。
+    // 请求没带音色时用配置里的那个值——代码里没有第二份默认音色。
+    voice: createVoiceService({
+      userRoot,
+      log,
+      configuredVoice: () => {
+        const name = readAllConfig(configPaths).main?.voiceName;
+        return typeof name === 'string' && name ? name : undefined;
+      },
+    }),
     // 语音识别：能力来自宿主（DSH 的 speechToText），没启用时服务自己在调用时回 unsupported
     speech: createHearService({ speechToText: () => setup.optionalService('speechToText') }),
   };

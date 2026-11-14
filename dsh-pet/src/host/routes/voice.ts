@@ -15,7 +15,7 @@ export async function handleVoiceRoutes(deps: PetRouteDeps, input: RouteInput): 
 
   if (rest === 'voice/voices') {
     if (method !== 'GET') return methodNotAllowed();
-    return okResult({ ok: true, voices: deps.voice.listVoices() });
+    return okResult({ ok: true, ...deps.voice.list() });
   }
 
   if (rest === 'voice/speak') {
@@ -28,7 +28,7 @@ export async function handleVoiceRoutes(deps: PetRouteDeps, input: RouteInput): 
     }
     const result = await deps.voice.speak(parsed);
     if (!result.ok) return failResult(result.reason, result.message);
-    return { kind: 'file', file: result.file, contentType: 'audio/mpeg' };
+    return { kind: 'file', file: result.file, contentType: result.contentType };
   }
 
   // 与 /voice/speak 反向：音频进、文字出。格式由宿主 provider 校验，这里只转发结论。

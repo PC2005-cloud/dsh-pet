@@ -1,38 +1,54 @@
 /**
- * 语音缓存：按「音色 + 语速 + 文本」算键，落盘为 mp3，并按总量与条数淘汰最旧的。
+ * 语音缓存：按「限定音色 + 语速 + 文本」算键，落盘为音频文件，并按总量与条数淘汰最旧的。
  *
- * 命中即免合成——同一句话不管是自动播报还是用户点历史，都只合成一次。缓存只是加速，
- * 删掉任意文件都不影响正确性：下一次请求会重新合成。不负责合成与队列。
+ * 命中即免合成——同一句话不管是自动播报还是手动点播都只合成一次。扩展名与 MIME 由
+ * {@link FORMAT_INFO} 统一给出：两处各写一份就会出现「存成 .mp3、应答说 wav」。
+ * 不负责合成与队列；删除任意文件都不影响正确性，下一次请求会重新合成。
  * @module dsh-pet/src/host/voice/cache
  */
 import { createHash } from 'node:crypto';
 import { mkdir, readdir, rm, stat } from 'node:fs/promises';
 import { join } from 'node:path';
+import type { VoiceFormat } from './types.ts';
 
 /** 缓存总量上限（字节）：超过后从最旧的开始删。 */
 export const CACHE_MAX_BYTES = 20 * 1024 * 1024;
 /** 缓存文件条数上限。 */
 export const CACHE_MAX_FILES = 200;
 
-/** 缓存文件的完整路径：`<userRoot>/voice-cache/<key>.mp3`。 */
-export function cachePath(userRoot: string, key: string): string {
-  return join(userRoot, 'voice-cache', `${key}.mp3`);
+/** 各格式的落盘扩展名与应答 MIME；缓存路径、淘汰白名单与路由应答都读这一份。 */
+export const FORMAT_INFO: Record<VoiceFormat, { readonly ext: string; readonly mime: string }> = {
+  mp3: { ext: '.mp3', mime: 'audio/mpeg' },
+  wav: { ext: '.wav', mime: 'audio/wav' },
+};
+
+/** 淘汰时要统计的扩展名；漏掉一种，那种文件就永远删不掉。 */
+const CACHED_EXTENSIONS: readonly string[] = Object.values(FORMAT_INFO).map((info) => info.ext);
+
+/**
+ * 缓存文件的完整路径：`<userRoot>/voice-cache/<key><ext>`。
+ * @param userRoot - 用户数据根。
+ * @param key - {@link cacheKey} 的结果。
+ * @param format - 音频格式；决定扩展名。
+ */
+export function cachePath(userRoot: string, key: string, format: VoiceFormat): string {
+  return join(userRoot, 'voice-cache', key + FORMAT_INFO[format].ext);
 }
 
 /**
  * 计算缓存键。
  *
- * 四个输入都影响音频内容。`source` 是合成来源——内置实现的 id 或第三方 provider 的 id：
- * 不含它的话，切换实现后会命中上一家的旧音频，听起来像「注册了没生效」。
- * `text` 不做归一化——同一句话多一个空格就是另一份音频，宁可多存也不冒「听起来不对」的风险。
- * @param source - 合成来源。
- * @param voice - 音色 id；第三方实现没有音色概念，传空串。
- * @param rate - 语速表达式（如 `+0%`）。
+ * 三个输入都影响音频内容。`voiceId` 是限定 id（含 provider 前缀），所以换实现、换音色、
+ * 换语速、换文本里的任何一项都不会命中旧音频；`text` 不做归一化——同一句话多一个空格
+ * 就是另一份音频，宁可多存也不冒「听起来不对」的风险。
+ *
+ * @param voiceId - 限定音色 id，如 `edge/zh-CN-XiaoyiNeural`。
+ * @param rate - 语速偏移百分比，由入口解析成数字后传入。
  * @param text - 待合成文本。
  * @returns 十六进制 sha1。
  */
-export function cacheKey(source: string, voice: string, rate: string, text: string): string {
-  return createHash('sha1').update(`${source}\n${voice}\n${rate}\n${text}`).digest('hex');
+export function cacheKey(voiceId: string, rate: number, text: string): string {
+  return createHash('sha1').update(`${voiceId}\n${rate}\n${text}`).digest('hex');
 }
 
 /**
@@ -63,7 +79,7 @@ export async function pruneCache(dir: string, limits: { maxBytes?: number; maxFi
   }
   const entries: { file: string; size: number; mtimeMs: number }[] = [];
   for (const name of names) {
-    if (!name.endsWith('.mp3')) continue;
+    if (!CACHED_EXTENSIONS.some((ext) => name.endsWith(ext))) continue;
     const file = join(dir, name);
     try {
       const info = await stat(file);

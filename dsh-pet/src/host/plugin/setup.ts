@@ -10,7 +10,7 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths';
 import { listBalanceProviders, registerBalanceProvider } from '../balance/index.ts';
-import { listVoiceProviders, registerVoiceProvider } from '../voice/registry.ts';
+import { listCatalog, registerVoiceProvider } from '../voice/registry.ts';
 import { listSpeechProviders, registerSpeechProvider } from '../voice/speech-registry.ts';
 import { listChatMemoryProviders, registerChatMemoryProvider } from '../chat-memory-provider.ts';
 import { migrateUserConfig, type ConfigPaths } from '../config.ts';
@@ -200,7 +200,7 @@ export function createHostSetup(ctx: HostSetupContext): HostSetup {
     // 同样只给 register（返回 disposer）与 list，不给 unregister。
     voice: {
       register: registerVoiceProvider,
-      list: listVoiceProviders,
+      list: listCatalog,
     },
     // 识别：与合成对称的一槽；注册后 /voice/hear 只走它，不再看宿主自带的 speechToText。
     speech: {

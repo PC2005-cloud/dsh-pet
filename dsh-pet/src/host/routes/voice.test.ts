@@ -7,14 +7,22 @@ import { test } from 'node:test';
 import type { PetRouteDeps } from './types.ts';
 import { handleVoiceRoutes } from './voice.ts';
 
-const VOICES = [{ id: 'zh-CN-XiaoxiaoNeural', name: '晓晓', tag: '女 · 通用', default: true }];
+const CATALOG = {
+  providers: [
+    {
+      id: 'edge',
+      name: '内置',
+      voices: [{ id: 'edge/zh-CN-XiaoxiaoNeural', name: '晓晓', tag: '女 · 通用' }],
+    },
+  ],
+};
 
 /** 造最小依赖：只提供 voice 与 speech，其余字段这条路由不会碰。 */
 function makeDeps(
   speak: (raw: unknown) => Promise<unknown>,
   hear: (raw: unknown, signal?: AbortSignal) => Promise<unknown> = async () => ({ ok: true, text: '你好' }),
 ): PetRouteDeps {
-  return { voice: { listVoices: () => VOICES, speak }, speech: { hear } } as unknown as PetRouteDeps;
+  return { voice: { list: () => CATALOG, speak }, speech: { hear } } as unknown as PetRouteDeps;
 }
 
 /** 造一次路由输入。 */
@@ -22,23 +30,31 @@ function input(rest: string, method: string, body?: string) {
   return { url: new URL(`http://127.0.0.1:1/dsh-pet-7340/${rest}`), rest, method, body };
 }
 
-test('GET /voice/voices：返回音色列表', async () => {
+test('GET /voice/voices：按 provider 分组返回音色目录', async () => {
   const result = await handleVoiceRoutes(
-    makeDeps(async () => ({ ok: true, file: '/x.mp3' })),
+    makeDeps(async () => ({ ok: true, file: '/x.mp3', contentType: 'audio/mpeg' })),
     input('voice/voices', 'GET'),
   );
   assert.equal(result?.kind, 'json');
   if (result?.kind !== 'json') return;
   assert.equal(result.status, 200);
-  assert.deepEqual((result.obj as { voices: unknown }).voices, VOICES);
+  assert.deepEqual(result.obj, { ok: true, ...CATALOG });
 });
 
-test('POST /voice/speak 成功：交回 mp3 文件', async () => {
+test('POST /voice/speak 成功：交回音频文件与实现声明的 MIME', async () => {
   const result = await handleVoiceRoutes(
-    makeDeps(async () => ({ ok: true, file: '/cache/a.mp3' })),
+    makeDeps(async () => ({ ok: true, file: '/cache/a.mp3', contentType: 'audio/mpeg' })),
     input('voice/speak', 'POST', '{"text":"hi"}'),
   );
   assert.deepEqual(result, { kind: 'file', file: '/cache/a.mp3', contentType: 'audio/mpeg' });
+});
+
+test('POST /voice/speak 成功：WAV 实现的 MIME 原样透传，不在路由里写死', async () => {
+  const result = await handleVoiceRoutes(
+    makeDeps(async () => ({ ok: true, file: '/cache/a.wav', contentType: 'audio/wav' })),
+    input('voice/speak', 'POST', '{"text":"hi"}'),
+  );
+  assert.deepEqual(result, { kind: 'file', file: '/cache/a.wav', contentType: 'audio/wav' });
 });
 
 test('POST /voice/speak 业务失败：200 + 失败实体（不做成 4xx）', async () => {
