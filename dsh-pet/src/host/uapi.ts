@@ -230,6 +230,7 @@ function textOf(value: unknown): string | undefined {
 /** 取有限数值；字符串数字也接受（上游偶尔把温度写成字符串）。 */
 function numOf(value: unknown): number | undefined {
   if (typeof value !== 'number' && typeof value !== 'string') return undefined;
+  if (typeof value === 'string' && value.trim() === '') return undefined;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : undefined;
 }

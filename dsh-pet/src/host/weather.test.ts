@@ -156,3 +156,23 @@ describe('queryWeather —— 缓存', () => {
     assert.ok(fake.calls[2].startsWith('https://api.open-meteo.com/v1/forecast'), '第三次应是天气请求');
   });
 });
+
+describe('queryWeather —— 空数值字段', () => {
+  for (const key of ['temperature_2m', 'relative_humidity_2m'] as const) {
+    test(`${key} 空白时不生成零值天气`, async () => {
+      resetWeatherCache();
+      const fake = fakeFetch([() => json(SHENZHEN), () => json({ current: { ...CURRENT.current, [key]: ' ' } })]);
+      assert.equal(await queryWeather('深圳', { fetchImpl: fake.impl, sleep: NO_SLEEP }), null);
+    });
+  }
+  test('数字零值合法', async () => {
+    resetWeatherCache();
+    const fake = fakeFetch([
+      () => json(SHENZHEN),
+      () => json({ current: { ...CURRENT.current, temperature_2m: 0, relative_humidity_2m: '0' } }),
+    ]);
+    const hit = await queryWeather('深圳', { fetchImpl: fake.impl, sleep: NO_SLEEP });
+    assert.equal(hit?.temperatureC, 0);
+    assert.equal(hit?.humidityPercent, 0);
+  });
+});

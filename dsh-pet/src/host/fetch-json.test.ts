@@ -108,3 +108,91 @@ describe('fetchJson —— 失败归一', () => {
     );
   });
 });
+
+describe('fetchJson —— 正文读取与重试边界', () => {
+  test('损坏的 JSON 只请求一次', async () => {
+    const fake = fakeFetch([() => new Response('<html>error</html>')]);
+    await assert.rejects(
+      () => fetchJson('https://example.test', { label: 't', fetchImpl: fake.impl, sleep: NO_SLEEP }),
+      (e: unknown) => e instanceof FetchJsonError && e.code === 'bad-json',
+    );
+    assert.equal(fake.calls.length, 1);
+  });
+  test('正文读取超时保留 timeout 分类', async () => {
+    const fake = fakeFetch([
+      () =>
+        new Response(
+          new ReadableStream({
+            start(controller) {
+              controller.error(timeoutError());
+            },
+          }),
+        ),
+    ]);
+    await assert.rejects(
+      () => fetchJson('https://example.test', { label: 't', fetchImpl: fake.impl, sleep: NO_SLEEP }),
+      (e: unknown) => e instanceof FetchJsonError && e.code === 'timeout',
+    );
+    assert.equal(fake.calls.length, 2);
+  });
+  test('正文传输中断可重试，第二次响应正常时成功', async () => {
+    const fake = fakeFetch([
+      () =>
+        new Response(
+          new ReadableStream({
+            start(controller) {
+              controller.error(new TypeError('terminated'));
+            },
+          }),
+        ),
+      () => json({ ok: true }),
+    ]);
+    assert.deepEqual(await fetchJson('https://example.test', { label: 't', fetchImpl: fake.impl, sleep: NO_SLEEP }), {
+      ok: true,
+    });
+    assert.equal(fake.calls.length, 2);
+  });
+  test('正文传输持续中断归为 network', async () => {
+    const fake = fakeFetch([
+      () =>
+        new Response(
+          new ReadableStream({
+            start(controller) {
+              controller.error(new TypeError('terminated'));
+            },
+          }),
+        ),
+    ]);
+    await assert.rejects(
+      () => fetchJson('https://example.test', { label: 't', fetchImpl: fake.impl, sleep: NO_SLEEP }),
+      (e: unknown) => e instanceof FetchJsonError && e.code === 'network',
+    );
+    assert.equal(fake.calls.length, 2);
+  });
+  test('超时信号触发后正文抛 AbortError，仍报告 timeout', async () => {
+    let calls = 0;
+    const impl = (async (_url: unknown, options?: RequestInit) => {
+      calls++;
+      const signal = options?.signal;
+      return new Response(
+        new ReadableStream({
+          start(controller) {
+            signal?.addEventListener('abort', () => controller.error(new DOMException('aborted', 'AbortError')), {
+              once: true,
+            });
+          },
+        }),
+      );
+    }) as typeof fetch;
+    const keepAlive = setInterval(() => {}, 1000);
+    try {
+      await assert.rejects(
+        () => fetchJson('https://example.test', { label: 't', fetchImpl: impl, sleep: NO_SLEEP, timeoutMs: 10 }),
+        (e: unknown) => e instanceof FetchJsonError && e.code === 'timeout',
+      );
+      assert.equal(calls, 2);
+    } finally {
+      clearInterval(keepAlive);
+    }
+  });
+});
