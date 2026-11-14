@@ -82,7 +82,7 @@
     "standalone": "node lib/standalone.js",
     "start:app": "node scripts/start-app.mjs",
     "dist": "node scripts/dist.mjs",
-  "release": "node scripts/publish.mjs",
+    "release": "node scripts/publish.mjs",
     "dev:mock": "node scripts/dev/mock-server.mjs",
     "dev:subpath": "node scripts/dev/subpath-proxy.mjs",
     "build": "node scripts/prepare.js",
