@@ -44,6 +44,7 @@ Object.assign(PetSprite.prototype, {
     this.dragFollowToken = 0;
     this.throwRef = null; // 抛掷 rAF handle
     this.throwToken = 0;
+    this.tiltDeg = 0; // 飞行倾斜角（°）；stopThrow / 落定清零
     // 位置指令的跟随 rAF（spring 与 line 共用）：与拖拽跟手分开——这条有终点，收敛或到点必须自己收掉。
     this.posFollow = null;
     this.posFollowToken = 0;

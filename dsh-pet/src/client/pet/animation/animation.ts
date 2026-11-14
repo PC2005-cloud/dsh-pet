@@ -7,6 +7,7 @@
  * @module dsh-pet/src/client/pet/animation/animation
  */
 import { isEventAnim } from '../../../shared/pickers.ts';
+import { petTransform } from '../../../shared/physics.ts';
 import { decideEndedCue, type EndedCue, type FreezeCue } from './cues.ts';
 import type { ReportableStatus } from '../../../shared/playback.ts';
 import type { Animations } from '../../../shared/types.ts';
@@ -51,6 +52,8 @@ export interface OwnAnimationDeps {
   workStatus: () => WorkStatusSnapshot | null | undefined;
   /** 当前朝向，决定镜像。 */
   facing: () => 'left' | 'right';
+  /** 当前飞行倾斜角（°）；缺省 0。换源就位时一并写入 transform。 */
+  tiltDeg?: () => number;
   /** 上报第三方点播的真实状态。 */
   report: (playbackId: string, status: ReportableStatus, reason?: string) => void;
   /** 消费掉点播编号（清 React 状态，避免 effect 再跑一趟）。 */
@@ -215,7 +218,7 @@ export function createOwnAnimation(deps: OwnAnimationDeps): OwnAnimation {
       front = front === 0 ? 1 : 0;
       pending = null;
       playing = cuePlaybackId;
-      el.style.transform = deps.facing() === 'right' ? 'scaleX(-1)' : '';
+      el.style.transform = petTransform({ facing: deps.facing(), tiltDeg: deps.tiltDeg?.() ?? 0 });
       el.play()
         .then(() => {
           // 只有 play() 兑现才代表确实开始出画，loadeddata 只代表可解码。
