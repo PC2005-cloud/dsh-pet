@@ -66,6 +66,38 @@ test('rate 格式不合法：判 bad-request', () =>
     assert.match(result.ok === false ? result.message : '', /rate/);
   }));
 
+for (const rate of ['-51%', '-60%', '-100%', '-101%', '-999%', '+101%', '+999%']) {
+  test(`rate 超出 -50%..+100%：${rate} 判 bad-request 且不调用合成`, () =>
+    withService(
+      async (voice) => {
+        const result = await voice.speak({ text: '你好', rate });
+        assert.equal(result.ok, false);
+        assert.equal(result.ok === false ? result.reason : '', 'bad-request');
+        assert.match(result.ok === false ? result.message : '', /rate out of range/);
+      },
+      async () => {
+        assert.fail('非法语速不能进入合成流程');
+      },
+    ));
+}
+
+for (const rate of ['-50%', '-49%', '-10%', '-0%', '+0%', '+99%', '+100%']) {
+  test(`rate 位于允许范围：${rate} 原样交给合成`, async () => {
+    let received: string | undefined;
+    await withService(
+      async (voice) => {
+        const result = await voice.speak({ text: '你好', rate });
+        assert.equal(result.ok, true);
+        assert.equal(received, rate);
+      },
+      async (input) => {
+        received = input.rate;
+        await writeFile(input.target, Buffer.from('mp3'));
+      },
+    );
+  });
+}
+
 test('合法请求：返回 mp3 路径，文件确实落盘', () =>
   withService(async (voice, root) => {
     const result = await voice.speak({ text: '今天也要加油哦' });
