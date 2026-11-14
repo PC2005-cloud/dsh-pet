@@ -24,8 +24,8 @@ const EDGE_TIMEOUT_MS = 28_000;
 /** 内置实现：四个中文音色，其余字段全走契约缺省（mp3、无额外元数据）。 */
 export const EDGE_PROVIDER: VoiceProvider = {
   id: EDGE_PROVIDER_ID,
-  // 分组标题直接用来源名：多实现并存时用户认的是「edge / azure」这类标识，不是「内置」
-  name: EDGE_PROVIDER_ID,
+  // 分组标题用品牌写法；id 仍是小写 kebab-case，两者不必一致
+  name: 'Edge',
   voices: VOICES.map((voice) => ({ id: voice.id, name: voice.name, tag: voice.tag })),
   format: 'mp3',
   timeoutMs: EDGE_TIMEOUT_MS,

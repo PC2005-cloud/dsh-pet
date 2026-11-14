@@ -11,14 +11,14 @@ const CATALOG = {
   providers: [
     {
       id: 'edge',
-      name: 'edge',
+      name: 'Edge',
       voices: [{ id: 'edge/zh-CN-XiaoxiaoNeural', name: '晓晓', tag: '女 · 通用' }],
     },
   ],
 };
 
 /** 识别实现的目录；`/voice/hear-providers` 与 `list()` 同源。 */
-const SPEECH_CATALOG = { providers: [{ id: 'dsh', name: 'dsh 语音插件' }] };
+const SPEECH_CATALOG = { providers: [{ id: 'dsh', name: 'DSH 语音插件' }] };
 
 /** 造最小依赖：只提供 voice 与 speech，其余字段这条路由不会碰。 */
 function makeDeps(

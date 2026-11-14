@@ -36,7 +36,7 @@ test('注册：ensureEdgeProvider 之后默认音色可解析，目录里出现 
   assert.equal(resolved?.provider.id, EDGE_PROVIDER_ID);
   assert.equal(resolved?.voice.id, DEFAULT_VOICE);
   const group = listCatalog().providers.find((item) => item.id === EDGE_PROVIDER_ID);
-  assert.equal(group?.name, EDGE_PROVIDER_ID, '分组标题直接用 provider id');
+  assert.equal(group?.name, 'Edge');
   assert.equal(group?.voices.length, VOICES.length);
 });
 

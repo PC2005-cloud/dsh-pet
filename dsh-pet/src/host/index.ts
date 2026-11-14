@@ -21,8 +21,11 @@ import { createPetLookup } from './plugin/pet-lookup.ts';
 import { createDownloadReport } from './plugin/download-report.ts';
 import { createWorkStatusBridge } from './plugin/work-status-bridge.ts';
 import { registerTodoReminders } from './plugin/todo-reminders.ts';
+import { ensureDeepseekAsrProvider } from './voice/builtin-deepseek-asr.ts';
+import { ensureDeepseekTtsProvider } from './voice/builtin-deepseek-tts.ts';
 import { ensureDshSpeechProvider } from './voice/builtin-dsh.ts';
 import { ensureEdgeProvider } from './voice/builtin-edge.ts';
+import { credentialRef } from '@deepseek-ai/dsh-credentials';
 import { createVoiceService } from './voice/speak.ts';
 import { createHearService } from './voice/hear.ts';
 import { TODO_FILE_NAME, TodoStore } from './todo/store.ts';
@@ -102,6 +105,14 @@ export function apply(ctx: any): void {
   // 识别那侧惰性依赖宿主服务，没装语音输入插件也能登记——调用时才回 unsupported。
   ensureEdgeProvider();
   ensureDshSpeechProvider({ speechToText: () => setup.optionalService('speechToText') });
+  // DeepSeek 官方语音：鉴权复用 DSH 的 DEEPSEEK_API_KEY，与余额那条路一致；
+  // 每次调用现取，用户在 DSH 里换了 key 不必重启插件
+  const resolveDeepseekKey = async (): Promise<string | undefined> => {
+    const resolved = await ctx.credentials.resolve(credentialRef('DEEPSEEK_API_KEY'));
+    return resolved?.value;
+  };
+  ensureDeepseekTtsProvider({ resolveKey: resolveDeepseekKey });
+  ensureDeepseekAsrProvider({ resolveKey: resolveDeepseekKey });
 
   const deps: PetRouteDeps = {
     ...setup,

@@ -306,7 +306,7 @@ export function apply(ctx) {
 
 ```js
 ctx.get('petApi7340').voice.list();
-// { providers: [{ id: 'edge', name: 'edge', voices: [{ id: 'edge/zh-CN-XiaoyiNeural', name: '晓伊', tag: '女 · 活泼' }] }] }
+// { providers: [{ id: 'edge', name: 'Edge', voices: [{ id: 'edge/zh-CN-XiaoyiNeural', name: '晓伊', tag: '女 · 活泼' }] }] }
 ```
 
 ### speech.register
@@ -368,5 +368,5 @@ export function apply(ctx) {
 
 ```js
 ctx.get('petApi7340').speech.list();
-// { providers: [{ id: 'dsh', name: 'dsh 语音插件' }] }
+// { providers: [{ id: 'dsh', name: 'DSH 语音插件' }] }
 ```

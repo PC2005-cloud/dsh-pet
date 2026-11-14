@@ -53,7 +53,7 @@ test('声明：通过注册校验，id 是 dsh，展示名带来源', () => {
   const provider = providerWith(makeSpeech().service);
   assert.doesNotThrow(() => validateSpeechProvider(provider));
   assert.equal(provider.id, DSH_SPEECH_PROVIDER_ID);
-  assert.equal(provider.name, 'dsh 语音插件');
+  assert.equal(provider.name, 'DSH 语音插件');
 });
 
 test('成功：返回宿主给的文字', async () => {
@@ -113,7 +113,7 @@ test('ensureDshSpeechProvider：注册一次，重复调用不覆盖也不抛错
   const { service } = makeSpeech();
   ensureDshSpeechProvider({ speechToText: () => service });
   const first = resolveSpeechProvider(DSH_SPEECH_PROVIDER_ID);
-  assert.equal(first?.name, 'dsh 语音插件');
+  assert.equal(first?.name, 'DSH 语音插件');
 
   ensureDshSpeechProvider({ speechToText: () => makeSpeech().service });
   assert.equal(resolveSpeechProvider(DSH_SPEECH_PROVIDER_ID), first, '第二次调用不该换掉已有实现');

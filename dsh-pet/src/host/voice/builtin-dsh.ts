@@ -39,7 +39,7 @@ interface SpeechToTextLike {
 export function createDshSpeechProvider(deps: { speechToText: () => unknown }): SpeechProvider {
   return {
     id: DSH_SPEECH_PROVIDER_ID,
-    name: 'dsh 语音插件',
+    name: 'DSH 语音插件',
     async transcribe({ audio, signal }) {
       const speech = deps.speechToText() as SpeechToTextLike | undefined;
       if (speech === undefined || typeof speech.transcribe !== 'function') {
