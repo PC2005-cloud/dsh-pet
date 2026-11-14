@@ -43,7 +43,7 @@ function pickGlobals(main) {
     confineToScreen: source.confineToScreen === true,
     trayEnabled: source.trayEnabled !== false,
     voiceEnabled: source.voiceEnabled === true,
-    voiceName: typeof source.voiceName === 'string' && source.voiceName ? source.voiceName : (VOICES[1] ? VOICES[1].id : ''),
+    voiceName: typeof source.voiceName === 'string' && source.voiceName ? source.voiceName : DEFAULT_VOICE_ID,
     voiceVolume: typeof source.voiceVolume === 'number' ? source.voiceVolume : 1,
     voiceWhisperEnabled: source.voiceWhisperEnabled !== false,
     voiceTodoEnabled: source.voiceTodoEnabled !== false,

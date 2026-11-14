@@ -2497,16 +2497,15 @@ paths:
       operationId: synthesizeVoice
       summary: 合成一段语音
       description: |
-        把一段中文文本合成为 mp3，成功时直接返回文件本体。
+        把一段中文文本合成为 mp3 或 wav，成功时直接返回文件本体。
 
-        - **合成源可被第三方覆盖**：宿主插件可经 Cordis 服务 `petApi7340.voice.register`
-          注册自己的实现；注册后本端点改走该实现，未注册时走内置实现。两边返回的都是 mp3，
-          调用方无需区分。
-        - 覆盖期间 `voice` 参数不生效（音色由第三方实现自己决定），但校验口径不变：
-          非法值仍按 `bad-request` 拒绝。
-        - 第三方实现必须返回 mp3 字节；返回其它格式浏览器播不出来，空字节按 `generate-error` 处理。
-        - 同一「来源 + 音色 + 语速 + 文本」只会合成一次，命中缓存时不再联网；来源即内置实现
-          或第三方 id，因此切换实现后不会命中旧音频。
+        - **多实现并存**：宿主插件可经 Cordis 服务 `petApi7340.voice.register` 注册自己的实现，
+          每个实现声明自己的音色清单；`/voice/voices` 按 provider 分组列出全部音色。
+        - 音色 id 是 `provider/音色` 的限定形态；`voice` 不传时用配置里的 `main.voiceName`。
+          解析不到按 `bad-request` 拒绝，不会替换成另一个音色。
+        - 输出格式由实现声明（mp3 / wav），应答的 `Content-Type` 与之一致。
+        - 同一「限定音色 + 语速 + 文本」只会合成一次，命中缓存时不再调用实现；限定 id 含
+          provider，因此换实现或换音色都不会命中旧音频。
         - 合成串行执行，同时最多排队 3 个；超出返回 `voice-busy`，调用方可稍后重试。
         - 参数问题、队列满、上游失败都是业务失败：HTTP 200 + `{ ok: false, reason, message }`。
         只有请求体不是合法 JSON 才是 400，方法不对是 405。
@@ -2525,7 +2524,9 @@ paths:
                   maxLength: 500
                 voice:
                   type: string
-                  description: 音色 id，必须来自 `/voice/voices`；缺省 `zh-CN-XiaoxiaoNeural`。
+                  description: |
+                    音色限定 id（`provider/音色`），取值见 `/voice/voices`；
+                    缺省用配置里的 `main.voiceName`，两者都没有或解析不到时按 `bad-request` 拒绝。
                 rate:
                   type: string
                   description: prosody 语速表达式，如 `+0%` / `-10%`；允许 -50%..+100%，缺省 `+0%`。
@@ -2562,33 +2563,47 @@ paths:
       tags: [Voice]
       operationId: getVoices
       summary: 列出可用音色
-      description: 与 `/voice/speak` 的白名单同源；前端据此渲染音色选择器，不要硬编码 id。
+      description: |
+        按 provider 分组列出所有已注册实现的音色；前端据此渲染音色选择器，不要硬编码 id。
+        音色 `id` 是限定形态，写进配置 `main.voiceName` 的就是它。
       responses:
         "200":
-          description: 音色列表。
+          description: 音色目录，按注册顺序分组。
           content:
             application/json:
               schema:
                 type: object
-                required: [ok, voices]
+                required: [ok, providers]
                 properties:
                   ok:
                     type: boolean
                     const: true
-                  voices:
+                  providers:
                     type: array
                     items:
                       type: object
-                      required: [id, name, tag, default]
+                      required: [id, name, voices]
                       properties:
                         id:
                           type: string
+                          description: provider id，如 `edge`。
                         name:
                           type: string
-                        tag:
-                          type: string
-                        default:
-                          type: boolean
+                          description: 展示名，设置页用作分组标题。
+                        voices:
+                          type: array
+                          items:
+                            type: object
+                            required: [id, name]
+                            properties:
+                              id:
+                                type: string
+                                description: 限定 id，如 `edge/zh-CN-XiaoyiNeural`。
+                              name:
+                                type: string
+                              tag:
+                                type: string
+                                description: 展示用副标题，如「女 · 活泼」；可能缺省。
         "405":
           description: 方法不是 GET。
 
@@ -4531,8 +4546,8 @@ components:
         voiceName:
           type: string
           description: |
-            音色 id，白名单为 `/voice/voices` 里的四个中文音色之一；写错或留空即配置错误，
-            告警并回落到 `zh-CN-XiaoyiNeural`。设置页「语音播报」卡的音色下拉写的就是它。
+            音色限定 id（`provider/音色`），取值见 `/voice/voices`；写错或留空即解析不到，
+            合成按 `bad-request` 失败并告警，不会回落到另一个音色。设置页「语音播报」卡的音色下拉写的就是它。
         voiceVolume:
           type: number
           minimum: 0

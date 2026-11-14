@@ -21,6 +21,7 @@ import { createPetLookup } from './plugin/pet-lookup.ts';
 import { createDownloadReport } from './plugin/download-report.ts';
 import { createWorkStatusBridge } from './plugin/work-status-bridge.ts';
 import { registerTodoReminders } from './plugin/todo-reminders.ts';
+import { ensureEdgeProvider } from './voice/builtin-edge.ts';
 import { createVoiceService } from './voice/speak.ts';
 import { createHearService } from './voice/hear.ts';
 import { TODO_FILE_NAME, TodoStore } from './todo/store.ts';
@@ -95,6 +96,9 @@ export function apply(ctx: any): void {
     getHandlePetRoute: () => httpRoute.handlePetRoute,
   });
   const { startHelper, stopHelper, markDisposed } = desktopHelper;
+
+  // 内置语音实现与第三方走同一条注册路径：先登记，/voice/speak 才解析得到 edge/<音色>
+  ensureEdgeProvider();
 
   const deps: PetRouteDeps = {
     ...setup,

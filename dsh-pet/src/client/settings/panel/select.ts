@@ -15,6 +15,8 @@ import { computePanelPlacement, type PanelPosition } from './placement.ts';
 export interface SelectOption {
   id: string;
   label: string;
+  /** 分组标题；相邻且同组时合并，渲染时在组前插一行标题。不参与键盘索引。 */
+  group?: string;
 }
 
 /** 下拉的对外契约：一个字段一个实例。 */
@@ -157,26 +159,41 @@ export function makeSelect(
             },
             children: h('div', {
               className: 'dsh-pet-sel__list',
-              children: props.options.map((option, index) =>
-                h('button', {
-                  key: option.id,
-                  type: 'button',
-                  role: 'option',
-                  'aria-selected': option.id === props.value,
-                  'data-row': index,
-                  className: 'dsh-pet-sel__item' + (index === active ? ' is-active' : ''),
-                  onMouseMove: () => setActive(index),
-                  onClick: () => commit(index),
-                  children: [
-                    h('span', { key: 'n', className: 'dsh-pet-sel__name', children: option.label }),
-                    h('span', {
-                      key: 'c',
-                      className: 'dsh-pet-sel__check',
-                      children: option.id === props.value ? '✓' : '',
-                    }),
-                  ],
-                }),
-              ),
+              children: props.options.flatMap((option, index) => {
+                // 分组标题只是分隔行：不占 index、不参与 step/commit，所以键盘逻辑一行都不用改
+                const isGroupStart = option.group !== undefined && option.group !== props.options[index - 1]?.group;
+                const groupRow = isGroupStart
+                  ? [
+                      h('div', {
+                        key: 'group-' + index,
+                        className: 'dsh-pet-sel__group',
+                        role: 'presentation',
+                        children: option.group,
+                      }),
+                    ]
+                  : [];
+                return [
+                  ...groupRow,
+                  h('button', {
+                    key: option.id,
+                    type: 'button',
+                    role: 'option',
+                    'aria-selected': option.id === props.value,
+                    'data-row': index,
+                    className: 'dsh-pet-sel__item' + (index === active ? ' is-active' : ''),
+                    onMouseMove: () => setActive(index),
+                    onClick: () => commit(index),
+                    children: [
+                      h('span', { key: 'n', className: 'dsh-pet-sel__name', children: option.label }),
+                      h('span', {
+                        key: 'c',
+                        className: 'dsh-pet-sel__check',
+                        children: option.id === props.value ? '✓' : '',
+                      }),
+                    ],
+                  }),
+                ];
+              }),
             }),
           })
         : null;

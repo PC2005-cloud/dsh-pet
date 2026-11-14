@@ -11,7 +11,7 @@ const CATALOG = {
   providers: [
     {
       id: 'edge',
-      name: '内置',
+      name: 'edge',
       voices: [{ id: 'edge/zh-CN-XiaoxiaoNeural', name: '晓晓', tag: '女 · 通用' }],
     },
   ],

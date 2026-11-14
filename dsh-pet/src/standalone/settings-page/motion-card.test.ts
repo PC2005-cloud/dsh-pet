@@ -69,6 +69,7 @@ function probe(): Probe {
   const script = [
     coreScript('/dsh-pet-7340', {
       voices: [],
+      defaultVoice: 'edge/zh-CN-XiaoyiNeural',
       fonts: [],
       displays: [],
       corners: [],

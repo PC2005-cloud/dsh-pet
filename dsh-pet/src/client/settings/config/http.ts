@@ -41,8 +41,8 @@ export interface SaveFields {
   trayEnabled: boolean;
   /** 手动播报开关：手动触发的碎碎念与对话回复。 */
   voiceEnabled: boolean;
-  /** 语音音色 id（白名单内的四个之一）。 */
-  voiceName: string;
+  /** 语音音色（`provider/音色` 限定 id）；缺省表示不提交这一项，服务端保留原值。 */
+  voiceName?: string;
   /** 播放音量系数：0–1 的小数，1 = 最大音量，0 = 静音。 */
   voiceVolume: number;
   /** 周期碎碎念要不要念出来。 */

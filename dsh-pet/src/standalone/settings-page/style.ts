@@ -139,6 +139,7 @@ input:disabled,select:disabled,textarea:disabled{background:var(--dsw-static-neu
 .selectChevron{flex:none;width:16px;height:16px;color:var(--dsw-alias-label-tertiary);transition:transform .1s ease}
 .selectTrigger[aria-expanded=true] .selectChevron{transform:rotate(180deg)}
 .selectMenu{position:fixed;z-index:60;margin:0;padding:4px;list-style:none;overflow-y:auto;background:var(--dsw-alias-bg-layer-2);border:1px solid var(--dsw-alias-border-l3);border-radius:var(--dsw-radius-md);box-shadow:var(--dsw-elevation-prominent)}
+.selectGroup{padding:6px 10px 2px;font-size:12px;line-height:16px;color:var(--dsw-alias-label-tertiary)}
 .selectItem{padding:7px 10px;border-radius:var(--dsw-radius-sm);font-size:14px;line-height:20px;color:var(--dsw-alias-label-primary);cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .selectItem:hover,.selectItem.active{background:var(--dsw-alias-interactive-bg-hover)}
 .selectItem[aria-selected=true]{background:var(--dsw-specific-sidebar-nav-item-active);font-weight:500}

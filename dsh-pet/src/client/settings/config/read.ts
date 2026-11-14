@@ -30,7 +30,7 @@ export interface MainConfigPatch {
   trayEnabled?: boolean;
   /** 手动播报开关：手动触发的碎碎念与对话回复；缺省表示这次响应里没有可信值。 */
   voiceEnabled?: boolean;
-  /** 语音音色 id（宿主已按白名单校验，客户端原样展示）。 */
+  /** 语音音色（`provider/音色` 限定 id；宿主只验形态，客户端原样展示）。 */
   voiceName?: string;
   /** 播放音量系数（0–1）；缺省表示这次响应里没有可信值。 */
   voiceVolume?: number;

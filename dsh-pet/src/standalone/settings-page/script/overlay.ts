@@ -59,7 +59,15 @@ function openSelectMenu(trigger, options, current, onPick, widthOf) {
   const menu = make('ul', { class: 'selectMenu' });
   menu.setAttribute('role', 'listbox');
   const items = [];
+  // 分组标题只是分隔行：不进 items，键盘索引与高亮完全不受影响
+  let prevGroup = null;
   for (const option of options) {
+    if (option.group && option.group !== prevGroup) {
+      const title = make('li', { class: 'selectGroup', text: option.group });
+      title.setAttribute('role', 'presentation');
+      menu.append(title);
+      prevGroup = option.group;
+    }
     const item = make('li', { class: 'selectItem', text: option.label });
     item.setAttribute('role', 'option');
     item.setAttribute('aria-selected', option.value === current ? 'true' : 'false');

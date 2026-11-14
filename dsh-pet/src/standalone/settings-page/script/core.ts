@@ -10,8 +10,15 @@
 
 /** 脚本片段需要的枚举与默认值，全部由装配入口从源码常量注入。 */
 export interface ScriptConsts {
-  /** 音色白名单（来自 host/voice/voices.ts）。 */
-  readonly voices: readonly { readonly id: string; readonly name: string; readonly tag: string }[];
+  /** 可选音色（来自语音注册表的内置实现，id 已是限定 id；provider 是分组标题）。 */
+  readonly voices: readonly {
+    readonly id: string;
+    readonly name: string;
+    readonly tag: string;
+    readonly provider: string;
+  }[];
+  /** 出厂默认音色；配置里没写这一项时页面显示它。 */
+  readonly defaultVoice: string;
   /** 字体预设 id（来自 shared/fonts.ts）。 */
   readonly fonts: readonly string[];
   /** 显示档（来自 shared/config.ts）。 */
@@ -39,6 +46,7 @@ const TOKEN = new URLSearchParams(location.hash.slice(1)).get('token') || '';
 history.replaceState(null, '', location.pathname);
 const API = ${JSON.stringify(routePath)};
 const VOICES = ${JSON.stringify(consts.voices)};
+const DEFAULT_VOICE_ID = ${JSON.stringify(consts.defaultVoice)};
 const FONT_IDS = ${JSON.stringify(consts.fonts)};
 const DISPLAYS = ${JSON.stringify(consts.displays)};
 const CORNERS = ${JSON.stringify(consts.corners)};

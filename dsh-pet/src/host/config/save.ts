@@ -105,7 +105,7 @@ export function saveUserConfig(
   if (cae !== undefined && typeof cae !== 'boolean') return null;
   const cts = o.confineToScreen;
   if (cts !== undefined && typeof cts !== 'boolean') return null;
-  // 语音播报开关与音色（全局）：与上面几个布尔同语义；音色必须落在白名单内，
+  // 语音播报开关与音色（全局）：与上面几个布尔同语义；音色只验 `provider/音色` 形态，
   // 校验直接复用读取侧的 topFieldValid，读写同一份规则。
   const ve = o.voiceEnabled;
   if (ve !== undefined && typeof ve !== 'boolean') return null;

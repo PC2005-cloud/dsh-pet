@@ -122,12 +122,21 @@ export function makePetConfigSection(
     useEffect(() => attachTipLayer(), []);
 
     // 音色列表：与配置无关的一次性拉取，失败留空即可（下拉会只显示当前值）。
+    // 宿主按 provider 分组返回；这里拍平成一维并带上组名，由下拉渲染成 optgroup 式的分隔标题。
     useEffect(() => {
       let alive = true;
       void fetch(ROUTE_PATH + '/voice/voices')
         .then((response) => (response.ok ? response.json() : null))
-        .then((body: { voices?: VoiceOption[] } | null) => {
-          if (alive && body && Array.isArray(body.voices)) setVoiceOptions(body.voices);
+        .then((body: { providers?: { name?: string; voices?: VoiceOption[] }[] } | null) => {
+          if (!alive || !body || !Array.isArray(body.providers)) return;
+          setVoiceOptions(
+            body.providers.flatMap((group) =>
+              (Array.isArray(group.voices) ? group.voices : []).map((voice) => ({
+                ...voice,
+                ...(group.name === undefined ? {} : { providerName: group.name }),
+              })),
+            ),
+          );
         })
         .catch(() => undefined);
       return () => {
@@ -152,9 +161,10 @@ export function makePetConfigSection(
     const [confineScreen, setConfineScreen] = useState(false);
     // 系统托盘开关（全局）：随「保存」一起提交；宿主半侧据此决定建不建托盘、没桌面宠物时还值不值得常驻 Helper。
     const [trayEnabled, setTrayEnabled] = useState(true);
-    // 语音播报开关与音色（全局默认）：随「保存」整包写入；初值即内置默认，加载后用成品值覆盖。
+    // 语音播报开关与音色（全局默认）：随「保存」整包写入；音色初值留空，加载后由成品值覆盖。
     const [voiceEnabled, setVoiceEnabled] = useState(false);
-    const [voiceName, setVoiceName] = useState('zh-CN-XiaoyiNeural');
+    // 不在前端写默认音色：空串表示「还没拿到成品值」，保存时这一项不提交，免得用本地猜的 id 覆盖配置
+    const [voiceName, setVoiceName] = useState('');
     // 播放音量（全局系数 0–1）：初值 1 是内置默认（最大音量），加载后由成品值覆盖。
     const [voiceVolume, setVoiceVolume] = useState(1);
     // 另外三类语音开关（周期碎碎念 / 待办提醒 / 工作状态播报）：与语音播报平级，初值 false 是内置默认。
@@ -314,7 +324,8 @@ export function makePetConfigSection(
         confineToScreen: confineScreen,
         trayEnabled,
         voiceEnabled,
-        voiceName,
+        // 空串 = 还没加载到成品值：不提交，免得用一个本地猜的音色覆盖配置
+        ...(voiceName === '' ? {} : { voiceName }),
         voiceVolume,
         voiceWhisperEnabled,
         voiceTodoEnabled,
