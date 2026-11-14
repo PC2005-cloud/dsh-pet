@@ -106,23 +106,30 @@ export async function queryWeather(city: string, deps: QueryWeatherDeps = {}): P
   return snapshot;
 }
 
-/** 城市名 → 坐标；命中缓存时不再发请求；带行政区后缀查不到时去掉后缀再试一次。 */
+/** 城市名 → 坐标；命中缓存时不再发请求；原名查不到时换另一种形态再试一次。 */
 async function geocode(city: string, deps: QueryWeatherDeps): Promise<Place | null> {
   const now = deps.now ?? Date.now;
   const hit = geoCache.get(city);
   if (deps.force !== true && hit !== undefined && now() - hit.at < GEO_TTL_MS) return hit.place;
-  // 上游地名库不认行政区后缀：实测「南昌市」零命中、「南昌」一条命中，IP 定位给的名字正好带「市」
-  const bare = withoutAdminSuffix(city);
-  const place = (await searchPlace(city, deps)) ?? (bare === city ? null : await searchPlace(bare, deps));
+  // 上游对同一地名的两种写法命中情况不一致：实测「扬州」零命中而「扬州市」命中，
+  // 「南京市」零命中而「南京」命中——IP 定位给的名字带不带后缀都有可能，两个方向都得试
+  const alternate = alternateCityName(city);
+  const place = (await searchPlace(city, deps)) ?? (alternate === null ? null : await searchPlace(alternate, deps));
   if (place === null) return null;
   rememberPlace(city, place, now());
   return place;
 }
 
-/** 去掉「市 / 县 / 区 / 旗」后缀；去掉后不足两个字就原样返回（免得把「沙市」削成「沙」）。 */
-function withoutAdminSuffix(city: string): string {
-  const trimmed = city.replace(/[市县区旗]$/u, '');
-  return trimmed.length >= 2 ? trimmed : city;
+/**
+ * 同一个城市的另一种写法：带「市 / 县 / 区 / 旗」后缀的去掉后缀，不带后缀的补「市」。
+ *
+ * @param city - 已 trim 的城市名。
+ * @returns 另一种写法；去掉后缀后不足两个字时返回 null（免得把「沙市」削成「沙」再查一次）。
+ */
+function alternateCityName(city: string): string | null {
+  const bare = city.replace(/[市县区旗]$/u, '');
+  if (bare !== city) return bare.length >= 2 ? bare : null;
+  return city + '市';
 }
 
 /** 一次地名搜索：取第一条结果的坐标与中文名。 */

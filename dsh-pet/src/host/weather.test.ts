@@ -29,6 +29,11 @@ const SHENZHEN = {
   results: [{ id: 1795565, name: '深圳', latitude: 22.54554, longitude: 114.0683, country: '中国' }],
 };
 
+/** 扬州的地名搜索结果：上游只认带「市」的写法，「扬州」零命中。 */
+const YANGZHOU = {
+  results: [{ id: 1790770, name: '扬州市', latitude: 32.39722, longitude: 119.43583, country: '中国' }],
+};
+
 /** 深圳的当前天气（字段照抄 Open-Meteo 真实响应）。 */
 const CURRENT = {
   current: {
@@ -104,6 +109,17 @@ describe('queryWeather —— 查询路径', () => {
     assert.equal(snapshot?.city, '深圳', '应拿到去掉后缀后的命中结果');
     assert.equal(snapshot?.summary, '阴');
     assert.ok(decodeURIComponent(fake.calls[1]).includes('name=深圳'), '第二次搜索应是不带“市”的名字');
+  });
+
+  test('不带“市”字查不到：补“市”重试，命中后照样取到天气', async () => {
+    resetWeatherCache();
+    const fake = fakeFetch([() => json({ results: [] }), () => json(YANGZHOU), () => json(CURRENT)]);
+
+    const snapshot = await queryWeather('扬州', { fetchImpl: fake.impl, sleep: NO_SLEEP });
+
+    assert.equal(snapshot?.city, '扬州市', '应拿到补“市”后的命中结果');
+    assert.equal(snapshot?.summary, '阴');
+    assert.ok(decodeURIComponent(fake.calls[1]).includes('name=扬州市'), '第二次搜索应是补了“市”的名字');
   });
 
   test('天气字段非法：返回 null，不把非法值当 0', async () => {
