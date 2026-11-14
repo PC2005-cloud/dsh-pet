@@ -15,15 +15,13 @@
 export const HOST_WORK_STATUS_STATES = ['thinking', 'working', 'result', 'waiting', 'success', 'error'] as const;
 export type HostWorkStatusState = (typeof HOST_WORK_STATUS_STATES)[number];
 
-/**
- * 回合结束原因 → 档位：completed → success，错误系（error / max-tokens / timeout）→ error，
- * blocked → waiting；其余（aborted 等）→ null，由调用方清理会话回空闲——残留上一档会让回合被
- * 打断后永远卡在 working。
- */
+/** 回合结束原因 → 档位；null = 该会话回合已结束，由调用方清理回空闲——残留上一档会让回合被
+ *  打断后永远卡在 working。 */
 function turnEndState(kind: string): HostWorkStatusState | null {
   if (kind === 'completed') return 'success';
   if (kind === 'error' || kind === 'max-tokens' || kind === 'timeout') return 'error';
-  if (kind === 'blocked') return 'waiting';
+  // blocked 是回合进入 step 前被前置检查拒绝：没有可展示的载荷，也没有后续事件来收尾，
+  // 给它一个档位会永久占住展示。与 aborted 同归 null。
   return null;
 }
 
@@ -87,7 +85,7 @@ export function reduceWorkStatus(
     case 'approval/asked':
       return 'waiting';
     case 'turn/end': {
-      // completed→success、错误系→error、blocked→waiting；其余（aborted 等）→null＝清该会话回空闲
+      // completed→success、错误系→error；其余（aborted / blocked 等）→null＝清该会话回空闲
       const reason = turnEndState(String(event?.data?.reason?.kind ?? ''));
       // 本轮完成是否等于整个任务完成交给 completedState（goal 续跑轮的中间轮不庆祝）
       if (reason === 'success') return completedState(turn);

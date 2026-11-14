@@ -77,7 +77,7 @@ describe('reduceWorkStatus —— 带 turn 上下文的事件压缩', () => {
   test('其它 turn/end reason 不受影响：error / blocked / aborted', () => {
     assert.equal(reduceWorkStatus({ type: 'turn/end', data: { reason: { kind: 'error' } } }), 'error');
     assert.equal(reduceWorkStatus({ type: 'turn/end', data: { reason: { kind: 'max-tokens' } } }), 'error');
-    assert.equal(reduceWorkStatus({ type: 'turn/end', data: { reason: { kind: 'blocked' } } }), 'waiting');
+    assert.equal(reduceWorkStatus({ type: 'turn/end', data: { reason: { kind: 'blocked' } } }), null);
     // aborted → null：调用方清理会话回空闲（既有语义不回退）
     assert.equal(reduceWorkStatus({ type: 'turn/end', data: { reason: { kind: 'aborted' } } }), null);
   });
