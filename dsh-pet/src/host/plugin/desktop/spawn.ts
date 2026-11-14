@@ -11,6 +11,7 @@ import { PACKAGE_ROOT } from '../../paths.ts';
 import type { DesktopHelperDeps } from './types.ts';
 import type { DesktopPets } from './pets.ts';
 import { toBridgeResponse } from './bridge-response.ts';
+import { resolveDesktopSiteUrl } from './site-url.ts';
 import {
   HelperProcess,
   defaultElectronExe,
@@ -113,7 +114,7 @@ export function createDesktopSpawn(deps: DesktopSpawnInput) {
     // 右键「打开网站」交出去的是裸 origin：DSH 只在 `GET /` 接受本进程的启动令牌，换发绑定该 authority
     // 的签名 Cookie，其余请求一律 401，故传 origin 而不是另拼地址。令牌等价登录态：只经子进程环境变量
     // 递到 helper 内存，不落盘、不进日志。
-    const siteUrl = ctx.connection.authenticatedUrl(origin);
+    const siteUrl = resolveDesktopSiteUrl(ctx, origin);
     // 桌面渲染端也从同一份 handlePetRoute 拿成品配置（每只宠物一个局部小窗口；经管道，不走 HTTP——
     // DSH Desktop 2.0.3+ 会拦插件自拉进程的裸 HTTP 请求，浏览器访问闸门只放行带令牌的请求）
     const configUrl = `${origin}${ROUTE_SEGMENT}/config`;
