@@ -254,6 +254,7 @@ describe('buildSaveBody —— 请求体字段', () => {
       'notifyWhenFocused',
       'pets',
       'physics',
+      'speechProvider',
       'trayEnabled',
       'voiceEnabled',
       'voiceName',

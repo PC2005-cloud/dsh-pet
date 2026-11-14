@@ -122,8 +122,13 @@ export function apply(ctx: any): void {
         return typeof name === 'string' && name ? name : undefined;
       },
     }),
-    // 语音识别：能力来自宿主（DSH 的 speechToText），没启用时服务自己在调用时回 unsupported
-    speech: createHearService({ speechToText: () => setup.optionalService('speechToText') }),
+    // 语音识别：实现来自注册表；请求没带 provider 时用配置里的那个值，没有第二份默认
+    speech: createHearService({
+      configuredProvider: () => {
+        const provider = readAllConfig(configPaths).main?.speechProvider;
+        return typeof provider === 'string' && provider ? provider : undefined;
+      },
+    }),
   };
   const httpRoute = createHttpRoute(deps);
   registerHttpRoute(ctx, httpRoute.handlePetRoute);

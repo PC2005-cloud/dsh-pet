@@ -203,6 +203,9 @@ export function topFieldValid(key: string, value: unknown): boolean {
     case 'voiceNotifyEnabled':
       // 工作状态播报开关（全局布尔）：只决定完成 / 出错 / 等确认三档念不念，不影响系统通知弹窗
       return typeof value === 'boolean';
+    case 'speechProvider':
+      // 识别实现 id；只验形态，存在性由 hear 解析时判——配置校验拿不到运行时注册表
+      return typeof value === 'string' && value.trim().length > 0;
     case 'chatImageEnabled':
       return typeof value === 'boolean';
     case 'chatAnimationEnabled':

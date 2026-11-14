@@ -111,6 +111,9 @@ export function saveUserConfig(
   if (ve !== undefined && typeof ve !== 'boolean') return null;
   const vn = o.voiceName;
   if (vn !== undefined && !topFieldValid('voiceName', vn)) return null;
+  // 识别实现（全局）：只验形态，存在性由 hear 解析时判——配置校验拿不到运行时注册表
+  const sp = o.speechProvider;
+  if (sp !== undefined && !topFieldValid('speechProvider', sp)) return null;
   // 播放音量（全局系数，0–1）：与上面同一套语义——传了必须合法，没传走透传保留。
   const vv = o.voiceVolume;
   if (vv !== undefined && !topFieldValid('voiceVolume', vv)) return null;
@@ -181,6 +184,7 @@ export function saveUserConfig(
   if (vwe !== undefined) outConfig.voiceWhisperEnabled = vwe;
   if (vte !== undefined) outConfig.voiceTodoEnabled = vte;
   if (vne !== undefined) outConfig.voiceNotifyEnabled = vne;
+  if (sp !== undefined) outConfig.speechProvider = sp;
   if (te !== undefined) outConfig.trayEnabled = te;
   if (ph !== undefined) outConfig.physics = ph;
   if (aw !== undefined) outConfig.animationWeights = cleanWeights(aw as Record<string, unknown>);
@@ -208,6 +212,7 @@ export function saveUserConfig(
   if (vwe !== undefined) bodyOwned.add('voiceWhisperEnabled');
   if (vte !== undefined) bodyOwned.add('voiceTodoEnabled');
   if (vne !== undefined) bodyOwned.add('voiceNotifyEnabled');
+  if (sp !== undefined) bodyOwned.add('speechProvider');
   if (te !== undefined) bodyOwned.add('trayEnabled');
   if (ph !== undefined) bodyOwned.add('physics');
   if (aw !== undefined) bodyOwned.add('animationWeights');

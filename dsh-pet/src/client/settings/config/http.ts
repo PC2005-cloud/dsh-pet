@@ -51,6 +51,8 @@ export interface SaveFields {
   voiceTodoEnabled: boolean;
   /** 工作状态播报要不要念出来（任务完成 / 出错 / 等确认时念一句配置台词）。 */
   voiceNotifyEnabled: boolean;
+  /** 语音识别实现 id；缺省表示不提交这一项，服务端保留原值。 */
+  speechProvider?: string;
   physics: PhysicsParams;
   whisperModel: ModelSelection;
   chatModel: ModelSelection;
@@ -91,6 +93,7 @@ export function buildSaveBody(fields: SaveFields): Record<string, unknown> {
     voiceWhisperEnabled: fields.voiceWhisperEnabled,
     voiceTodoEnabled: fields.voiceTodoEnabled,
     voiceNotifyEnabled: fields.voiceNotifyEnabled,
+    speechProvider: fields.speechProvider,
     physics: fields.physics,
     whisperModel: fields.whisperModel,
     chatModel: fields.chatModel,

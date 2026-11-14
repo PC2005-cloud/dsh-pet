@@ -175,6 +175,11 @@ export const fr: Record<Key, string> = {
   voiceNotifyEnabledHint:
     "Lit une réplique d'état de travail configurée quand une tâche se termine, échoue ou attend votre confirmation. Comme les notifications système, elle n'est lue que lorsque vous n'êtes pas sur cette page (autre application, sans focus, réduite) — aucune interruption pendant que vous regardez l'écran. Seule la réplique configurée est lue, jamais le détail de la tâche. Désactivé par défaut.",
   voiceNameLabel: 'Voix',
+  voiceNameHint:
+    "Quelle voix lit le texte. Les voix viennent de l'implémentation de synthèse ; d'autres apparaissent avec une autre implémentation.",
+  speechProviderLabel: 'Reconnaissance vocale',
+  speechProviderHint:
+    "Quelle implémentation transcrit l'enregistrement. Plusieurs options n'apparaissent qu'avec un plugin de saisie vocale installé ; le choix est enregistré et un fournisseur absent échoue au lieu de basculer.",
   voiceVolumeLabel: 'Volume',
   voiceVolumeHint:
     'Volume de lecture en décimal 0–1 : 1 correspond au volume maximal (100 %), 0 coupe le son. Seule l’intensité change et l’audio n’est pas resynthétisé, donc le régler ne coûte rien de plus. Les quatre types de parole partagent ce même volume.',

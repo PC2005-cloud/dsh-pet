@@ -174,6 +174,10 @@ export const pt: Record<Key, string> = {
   voiceNotifyEnabledHint:
     'Fala uma frase configurada de estado de trabalho quando uma tarefa termina, falha ou aguarda sua confirmação. Como as notificações do sistema, só fala enquanto você não está nesta página (outro aplicativo, sem foco, minimizado) — sem interromper enquanto você olha para a tela. Só a frase configurada é falada, nunca o detalhe da tarefa. Desligado por padrão.',
   voiceNameLabel: 'Voz',
+  voiceNameHint: 'Qual voz lê o texto. As vozes vêm da implementação de síntese; mais aparecem ao instalar outra.',
+  speechProviderLabel: 'Reconhecimento de voz',
+  speechProviderHint:
+    'Qual implementação transcreve a gravação. Mais de uma opção aparece apenas com o plugin de entrada de voz instalado; a escolha é salva e um provedor ausente falha em vez de trocar sozinho.',
   voiceVolumeLabel: 'Volume',
   voiceVolumeHint:
     'Volume de reprodução em decimal 0–1: 1 é o volume máximo (100%) e 0 silencia. Altera apenas a intensidade e não sintetiza o áudio de novo, então ajustá-lo não custa nada extra. Os quatro tipos de fala compartilham este mesmo volume.',

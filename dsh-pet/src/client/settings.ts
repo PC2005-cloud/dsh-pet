@@ -144,6 +144,21 @@ export function makePetConfigSection(
       };
     }, []);
 
+    // 识别实现列表：与音色列表同构的一次性拉取，失败留空即可。
+    useEffect(() => {
+      let alive = true;
+      void fetch(ROUTE_PATH + '/voice/hear-providers')
+        .then((response) => (response.ok ? response.json() : null))
+        .then((body: { providers?: { id: string; name: string }[] } | null) => {
+          if (!alive || !body || !Array.isArray(body.providers)) return;
+          setSpeechProviders(body.providers);
+        })
+        .catch(() => undefined);
+      return () => {
+        alive = false;
+      };
+    }, []);
+
     // 系统通知总开关：与其余全局开关同构，切换只改本地状态、随「保存」整包写入。
     // 不做即时写入：PUT /config 会重启桌面 Helper，全部桌面宠物窗口重建（拖拽落点清空、宠物跳回角落）。
     // 引擎重读放在保存成功后（persist 里调 reloadNotifications），保存后即时生效、无需刷新。
@@ -173,6 +188,10 @@ export function makePetConfigSection(
     const [voiceNotifyEnabled, setVoiceNotifyEnabled] = useState(false);
     // 可选音色：来自宿主 /voice/voices，拉不到就留空——下拉只显示当前值，绝不硬编码音色 id。
     const [voiceOptions, setVoiceOptions] = useState<VoiceOption[]>([]);
+    // 语音识别实现：请求没带 provider 时用它；空串表示「还没拿到成品值」，保存时该项不提交。
+    const [speechProvider, setSpeechProvider] = useState('');
+    // 可选识别实现：来自宿主 /voice/hear-providers，拉不到就留空（下拉只显示当前值）。
+    const [speechProviders, setSpeechProviders] = useState<{ id: string; name: string }[]>([]);
     // 物理参数（全局）：只改本地状态，随「保存」整包写入；初值仅占位，成品加载成功后才允许编辑与保存。
     const [physics, setPhysics] = useState<PhysicsParams>({ ...DEFAULT_PHYSICS });
     // 字体（全局默认）：与 physics 同一套语义；初值仅占位，成品加载成功后才允许编辑与保存。
@@ -213,6 +232,7 @@ export function makePetConfigSection(
         if (patch.voiceWhisperEnabled !== undefined) setVoiceWhisperEnabled(patch.voiceWhisperEnabled);
         if (patch.voiceTodoEnabled !== undefined) setVoiceTodoEnabled(patch.voiceTodoEnabled);
         if (patch.voiceNotifyEnabled !== undefined) setVoiceNotifyEnabled(patch.voiceNotifyEnabled);
+        if (patch.speechProvider !== undefined) setSpeechProvider(patch.speechProvider);
         if (patch.physics !== undefined) setPhysics(patch.physics);
         if (patch.font !== undefined) setFont(patch.font);
         if (patch.animationWeights !== undefined) setWeights(patch.animationWeights);
@@ -330,6 +350,8 @@ export function makePetConfigSection(
         voiceWhisperEnabled,
         voiceTodoEnabled,
         voiceNotifyEnabled,
+        // 空串 = 还没加载到成品值：不提交，免得用一个本地猜的识别实现覆盖配置
+        ...(speechProvider === '' ? {} : { speechProvider }),
         physics,
         whisperModel,
         chatModel,
@@ -415,6 +437,9 @@ export function makePetConfigSection(
           whisperEnabled: voiceWhisperEnabled,
           todoEnabled: voiceTodoEnabled,
           notifyEnabled: voiceNotifyEnabled,
+          speechProvider,
+          speechProviders,
+          onSpeechProviderChange: setSpeechProvider,
           onToggle: setVoiceEnabled,
           onVoiceChange: setVoiceName,
           onVolumeChange: setVoiceVolume,

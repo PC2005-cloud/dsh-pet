@@ -177,6 +177,11 @@ export const es: Record<Key, string> = {
   voiceNotifyEnabledHint:
     'Locuta una frase configurada de estado de trabajo cuando una tarea termina, falla o espera tu confirmación. Igual que las notificaciones del sistema, solo locuta cuando no estás en esta página (otra aplicación, sin foco, minimizada): no interrumpe mientras miras la pantalla. Solo se locuta la frase configurada, nunca el detalle de la tarea. Desactivado por defecto.',
   voiceNameLabel: 'Voz',
+  voiceNameHint:
+    'Qué voz lee el texto. Las voces provienen de la implementación de síntesis; aparecen más al instalar otra.',
+  speechProviderLabel: 'Reconocimiento de voz',
+  speechProviderHint:
+    'Qué implementación transcribe la grabación. Solo aparecen varias opciones si hay un complemento de entrada de voz instalado; la elección se guarda y un proveedor ausente falla en vez de cambiarse solo.',
   voiceVolumeLabel: 'Volumen',
   voiceVolumeHint:
     'Volumen de reproducción como decimal 0–1: 1 es el volumen máximo (100 %) y 0 silencia. Solo cambia la intensidad y no vuelve a sintetizar el audio, así que ajustarlo no tiene coste extra. Los cuatro tipos de locución comparten este mismo volumen.',

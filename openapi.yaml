@@ -2438,15 +2438,18 @@ paths:
       description: |
         与 `/voice/speak` 反向：音频进、文字出。
 
-        - 能力来自宿主的语音识别服务；宿主没启用语音输入插件时返回 `unsupported`，
-          不把它当成识别失败。
+        - **多实现并存**：宿主插件可经 Cordis 服务 `petApi7340.speech.register` 注册自己的识别实现；
+          `/voice/hear-providers` 列出全部可用实现。
+        - `provider` 不传时用配置里的 `main.speechProvider`；解析不到按 `bad-request` 拒绝，
+          不会静默换成别的实现。
         - 音频必须是 **16kHz / 单声道 / PCM16 的 WAV**，base64 后放在 `audio` 字段。
-          其它容器（mp3/webm/ogg）或其它采样率一律拒绝。格式由宿主识别器校验，
+          其它容器（mp3/webm/ogg）或其它采样率一律拒绝。格式由实现校验，
           不合规时返回 `generate-error` 并附原始说明。
+        - 语言由实现自动检测，请求不带语言参数。
         - 解码后不得超过 768 KiB（约 24 秒）：请求体上限是 1 MiB，base64 会再放大三分之一。
         - 整段一次性识别，不做流式。
-        - 参数问题返回 `bad-request`，能力缺失返回 `unsupported`，识别器报错返回
-          `generate-error`；三者都是 HTTP 200 + `{ ok: false, reason, message }`。
+        - 参数问题返回 `bad-request`，能力缺失（插件没装、没配 key）返回 `unsupported`，
+          识别失败返回 `generate-error`；三者都是 HTTP 200 + `{ ok: false, reason, message }`。
           只有请求体不是合法 JSON 才是 400，方法不对是 405。
       requestBody:
         required: true
@@ -2460,9 +2463,9 @@ paths:
                 audio:
                   type: string
                   description: 16kHz/单声道/PCM16 WAV 的 base64；解码后上限 768 KiB。
-                language:
+                provider:
                   type: string
-                  description: 语言提示，如 `zh` / `en`；缺省由宿主识别器决定。
+                  description: 识别实现 id，取值见 `/voice/hear-providers`；缺省用配置 `main.speechProvider`。
       responses:
         "200":
           description: |
@@ -2490,6 +2493,39 @@ paths:
           description: 请求体不是合法 JSON。
         "405":
           description: 方法不是 POST。
+
+  /dsh-pet-7340/voice/hear-providers:
+    get:
+      tags: [Voice]
+      operationId: getHearProviders
+      summary: 列出可用的语音识别实现
+      description: 与 `/voice/hear` 的 `provider` 字段同源；前端据此渲染选择器，不要硬编码 id。
+      responses:
+        "200":
+          description: 识别实现目录，按注册顺序。
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, providers]
+                properties:
+                  ok:
+                    type: boolean
+                    const: true
+                  providers:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, name]
+                      properties:
+                        id:
+                          type: string
+                          description: provider id，如 `dsh`；写进配置 `main.speechProvider` 的就是它。
+                        name:
+                          type: string
+                          description: 展示名，如 `dsh 语音插件`。
+        "405":
+          description: 方法不是 GET。
 
   /dsh-pet-7340/voice/speak:
     post:
@@ -4548,6 +4584,11 @@ components:
           description: |
             音色限定 id（`provider/音色`），取值见 `/voice/voices`；写错或留空即解析不到，
             合成按 `bad-request` 失败并告警，不会回落到另一个音色。设置页「语音播报」卡的音色下拉写的就是它。
+        speechProvider:
+          type: string
+          description: |
+            语音识别实现 id（如 `dsh`），取值见 `/voice/hear-providers`；写错或留空即解析不到，
+            识别按 `bad-request` 失败并告警，不会回落到另一个实现。设置页「语音播报」卡的语音识别下拉写的就是它。
         voiceVolume:
           type: number
           minimum: 0
