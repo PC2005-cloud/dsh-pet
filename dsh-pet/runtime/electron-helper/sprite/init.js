@@ -241,6 +241,16 @@ Object.assign(PetSprite.prototype, {
       },
       { signal: ac.signal },
     );
+    // 点击窗口任意位置都补一次系统键盘焦点：失焦后再次点击时 DOM 焦点可能仍停在原输入框上，
+    // focusin 不会再触发，只靠它永远拿不回系统键盘焦点。主进程侧有 isFocused() 卫语句，
+    // 已聚焦时是 no-op，不会把焦点从别的应用抢过来。
+    window.addEventListener(
+      'pointerdown',
+      () => {
+        if (window.petBridge && window.petBridge.requestKeyboardFocus) window.petBridge.requestKeyboardFocus();
+      },
+      { signal: ac.signal, capture: true },
+    );
     // 点击穿透：窗口默认整窗穿透，光标进出身体命中区时翻转可交互；穿透期间 mousemove 由主进程
     // 转发进来（forward:true），mouseleave 保证光标离开窗口立即恢复穿透。
     window.addEventListener('mousemove', (e) => this.onMouseMove(e), { signal: ac.signal });
@@ -252,7 +262,10 @@ Object.assign(PetSprite.prototype, {
         // 切走时松手收不到 keyup：不在这里收尾，录音会一直开到 24 秒上限
         this.hearHold.release();
         if (this.dragState.active) this.onPointerUp();
-        if (!this.chatOpen && !this.todoOpen) this.setInteractive(false);
+        // 失焦不等于「必须穿透」：光标仍停在身体上时按命中区规则应保持可交互，否则 Linux 上
+        // 穿透后收不到 mousemove，回焦的那一下点击会被透传给下面的应用，窗口再也拿不到焦点。
+        // 菜单/弹窗开着时本就由 busy 接管；其余情况沿用当前命中区状态，交给兜底轮询与 mouseleave 收敛。
+        if (!this.chatOpen && !this.todoOpen) this.setInteractive(Boolean(this.hoverBody));
       },
       { signal: ac.signal },
     );

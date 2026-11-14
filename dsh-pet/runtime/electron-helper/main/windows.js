@@ -28,6 +28,7 @@ const POINTER_POLL_MS = 60;
  * @param deps.shouldReassertTopmost - 看门狗的纯判定。
  * @param deps.topmostLevel - 平台对应的置顶层级。
  * @param deps.taskbarWatchdogEnabled - 任务栏看门狗总开关（main.js 按 DSH_PET_TASKBAR_WATCHDOG 传入）。
+ * @param deps.x11Shape - Linux/X11 固定输入区域写入器；其它平台为 null（保留 setIgnoreMouseEvents 兜底）。
  */
 function createWindows({
   BrowserWindow,
@@ -41,6 +42,7 @@ function createWindows({
   shouldReassertTopmost,
   topmostLevel,
   taskbarWatchdogEnabled,
+  x11Shape,
 }) {
   /** 窗口表：petId -> BrowserWindow */
   const windows = new Map();
@@ -56,6 +58,8 @@ function createWindows({
   const inputRegions = new Map();
   /** 每窗口「光标停在余量区且非 busy」的连续时长（ms）：到点由兜底通道强制恢复穿透 */
   const offBodyMs = new Map();
+  /** win.id -> X11 窗口 ID（仅 Linux 固定输入区域路径使用） */
+  const x11Windows = new Map();
   /** 每窗口上一拍的光标分区：识别「刚离开身体」，据此向渲染端补发收起悬浮提示的通知 */
   const lastPointerZone = new Map();
   /** 宠物间碰撞 broker 状态：petId -> { x, y, vx, vy, size, bottomPad } */
@@ -97,6 +101,42 @@ function createWindows({
   function setWindowIgnore(win, ignore) {
     win.setIgnoreMouseEvents(ignore, { forward: true });
     windowIgnore.set(win.id, ignore);
+  }
+
+  /**
+   * 把窗口输入区重算并写到 X Server（仅 Linux 固定输入区域路径）。
+   *
+   * 输入区 = 可见宠物舞台（整个视频盒，含脚底垫）+ 打开中的菜单/气泡控件矩形；
+   * 拖拽或忙碌但没有控件矩形时整窗接收，避免拖拽过程中 pointermove/pointerup 断链。
+   * 窗口本身始终是正常可聚焦窗口，不再进入 setIgnoreMouseEvents 的穿透状态。
+   */
+  function applyInputShape(win) {
+    if (!x11Shape || win.isDestroyed()) return;
+    const xid = x11Windows.get(win.id);
+    if (!xid) return;
+    const bounds = win.getBounds();
+    if (bounds.width < 8 || bounds.height < 8) return;
+    const margin = winMargins.get(win.id);
+    const rects = [];
+    if (margin && Number.isFinite(margin.l) && Number.isFinite(margin.t)) {
+      const mr = Number.isFinite(margin.r) ? margin.r : margin.l;
+      const stageW = Math.max(0, bounds.width - margin.l - mr);
+      const stageH = (stageW * 360) / 640;
+      const bottomPad = (stageH * (360 - 330)) / 360;
+      // 舞台 = 可见宠物（视频盒）；比旧 HIT_BOX 大一圈，脚和裙摆也点得到
+      rects.push({ x: margin.l, y: margin.t, width: stageW, height: stageH + bottomPad });
+    }
+    const input = inputRegions.get(win.id);
+    if (input && input.dragging) {
+      rects.push({ x: 0, y: 0, width: bounds.width, height: bounds.height });
+    } else if (input && Array.isArray(input.rects)) {
+      for (const r of input.rects) rects.push({ x: r.x, y: r.y, width: r.width, height: r.height });
+    }
+    // 旧渲染端只报 busy、不报控件矩形：整窗可交互，至少菜单点得到
+    if (inputBusy.get(win.id) === true && !input) {
+      rects.push({ x: 0, y: 0, width: bounds.width, height: bounds.height });
+    }
+    x11Shape.set(xid, rects);
   }
 
   /** 桌面几何：逐屏工作区、外接矩形、主屏下标；边界判定必须走 areas 的并集而不是 hull。 */
@@ -160,8 +200,11 @@ function createWindows({
     taskbarWatchdogTimer = null;
   }
 
-  /** 穿透兜底泵：正规翻转链路只有 forward 鼠标钩子，它在 Windows 上可能静默失效。 */
-  function startPointerFallback(win) {
+  /**
+   * 光标轮询：非 Linux 用它做 setIgnoreMouseEvents 兜底翻转；Linux 固定输入区域路径下 flip=false，
+   * 只保留「刚离开身体」的提示收起通知，不再翻窗口（输入区由 X Shape 维护）。
+   */
+  function startPointerFallback(win, flip = true) {
     const pointerTimer = setInterval(() => {
       if (pointerFallbackPaused || win.isDestroyed()) return;
       const bounds = win.getBounds();
@@ -176,6 +219,8 @@ function createWindows({
       const prevZone = lastPointerZone.get(win.id);
       lastPointerZone.set(win.id, zone);
       if (!busy && leavesBody(prevZone, zone)) win.webContents.send('pet:pointer-left');
+      // Linux 固定输入区域：到这里为止只发了提示收起通知，输入区由 X Shape 维护，不再翻窗口
+      if (!flip) return;
       const nextMs = !busy && zone === 'margin' ? (offBodyMs.get(win.id) ?? 0) + POINTER_POLL_MS : 0;
       offBodyMs.set(win.id, nextMs);
       const next = decideWindowIgnore(bounds, point, ignoring, busy, nextMs, inputRegions.get(win.id), margin);
@@ -248,7 +293,15 @@ function createWindows({
     win.webContents.on('context-menu', (event) => event.preventDefault());
     // 页面级缩放与渲染端 CONFIG.scale 同源；show:false 的窗口 zoomFactor 不生效，须加载后设置
     win.webContents.on('did-finish-load', () => win.webContents.setZoomFactor(scale));
-    setWindowIgnore(win, true);
+    if (x11Shape) {
+      // Linux：窗口永不进入穿透态，输入区交给 X Shape；首帧上报前先给 1×1，避免整窗吞点击
+      const handle = win.getNativeWindowHandle();
+      const xid = handle.length >= 4 ? handle.readUInt32LE(0) : 0;
+      if (xid) x11Windows.set(win.id, xid);
+      x11Shape.set(xid, [{ x: 0, y: 0, width: 1, height: 1 }]);
+    } else {
+      setWindowIgnore(win, true);
+    }
     win.on('show', () => keepOffTaskbar(win));
     win.once('ready-to-show', () => {
       keepOffTaskbar(win);
@@ -260,10 +313,11 @@ function createWindows({
         if (!win.isDestroyed() && !win.isVisible()) win.showInactive();
       }, 400);
     });
-    const stopPointerFallback = startPointerFallback(win);
+    // Linux 用静态输入区域：flip=false 时只保留提示收起轮询，不再翻窗口；其它平台保持原兜底
+    const stopPointerFallback = startPointerFallback(win, !x11Shape);
     const stopTopmostWatchdog = startTopmostWatchdog(win);
     win.on('closed', () => {
-      stopPointerFallback();
+      if (stopPointerFallback) stopPointerFallback();
       stopTopmostWatchdog();
       windows.delete(pet.id);
       petStates.delete(pet.id);
@@ -274,6 +328,7 @@ function createWindows({
       inputBusy.delete(win.id);
       inputRegions.delete(win.id);
       offBodyMs.delete(win.id);
+      x11Windows.delete(win.id);
       lastPointerZone.delete(win.id);
     });
     win.loadFile(path.join(helperDir, 'index.html'), { query: windowQuery(pet, geo, scale) }).catch((error) => {
@@ -330,6 +385,7 @@ function createWindows({
     }
     windows.clear();
     petStates.clear();
+    x11Windows.clear();
     if (petStateTimer !== null) {
       clearTimeout(petStateTimer);
       petStateTimer = null;
@@ -342,6 +398,9 @@ function createWindows({
     closeAll: closeAllPetWindows,
     geometry: deskGeometry,
     setWindowIgnore,
+    applyInputShape,
+    // Linux 固定输入区域路径下 setInteractive 不再翻窗口，IPC 据此决定是否走旧逻辑
+    hasInputShape: Boolean(x11Shape),
     updatePetState,
     broadcastPetStates,
     keepOffTaskbar,
