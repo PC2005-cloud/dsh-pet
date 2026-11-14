@@ -1,0 +1,962 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>dsh-pet · 桌面宠物插件</title>
+<meta name="description" content="dsh-pet 项目主页：Star、Fork、npm 下载、Clone/View 流量、贡献者与版本发布，数据来自 GitHub 与 npm 的公开接口。">
+<link rel="icon" href="logo.png">
+<style>
+:root{
+  --paper:#FAFAF8; --card:#FFFFFF; --ink:#16161A; --ink2:#45454E; --mut:#7B7B86;
+  --line:#E7E5E0; --line2:#F1EFEA; --wash:#F4F3EF;
+  --star:#B4472E; --npm:#1F5F4B; --traffic:#2B4C7E; --warn:#8A6A1F;
+  --r:14px; --r-sm:9px;
+  --sh:0 1px 2px rgba(22,22,26,.04), 0 10px 30px -18px rgba(22,22,26,.18);
+  --mono:ui-monospace,SFMono-Regular,Consolas,"Liberation Mono",monospace;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans SC","Microsoft YaHei",Roboto,sans-serif;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%;scroll-behavior:smooth}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);font-size:15.5px;line-height:1.75;-webkit-font-smoothing:antialiased}
+a{color:inherit;text-decoration:none}
+h1,h2,h3,h4{margin:0;font-weight:640;letter-spacing:-.018em;line-height:1.3}
+p{margin:0}
+code{font-family:var(--mono);font-size:.9em}
+.wrap{max-width:1120px;margin:0 auto;padding:0 24px}
+.muted{color:var(--mut)}
+.skip{position:absolute;left:-9999px}
+.skip:focus{left:16px;top:12px;z-index:99;background:var(--ink);color:var(--paper);padding:8px 14px;border-radius:8px}
+
+/* ---------- nav ---------- */
+.nav{position:sticky;top:0;z-index:40;background:rgba(250,250,248,.86);backdrop-filter:saturate(160%) blur(12px);border-bottom:1px solid var(--line)}
+.nav-in{display:flex;align-items:center;gap:26px;height:62px}
+.brand{display:flex;align-items:center;gap:9px;font-weight:660;letter-spacing:-.02em;font-size:16.5px;flex:none}
+.brand img{display:block;width:22px;height:22px;border-radius:5px}
+.nav-links{display:flex;gap:22px;font-size:14px;color:var(--ink2);overflow-x:auto;scrollbar-width:none}
+.nav-links::-webkit-scrollbar{display:none}
+.nav-links a{padding:4px 0;border-bottom:1.5px solid transparent;white-space:nowrap}
+.nav-links a:hover{color:var(--ink);border-bottom-color:var(--ink)}
+.nav-cta{margin-left:auto;display:flex;gap:10px;flex:none}
+
+/* ---------- buttons ---------- */
+.btn{display:inline-flex;align-items:center;gap:8px;font:inherit;font-size:14px;padding:9px 16px;border-radius:var(--r-sm);border:1px solid var(--line);background:var(--card);color:var(--ink);cursor:pointer;transition:transform .12s ease,border-color .12s ease,background .12s ease;white-space:nowrap}
+.btn:hover{border-color:#CFCCC4;transform:translateY(-1px)}
+.btn-primary{background:var(--ink);border-color:var(--ink);color:#FCFCFA}
+.btn-primary:hover{background:#000;border-color:#000}
+.btn-code{font-family:var(--mono);font-size:13.5px;background:var(--wash);border-color:var(--line);gap:12px}
+.btn-code .hint{font-family:var(--sans);font-size:12px;color:var(--mut);border-left:1px solid var(--line);padding-left:10px}
+.btn-code.copied .hint{color:var(--npm)}
+.btn svg{display:block}
+
+/* ---------- hero ---------- */
+.hero{position:relative;overflow:hidden;border-bottom:1px solid var(--line)}
+.hero::before{content:"";position:absolute;inset:-40% 30% 40% -10%;background:radial-gradient(60% 60% at 30% 40%,rgba(180,71,46,.10),transparent 70%),radial-gradient(50% 50% at 70% 20%,rgba(31,95,75,.09),transparent 70%);pointer-events:none}
+.hero-in{position:relative;display:grid;grid-template-columns:minmax(0,1.35fr) minmax(300px,.85fr);gap:56px;padding:72px 24px 68px;align-items:start}
+.eyebrow{display:inline-flex;align-items:center;gap:8px;font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--mut);font-weight:600;margin-bottom:18px}
+.eyebrow .dot{width:7px;height:7px;border-radius:50%;background:var(--npm);box-shadow:0 0 0 3px rgba(31,95,75,.14)}
+.hero h1{font-size:clamp(38px,6vw,62px);letter-spacing:-.035em;line-height:1.04;margin-bottom:20px}
+.hero h1 .sub{display:block;font-size:clamp(17px,2.2vw,21px);font-weight:520;letter-spacing:-.01em;color:var(--ink2);margin-top:14px;line-height:1.5}
+.hero-lede{font-size:17px;color:var(--ink2);max-width:56ch;margin-bottom:28px}
+.hero-actions{display:flex;flex-wrap:wrap;gap:12px;margin-bottom:26px}
+.hero-facts{list-style:none;display:flex;flex-wrap:wrap;gap:8px;margin:0;padding:0}
+.hero-facts li{font-size:12.5px;color:var(--ink2);background:var(--wash);border:1px solid var(--line2);border-radius:999px;padding:4px 12px}
+.hero-more{font-size:14px;color:var(--ink2);line-height:1.85;max-width:34em;margin-top:22px}
+.hero-more + .hero-more{margin-top:10px;font-size:13.5px;color:var(--mut)}
+.hero-card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--sh);padding:22px 22px 14px;position:sticky;top:82px}
+.card-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding-bottom:12px;border-bottom:1px solid var(--line2);margin-bottom:12px}
+.card-head h2{font-size:14px;letter-spacing:.02em}
+.card-head span{font-size:12px;font-family:var(--mono)}
+.kv{margin:0;display:grid;gap:0}
+.kv div{display:flex;justify-content:space-between;gap:16px;padding:7px 0;border-bottom:1px solid var(--line2);font-size:13.5px}
+.kv div:last-child{border-bottom:none}
+.kv dt{color:var(--mut);flex:none}
+.kv dd{margin:0;text-align:right;font-weight:560;min-width:0;overflow-wrap:anywhere}
+.kv dd.mono{font-family:var(--mono);font-weight:500;font-size:12.5px}
+
+/* ---------- stat band ---------- */
+.band{padding:44px 0 8px}
+.stat-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:14px}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:18px 18px 15px;box-shadow:var(--sh)}
+.stat .lab{font-size:12px;color:var(--mut);letter-spacing:.04em;margin-bottom:10px;display:flex;align-items:center;gap:6px}
+.stat .lab i{width:8px;height:8px;border-radius:2px;flex:none}
+.stat .val{font-size:27px;font-weight:640;letter-spacing:-.03em;font-variant-numeric:tabular-nums;line-height:1.1}
+.stat .sub{font-size:12.5px;color:var(--mut);margin-top:7px;font-variant-numeric:tabular-nums}
+.stat .sub b{color:var(--npm);font-weight:600}
+.stat .sub b.down{color:var(--star)}
+
+/* ---------- sections ---------- */
+.sec{padding:64px 0 0}
+.sec-head{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:18px;padding-bottom:20px}
+.sec-head .eyebrow{margin-bottom:8px}
+.sec-head h2{font-size:clamp(24px,3.2vw,32px);letter-spacing:-.028em}
+.sec-head .desc{font-size:14.5px;color:var(--mut);margin-top:8px;max-width:62ch}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--sh);padding:22px}
+.panel h3{font-size:15px;margin-bottom:14px}
+.tabs{display:inline-flex;border:1px solid var(--line);border-radius:var(--r-sm);overflow:hidden;background:var(--card)}
+.tabs button{font:inherit;font-size:13.5px;padding:7px 15px;border:0;background:transparent;color:var(--mut);cursor:pointer;border-right:1px solid var(--line)}
+.tabs button:last-child{border-right:0}
+.tabs button[aria-selected="true"]{background:var(--ink);color:#FCFCFA}
+.tabs button:not([aria-selected="true"]):hover{background:var(--wash);color:var(--ink)}
+.split{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(280px,1fr);gap:16px;align-items:stretch}
+.split > .panel{display:flex;flex-direction:column}
+.split-2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+
+/* ---------- charts ---------- */
+.chart{position:relative}
+.chart svg{display:block;width:100%;height:auto;overflow:visible}
+.chart .grid{stroke:var(--line2);stroke-width:1}
+.chart .ax{font-family:var(--mono);font-size:11px;fill:var(--mut)}
+.chart .tip{position:absolute;transform:translate(-50%,-135%);background:var(--ink);color:#FCFCFA;font-size:12px;font-family:var(--mono);padding:4px 9px;border-radius:7px;white-space:nowrap;pointer-events:none;z-index:5}
+.legend{display:flex;gap:18px;flex-wrap:wrap;font-size:12.5px;color:var(--mut);margin-top:12px}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+.fine{font-size:12.5px;color:var(--mut);line-height:1.7;margin-top:14px;border-top:1px solid var(--line2);padding-top:12px}
+.fine code{background:var(--wash);padding:1px 5px;border-radius:4px}
+.note{display:flex;gap:10px;font-size:13px;color:var(--warn);background:#FBF7EC;border:1px solid #EFE6CE;border-radius:var(--r-sm);padding:12px 14px;margin-top:16px}
+.note svg{flex:none;margin-top:3px}
+
+/* ---------- window grid ---------- */
+.win-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:0;border-top:1px solid var(--line2);margin-top:20px}
+.win{padding:16px 16px 4px;border-right:1px solid var(--line2)}
+.win:last-child{border-right:0}
+.win .k{font-size:12px;color:var(--mut)}
+.win .v{font-size:22px;font-weight:640;letter-spacing:-.025em;font-variant-numeric:tabular-nums;margin-top:4px}
+.win .d{font-size:12px;color:var(--mut);margin-top:3px;font-variant-numeric:tabular-nums}
+.win .d b{font-weight:600;color:var(--npm)}
+.win .d b.down{color:var(--star)}
+
+/* ---------- contributors ---------- */
+.people{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:12px}
+.person{display:flex;align-items:center;gap:11px;background:var(--card);border:1px solid var(--line);border-radius:var(--r-sm);padding:11px 13px;transition:transform .12s ease,border-color .12s ease}
+.person:hover{transform:translateY(-2px);border-color:#CFCCC4}
+.person .ava{width:34px;height:34px;border-radius:50%;flex:none;display:grid;place-items:center;font-size:13px;font-weight:640;color:#FCFCFA;overflow:hidden;background:var(--ink2)}
+.person .ava img{width:100%;height:100%;object-fit:cover;display:block}
+.person .who{min-width:0}
+.person .who b{display:block;font-size:13.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.person .who span{font-size:12px;color:var(--mut);font-variant-numeric:tabular-nums}
+.person .who .adds{display:block;font-size:11.5px;line-height:1.5;margin-top:1px;white-space:nowrap}
+.person .who .adds i{font-style:normal}
+.person .who .adds .plus{color:var(--npm)}
+.person .who .adds .minus{color:var(--star);margin-left:6px}
+.person.lead{border-color:rgba(180,71,46,.35);background:linear-gradient(180deg,rgba(180,71,46,.05),transparent)}
+
+/* ---------- releases ---------- */
+.rel-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));column-gap:36px}
+.rel{display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:11px 0;border-bottom:1px solid var(--line2);font-size:13.5px}
+.rel .tag{font-family:var(--mono);font-weight:560}
+.rel .meta{font-size:12px;color:var(--mut);font-variant-numeric:tabular-nums;text-align:right}
+.rel .meta b{color:var(--ink);font-weight:600}
+.rel-more{
+  display:inline-flex;align-items:center;gap:6px;margin-top:16px;
+  padding:8px 14px;font:inherit;font-size:13px;line-height:1;
+  color:var(--ink-2);background:var(--card);border:1px solid var(--line);
+  border-radius:var(--r-sm);cursor:pointer;transition:border-color .12s,color .12s;
+}
+.rel-more:hover{border-color:#CFCCC4;color:var(--ink)}
+.rel-more[hidden]{display:none}
+
+/* ---------- issues ---------- */
+.months{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+.month .mh{display:flex;align-items:baseline;justify-content:space-between;font-size:13.5px;font-weight:600;padding-bottom:10px;border-bottom:1px solid var(--line2);margin-bottom:12px}
+.month .mh span{font-size:12px;color:var(--mut);font-weight:400;font-variant-numeric:tabular-nums}
+.bar-row{display:flex;align-items:center;gap:10px;font-size:12.5px;margin-bottom:9px}
+.bar-row .n{width:52px;color:var(--mut);flex:none}
+.bar-row .track{flex:1;height:7px;background:var(--wash);border-radius:4px;overflow:hidden;display:flex}
+.bar-row .track i{display:block;height:100%}
+.bar-row .v{width:34px;text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums;flex:none}
+
+/* ---------- sources table ---------- */
+.tw{overflow-x:auto}
+table{border-collapse:collapse;width:100%;min-width:640px;font-size:13.5px}
+th{text-align:left;font-size:11.5px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--mut);padding:0 16px 9px 0;border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:11px 16px 11px 0;border-bottom:1px solid var(--line2);vertical-align:top}
+tbody tr:last-child td{border-bottom:0}
+tbody tr:hover{background:var(--wash)}
+td.cmd{font-family:var(--mono);font-size:12px;color:var(--ink2);max-width:430px;overflow-wrap:anywhere}
+td.m{font-weight:600;white-space:nowrap}
+
+/* ---------- footer ---------- */
+.foot{margin-top:80px;border-top:1px solid var(--line);background:var(--wash)}
+.foot-in{display:flex;flex-wrap:wrap;gap:24px;justify-content:space-between;padding:30px 24px 40px;font-size:13px;color:var(--mut)}
+.foot-in a{border-bottom:1px solid transparent}
+.foot-in a:hover{border-bottom-color:var(--mut)}
+.foot .stamp{font-family:var(--mono);font-size:12px;color:var(--ink2)}
+
+/* ---------- boot / error ---------- */
+#boot{position:fixed;inset:0;display:grid;place-items:center;background:var(--paper);z-index:80;transition:opacity .25s ease}
+#boot.done{opacity:0;pointer-events:none}
+.spin{width:26px;height:26px;border:2px solid var(--line);border-top-color:var(--star);border-radius:50%;animation:sp .7s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+#fail{display:none;max-width:660px;margin:80px auto;background:var(--card);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--sh);padding:30px}
+#fail h2{font-size:19px;margin-bottom:12px}
+#fail p{color:var(--ink2);font-size:14px;margin-bottom:14px}
+#fail pre{background:var(--ink);color:#F0EFEA;font-family:var(--mono);font-size:13px;padding:14px 16px;border-radius:var(--r-sm);overflow-x:auto;margin:0 0 14px}
+
+@media (max-width:1020px){
+  .hero-in{grid-template-columns:1fr;gap:36px;padding:52px 24px 48px}
+  .hero-card{position:static}
+  .stat-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .split,.split-2{grid-template-columns:1fr}
+  .months{grid-template-columns:1fr}
+}
+@media (max-width:720px){
+  body{font-size:15px}
+  .wrap{padding:0 16px}
+  .nav-in{gap:14px;height:56px}
+  .nav-links{gap:16px;font-size:13px}
+  .stat-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .win-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .win:nth-child(2){border-right:0}
+  .win:nth-child(1),.win:nth-child(2){border-bottom:1px solid var(--line2)}
+  .sec{padding:44px 0 0}
+  .hero-in{padding:38px 16px 36px}
+  .panel{padding:16px}
+}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;scroll-behavior:auto}}
+</style>
+</head>
+<body>
+<a class="skip" href="#main">跳到主要内容</a>
+
+<header class="nav">
+  <div class="wrap nav-in">
+    <a class="brand" href="#top">
+      <img src="logo.png" alt="">
+      <span id="navName">dsh-pet</span>
+    </a>
+    <nav class="nav-links" aria-label="页面导航">
+      <a href="#stats">概览</a>
+      <a href="#growth">增长</a>
+      <a href="#downloads">下载</a>
+      <a href="#traffic">流量</a>
+      <a href="#commits">提交</a>
+      <a href="#people">贡献者</a>
+      <a href="#releases">版本</a>
+      <a href="#issues">Issue</a>
+      <a href="#sources">数据源</a>
+    </nav>
+    <div class="nav-cta">
+      <a class="btn" id="navRepo" href="#" target="_blank" rel="noopener">
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 .25a.75.75 0 0 1 .673.418l1.882 3.815 4.21.612a.75.75 0 0 1 .416 1.279l-3.046 2.97.719 4.192a.75.75 0 0 1-1.088.791L8 12.347l-3.766 1.98a.75.75 0 0 1-1.088-.79l.72-4.194L.818 6.374a.75.75 0 0 1 .416-1.28l4.21-.611L7.327.668A.75.75 0 0 1 8 .25Z"/></svg>
+        <span id="navStars">—</span>
+      </a>
+    </div>
+  </div>
+</header>
+
+<div id="boot"><div class="spin" role="status" aria-label="正在加载数据"></div></div>
+<div id="fail"></div>
+
+<main id="main">
+  <section class="hero" id="top">
+    <div class="wrap hero-in">
+      <div>
+        <p class="eyebrow"><span class="dot"></span>数据更新于 <span id="heroUpdated">—</span></p>
+        <h1><span id="heroName">dsh-pet</span><span class="sub" id="heroSub"></span></h1>
+        <p class="hero-lede" id="heroDesc"></p>
+        <div class="hero-actions">
+          <a class="btn btn-primary" id="heroRepo" href="#" target="_blank" rel="noopener">在 GitHub 上查看</a>
+          <button class="btn btn-code" id="copyInstall" type="button" aria-label="复制安装命令">
+            <code id="installCmd">npm i dsh-pet</code><span class="hint" id="copyHint">复制</span>
+          </button>
+        </div>
+        <ul class="hero-facts" id="heroFacts"></ul>
+        <p class="hero-more">
+          提示词配方、素材生成链、插件成品，三件都能自己跑一遍——换角色、换动作、换风格，从零做出属于你的桌宠。
+        </p>
+        <p class="hero-more">
+          Windows / Linux / macOS 均可运行：浏览器浮层、桌面透明窗、独立程序三种形态，装好后默认落在界面右上角。
+        </p>
+      </div>
+      <aside class="hero-card" aria-label="项目速览">
+        <div class="card-head"><h2>项目速览</h2><span class="muted" id="cardStamp">—</span></div>
+        <dl class="kv" id="heroKv"></dl>
+      </aside>
+    </div>
+  </section>
+
+  <section class="band" id="stats" aria-label="核心指标">
+    <div class="wrap"><div class="stat-grid" id="statGrid"></div></div>
+  </section>
+
+  <section class="sec" id="growth">
+    <div class="wrap">
+      <header class="sec-head">
+        <div>
+          <p class="eyebrow">增长</p>
+          <h2 id="growthTitle">Star 曲线</h2>
+          <p class="desc" id="growthDesc"></p>
+        </div>
+        <div class="tabs" role="tablist" id="growthTabs" aria-label="增长图表切换"></div>
+      </header>
+      <div class="panel">
+        <div class="chart" id="growthChart"></div>
+        <div class="win-grid" id="winGrid"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec" id="downloads">
+    <div class="wrap">
+      <header class="sec-head">
+        <div>
+          <p class="eyebrow">npm</p>
+          <h2>下载量</h2>
+          <p class="desc" id="npmDesc"></p>
+        </div>
+      </header>
+      <div class="split">
+        <div class="panel">
+          <div class="chart" id="npmChart"></div>
+          <div class="win-grid" id="npmWins"></div>
+          <p class="fine" id="npmNote"></p>
+        </div>
+        <aside class="panel">
+          <h3>npm 自报区间</h3>
+          <dl class="kv" id="npmKv"></dl>
+          <p class="fine" id="npmSide"></p>
+        </aside>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec" id="traffic">
+    <div class="wrap">
+      <header class="sec-head">
+        <div>
+          <p class="eyebrow">流量</p>
+          <h2>Clone 与 View</h2>
+          <p class="desc" id="trafficDesc"></p>
+        </div>
+      </header>
+      <div class="panel">
+        <div class="chart" id="trafficChart"></div>
+        <div class="legend"><span><i style="background:var(--star)"></i>Clone</span><span><i style="background:var(--traffic)"></i>View</span></div>
+        <div class="note">
+          <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 1.5 15 14H1L8 1.5Zm0 4.2a.75.75 0 0 0-.75.75v3a.75.75 0 0 0 1.5 0v-3A.75.75 0 0 0 8 5.7Zm0 6.3a.9.9 0 1 0 0-1.8.9.9 0 0 0 0 1.8Z"/></svg>
+          <span id="trafficNote"></span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec" id="commits">
+    <div class="wrap">
+      <header class="sec-head">
+        <div>
+          <p class="eyebrow">提交</p>
+          <h2>每周提交量</h2>
+          <p class="desc" id="commitDesc"></p>
+        </div>
+      </header>
+      <div class="panel"><div class="chart" id="commitChart"></div></div>
+    </div>
+  </section>
+
+  <section class="sec" id="people">
+    <div class="wrap">
+      <header class="sec-head">
+        <div>
+          <p class="eyebrow">贡献者</p>
+          <h2 id="peopleTitle">贡献者</h2>
+          <p class="desc" id="peopleDesc"></p>
+        </div>
+      </header>
+      <div class="people" id="people"></div>
+    </div>
+  </section>
+
+  <section class="sec" id="releases">
+    <div class="wrap">
+      <header class="sec-head">
+        <div>
+          <p class="eyebrow">版本</p>
+          <h2>Release</h2>
+          <p class="desc" id="relDesc"></p>
+        </div>
+      </header>
+      <div class="panel">
+        <div class="rel-list" id="relList"></div>
+        <button class="rel-more" id="relMore" type="button" hidden></button>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec" id="issues">
+    <div class="wrap">
+      <header class="sec-head">
+        <div>
+          <p class="eyebrow">协作</p>
+          <h2>Issue 与 PR</h2>
+          <p class="desc" id="issueDesc"></p>
+        </div>
+      </header>
+      <div class="panel"><div class="months" id="months"></div></div>
+    </div>
+  </section>
+
+  <section class="sec" id="sources">
+    <div class="wrap">
+      <header class="sec-head">
+        <div>
+          <p class="eyebrow">口径</p>
+          <h2>数据源与已知偏差</h2>
+          <p class="desc">页面上每个数字都能对回下面这条命令。数字不修饰、缺口不补齐，接口返回什么就展示什么。</p>
+        </div>
+      </header>
+      <div class="panel tw">
+        <table>
+          <thead><tr><th>指标</th><th>命令 / 接口</th><th>已知偏差</th></tr></thead>
+          <tbody id="srcBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="foot">
+  <div class="wrap foot-in">
+    <div>
+      <div><b id="footName">dsh-pet</b> · <span id="footLicense">—</span></div>
+      <div class="stamp" id="footStamp">—</div>
+    </div>
+    <div>
+      数据来自 GitHub 与 npm 的公开接口，页面只负责展示。<br>
+      <a id="footRepo" href="#" target="_blank" rel="noopener">GitHub 仓库</a> · <a id="footNpm" href="#" target="_blank" rel="noopener">npm 包</a>
+    </div>
+  </div>
+</footer>
+
+<script src="data.js"></script>
+<script>
+"use strict";
+(function () {
+  var $ = function (s, r) { return (r || document).querySelector(s); };
+  var css = function (n) { return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); };
+
+  /* ---------------- 格式化 ---------------- */
+  var fmt = function (n) { return (n == null ? 0 : n).toLocaleString("en-US"); };
+  var compact = function (n) {
+    n = n || 0;
+    if (n >= 1e6) return (n / 1e6).toFixed(n >= 1e7 ? 0 : 1).replace(/\.0$/, "") + "M";
+    if (n >= 1e4) return (n / 1e3).toFixed(0) + "k";
+    if (n >= 1e3) return (n / 1e3).toFixed(1).replace(/\.0$/, "") + "k";
+    return String(n);
+  };
+  var pct = function (cur, prev) {
+    if (!prev) return null;
+    var d = (cur - prev) / prev * 100;
+    return (d >= 0 ? "+" : "") + d.toFixed(1) + "%";
+  };
+  var day = function (s) { return new Date(s + "T00:00:00Z"); };
+  var iso = function (d) { return d.toISOString().slice(0, 10); };
+  var addDays = function (d, n) { return new Date(d.getTime() + n * 86400000); };
+  var shortDate = function (s) { return String(s).slice(5); };
+  var stamp = function (s) {
+    if (!s) return "—";
+    var d = new Date(s);
+    var p = function (n) { return String(n).padStart(2, "0"); };
+    return d.getUTCFullYear() + "-" + p(d.getUTCMonth() + 1) + "-" + p(d.getUTCDate()) + " " +
+      p(d.getUTCHours()) + ":" + p(d.getUTCMinutes()) + " UTC";
+  };
+  var dt = function (s) { return s ? String(s).slice(0, 10) : "—"; };
+
+  /* ---------------- 序列工具 ---------------- */
+  function sumRange(series, from, to) {
+    var t = 0;
+    for (var i = 0; i < series.length; i++) {
+      var d = series[i][0];
+      if ((!from || d >= from) && (!to || d <= to)) t += series[i][1];
+    }
+    return t;
+  }
+  function cumulative(series) {
+    var acc = 0, out = [];
+    for (var i = 0; i < series.length; i++) { acc += series[i][1]; out.push({ label: series[i][0], value: acc }); }
+    return out;
+  }
+  function toPoints(series) {
+    var out = [];
+    for (var i = 0; i < series.length; i++) out.push({ label: series[i][0], value: series[i][1] });
+    return out;
+  }
+  function lastDate(series) { return series.length ? series[series.length - 1][0] : null; }
+  function niceMax(v) {
+    if (!v || v <= 0) return 1;
+    var e = Math.pow(10, Math.floor(Math.log10(v))), m = v / e;
+    var s = m <= 1 ? 1 : m <= 2 ? 2 : m <= 2.5 ? 2.5 : m <= 5 ? 5 : 10;
+    return s * e;
+  }
+  function tickIdx(n, count) {
+    if (n <= count) { var a = []; for (var i = 0; i < n; i++) a.push(i); return a; }
+    var out = [], seen = {};
+    for (var k = 0; k < count; k++) {
+      var i2 = Math.round(k * (n - 1) / (count - 1));
+      if (!seen[i2]) { seen[i2] = 1; out.push(i2); }
+    }
+    return out;
+  }
+
+  /* ---------------- 图表：折线 ---------------- */
+  function renderLine(host, cfg) {
+    var pts = cfg.points, color = cfg.color, area = !!cfg.area;
+    var yFmt = cfg.yFormat || fmt, tipFmt = cfg.tipFormat || (function (l, v) { return l + " · " + fmt(v); });
+    var H = cfg.height || 300, W = 1000, pad = { t: 18, r: 18, b: 34, l: 62 };
+    var pw = W - pad.l - pad.r, ph = H - pad.t - pad.b, n = pts.length;
+    if (!n) { host.innerHTML = '<p class="fine">没有数据。</p>'; return; }
+    var maxV = niceMax(Math.max.apply(null, pts.map(function (p) { return p.value; })));
+    var X = function (i) { return n <= 1 ? pad.l + pw / 2 : pad.l + i / (n - 1) * pw; };
+    var Y = function (v) { return pad.t + ph - (maxV ? v / maxV * ph : 0); };
+    var g = "", t, v, y;
+    for (t = 0; t <= 4; t++) {
+      v = maxV * t / 4; y = Y(v);
+      g += '<line class="grid" x1="' + pad.l + '" y1="' + y.toFixed(1) + '" x2="' + (W - pad.r) + '" y2="' + y.toFixed(1) + '"/>';
+      g += '<text class="ax" x="' + (pad.l - 10) + '" y="' + (y + 4).toFixed(1) + '" text-anchor="end">' + yFmt(v) + "</text>";
+    }
+    tickIdx(n, 6).forEach(function (i) {
+      g += '<text class="ax" x="' + X(i).toFixed(1) + '" y="' + (H - 11) + '" text-anchor="middle">' + shortDate(pts[i].label) + "</text>";
+    });
+    var d = pts.map(function (p, i) { return (i ? "L" : "M") + X(i).toFixed(1) + " " + Y(p.value).toFixed(1); }).join(" ");
+    var fill = "";
+    if (area) {
+      fill = '<path d="' + d + " L" + X(n - 1).toFixed(1) + " " + (pad.t + ph).toFixed(1) + " L" + X(0).toFixed(1) + " " + (pad.t + ph).toFixed(1) +
+        ' Z" fill="' + color + '" opacity=".10"/>';
+    }
+    host.innerHTML =
+      '<svg viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="' + (cfg.label || "折线图") + '">' + g + fill +
+      '<path d="' + d + '" fill="none" stroke="' + color + '" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>' +
+      '<g class="hover" opacity="0"><line class="cross" y1="' + pad.t + '" y2="' + (pad.t + ph) + '" stroke="' + color + '" stroke-width="1" stroke-dasharray="3 3"/>' +
+      '<circle r="4.5" fill="#fff" stroke="' + color + '" stroke-width="2.5"/></g>' +
+      '<rect class="ov" x="' + pad.l + '" y="' + pad.t + '" width="' + pw + '" height="' + ph + '" fill="transparent"/>' +
+      "</svg><div class=\"tip\" hidden></div>";
+
+    var svg = $("svg", host), ov = $(".ov", host), hov = $(".hover", host),
+      cross = $(".cross", host), dot = $(".hover circle", host), tip = $(".tip", host);
+    function move(e) {
+      var r = svg.getBoundingClientRect();
+      var sx = (e.clientX - r.left) / r.width * W;
+      var i = Math.max(0, Math.min(n - 1, Math.round((sx - pad.l) / pw * (n - 1))));
+      var x = X(i), yy = Y(pts[i].value);
+      cross.setAttribute("x1", x); cross.setAttribute("x2", x);
+      dot.setAttribute("cx", x); dot.setAttribute("cy", yy);
+      hov.setAttribute("opacity", "1");
+      tip.hidden = false;
+      tip.textContent = tipFmt(pts[i].label, pts[i].value);
+      tip.style.left = (x / W * 100) + "%";
+      tip.style.top = (yy / H * 100) + "%";
+    }
+    ov.addEventListener("mousemove", move);
+    ov.addEventListener("mouseleave", function () { hov.setAttribute("opacity", "0"); tip.hidden = true; });
+    ov.addEventListener("touchmove", function (e) { if (e.touches && e.touches[0]) move(e.touches[0]); }, { passive: true });
+  }
+
+  /* ---------------- 图表：柱状 ---------------- */
+  function renderBars(host, cfg) {
+    var pts = cfg.points, H = cfg.height || 260, W = 1000, pad = { t: 18, r: 18, b: 34, l: 62 };
+    var pw = W - pad.l - pad.r, ph = H - pad.t - pad.b, n = pts.length;
+    if (!n) { host.innerHTML = '<p class="fine">没有数据。</p>'; return; }
+    var maxV = niceMax(Math.max.apply(null, pts.map(function (p) { return p.value; })));
+    var slot = pw / n, bw = Math.max(2, Math.min(38, slot * 0.62));
+    var Y = function (v) { return pad.t + ph - (maxV ? v / maxV * ph : 0); };
+    var g = "", t, v, y;
+    for (t = 0; t <= 4; t++) {
+      v = maxV * t / 4; y = Y(v);
+      g += '<line class="grid" x1="' + pad.l + '" y1="' + y.toFixed(1) + '" x2="' + (W - pad.r) + '" y2="' + y.toFixed(1) + '"/>';
+      g += '<text class="ax" x="' + (pad.l - 10) + '" y="' + (y + 4).toFixed(1) + '" text-anchor="end">' + (cfg.yFormat || fmt)(v) + "</text>";
+    }
+    var bars = "";
+    pts.forEach(function (p, i) {
+      var x = pad.l + i * slot + (slot - bw) / 2, yy = Y(p.value), h = Math.max(p.value > 0 ? 1.5 : 0, pad.t + ph - yy);
+      bars += '<rect class="bar" data-i="' + i + '" x="' + x.toFixed(1) + '" y="' + yy.toFixed(1) + '" width="' + bw.toFixed(1) +
+        '" height="' + h.toFixed(1) + '" rx="2" fill="' + (cfg.color || css("--npm")) + '"/>';
+    });
+    tickIdx(n, 6).forEach(function (i) {
+      g += '<text class="ax" x="' + (pad.l + i * slot + slot / 2).toFixed(1) + '" y="' + (H - 11) + '" text-anchor="middle">' + shortDate(pts[i].label) + "</text>";
+    });
+    host.innerHTML = '<svg viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="' + (cfg.label || "柱状图") + '">' + g + bars +
+      '<rect class="ov" x="' + pad.l + '" y="' + pad.t + '" width="' + pw + '" height="' + ph + '" fill="transparent"/></svg><div class="tip" hidden></div>';
+
+    var svg = $("svg", host), ov = $(".ov", host), tip = $(".tip", host);
+    ov.addEventListener("mousemove", function (e) {
+      var r = svg.getBoundingClientRect();
+      var sx = (e.clientX - r.left) / r.width * W;
+      var i = Math.max(0, Math.min(n - 1, Math.floor((sx - pad.l) / slot)));
+      var p = pts[i];
+      tip.hidden = false;
+      tip.textContent = (cfg.tipFormat || (function (l, vv) { return l + " · " + fmt(vv); }))(p.label, p.value);
+      tip.style.left = ((pad.l + i * slot + slot / 2) / W * 100) + "%";
+      tip.style.top = (Y(p.value) / H * 100) + "%";
+    });
+    ov.addEventListener("mouseleave", function () { tip.hidden = true; });
+  }
+
+  /* ---------------- 图表：双色分组柱 ---------------- */
+  function renderGroups(host, cfg) {
+    var items = cfg.items, H = cfg.height || 280, W = 1000, pad = { t: 18, r: 18, b: 34, l: 62 };
+    var pw = W - pad.l - pad.r, ph = H - pad.t - pad.b, n = items.length;
+    if (!n) { host.innerHTML = '<p class="fine">没有数据。</p>'; return; }
+    var mx = 0;
+    items.forEach(function (it) { mx = Math.max(mx, it.a, it.b); });
+    var maxV = niceMax(mx);
+    var slot = pw / n, bw = Math.max(1.5, Math.min(15, slot * 0.32));
+    var Y = function (v) { return pad.t + ph - (maxV ? v / maxV * ph : 0); };
+    var g = "", t, v, y;
+    for (t = 0; t <= 4; t++) {
+      v = maxV * t / 4; y = Y(v);
+      g += '<line class="grid" x1="' + pad.l + '" y1="' + y.toFixed(1) + '" x2="' + (W - pad.r) + '" y2="' + y.toFixed(1) + '"/>';
+      g += '<text class="ax" x="' + (pad.l - 10) + '" y="' + (y + 4).toFixed(1) + '" text-anchor="end">' + compact(v) + "</text>";
+    }
+    var bars = "";
+    items.forEach(function (it, i) {
+      var x = pad.l + i * slot + slot / 2;
+      bars += '<rect x="' + (x - bw - 1).toFixed(1) + '" y="' + Y(it.a).toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + Math.max(1, pad.t + ph - Y(it.a)).toFixed(1) + '" rx="2" fill="' + css("--star") + '"/>';
+      bars += '<rect x="' + (x + 1).toFixed(1) + '" y="' + Y(it.b).toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + Math.max(1, pad.t + ph - Y(it.b)).toFixed(1) + '" rx="2" fill="' + css("--traffic") + '"/>';
+    });
+    tickIdx(n, 7).forEach(function (i) {
+      g += '<text class="ax" x="' + (pad.l + i * slot + slot / 2).toFixed(1) + '" y="' + (H - 11) + '" text-anchor="middle">' + shortDate(items[i].label) + "</text>";
+    });
+    host.innerHTML = '<svg viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="' + (cfg.label || "分组柱状图") + '">' + g + bars +
+      '<rect class="ov" x="' + pad.l + '" y="' + pad.t + '" width="' + pw + '" height="' + ph + '" fill="transparent"/></svg><div class="tip" hidden></div>';
+
+    var svg = $("svg", host), ov = $(".ov", host), tip = $(".tip", host);
+    ov.addEventListener("mousemove", function (e) {
+      var r = svg.getBoundingClientRect();
+      var sx = (e.clientX - r.left) / r.width * W;
+      var i = Math.max(0, Math.min(n - 1, Math.floor((sx - pad.l) / slot)));
+      var it = items[i];
+      tip.hidden = false;
+      tip.textContent = it.label + " · Clone " + fmt(it.a) + " · View " + fmt(it.b);
+      tip.style.left = ((pad.l + i * slot + slot / 2) / W * 100) + "%";
+      tip.style.top = (Math.min(Y(it.a), Y(it.b)) / H * 100) + "%";
+    });
+    ov.addEventListener("mouseleave", function () { tip.hidden = true; });
+  }
+
+  /* ---------------- 渲染各区块 ---------------- */
+  var S = { data: null, tab: "stars_cum" };
+
+  function renderNav(d) {
+    $("#navName").textContent = d.repo.name;
+    $("#navRepo").href = d.repo.html_url;
+    $("#navStars").textContent = compact(d.repo.stars);
+    $("#navStars").title = fmt(d.repo.stars) + " stars";
+  }
+
+  function renderHero(d) {
+    $("#heroName").textContent = d.repo.name;
+    $("#heroSub").textContent = d.repo.description;
+    $("#heroUpdated").textContent = stamp(d.generated_at);
+    $("#cardStamp").textContent = d.generated_at ? dt(d.generated_at) : "—";
+    $("#heroDesc").innerHTML = "仓库 <b>" + d.repo.full_name + "</b> 的公开数据汇总：Star 与 Fork 的逐日增长、" +
+      "npm 下载量、近 14 天的 Clone 与 View 流量，以及贡献者和版本发布。所有数字均来自公开接口，页面本身不写死任何值。";
+    $("#heroRepo").href = d.repo.html_url;
+    $("#installCmd").textContent = "npm i " + d.npm.package;
+
+    var facts = [
+      d.repo.license ? d.repo.license + " 许可" : null,
+      d.repo.language,
+      "创建于 " + dt(d.repo.created_at),
+      "默认分支 " + d.repo.default_branch,
+      d.repo.topics && d.repo.topics.length ? d.repo.topics.length + " 个 topics" : null,
+      d.repo.archived ? "已归档" : "活跃维护中"
+    ].filter(Boolean);
+    $("#heroFacts").innerHTML = facts.map(function (f) { return "<li>" + f + "</li>"; }).join("");
+
+    var rows = [
+      ["仓库", d.repo.full_name, "mono"],
+      ["许可证", d.repo.license || "—"],
+      ["创建时间", dt(d.repo.created_at)],
+      ["最近提交", dt(d.repo.pushed_at)],
+      ["默认分支", d.repo.default_branch, "mono"],
+      ["Watchers", fmt(d.repo.watchers)],
+      ["Open Issues", fmt(d.repo.open_issues) + (d.repo.open_issues_excluding_prs != null ? "（不含 PR " + fmt(d.repo.open_issues_excluding_prs) + "）" : "")],
+      ["仓库体积", compact(d.repo.size_kb) + " KB"],
+      ["贡献者", fmt((d.contributors || []).length) + " 人"],
+      ["Release", fmt((d.releases || []).length) + " 个"],
+      ["npm 最新版", d.npm.latest_version, "mono"],
+      ["npm 版本数", fmt(d.npm.version_count)]
+    ];
+    $("#heroKv").innerHTML = rows.map(function (r) {
+      return "<div><dt>" + r[0] + '</dt><dd class="' + (r[2] || "") + '">' + r[1] + "</dd></div>";
+    }).join("");
+
+    var btn = $("#copyInstall");
+    btn.addEventListener("click", function () {
+      var text = "npm i " + d.npm.package;
+      var done = function () {
+        btn.classList.add("copied"); $("#copyHint").textContent = "已复制";
+        setTimeout(function () { btn.classList.remove("copied"); $("#copyHint").textContent = "复制"; }, 1600);
+      };
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, done);
+      else done();
+    });
+  }
+
+  function renderStats(d) {
+    var stars = d.series.stars_daily, forks = d.series.forks_daily, npmS = d.series.npm_daily;
+    var t = lastDate(stars);
+    var todayStars = sumRange(stars, t, t);
+    var weekStars = sumRange(stars, iso(addDays(day(t), -6)), t);
+    var prevWeekStars = sumRange(stars, iso(addDays(day(t), -13)), iso(addDays(day(t), -7)));
+    var npmTotal = sumRange(npmS, null, null);
+    var npmLast = null;
+    for (var i = npmS.length - 1; i >= 0; i--) { if (npmS[i][1] > 0) { npmLast = npmS[i]; break; } }
+    var contribs = (d.contributors || []).length;
+    var contribTop = 0;
+    (d.contributors || []).forEach(function (c) { contribTop += c.contributions || 0; });
+    var cards = [
+      { lab: "Stars", color: "--star", val: fmt(d.repo.stars), sub: "今日 +" + fmt(todayStars) + " · 本周 +" + fmt(weekStars) },
+      { lab: "Forks", color: "--npm", val: fmt(d.repo.forks), sub: d.repo.forks_with_timestamp != null && d.repo.forks_with_timestamp !== d.repo.forks ? "带时间戳记录 " + fmt(d.repo.forks_with_timestamp) + " 条" : "Fork 接口与计数一致" },
+      { lab: "贡献者", color: "--traffic", val: fmt(contribs), sub: "合计 " + fmt(contribTop) + " 次提交" },
+      { lab: "npm 累计下载", color: "--npm", val: compact(npmTotal), sub: npmLast ? "最后有数据 " + npmLast[0] : "—" },
+      { lab: "Release", color: "--star", val: fmt((d.releases || []).length), sub: "npm 上 " + fmt(d.npm.version_count) + " 个版本" },
+      { lab: "Open Issues", color: "--warn", val: fmt(d.repo.open_issues), sub: "不含 PR " + fmt(d.repo.open_issues_excluding_prs) }
+    ];
+    var ratio = pct(weekStars, prevWeekStars);
+    if (ratio) cards[0].sub += " · 环比 " + ratio;
+    $("#statGrid").innerHTML = cards.map(function (c) {
+      return '<div class="stat"><div class="lab"><i style="background:var(' + c.color + ')"></i>' + c.lab + "</div>" +
+        '<div class="val">' + c.val + '</div><div class="sub">' + c.sub + "</div></div>";
+    }).join("");
+  }
+
+  function renderGrowth() {
+    var d = S.data, isStar = S.tab.indexOf("stars") === 0, isCum = S.tab.indexOf("_cum") > 0;
+    var src = isStar ? d.series.stars_daily : d.series.forks_daily;
+    var pts = isCum ? cumulative(src) : toPoints(src);
+    var color = css(isStar ? "--star" : "--npm");
+    var t = lastDate(src);
+    var dayV = sumRange(src, t, t);
+    var cumTotal = 0;
+    for (var i = 0; i < src.length; i++) cumTotal += src[i][1];
+
+    $("#growthTitle").textContent = (isStar ? "Star" : "Fork") + (isCum ? " 累计曲线" : " 每日新增");
+    $("#growthDesc").textContent = (isStar ? "Star" : "Fork") + " 从 " + src[0][0] + " 起按 UTC 日归组，" +
+      (isCum ? "累计到 " + t + " 共 " + fmt(cumTotal) + "。" : "最后一根柱子是尚未走完的 " + t + "（+" + fmt(dayV) + "）。");
+    renderLine($("#growthChart"), {
+      points: pts, color: color, area: isCum, height: 320,
+      label: (isStar ? "Star" : "Fork") + (isCum ? "累计" : "每日新增"),
+      yFormat: function (v) { return compact(Math.round(v)); },
+      tipFormat: function (l, v) { return l + " · " + (isCum ? "累计 " : "新增 ") + fmt(v); }
+    });
+
+    var wins = [
+      { k: "今日", v: dayV, note: t + "（未走完）" },
+      { k: "本周", v: sumRange(src, iso(addDays(day(t), -6)), t), prev: sumRange(src, iso(addDays(day(t), -13)), iso(addDays(day(t), -7))), note: "近 7 天" },
+      { k: "本月", v: sumRange(src, t.slice(0, 8) + "01", t), prev: sumRange(src, prevMonthStart(t), prevMonthEnd(t)), note: t.slice(0, 7) },
+      { k: "累计", v: cumTotal, note: src[0][0] + " 起" }
+    ];
+    $("#winGrid").innerHTML = wins.map(function (w) {
+      var r = w.prev != null ? pct(w.v, w.prev) : null;
+      var dpart = r ? ' · 环比 <b class="' + (r.charAt(0) === "-" ? "down" : "") + '">' + r + "</b>" : "";
+      return '<div class="win"><div class="k">' + w.k + "</div><div class=\"v\">" + fmt(w.v) + '</div><div class="d">' + w.note + dpart + "</div></div>";
+    }).join("");
+  }
+  function prevMonthStart(t) {
+    var y = +t.slice(0, 4), m = +t.slice(5, 7);
+    m -= 1; if (m === 0) { m = 12; y -= 1; }
+    return y + "-" + String(m).padStart(2, "0") + "-01";
+  }
+  function prevMonthEnd(t) {
+    var y = +t.slice(0, 4), m = +t.slice(5, 7);
+    return iso(addDays(new Date(Date.UTC(y, m - 1, 1)), -1));
+  }
+
+  function renderNpm(d) {
+    var s = d.series.npm_daily, t = lastDate(s);
+    var lastWith = null;
+    for (var i = s.length - 1; i >= 0; i--) { if (s[i][1] > 0) { lastWith = s[i]; break; } }
+    var total = sumRange(s, null, null);
+    var zeros = s.filter(function (x) { return x[1] === 0; }).length;
+    $("#npmDesc").innerHTML = "npm 包 <b>" + d.npm.package + "</b> 累计 " + fmt(total) + " 次下载，" +
+      (lastWith ? "最后一天有数据的是 <b>" + lastWith[0] + "</b>（" + fmt(lastWith[1]) + " 次）。" : "");
+    renderLine($("#npmChart"), {
+      points: toPoints(s), color: css("--npm"), area: true, height: 340, label: "npm 逐日下载量",
+      yFormat: function (v) { return compact(Math.round(v)); },
+      tipFormat: function (l, v) { return l + " · " + fmt(v) + " 次"; }
+    });
+
+    var lastDay = lastWith ? lastWith[0] : t;
+    var wins = [
+      { k: "最后一日", v: lastWith ? lastWith[1] : 0, note: lastDay },
+      { k: "近 7 天", v: sumRange(s, iso(addDays(day(t), -6)), t), note: "按 UTC 日" },
+      { k: "本月", v: sumRange(s, t.slice(0, 8) + "01", t), note: t.slice(0, 7) },
+      { k: "累计", v: total, note: "自首发" }
+    ];
+    $("#npmWins").innerHTML = wins.map(function (w) {
+      return '<div class="win"><div class="k">' + w.k + '</div><div class="v">' + compact(w.v) +
+        '</div><div class="d">' + w.note + "</div></div>";
+    }).join("");
+    $("#npmNote").innerHTML = "逐日序列从首发日 <code>" + d.npm.first_publish + "</code> 开始，请求区间到 <code>" + t +
+      "</code>。序列里有 <b>" + zeros + "</b> 天接口原样返回 0，页面不补数也不估算：未发布日与 npm 侧数据缺口都照原样显示。" +
+      "下载量包含 CI、镜像源与爬虫抓取，不能读成真实用户数。";
+
+    var sr = d.npm.self_reported || {};
+    var labels = [["last_day", "自报 last-day"], ["last_week", "自报 last-week"], ["last_month", "自报 last-month"], ["last_year", "自报 last-year"]];
+    $("#npmKv").innerHTML = labels.map(function (l) {
+      var o = sr[l[0]];
+      if (!o) return "";
+      return "<div><dt>" + l[1] + "</dt><dd>" + fmt(o.value) + '</dd></div><div><dt class="muted">窗口</dt><dd class="mono">' +
+        o.from + " → " + o.to + "</dd></div>";
+    }).join("");
+    $("#npmSide").innerHTML = "自报区间与逐日序列在各自窗口上逐项核对；<code>last-year</code> 的窗口不含最后一天，因此会小于逐日合计。";
+  }
+
+  function renderTraffic(d) {
+    var tr = d.traffic, c = tr.clones, v = tr.views, w = tr.window;
+    var cSum = sumRange(c, null, null), vSum = sumRange(v, null, null);
+    $("#trafficDesc").innerHTML = "近 " + w.days + " 天（" + w.from + " → " + w.to + "）Clone <b>" + fmt(cSum) +
+      "</b> 次、View <b>" + fmt(vSum) + "</b> 次。";
+    $("#trafficNote").textContent = tr.note;
+    var items = c.map(function (x, i) { return { label: x[0], a: x[1], b: v[i] ? v[i][1] : 0 }; });
+    renderGroups($("#trafficChart"), { items: items, height: 300, label: "Clone 与 View 每日对比" });
+  }
+
+  function renderCommits(d) {
+    var w = d.commits.weekly, total = sumRange(w, null, null), last = w[w.length - 1];
+    $("#commitDesc").innerHTML = "近 " + w.length + " 周合计 <b>" + fmt(total) + "</b> 次提交，最近一周 <b>" + fmt(last[1]) + "</b> 次。";
+    renderBars($("#commitChart"), {
+      points: toPoints(w), color: css("--npm"), height: 260, label: "每周提交量",
+      yFormat: function (v) { return compact(Math.round(v)); },
+      tipFormat: function (l, v) { return "周起 " + l + " · " + fmt(v) + " 次提交"; }
+    });
+  }
+
+  function renderPeople(d) {
+    var list = (d.contributors || []).slice().sort(function (a, b) { return (b.contributions || 0) - (a.contributions || 0); });
+    var total = 0;
+    list.forEach(function (c) { total += c.contributions || 0; });
+    $("#peopleTitle").textContent = fmt(list.length) + " 位贡献者";
+    $("#peopleDesc").innerHTML = "合计 " + fmt(total) + " 次提交，按提交数排序。增删行数取自 stats/contributors，只统计默认分支。头像来自 GitHub，未提供时用首字母占位。";
+    var palette = ["--star", "--npm", "--traffic", "--warn"];
+    $(".people").innerHTML = list.map(function (c, i) {
+      var initials = String(c.login || "?").replace(/[^a-zA-Z0-9]/g, "").slice(0, 2).toUpperCase() || "?";
+      var ava = c.avatar_url
+        ? '<span class="ava"><img src="' + c.avatar_url + '" alt="" loading="lazy" referrerpolicy="no-referrer"></span>'
+        : '<span class="ava" style="background:var(' + palette[i % palette.length] + ')">' + initials + "</span>";
+      var diff = "";
+      if (c.additions != null || c.deletions != null) {
+        var adds = c.additions || 0, dels = c.deletions || 0;
+        diff = (adds || dels)
+          ? '<span class="adds"><i class="plus">+' + compact(adds) + '</i><i class="minus">−' + compact(dels) + "</i></span>"
+          : '<span class="adds">无代码行变更</span>';
+      }
+      return '<a class="person' + (i === 0 ? " lead" : "") + '" href="' + (c.html_url || d.repo.html_url) + '" target="_blank" rel="noopener">' +
+        ava + '<span class="who"><b>' + c.login + "</b><span>" + fmt(c.contributions) + " commits</span>" + diff + "</span></a>";
+    }).join("");
+  }
+
+  var REL_PAGE = 12;
+  var relExpanded = false;
+
+  function renderReleases(d) {
+    var list = (d.releases || []).slice();
+    var withAssets = list.filter(function (r) { return (r.assets || 0) > 0; }).length;
+    var dl = 0;
+    list.forEach(function (r) { dl += r.downloads || 0; });
+    $("#relDesc").innerHTML = "共 " + fmt(list.length) + " 个 Release，其中 <b>" + fmt(withAssets) +
+      "</b> 个带资产文件，资产下载量合计 <b>" + fmt(dl) + "</b> 次。";
+
+    var shown = relExpanded ? list : list.slice(0, REL_PAGE);
+    $("#relList").innerHTML = shown.map(function (r) {
+      var meta = r.assets > 0 ? r.assets + " 个资产 · <b>" + fmt(r.downloads) + "</b> 次下载" : "无资产文件";
+      return '<div class="rel"><span class="tag">' + r.tag + (r.prerelease ? " · pre" : "") + "</span>" +
+        '<span class="meta">' + dt(r.published_at) + "<br>" + meta + "</span></div>";
+    }).join("");
+
+    var btn = $("#relMore");
+    if (!btn) return;
+    if (list.length > REL_PAGE) {
+      btn.hidden = false;
+      btn.textContent = relExpanded
+        ? "收起，只看最近 " + REL_PAGE + " 个"
+        : "显示全部 " + fmt(list.length) + " 个";
+    } else {
+      btn.hidden = true;
+    }
+  }
+
+  function renderIssues(d) {
+    var im = d.issues.monthly, pm = d.pulls.monthly;
+    var io = 0, ic = 0, po = 0, pmer = 0;
+    im.forEach(function (m) { io += m.opened; ic += m.closed; });
+    pm.forEach(function (m) { po += m.opened; pmer += m.merged; });
+    $("#issueDesc").innerHTML = "累计新建 Issue <b>" + fmt(io) + "</b> 个、关闭 <b>" + fmt(ic) + "</b> 个；PR 新建 <b>" +
+      fmt(po) + "</b> 个、已合并 <b>" + fmt(pmer) + "</b> 个。按 UTC 月归组。";
+    var months = im.map(function (m, i) {
+      var p = pm[i] || { opened: 0, closed: 0, merged: 0 };
+      var scale = Math.max(m.opened, m.closed, p.opened, p.merged, 1);
+      var row = function (name, val, color) {
+        return '<div class="bar-row"><span class="n">' + name + '</span><span class="track"><i style="width:' +
+          (val / scale * 100).toFixed(1) + "%;background:" + color + '"></i></span><span class="v">' + fmt(val) + "</span></div>";
+      };
+      return '<div class="month"><div class="mh">' + m.month + "<span>净增 " + (m.net >= 0 ? "+" : "") + fmt(m.net) + "</span></div>" +
+        row("Issue 新", m.opened, "var(--star)") + row("Issue 关", m.closed, "var(--npm)") +
+        row("PR 新", p.opened, "var(--traffic)") + row("PR 合并", p.merged, "var(--warn)") + "</div>";
+    }).join("");
+    $("#months").innerHTML = months;
+  }
+
+  function renderSources(d) {
+    $("#srcBody").innerHTML = (d.sources || []).map(function (s) {
+      return '<tr><td class="m">' + s.metric + '</td><td class="cmd">' + s.command + "</td><td>" + s.note + "</td></tr>";
+    }).join("");
+  }
+
+  function renderFoot(d) {
+    $("#footName").textContent = d.repo.full_name;
+    $("#footLicense").textContent = d.repo.license || "未标注许可";
+    $("#footStamp").textContent = "数据截止 " + stamp(d.generated_at) + (d.generated_by ? " · 生成器 " + d.generated_by : "");
+    $("#footRepo").href = d.repo.html_url;
+    $("#footNpm").href = d.npm.registry_url || ("https://www.npmjs.com/package/" + d.npm.package);
+  }
+
+  function renderTabs() {
+    var tabs = [["stars_cum", "Star 累计"], ["stars_daily", "Star 每日"], ["forks_cum", "Fork 累计"], ["forks_daily", "Fork 每日"]];
+    $("#growthTabs").innerHTML = tabs.map(function (t) {
+      return '<button type="button" role="tab" data-tab="' + t[0] + '" aria-selected="' + (S.tab === t[0]) + '">' + t[1] + "</button>";
+    }).join("");
+    Array.prototype.forEach.call($("#growthTabs").querySelectorAll("button"), function (b) {
+      b.addEventListener("click", function () {
+        S.tab = b.getAttribute("data-tab");
+        Array.prototype.forEach.call($("#growthTabs").querySelectorAll("button"), function (o) {
+          o.setAttribute("aria-selected", String(o === b));
+        });
+        renderGrowth();
+      });
+    });
+  }
+
+  function fail(err) {
+    $("#boot").classList.add("done");
+    var f = $("#fail");
+    f.style.display = "block";
+    f.innerHTML = "<h2>数据没能加载</h2>" +
+      "<p>页面数据来自 GitHub 与 npm 的公开接口，通常刷新一下就能恢复。</p>" +
+      "<p>如果一直失败，可能是接口暂时不可用，稍后再试。</p>" +
+      '<p class="muted" style="font-size:12.5px">错误信息：' + (err && err.message ? err.message : err) + "</p>";
+  }
+
+  var relMoreBtn = $("#relMore");
+  if (relMoreBtn) {
+    relMoreBtn.addEventListener("click", function () {
+      relExpanded = !relExpanded;
+      if (S.data) renderReleases(S.data);
+    });
+  }
+
+  var d = window.__DSH_PET_DATA__;
+  if (!d) {
+    fail(new Error("数据加载失败"));
+  } else {
+    S.data = d;
+    renderNav(d); renderHero(d); renderStats(d); renderTabs(); renderGrowth();
+    renderNpm(d); renderTraffic(d); renderCommits(d); renderPeople(d);
+    renderReleases(d); renderIssues(d); renderSources(d); renderFoot(d);
+    $("#boot").classList.add("done");
+    setTimeout(function () { var b = $("#boot"); if (b) b.style.display = "none"; }, 300);
+  }
+})();
+</script>
+</body>
+</html>

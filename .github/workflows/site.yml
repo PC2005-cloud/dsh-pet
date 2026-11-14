@@ -1,0 +1,65 @@
+name: Update Metrics Site
+
+on:
+  schedule:
+    # 每天四次：北京时间 08:00 / 12:00 / 18:00 / 22:00。
+    # GitHub 的 cron 走 UTC，0/4/10/14 分别对应上面四个北京时间。
+    - cron: "0 0,4,10,14 * * *"
+  # 支持在 Actions 页面手动触发
+  workflow_dispatch:
+  push:
+    # 改动本文件或站点源码时立刻部署一次，便于验证
+    paths:
+      - ".github/workflows/site.yml"
+      - "site/**"
+
+permissions:
+  # 目标仓库就是本仓库，安装令牌够用；traffic 接口需要 push 权限，所以给 write。
+  # 若没有该权限，脚本会降级跳过 traffic，不会让 job 失败。
+  contents: write
+  pages: write
+  id-token: write
+
+# 同一时间只跑一个部署，避免两次并发抢 Pages
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出仓库
+        uses: actions/checkout@v4
+
+      - name: 抓取指标
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p _site
+          python3 site/fetch_metrics.py --out _site/data.js
+
+      - name: 组装站点
+        run: |
+          cp site/index.html _site/index.html
+          cp site/logo.png _site/logo.png
+          # CNAME 必须在发布产物根目录，否则每次部署会把自定义域名重置掉
+          cp site/CNAME _site/CNAME
+          echo "--- _site ---"
+          ls -la _site
+
+      - name: 上传 Pages 产物
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: 发布到 GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

@@ -13,6 +13,7 @@
   <img alt="platform" src="https://img.shields.io/badge/platform-DeepSeek%20Harness%20Web-8A2BE2">
   <img alt="assets" src="https://img.shields.io/badge/assets-dynamic%20animations-ff69b4">
   <a href="https://atomgit.com/PC2005-cloud/dsh-pet"><img alt="AtomGit" src="https://img.shields.io/badge/AtomGit-%E9%95%9C%E5%83%8F%E5%90%8C%E6%AD%A5-4B8BBE"></a>
+  <a href="https://pet.lxpavilion.top"><img alt="数据看板" src="https://img.shields.io/badge/%E6%95%B0%E6%8D%AE%E7%9C%8B%E6%9D%BF-pet.lxpavilion.top-4C8DF6"></a>
 </p>
 
 一只住在 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 里的桌面宠物：待机呼吸、随机动作（打瞌睡、玩魔方、吃火锅……）、左右转向、屏幕漫游、点击 Q 弹、拖拽甩抛反弹、右键菜单点播——一百余个透明动画随时无缝衔接；还能跟随 DSH 会话事件切换工作状态动画、按档位播放余额动画 + 头顶气泡、碎碎念与对话聊天、窗口失焦时弹系统通知。可多开同屏，能脱离浏览器住上**桌面**（透明置顶小窗），也能自己添加**全新宠物种类**（pet pack）。
