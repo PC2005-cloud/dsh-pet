@@ -65,6 +65,8 @@ export interface HostSetup {
   readonly standaloneAiPolicy: () => StandaloneWhisperPolicy | undefined;
   /** 独立模式的余额凭证；DSH 宿主里是 undefined → 余额走 currentSelection 与 credential store。 */
   readonly standaloneAiBalance: () => StandaloneBalanceAuth | undefined;
+  /** 独立模式单独保存的 DeepSeek 语音密钥；DSH 模式下为 undefined。 */
+  readonly standaloneDeepseekKey: () => string | undefined;
   /** 轮询快照 */
   readonly state: PollStateStore;
   /** 第三方菜单注册表 */
@@ -139,6 +141,13 @@ export function createHostSetup(ctx: HostSetupContext): HostSetup {
   const standaloneAiBalance = (): StandaloneBalanceAuth | undefined => {
     const service = optionalService('standaloneAi') as { balanceAuth?: () => StandaloneBalanceAuth } | undefined;
     return service?.balanceAuth?.();
+  };
+
+  /** 独立模式单独保存的 DeepSeek 语音密钥：对话与语音可以用不同服务商。 */
+  const standaloneDeepseekKey = (): string | undefined => {
+    const service = optionalService('standaloneAi') as { deepseekKey?: () => string } | undefined;
+    const key = service?.deepseekKey?.();
+    return key ? key : undefined;
   };
 
   // 用户主配置（可编辑层）与文件宠物目录；配置读取/合并统一走 readAllConfig（./config）。
@@ -245,6 +254,7 @@ export function createHostSetup(ctx: HostSetupContext): HostSetup {
     optionalService,
     standaloneAiPolicy,
     standaloneAiBalance,
+    standaloneDeepseekKey,
     state,
     menuRegistry,
     playback,

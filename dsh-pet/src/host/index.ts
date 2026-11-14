@@ -21,6 +21,7 @@ import { createPetLookup } from './plugin/pet-lookup.ts';
 import { createDownloadReport } from './plugin/download-report.ts';
 import { createWorkStatusBridge } from './plugin/work-status-bridge.ts';
 import { registerTodoReminders } from './plugin/todo-reminders.ts';
+import { DEEPSEEK_OFFICIAL_PROVIDER_ID } from './balance/providers/deepseek-official.ts';
 import { ensureDeepseekAsrProvider } from './voice/builtin-deepseek-asr.ts';
 import { ensureDeepseekTtsProvider } from './voice/builtin-deepseek-tts.ts';
 import { ensureDshSpeechProvider } from './voice/builtin-dsh.ts';
@@ -106,8 +107,12 @@ export function apply(ctx: any): void {
   ensureEdgeProvider();
   ensureDshSpeechProvider({ speechToText: () => setup.optionalService('speechToText') });
   // DeepSeek 官方语音：鉴权复用 DSH 的 DEEPSEEK_API_KEY，与余额那条路一致；
-  // 每次调用现取，用户在 DSH 里换了 key 不必重启插件
+  // 独立模式依次借「语音专用 key」和「余额选 DeepSeek 时的那把」，最后才回落 DSH 凭据
   const resolveDeepseekKey = async (): Promise<string | undefined> => {
+    const dedicated = setup.standaloneDeepseekKey();
+    if (dedicated) return dedicated;
+    const standalone = setup.standaloneAiBalance();
+    if (standalone?.provider === DEEPSEEK_OFFICIAL_PROVIDER_ID && standalone.apiKey) return standalone.apiKey;
     const resolved = await ctx.credentials.resolve(credentialRef('DEEPSEEK_API_KEY'));
     return resolved?.value;
   };

@@ -160,6 +160,8 @@ export function createStandaloneContext(options: StandaloneContextOptions): Stan
             isReady: () => ai.isReady(),
             // 余额走独立模式自己的服务商与密钥：DSH 的 credential store 与账号服务在这里都不在场。
             balanceAuth: () => ai.balanceAuth(),
+            // 语音专用密钥单独存：对话密钥属于用户选的任意服务商，不一定能用来调 DeepSeek 语音。
+            deepseekKey: () => ai.deepseekKey(),
           },
         }
       : {}),

@@ -77,6 +77,35 @@ test('余额服务商：默认不查询，只接受三条可用路由，且随�
   }
 });
 
+test('语音密钥独立于对话密钥：单独保存、单独清空、互不影响', async () => {
+  const home = mkdtempSync(join(tmpdir(), 'pet-ai-speech-'));
+  try {
+    const store = createAiConfig(home);
+    assert.equal(store.publicSettings().hasDeepseekKey, false, '默认没有语音密钥');
+    const saved = await store.save({ ...configured, deepseekApiKey: 'speech-secret' });
+    assert.equal(saved.hasDeepseekKey, true);
+    assert.equal('deepseekApiKey' in saved, false, '密钥不回显');
+    // 清对话密钥不能连语音那把一起清掉：两者是给不同服务商用的
+    assert.equal((await store.save({ clearApiKey: true })).hasDeepseekKey, true);
+    assert.equal(store.current().deepseekApiKey, 'speech-secret');
+    assert.equal(store.current().apiKey, '');
+    // 清语音密钥同样不动对话密钥
+    await store.save({ apiKey: 'talk-secret' });
+    assert.equal((await store.save({ clearDeepseekKey: true })).hasDeepseekKey, false);
+    assert.equal(store.current().deepseekApiKey, '');
+    assert.equal(store.current().apiKey, 'talk-secret');
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test('语音密钥与对话密钥同时清空又写入时拒绝，意图不明', () => {
+  assert.throws(
+    () => validateSettings({ clearDeepseekKey: true, deepseekApiKey: 'x' }, DEFAULT_AI_SETTINGS),
+    /Invalid standalone AI settings/,
+  );
+});
+
 test('persists only in isolated home, redacts keys, supports keep and clear, reloads offline', async () => {
   const home = mkdtempSync(join(tmpdir(), 'pet-ai-'));
   try {

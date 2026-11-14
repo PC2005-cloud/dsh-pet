@@ -92,6 +92,7 @@ export function createStandaloneAi(
     saveSettings: (input) => saveSettings(runtime, store, input),
     isReady: () => runtime.ready(),
     balanceAuth: () => ({ provider: store.current().balanceProvider, apiKey: store.current().apiKey }),
+    deepseekKey: () => store.current().deepseekApiKey,
     testConnection: (input) =>
       runtime.disposed
         ? Promise.resolve({ ok: false, message: '服务已关闭' })

@@ -84,6 +84,32 @@ function wireTabs() {
   });
 }
 
+async function loadVoiceCatalog() {
+  // 音色与识别实现都是宿主目录：注册了哪些实现，页面就列哪些。
+  // 拉不到就回落构建期注入的内置清单，至少内置实现还能选。
+  try {
+    const body = await callApi('GET', '/voice/voices');
+    if (body && Array.isArray(body.providers)) {
+      state.voiceOptions = body.providers.flatMap((group) =>
+        (group.voices || []).map((voice) => ({
+          id: voice.id,
+          name: voice.name,
+          tag: voice.tag || '',
+          provider: group.name,
+        })),
+      );
+    }
+  } catch {
+    /* 回落内置清单 */
+  }
+  try {
+    const body = await callApi('GET', '/voice/hear-providers');
+    if (body && Array.isArray(body.providers)) state.speechProviders = body.providers;
+  } catch {
+    /* 回落空列表：下拉只显示当前值 */
+  }
+}
+
 async function loadPets() {
   const status = byId('pet-status');
   setStatus(status, '正在读取本机配置…');
@@ -126,7 +152,8 @@ function boot() {
     event.preventDefault();
     event.returnValue = '';
   });
-  loadPets();
+  // 目录先于配置渲染：voiceCard 要用它决定下拉里有哪些音色与识别实现
+  loadVoiceCatalog().then(loadPets);
   loadAi();
 }
 `;

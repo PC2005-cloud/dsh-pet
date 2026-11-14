@@ -11,9 +11,12 @@ import { deepseekFullBalance, deepseekPricingTier } from '../deepseek-common.ts'
 import { fetchWithRetry, obj, str } from '../internal.ts';
 import type { BalanceProvider } from '../types.ts';
 
+/** 官方 API Key 路由的 id；独立模式据此判断余额那把 key 是不是 DeepSeek 的。 */
+export const DEEPSEEK_OFFICIAL_PROVIDER_ID = 'deepseek-official';
+
 /** DeepSeek 官方 API Key 路由的内置定义。 */
 export const deepseekOfficial: BalanceProvider = {
-  id: 'deepseek-official',
+  id: DEEPSEEK_OFFICIAL_PROVIDER_ID,
   credential: { mode: 'ref', ref: 'DEEPSEEK_API_KEY' },
   async fetch({ key, provider }) {
     const res = await fetchWithRetry('https://api.deepseek.com/user/balance', key);

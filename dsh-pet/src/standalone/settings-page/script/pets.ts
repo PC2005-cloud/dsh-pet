@@ -44,6 +44,8 @@ function pickGlobals(main) {
     trayEnabled: source.trayEnabled !== false,
     voiceEnabled: source.voiceEnabled === true,
     voiceName: typeof source.voiceName === 'string' && source.voiceName ? source.voiceName : DEFAULT_VOICE_ID,
+    // 识别实现：独立模式只有内置几家，缺值时留空——空值不提交，服务端保留原值
+    speechProvider: typeof source.speechProvider === 'string' ? source.speechProvider : '',
     voiceVolume: typeof source.voiceVolume === 'number' ? source.voiceVolume : 1,
     voiceWhisperEnabled: source.voiceWhisperEnabled !== false,
     voiceTodoEnabled: source.voiceTodoEnabled !== false,
@@ -135,6 +137,8 @@ function petsBody() {
     voiceWhisperEnabled: state.globals.voiceWhisperEnabled,
     voiceTodoEnabled: state.globals.voiceTodoEnabled,
     voiceNotifyEnabled: state.globals.voiceNotifyEnabled,
+    // 空串 = 还没读到成品值：不提交，免得用一个本地猜的实现覆盖配置
+    ...(state.globals.speechProvider ? { speechProvider: state.globals.speechProvider } : {}),
     physics: physicsBody(),
     font: state.globals.font,
     chatMemoryRounds: state.globals.chatMemoryRounds,

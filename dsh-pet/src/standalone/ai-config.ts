@@ -35,10 +35,14 @@ export interface StandaloneAiPublicSettings {
   timeoutMs: number;
   /** 是否已保存密钥，不回传密钥本身。 */
   hasKey: boolean;
+  /** 是否已保存 DeepSeek 语音密钥，不回传密钥本身。 */
+  hasDeepseekKey: boolean;
 }
 /** 内部成品配置：在公开视图上补回明文密钥，以及只为文件兼容保留的启用位。 */
-export type StandaloneAiSettings = Omit<StandaloneAiPublicSettings, 'hasKey'> & {
+export type StandaloneAiSettings = Omit<StandaloneAiPublicSettings, 'hasKey' | 'hasDeepseekKey'> & {
   apiKey: string;
+  /** 仅 DeepSeek 语音（TTS / ASR）用的密钥；对话与余额查询仍用 apiKey。 */
+  deepseekApiKey: string;
   /** 兼容旧配置文件的遗留字段，恒为 true；旧文件里的 false 读入后即被覆盖。 */
   enabled: boolean;
 };
@@ -55,6 +59,7 @@ export const DEFAULT_AI_SETTINGS: Readonly<StandaloneAiSettings> = Object.freeze
   maxTokens: 1024,
   timeoutMs: 30_000,
   apiKey: '',
+  deepseekApiKey: '',
 });
 
 /** 只接受空值或干净的 HTTP 或 HTTPS 地址；账号、查询参数与片段都不允许。 */
@@ -102,11 +107,19 @@ const fields = {
     .string()
     .max(4096)
     .refine((s) => !containsControlChar(s) && !/\s/.test(s)),
+  /** 仅语音用；规则与 apiKey 相同，但它不参与对话与余额。 */
+  deepseekApiKey: z
+    .string()
+    .max(4096)
+    .refine((s) => !containsControlChar(s) && !/\s/.test(s)),
 };
 /** 落盘内容的完整校验。 */
 const persistedSchema = z.object(fields).strict();
-/** 设置页提交的补丁校验，允许额外带一个清空密钥标记。 */
-const patchSchema = persistedSchema.partial().extend({ clearApiKey: z.boolean().optional() }).strict();
+/** 设置页提交的补丁校验，允许额外带清空密钥的标记。 */
+const patchSchema = persistedSchema
+  .partial()
+  .extend({ clearApiKey: z.boolean().optional(), clearDeepseekKey: z.boolean().optional() })
+  .strict();
 
 /**
  * 校验未知输入并合并到上一份成品配置。
@@ -119,11 +132,14 @@ export function validateSettings(input: unknown, previous: Readonly<StandaloneAi
   try {
     const patch = patchSchema.parse(input);
     // 清空与写入同时出现时意图不明，直接拒绝。
-    if (patch.clearApiKey && patch.apiKey) throw new Error('Conflicting key changes');
-    const { clearApiKey, ...values } = patch;
+    if ((patch.clearApiKey && patch.apiKey) || (patch.clearDeepseekKey && patch.deepseekApiKey)) {
+      throw new Error('Conflicting key changes');
+    }
+    const { clearApiKey, clearDeepseekKey, ...values } = patch;
     const apiKey = clearApiKey ? '' : values.apiKey || previous.apiKey;
+    const deepseekApiKey = clearDeepseekKey ? '' : values.deepseekApiKey || previous.deepseekApiKey;
     // 配置填一半只是暂时不可用，不该连保存都拒绝；启用位不再有语义，一律写回 true。
-    return persistedSchema.parse({ ...previous, ...values, apiKey, enabled: true });
+    return persistedSchema.parse({ ...previous, ...values, apiKey, deepseekApiKey, enabled: true });
   } catch {
     throw new Error('Invalid standalone AI settings.');
   }
@@ -131,10 +147,10 @@ export function validateSettings(input: unknown, previous: Readonly<StandaloneAi
 
 /** 去掉密钥与启用位，只保留是否已保存密钥。 */
 function redact(settings: Readonly<StandaloneAiSettings>): StandaloneAiPublicSettings {
-  const { apiKey, enabled, ...publicFields } = settings;
+  const { apiKey, deepseekApiKey, enabled, ...publicFields } = settings;
   // 启用位只为旧文件保留，不进对外视图；解构出来显式丢弃，否则 lint 会当成未使用变量。
   void enabled;
-  return { ...publicFields, hasKey: apiKey.length > 0 };
+  return { ...publicFields, hasKey: apiKey.length > 0, hasDeepseekKey: deepseekApiKey.length > 0 };
 }
 
 /** 设置存储的读写门面，调用方只能拿到脱敏视图。 */

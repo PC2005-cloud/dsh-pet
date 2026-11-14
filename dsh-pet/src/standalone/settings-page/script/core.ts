@@ -54,7 +54,7 @@ const FALLBACK_PHYSICS = ${JSON.stringify(consts.physics)};
 const FALLBACK_FONT = ${JSON.stringify(consts.font)};
 const FALLBACK_WEIGHTS = ${JSON.stringify(consts.weights)};
 const FALLBACK_INTERVAL_SEC = 300;
-const state = { config: null, meta: null, globals: null, pets: {}, prompts: {}, entry: 'main', petIndex: 0, dirty: false };
+const state = { config: null, meta: null, globals: null, pets: {}, prompts: {}, entry: 'main', petIndex: 0, dirty: false, voiceOptions: null, speechProviders: null };
 
 function byId(id) {
   return document.getElementById(id);

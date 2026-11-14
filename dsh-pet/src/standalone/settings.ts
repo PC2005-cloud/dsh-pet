@@ -50,6 +50,9 @@ const settingsSchema = z
     balanceProvider: z.string().max(40).optional(),
     apiKey: z.string().max(8192).optional(),
     clearApiKey: z.boolean().optional(),
+    /** 仅语音用；与 apiKey 同一套长度上限，取值细节交给 ai-config.ts 的持久化校验。 */
+    deepseekApiKey: z.string().max(4096).optional(),
+    clearDeepseekKey: z.boolean().optional(),
     automaticWhispers: z.boolean().optional(),
     whisperIntervalSec: z.number().int().min(60).max(86400).optional(),
     maxTokens: z.number().int().min(128).max(4096).optional(),
@@ -75,6 +78,7 @@ const publicNames = [
   'maxTokens',
   'timeoutMs',
   'hasKey',
+  'hasDeepseekKey',
 ] as const;
 /** 过滤出可公开的设置字段。 */
 export function publicSettings(input: unknown): Record<string, unknown> {

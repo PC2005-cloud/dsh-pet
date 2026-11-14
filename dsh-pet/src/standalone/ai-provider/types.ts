@@ -93,6 +93,8 @@ export interface StandaloneAiService {
   queryBalance(): Promise<BalanceResult>;
   /** 余额查询要用的服务商与密钥；供宿主半侧的余额轮询取用，不进对外设置视图。 */
   balanceAuth(): { provider: string; apiKey: string };
+  /** 单独保存的 DeepSeek 语音密钥；空串表示没单独配。 */
+  deepseekKey(): string;
   /** 是否满足发起请求的全部条件。 */
   isReady(): boolean;
   /** 终止在途请求并释放服务。 */

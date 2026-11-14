@@ -26,6 +26,7 @@ function modelService() {
     },
     isReady: () => true,
     balanceAuth: () => ({ provider: 'deepseek-official', apiKey: 'fake-key' }),
+    deepseekKey: () => '',
     dispose: () => calls.push('dispose'),
   };
 }
