@@ -21,6 +21,7 @@ import { createPetLookup } from './plugin/pet-lookup.ts';
 import { createDownloadReport } from './plugin/download-report.ts';
 import { createWorkStatusBridge } from './plugin/work-status-bridge.ts';
 import { registerTodoReminders } from './plugin/todo-reminders.ts';
+import { ensureDshSpeechProvider } from './voice/builtin-dsh.ts';
 import { ensureEdgeProvider } from './voice/builtin-edge.ts';
 import { createVoiceService } from './voice/speak.ts';
 import { createHearService } from './voice/hear.ts';
@@ -97,8 +98,10 @@ export function apply(ctx: any): void {
   });
   const { startHelper, stopHelper, markDisposed } = desktopHelper;
 
-  // 内置语音实现与第三方走同一条注册路径：先登记，/voice/speak 才解析得到 edge/<音色>
+  // 内置语音实现与第三方走同一条注册路径：先登记，两个服务才解析得到各自的实现。
+  // 识别那侧惰性依赖宿主服务，没装语音输入插件也能登记——调用时才回 unsupported。
   ensureEdgeProvider();
+  ensureDshSpeechProvider({ speechToText: () => setup.optionalService('speechToText') });
 
   const deps: PetRouteDeps = {
     ...setup,

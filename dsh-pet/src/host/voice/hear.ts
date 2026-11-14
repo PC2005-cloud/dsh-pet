@@ -9,8 +9,8 @@
 import { listSpeechCatalog, resolveSpeechProvider } from './speech-registry.ts';
 import { DEFAULT_SPEECH_TIMEOUT_MS, SpeechUnavailableError, type SpeechCatalog } from './speech-types.ts';
 
-/** 单次识别的音频上限（字节）：音频经 base64 塞进 1MiB 请求体，解码后约 786KiB。 */
-export const MAX_AUDIO_BYTES = 768 * 1024;
+/** 单次识别的音频上限（字节）：base64 后仍落在 10 MiB 请求体内，约合 200 秒 16kHz 单声道。 */
+export const MAX_AUDIO_BYTES = 7 * 1024 * 1024;
 
 /** 失败原因；路由层原样映射成 result.ts 的 reason。 */
 export type HearFailure = 'bad-request' | 'unsupported' | 'generate-error';

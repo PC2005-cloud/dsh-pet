@@ -12,10 +12,10 @@ export const HEAR_SAMPLE_RATE = 16000;
 /**
  * 单次录音上限（ms）。
  *
- * 24 秒 × 32000 B/s ≈ 750KB，base64 后仍落在宿主 1MiB 的请求体里（上限 768KiB 音频）；
- * 再长就必须先想办法分片，那是另一件事。
+ * 200 秒 × 32000 B/s ≈ 6.25MB，base64 后落在宿主 10MiB 的请求体里（音频上限 7MiB）。
+ * 真正能用多久由识别实现决定，这里只是别让一次误按把内存吃光。
  */
-export const MAX_RECORD_MS = 24_000;
+export const MAX_RECORD_MS = 200_000;
 /** 判静音的峰值阈值（0..1）：低于它视为没听到声音，不白送一次识别。 */
 export const SILENCE_PEAK = 0.002;
 /**

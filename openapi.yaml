@@ -2446,7 +2446,7 @@ paths:
           其它容器（mp3/webm/ogg）或其它采样率一律拒绝。格式由实现校验，
           不合规时返回 `generate-error` 并附原始说明。
         - 语言由实现自动检测，请求不带语言参数。
-        - 解码后不得超过 768 KiB（约 24 秒）：请求体上限是 1 MiB，base64 会再放大三分之一。
+        - 解码后不得超过 7 MiB（约 200 秒 16kHz 单声道）：请求体上限是 10 MiB，base64 会再放大三分之一。
         - 整段一次性识别，不做流式。
         - 参数问题返回 `bad-request`，能力缺失（插件没装、没配 key）返回 `unsupported`，
           识别失败返回 `generate-error`；三者都是 HTTP 200 + `{ ok: false, reason, message }`。
@@ -2462,7 +2462,7 @@ paths:
               properties:
                 audio:
                   type: string
-                  description: 16kHz/单声道/PCM16 WAV 的 base64；解码后上限 768 KiB。
+                  description: 16kHz/单声道/PCM16 WAV 的 base64；解码后上限 7 MiB（约 200 秒）。
                 provider:
                   type: string
                   description: 识别实现 id，取值见 `/voice/hear-providers`；缺省用配置 `main.speechProvider`。
@@ -2470,8 +2470,8 @@ paths:
         "200":
           description: |
             成功时是 `{ ok: true, text }`；失败时是 `{ ok: false, reason, message }`，
-            reason 取值 `bad-request`（参数非法）/ `unsupported`（宿主没有可用识别器）/
-            `generate-error`（识别器失败或超时）。
+            reason 取值 `bad-request`（参数非法）/ `unsupported`（实现不可用：插件没装、没配 key
+            或模型未就绪）/ `generate-error`（识别失败或超时）。
           content:
             application/json:
               schema:
@@ -2570,10 +2570,14 @@ paths:
       responses:
         "200":
           description: |
-            成功时是 mp3 音频；失败时是 JSON `{ ok: false, reason, message }`，
+            成功时是 mp3 或 wav 音频（由实现声明）；失败时是 JSON `{ ok: false, reason, message }`，
             reason 取值 `bad-request`（参数非法）/ `voice-busy`（队列已满）/ `generate-error`（上游失败或超时）。
           content:
             audio/mpeg:
+              schema:
+                type: string
+                format: binary
+            audio/wav:
               schema:
                 type: string
                 format: binary
@@ -2772,7 +2776,7 @@ paths:
 
         - **只属于 pet pack**：`root=main`（内置条目）直接拒绝——`pet/` 目录不接内置的头像，
           内置永远用插件默认 logo。
-        - **上限 768 KiB（解码后）**：请求体上限 1 MiB，base64 膨胀 4/3，所以原图约 750 KB 封顶；
+        - **上限 768 KiB（解码后）**：按头像尺寸独立定，与请求体上限无关；
           设置页会先把图缩到长边 512 再上传。
         - **只校验「文件头像图片 + 在预算内」**：不裁剪、不重编码，尺寸与画质由调用方担保。
         - 落盘后**立即生效**：不是配置字段，不需要 `PUT /config`，也不重启桌面 Helper。

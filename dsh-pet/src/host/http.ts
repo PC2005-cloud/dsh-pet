@@ -223,7 +223,7 @@ export type RouteResult =
   | { kind: 'none' };
 
 /** 请求体上限（字节）：写端点只收 JSON 配置与指令，1MiB 足够，超限直接 413。 */
-export const MAX_BODY_BYTES = 1024 * 1024;
+export const MAX_BODY_BYTES = 10 * 1024 * 1024;
 
 /**
  * 收集请求体（文本）。

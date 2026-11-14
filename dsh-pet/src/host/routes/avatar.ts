@@ -12,7 +12,7 @@ import { failResult, invalidJson, methodNotAllowed, okResult, payloadTooLarge } 
 import type { PetRouteDeps, RouteInput } from './types.ts';
 import type { RouteResult } from '../http.ts';
 
-/** 解码后的字节上限：请求体 1 MiB 是 base64 文本的上限，解码后天然不超过 768 KiB。 */
+/** 解码后的字节上限：按头像尺寸独立定，与请求体上限无关。 */
 const MAX_AVATAR_BYTES = 768 * 1024;
 
 /**

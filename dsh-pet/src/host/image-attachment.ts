@@ -40,7 +40,7 @@ export type ParsedImage =
 /** 允许的媒体类型；顺序用于错误文案，与宿主附件服务的白名单保持一份事实。 */
 const MEDIA_TYPES: readonly PetImageMediaType[] = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
 
-/** base64 字符上限：请求体上限 1 MiB 下留出 text 与 JSON 结构的余量。 */
+/** base64 字符上限：按对话配图本身的需要定，不随请求体上限放大。 */
 const MAX_BASE64_CHARS = 900_000;
 
 /**

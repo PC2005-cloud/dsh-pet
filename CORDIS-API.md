@@ -25,10 +25,10 @@ dsh-pet 提供两个 Cordis 服务：页面内的 `petApi7340`（浏览器半侧
 | --- | --- |
 | `balance.register(def)` | 注册一个自定义余额服务商（`{ id, fetch }`）：`shape` 支持 `windows` / `money` / `points` / `custom`，最后一种是自己画节点树；宿主统一排期、统一渲染气泡 |
 | `balance.list()` | 列出内置与已注册的余额服务商 id，用来确认注册是否生效 |
-| `voice.register(def)` | 注册一个语音合成实现（`{ id, name, synthesize }`）：注册后 `POST /voice/speak` 改走它，`synthesize` 返回 mp3 字节；同一时刻只有一个生效，后注册覆盖先注册 |
-| `voice.list()` | 列出内置与已注册的语音实现 id，用来确认注册是否生效 |
-| `speech.register(def)` | 注册一个语音识别实现（`{ id, name, transcribe }`）：注册后 `POST /voice/hear` 改走它，`transcribe` 收 WAV 字节回文字；同一时刻只有一个生效，后注册覆盖先注册 |
-| `speech.list()` | 列出内置与已注册的识别实现 id，用来确认注册是否生效 |
+| `voice.register(def)` | 注册一个语音合成实现（`{ id, name, voices, format?, timeoutMs?, synthesize }`）：注册后出现在 `GET /voice/voices`；多实现并存，`id` 唯一，重复注册抛错不覆盖；`synthesize` 收 `{ text, voice, rate, signal }` 回音频字节 |
+| `voice.list()` | 列出全部实现与音色（`{ providers: [{ id, name, voices }] }`），与 `GET /voice/voices` 同源 |
+| `speech.register(def)` | 注册一个语音识别实现（`{ id, name, timeoutMs?, transcribe }`）：注册后出现在 `GET /voice/hear-providers`；多实现并存，`id` 唯一，重复注册抛错不覆盖；`transcribe` 收 `{ audio, signal }` 回文字 |
+| `speech.list()` | 列出全部识别实现（`{ providers: [{ id, name }] }`），与 `GET /voice/hear-providers` 同源 |
 | `memory.register(def)` | 注册一个第三方记忆实现（`{ id, recall?, capture? }`）：`recall` 在生成前改本轮 `system/history/userText`，`capture` 在落盘后收这一轮；同一时刻只有一个生效，后注册覆盖先注册 |
 | `memory.list()` | 列出原生与已注册的记忆实现 id，用来确认注册是否生效 |
 
