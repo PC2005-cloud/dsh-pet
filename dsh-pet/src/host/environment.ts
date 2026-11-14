@@ -20,6 +20,23 @@ export interface EnvironmentDeps {
   readonly now?: () => number;
   /** 跳过缓存读取强制重查。 */
   readonly force?: boolean;
+  /** 覆盖配置里的城市（测试用）；生产走 {@link setCityProvider}。 */
+  readonly city?: string;
+}
+
+/** 配置里的天气城市读取口；宿主启动时注入一次，两条取数路径因此自动一致。 */
+let cityProvider: () => string | undefined = () => undefined;
+
+/**
+ * 注入「配置里的天气城市」读取口。
+ *
+ * 只注入一次、所有调用方共享：/environment 路由与 system 时间行调的是同一个函数，
+ * 各自再去读配置就会出现两边说法不一致。
+ *
+ * @param provider - 返回配置的城市名；空串或 undefined 表示跟随 IP 自动定位。
+ */
+export function setCityProvider(provider: () => string | undefined): void {
+  cityProvider = provider;
 }
 
 /** 环境事实：省市两段分开给，拼成一句话是消费方的事。 */
@@ -39,16 +56,24 @@ export interface EnvironmentFacts {
  * @returns 城市与天气；都没有时是空对象（调用方据此少写几段）。
  */
 export async function currentEnvironment(deps: EnvironmentDeps = {}): Promise<EnvironmentFacts> {
+  // 配置的城市优先：用户既然写了，就不该再让 IP 归属地库替他决定
+  const city = (deps.city ?? cityProvider() ?? '').trim();
   try {
     // 首选 UAPI：一次请求同时给城市与天气，省掉「IP 定位 + 地名搜索」两次往返；
     // 它的 IP 定位实测比 ip-api 准（同一个教育网出口，它给南昌、ip-api 给上海）
-    const uapi = await fetchUapiWeather(deps);
+    const uapi = await fetchUapiWeather(city === '' ? deps : { ...deps, city });
     if (uapi !== null) {
       return {
         ...(uapi.region === '' ? {} : { region: uapi.region }),
         city: uapi.city,
         weather: uapi.weather,
       };
+    }
+    // 配了城市：UAPI 不可用就直接按城市名查，跳过 IP 定位——用户已经说了在哪，
+    // 再让 IP 库投票只会把它改回省会或邻市
+    if (city !== '') {
+      const weather = await queryWeather(city, deps);
+      return weather === null ? { city } : { city: weather.city, weather };
     }
     // 回落：自建链路（IP 定位 → 地名搜索 → 天气）
     const located = await locateCity(deps);

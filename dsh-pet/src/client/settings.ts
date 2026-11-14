@@ -17,6 +17,7 @@ import { type Feedback, makeActions } from './settings/actions.ts';
 import { petBridge } from './settings/bridge.ts';
 import { type MergedConfig, readConfigEntries, readMainConfig } from './settings/config/index.ts';
 import { type DialogState, makeDialog } from './settings/dialog.ts';
+import { makeEnvironmentCard } from './settings/environment-card.ts';
 import { makeFontCard } from './settings/font-card.ts';
 import { makeGlobalCard, type GlobalFlagKey, type GlobalFlags } from './settings/global-card.ts';
 import { makeLoadStatus } from './settings/load-status.ts';
@@ -76,6 +77,7 @@ export function makePetConfigSection(
   const KindTabs = makeKindTabs({ h, t });
   const PetCard = makePetCard(rt);
   const GlobalCard = makeGlobalCard(rt);
+  const EnvironmentCard = makeEnvironmentCard(rt);
   const VoiceCard = makeVoiceCard(rt, VoicePicker);
   const FontCard = makeFontCard(rt);
   const ModelCard = makeModelCard(rt, ModelPicker);
@@ -192,6 +194,8 @@ export function makePetConfigSection(
     const [speechProvider, setSpeechProvider] = useState('');
     // 可选识别实现：来自宿主 /voice/hear-providers，拉不到就留空（下拉只显示当前值）。
     const [speechProviders, setSpeechProviders] = useState<{ id: string; name: string }[]>([]);
+    // 天气城市覆盖（全局，只读 main）：空串是有效值 = 跟随 IP 自动定位，所以初值就是空串。
+    const [environmentCity, setEnvironmentCity] = useState('');
     // 物理参数（全局）：只改本地状态，随「保存」整包写入；初值仅占位，成品加载成功后才允许编辑与保存。
     const [physics, setPhysics] = useState<PhysicsParams>({ ...DEFAULT_PHYSICS });
     // 字体（全局默认）：与 physics 同一套语义；初值仅占位，成品加载成功后才允许编辑与保存。
@@ -233,6 +237,7 @@ export function makePetConfigSection(
         if (patch.voiceTodoEnabled !== undefined) setVoiceTodoEnabled(patch.voiceTodoEnabled);
         if (patch.voiceNotifyEnabled !== undefined) setVoiceNotifyEnabled(patch.voiceNotifyEnabled);
         if (patch.speechProvider !== undefined) setSpeechProvider(patch.speechProvider);
+        if (patch.environmentCity !== undefined) setEnvironmentCity(patch.environmentCity);
         if (patch.physics !== undefined) setPhysics(patch.physics);
         if (patch.font !== undefined) setFont(patch.font);
         if (patch.animationWeights !== undefined) setWeights(patch.animationWeights);
@@ -352,6 +357,8 @@ export function makePetConfigSection(
         voiceNotifyEnabled,
         // 空串 = 还没加载到成品值：不提交，免得用一个本地猜的识别实现覆盖配置
         ...(speechProvider === '' ? {} : { speechProvider }),
+        // 城市覆盖与上面两项不同：空串是有效值（= 恢复自动定位），必须照常提交
+        environmentCity,
         physics,
         whisperModel,
         chatModel,
@@ -465,6 +472,7 @@ export function makePetConfigSection(
         h(PhysicsCard, { busy, physics, onChange: patchPhysics }),
         h(MotionCard, { busy, weights, onChange: setWeights }),
         h(MobileCard, { busy, physics, onChange: patchPhysics }),
+        h(EnvironmentCard, { busy, city: environmentCity, onChange: setEnvironmentCity }),
         h(Actions, {
           busy,
           msg,

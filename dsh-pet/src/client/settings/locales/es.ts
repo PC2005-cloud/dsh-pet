@@ -185,6 +185,14 @@ export const es: Record<Key, string> = {
   voiceVolumeLabel: 'Volumen',
   voiceVolumeHint:
     'Volumen de reproducción como decimal 0–1: 1 es el volumen máximo (100 %) y 0 silencia. Solo cambia la intensidad y no vuelve a sintetizar el audio, así que ajustarlo no tiene coste extra. Los cuatro tipos de locución comparten este mismo volumen.',
+  environmentTitle: 'Entorno y ubicación',
+  environmentHint: 'Qué ciudad se usa para la meteorología. Los cambios se guardan con «Guardar».',
+  environmentCityLabel: 'Ciudad',
+  environmentCityHint: 'Escribe un nombre de ciudad: forma corta u oficial completa.',
+  environmentCityPlaceholder: 'Vacío = automático',
+  environmentDetect: 'Detectar',
+  environmentDetected: 'Rellenado: {city}',
+  environmentDetectFailed: 'No se pudo detectar: escribe la ciudad a mano',
   physicsTitle: 'Física (sensación al arrastrar y lanzar)',
   physicsHint:
     'Valor predeterminado global, compartido por todas las mascotas (un pet pack puede sobrescribirlo en el archivo de su propio tipo); se escribe en la configuración del usuario al "Guardar" (nunca al instante). En el navegador se aplica al instante; en el escritorio se aplica cuando Guardar recarga las ventanas de mascotas.',

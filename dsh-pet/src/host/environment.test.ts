@@ -4,8 +4,8 @@
  * fetch 用手写替身，不联网；三条链路的缓存都是模块级的，每个用例先清。
  */
 import assert from 'node:assert/strict';
-import { describe, test } from 'node:test';
-import { currentEnvironment } from './environment.ts';
+import { afterEach, describe, test } from 'node:test';
+import { currentEnvironment, setCityProvider } from './environment.ts';
 import { resetCityCache } from './ip-city.ts';
 import { resetUapiCache } from './uapi.ts';
 import { resetWeatherCache } from './weather.ts';
@@ -169,5 +169,65 @@ describe('currentEnvironment —— 强制刷新', () => {
     assert.equal(cached.city, '南昌市', '10 分钟内应命中缓存');
     assert.equal(forced.city, '九江市', 'force 必须绕过缓存拿到新结果');
     assert.equal(fake.calls.length, 2, '缓存命中那次不该发请求');
+  });
+});
+
+describe('currentEnvironment —— 配置的天气城市', () => {
+  // 城市读取口是模块级的：每个用例自己设，用例后恢复默认，免得串到别的用例
+  afterEach(() => setCityProvider(() => undefined));
+
+  test('配了城市：请求带 city，且不再走 IP 定位', async () => {
+    resetAll();
+    setCityProvider(() => '扬州');
+    const fake = fakeFetch([() => json({ ...UAPI_OK, province: '江苏省', city: '扬州市' })]);
+
+    const facts = await currentEnvironment({ fetchImpl: fake.impl, sleep: NO_SLEEP });
+
+    assert.equal(facts.city, '扬州市');
+    assert.equal(facts.region, '江苏省');
+    assert.ok(decodeURIComponent(fake.calls[0] ?? '').includes('city=扬州'), 'UAPI 请求必须带配置的城市');
+    assert.equal(fake.calls.length, 1, 'UAPI 命中时不该再打 ip-api');
+  });
+
+  test('配了城市但 UAPI 失败：直接按城市名查，跳过 IP 定位', async () => {
+    resetAll();
+    setCityProvider(() => '扬州');
+    const fake = fakeFetch([
+      UAPI_DOWN,
+      () => json({ results: [] }),
+      () => json({ results: [{ name: '扬州市', latitude: 32.39722, longitude: 119.43583 }] }),
+      () => json(CURRENT_OK),
+    ]);
+
+    const facts = await currentEnvironment({ fetchImpl: fake.impl, sleep: NO_SLEEP });
+
+    assert.equal(facts.city, '扬州市');
+    assert.equal(facts.weather?.temperatureC, 13.1);
+    assert.equal(
+      fake.calls.some((call) => call.includes('ip-api')),
+      false,
+      '配了城市就不该再问 IP 归属地库',
+    );
+  });
+
+  test('配了城市但两条链路都查不到：仍返回城市，只是没有天气', async () => {
+    resetAll();
+    setCityProvider(() => '不存在的地方');
+    const fake = fakeFetch([UAPI_DOWN, () => json({ results: [] })]);
+
+    const facts = await currentEnvironment({ fetchImpl: fake.impl, sleep: NO_SLEEP });
+
+    assert.deepEqual(facts, { city: '不存在的地方' });
+  });
+
+  test('deps.city 优先于注入的读取口', async () => {
+    resetAll();
+    setCityProvider(() => '扬州');
+    const fake = fakeFetch([() => json({ ...UAPI_OK, city: '九江市', province: '江西省' })]);
+
+    const facts = await currentEnvironment({ fetchImpl: fake.impl, sleep: NO_SLEEP, city: '九江' });
+
+    assert.equal(facts.city, '九江市');
+    assert.ok(decodeURIComponent(fake.calls[0] ?? '').includes('city=九江'));
   });
 });

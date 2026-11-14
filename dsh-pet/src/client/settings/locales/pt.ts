@@ -181,6 +181,14 @@ export const pt: Record<Key, string> = {
   voiceVolumeLabel: 'Volume',
   voiceVolumeHint:
     'Volume de reprodução em decimal 0–1: 1 é o volume máximo (100%) e 0 silencia. Altera apenas a intensidade e não sintetiza o áudio de novo, então ajustá-lo não custa nada extra. Os quatro tipos de fala compartilham este mesmo volume.',
+  environmentTitle: 'Ambiente e localização',
+  environmentHint: 'Qual cidade é usada para a previsão do tempo. As alterações são gravadas com «Salvar».',
+  environmentCityLabel: 'Cidade',
+  environmentCityHint: 'Informe um nome de cidade — forma curta ou oficial completa.',
+  environmentCityPlaceholder: 'Vazio = automático',
+  environmentDetect: 'Detectar',
+  environmentDetected: 'Preenchido: {city}',
+  environmentDetectFailed: 'Falha na detecção — informe a cidade manualmente',
   physicsTitle: 'Física (sensação de arrastar e arremessar)',
   physicsHint:
     'Padrão global, compartilhado por todos os pets (um pet pack pode sobrescrever no arquivo do próprio tipo); gravado na configuração do usuário ao "Salvar" (nunca na hora). No navegador vale na hora; no desktop vale quando o "Salvar" recarrega as janelas do pet.',

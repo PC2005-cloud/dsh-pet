@@ -183,6 +183,14 @@ export const fr: Record<Key, string> = {
   voiceVolumeLabel: 'Volume',
   voiceVolumeHint:
     'Volume de lecture en décimal 0–1 : 1 correspond au volume maximal (100 %), 0 coupe le son. Seule l’intensité change et l’audio n’est pas resynthétisé, donc le régler ne coûte rien de plus. Les quatre types de parole partagent ce même volume.',
+  environmentTitle: 'Environnement et localisation',
+  environmentHint: 'Quelle ville sert à la météo. Les modifications sont écrites avec « Enregistrer ».',
+  environmentCityLabel: 'Ville',
+  environmentCityHint: 'Saisissez un nom de ville — forme courte ou officielle complète.',
+  environmentCityPlaceholder: 'Vide = automatique',
+  environmentDetect: 'Détecter',
+  environmentDetected: 'Rempli : {city}',
+  environmentDetectFailed: 'Échec de la détection — saisissez la ville manuellement',
   physicsTitle: 'Physique (ressenti du glisser-lancer)',
   physicsHint:
     "Valeurs par défaut globales, partagées par tous les compagnons (un pet pack peut les remplacer dans son propre fichier de type) ; écrites dans la configuration utilisateur lors de l'enregistrement (jamais immédiatement). Appliquées immédiatement dans le navigateur ; sur le bureau, après que l'enregistrement a rechargé les fenêtres des compagnons.",

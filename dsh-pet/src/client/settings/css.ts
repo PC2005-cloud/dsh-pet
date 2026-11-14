@@ -104,6 +104,10 @@ const SETTINGS_CSS = [
   '.dsh-pet-cfg__inp:focus{border-color:var(--dsw-alias-state-business-primary)}',
   '.dsh-pet-cfg__inp:disabled{color:var(--dsw-alias-label-tertiary);cursor:default}',
 
+  // 输入框与旁边的动作按钮并排：按钮按自身内容宽度不压缩，输入框吃掉剩余宽度。
+  '.dsh-pet-cfg__row{display:flex;gap:8px;align-items:center}',
+  '.dsh-pet-cfg__row>.dsh-pet-cfg__inp{flex:1;min-width:0}',
+
   // 人设复用 __inp 的边框与字号，只补高度与纵向缩放；人设没有长度上限，右下角只显示字数、不阻断输入。
   '.dsh-pet-cfg__persona{display:flex;flex-direction:column;gap:2px;min-width:0}',
   '.dsh-pet-cfg__area{min-height:66px;resize:vertical;line-height:18px}',

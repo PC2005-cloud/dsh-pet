@@ -444,6 +444,50 @@ describe('saveUserConfig —— 系统托盘开关（trayEnabled）', () => {
   });
 });
 
+describe('saveUserConfig —— 天气城市覆盖（environmentCity）', () => {
+  test('非法值整包拒绝：非字符串与超长都不收', () => {
+    assert.equal(saveUserConfig({ pets: PETS, environmentCity: 42 }, undefined), null);
+    assert.equal(saveUserConfig({ pets: PETS, environmentCity: '城'.repeat(33) }, undefined), null);
+  });
+
+  test('空串是有效值：清空 = 恢复自动定位，必须落盘', () => {
+    const out = saveUserConfig(
+      { pets: PETS, environmentCity: '' },
+      {
+        environmentCity: '南京市',
+      },
+    ) as Record<string, unknown>;
+    assert.equal(out.environmentCity, '');
+  });
+
+  test('请求体带了 → 去首尾空白后写入', () => {
+    const out = saveUserConfig({ pets: PETS, environmentCity: '  扬州市  ' }, undefined) as Record<string, unknown>;
+    assert.equal(out.environmentCity, '扬州市');
+  });
+
+  test('请求体没带 → 透传磁盘旧值（不得把用户填的城市抹掉）', () => {
+    const out = saveUserConfig({ pets: PETS }, { environmentCity: '扬州市' }) as Record<string, unknown>;
+    assert.equal(out.environmentCity, '扬州市');
+  });
+});
+
+describe('readAllConfig —— 天气城市覆盖（只读 main）', () => {
+  test('用户层写了 → 取用户层的值', () => {
+    const merged = readAllConfig(withBase({ environmentCity: '' }, { environmentCity: '扬州市' }));
+    assert.equal(merged.main.environmentCity, '扬州市');
+  });
+
+  test('用户层没写 → 取内置默认（空串 = 跟随 IP 自动定位）', () => {
+    const merged = readAllConfig(withBase({ environmentCity: '' }));
+    assert.equal(merged.main.environmentCity, '');
+  });
+
+  test('用户层写了非法值 → 告警并回退默认', () => {
+    const merged = readAllConfig(withBase({ environmentCity: '' }, { environmentCity: 42 }));
+    assert.equal(merged.main.environmentCity, '');
+  });
+});
+
 describe('JSONC 配置读取：字符串中的注释标记与转义', () => {
   const prompts = [
     '请原样解释 // 示例 这段文字',

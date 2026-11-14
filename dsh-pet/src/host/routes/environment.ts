@@ -39,7 +39,10 @@ export async function handleEnvironmentRoutes(deps: PetRouteDeps, input: RouteIn
 
   // fresh=1 才跳过缓存：菜单是“我要现在最准的”，外部脚本默认走缓存
   const fresh = url.searchParams.get('fresh') === '1';
-  const facts = await environment({ fresh });
+  // ip=1 忽略配置里的城市、按出口 IP 定位：设置页「检测」要问的是「IP 认为你在哪」，
+  // 配置优先级更高时它会变成自我回显，那个按钮就失去意义了
+  const byIp = url.searchParams.get('ip') === '1';
+  const facts = await environment({ fresh, ...(byIp ? { city: '' } : {}) });
 
   const body: Record<string, unknown> = { ok: true };
   if (facts.region !== undefined) body.region = facts.region;

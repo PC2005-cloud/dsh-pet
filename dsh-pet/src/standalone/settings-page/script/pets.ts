@@ -46,6 +46,8 @@ function pickGlobals(main) {
     voiceName: typeof source.voiceName === 'string' && source.voiceName ? source.voiceName : DEFAULT_VOICE_ID,
     // 识别实现：独立模式只有内置几家，缺值时留空——空值不提交，服务端保留原值
     speechProvider: typeof source.speechProvider === 'string' ? source.speechProvider : '',
+    // 天气城市覆盖：空串是有效值（= 跟随 IP 自动定位），与上面 speechProvider 的空值语义不同，照常提交
+    environmentCity: typeof source.environmentCity === 'string' ? source.environmentCity : '',
     voiceVolume: typeof source.voiceVolume === 'number' ? source.voiceVolume : 1,
     voiceWhisperEnabled: source.voiceWhisperEnabled !== false,
     voiceTodoEnabled: source.voiceTodoEnabled !== false,
@@ -139,6 +141,8 @@ function petsBody() {
     voiceNotifyEnabled: state.globals.voiceNotifyEnabled,
     // 空串 = 还没读到成品值：不提交，免得用一个本地猜的实现覆盖配置
     ...(state.globals.speechProvider ? { speechProvider: state.globals.speechProvider } : {}),
+    // 城市覆盖与上面不同：空串是有效值（= 恢复自动定位），必须照常提交
+    environmentCity: state.globals.environmentCity || '',
     physics: physicsBody(),
     font: state.globals.font,
     chatMemoryRounds: state.globals.chatMemoryRounds,

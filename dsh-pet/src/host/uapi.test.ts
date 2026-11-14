@@ -185,3 +185,23 @@ describe('fetchUapiWeather —— 空数值字段', () => {
     assert.equal((await fetchUapiWeather({ fetchImpl: fake.impl, sleep: NO_SLEEP }))?.weather.apparentC, 17);
   });
 });
+
+describe('fetchUapiWeather —— 配置的城市', () => {
+  test('带 city：请求 URL 拼上 city 参数（不再由上游按 IP 定位）', async () => {
+    resetUapiCache();
+    const fake = fakeFetch([() => json(UAPI_OK)]);
+
+    await fetchUapiWeather({ fetchImpl: fake.impl, sleep: NO_SLEEP, city: '扬州' });
+
+    assert.ok(decodeURIComponent(fake.calls[0] ?? '').includes('city=扬州'), '请求必须带 city：' + fake.calls[0]);
+  });
+
+  test('city 只有空白：等同于没配，URL 里不出现 city 参数', async () => {
+    resetUapiCache();
+    const fake = fakeFetch([() => json(UAPI_OK)]);
+
+    await fetchUapiWeather({ fetchImpl: fake.impl, sleep: NO_SLEEP, city: '   ' });
+
+    assert.equal(fake.calls[0]?.includes('city='), false, '空白 city 不该拼进 URL');
+  });
+});

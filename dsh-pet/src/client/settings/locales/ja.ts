@@ -179,6 +179,14 @@ export const ja: Record<Key, string> = {
   voiceVolumeLabel: '音量',
   voiceVolumeHint:
     '読み上げの音量（0〜1 の小数）。1 が最大音量（100%）、0 は消音です。変わるのは再生の大きさだけで、音声の再合成は行いません。4種類の音声はこの1つの音量を共有します。',
+  environmentTitle: '環境と位置情報',
+  environmentHint: '天気をどの都市で調べるか。変更は「保存」で書き込まれます。',
+  environmentCityLabel: '都市',
+  environmentCityHint: '都市名を入れてください。短い名前でも正式名でも構いません。',
+  environmentCityPlaceholder: '空欄 = 自動判定',
+  environmentDetect: '検出',
+  environmentDetected: '入力しました：{city}',
+  environmentDetectFailed: '検出に失敗しました。都市名を手入力してください',
   physicsTitle: '物理（ドラッグ＆投げの感触）',
   physicsHint:
     'グローバルデフォルトで、すべてのペットに共通です（pet pack は自身の種類ファイルで個別に上書きできます）。「保存」時にユーザー設定へ書き込まれます（即時書き込みはしません）。ブラウザでは保存後すぐに反映され、デスクトップでは保存でペットウィンドウが再読み込みされてから反映されます。',

@@ -170,6 +170,14 @@ export const zh = {
   voiceVolumeLabel: '音量',
   voiceVolumeHint:
     '播报音量，0–1 的小数：1 是最大音量（100%），0 是静音。只改播放响度，不会重新合成音频，调它不额外花钱。四类语音共用这一个音量。',
+  environmentTitle: '环境与定位',
+  environmentHint: '天气查哪座城市由这里决定。修改随「保存」写入用户配置。',
+  environmentCityLabel: '城市',
+  environmentCityHint: '填城市名即可，「扬州」和「扬州市」都行。',
+  environmentCityPlaceholder: '留空 = 自动定位',
+  environmentDetect: '检测',
+  environmentDetected: '已填入：{city}',
+  environmentDetectFailed: '检测失败，请手动填写城市名',
   physicsTitle: '物理（拖拽抛掷手感）',
   physicsHint:
     '全局默认，所有宠物共用（pet pack 可在自己种类文件里单独覆盖）；随「保存」写入用户配置（不做即时写入）。浏览器保存后即时生效，桌面端由保存重载宠物窗口后生效。',

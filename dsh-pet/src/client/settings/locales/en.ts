@@ -181,6 +181,14 @@ export const en: Record<Key, string> = {
   voiceVolumeLabel: 'Volume',
   voiceVolumeHint:
     'Playback volume as a 0–1 decimal: 1 is full volume (100%), 0 is muted. Changes loudness only and never re-synthesizes audio, so adjusting it costs nothing extra. All four kinds of speech share this one volume.',
+  environmentTitle: 'Location',
+  environmentHint: 'Which city the weather is looked up for. Changes are written with "Save".',
+  environmentCityLabel: 'City',
+  environmentCityHint: 'Enter a city name — the short and the full official form both work.',
+  environmentCityPlaceholder: 'Empty = automatic',
+  environmentDetect: 'Detect',
+  environmentDetected: 'Filled in: {city}',
+  environmentDetectFailed: 'Detection failed — enter the city name manually',
   physicsTitle: 'Physics (drag & throw feel)',
   physicsHint:
     'Global default, shared by every pet (a pet pack may override it in its own kind file); written to the user config on "Save" (never written immediately). Applies instantly in the browser; on the desktop it applies once Save reloads the pet windows.',

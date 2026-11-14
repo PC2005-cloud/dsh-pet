@@ -5,7 +5,7 @@
  */
 import { createHostSetup } from './plugin/setup.ts';
 import { readAllConfig } from './config.ts';
-import { currentEnvironment } from './environment.ts';
+import { currentEnvironment, setCityProvider } from './environment.ts';
 import { createHttpRoute, registerHttpRoute } from './plugin/http-route.ts';
 import { registerLifecycle } from './plugin/lifecycle.ts';
 import { registerChatCommand } from './plugin/command-chat.ts';
@@ -80,6 +80,13 @@ export function apply(ctx: any): void {
     notifyActivityTimers,
     scheduleCompletionNotify,
   } = sessionNotify;
+  // 天气城市覆盖：配置里写了就按它查，不再由 IP 归属地库决定。
+  // 只注入这一次——/environment 路由与 system 时间行调的是同一个 currentEnvironment，
+  // 各自再去读配置就会出现「气泡说扬州、碎碎念说南京」。
+  setCityProvider(() => {
+    const city = readAllConfig(configPaths).main?.environmentCity;
+    return typeof city === 'string' && city.trim() !== '' ? city.trim() : undefined;
+  });
   const chatMemory = createChatMemory({ ctx, configPaths, log, memeDirsFor, playback, state, userRoot });
   const { lastWhisperAt, publishWhisper, publishSleepTalk, chatWithPet, getActivePetId, setActivePetId } = chatMemory;
 
@@ -129,8 +136,14 @@ export function apply(ctx: any): void {
     ...sessionNotify,
     ctx,
     todos,
-    // 环境查询：/environment 与 system 时间行共用同一个取数口
-    environment: (opts?: { fresh?: boolean }) => currentEnvironment({ force: opts?.fresh === true }),
+    // 环境查询：/environment 与 system 时间行共用同一个取数口。
+    // 传了 city 就照传（空串 = 忽略配置、按 IP 定位，设置页「检测」走这条）；
+    // 没传则交回 currentEnvironment 里注入的读取口。
+    environment: (opts?: { fresh?: boolean; city?: string }) =>
+      currentEnvironment({
+        force: opts?.fresh === true,
+        ...(opts?.city === undefined ? {} : { city: opts.city }),
+      }),
     // 语音合成：缓存落 userRoot，失败只留日志，不打断宿主。
     // 请求没带音色时用配置里的那个值——代码里没有第二份默认音色。
     voice: createVoiceService({

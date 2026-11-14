@@ -10,7 +10,7 @@
 export function globalsScript(): string {
   return `
 function globalCards() {
-  return [globalFlagsCard, voiceCard, fontCard, physicsCard, motionCard, modelCard, advancedCard];
+  return [globalFlagsCard, voiceCard, fontCard, physicsCard, motionCard, modelCard, environmentCard, advancedCard];
 }
 
 function setGlobal(key, value) {
@@ -28,6 +28,50 @@ function globalFlagsCard() {
     toggleRow('g-chat-anim', '对话动作联动', '对话时让模型挑一个动作当场表演。', g.chatAnimationEnabled, (value) => setGlobal('chatAnimationEnabled', value)),
     toggleRow('g-confine', '锁定在当前屏幕', '抛掷与自主漫游只在当前所在的这块屏幕里活动。', g.confineToScreen, (value) => setGlobal('confineToScreen', value)),
     toggleRow('g-tray', '系统托盘图标', '桌面模式常驻托盘；关掉后只能从任务栏找回。', g.trayEnabled, (value) => setGlobal('trayEnabled', value)),
+  ]);
+}
+
+function environmentCard() {
+  const g = state.globals;
+  const feedback = make('p', { class: 'fieldHint', text: '', hidden: true });
+  const show = (text) => {
+    feedback.textContent = text;
+    feedback.hidden = false;
+  };
+  const input = make('input', { type: 'text', id: 'g-env-city', value: g.environmentCity || '' });
+  input.placeholder = '留空 = 自动定位';
+  input.addEventListener('input', () => {
+    setGlobal('environmentCity', input.value);
+    markDirty(true);
+    feedback.hidden = true;
+  });
+  // 检测走宿主已有的环境查询（不带 pet = 纯查询，不点亮气泡），把 IP 定位结果回填。
+  // 必带 fresh=1：不带就会读到 10 分钟内的缓存定位，用户点了检测却拿到旧城市。
+  // 必带 ip=1：不带就会把配置里已填的城市原样回显，检测按钮等于没作用。
+  // 回填后不自动保存——用户可能还要改，统一走页面底部的保存。
+  const detect = button('检测', () => {
+    detect.textContent = '检测中…';
+    detect.disabled = true;
+    callApi('POST', '/environment?fresh=1&ip=1')
+      .then((facts) => {
+        if (!facts || typeof facts.city !== 'string' || !facts.city) {
+          show('宿主没有返回城市（IP 定位失败），请手动填写。');
+          return;
+        }
+        input.value = facts.city;
+        setGlobal('environmentCity', facts.city);
+        markDirty(true);
+        show('已填入：' + facts.city + '（点保存生效）');
+      })
+      .catch((error) => show('检测失败：' + (error && error.message ? error.message : String(error))))
+      .finally(() => {
+        detect.textContent = '检测';
+        detect.disabled = false;
+      });
+  });
+  return card('环境与定位', '天气查哪座城市。留空 = 按出口 IP 自动定位；填了城市名就按它查。', [
+    fieldRow('g-env-city', '城市', make('div', { class: 'row' }, [input, detect]), '填城市名即可，「扬州」和「扬州市」都行。'),
+    feedback,
   ]);
 }
 

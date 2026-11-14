@@ -182,6 +182,14 @@ export const de: Record<Key, string> = {
   voiceVolumeLabel: 'Lautstärke',
   voiceVolumeHint:
     'Wiedergabelautstärke als Dezimalzahl 0–1: 1 ist die maximale Lautstärke (100 %), 0 ist stumm. Ändert nur die Lautheit und synthetisiert kein Audio neu, kostet also nichts extra. Alle vier Arten von Sprachausgabe teilen sich diese eine Lautstärke.',
+  environmentTitle: 'Umgebung und Standort',
+  environmentHint: 'Für welche Stadt das Wetter abgefragt wird. Änderungen werden mit „Speichern“ geschrieben.',
+  environmentCityLabel: 'Stadt',
+  environmentCityHint: 'Stadtnamen eintragen – kurz oder amtlich vollständig.',
+  environmentCityPlaceholder: 'Leer = automatisch',
+  environmentDetect: 'Erkennen',
+  environmentDetected: 'Eingesetzt: {city}',
+  environmentDetectFailed: 'Erkennung fehlgeschlagen – Stadt bitte manuell eintragen',
   physicsTitle: 'Physik (Zieh- und Wurfgefühl)',
   physicsHint:
     'Globaler Standard für alle Pets (ein Pet-Pack kann ihn in seiner Art-Datei überschreiben); wird beim „Speichern" in die Benutzerkonfiguration geschrieben (kein sofortiges Schreiben). Im Browser sofort wirksam, im Desktop-Modus, sobald das Speichern die Pet-Fenster neu lädt.',

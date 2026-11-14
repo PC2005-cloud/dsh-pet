@@ -53,6 +53,8 @@ export interface SaveFields {
   voiceNotifyEnabled: boolean;
   /** 语音识别实现 id；缺省表示不提交这一项，服务端保留原值。 */
   speechProvider?: string;
+  /** 天气城市覆盖：空串 = 跟随 IP 自动定位，是有效值，所以必填而不是可选（清空必须能写回）。 */
+  environmentCity: string;
   physics: PhysicsParams;
   whisperModel: ModelSelection;
   chatModel: ModelSelection;
@@ -94,6 +96,7 @@ export function buildSaveBody(fields: SaveFields): Record<string, unknown> {
     voiceTodoEnabled: fields.voiceTodoEnabled,
     voiceNotifyEnabled: fields.voiceNotifyEnabled,
     speechProvider: fields.speechProvider,
+    environmentCity: fields.environmentCity,
     physics: fields.physics,
     whisperModel: fields.whisperModel,
     chatModel: fields.chatModel,

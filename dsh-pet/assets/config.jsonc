@@ -11,7 +11,8 @@
 //     chatMemoryRounds / whisperModel / chatModel / eventsRefreshSec
 //   · 条目级（每个条目一份：main 一份、每个种类各一份；种类文件顶层可覆盖）：
 //     whisperPrompt / memes / workStatusTexts / animations / animationWeights
-//   · 只读 main（写了也只认 main 条目那份）：notificationsEnabled / eventsRefreshSec.balance
+//   · 只读 main（写了也只认 main 条目那份）：notificationsEnabled / eventsRefreshSec.balance /
+//     environmentCity（天气城市覆盖）
 // 合并口径：所有顶层字段都是**整段替换**——写了就整段用自己的，缺的子键不会从本文件补回来
 //   （消费端各自兜底：余额周期读不到按 1800、碎碎念按 300）。
 {
@@ -179,6 +180,13 @@
   // 也可在用户配置（main-config.jsonc）顶层覆盖，设置页「全局开关」里的托盘开关写的就是它。
   // 改动后保存即生效（宿主会重启桌面 Helper，桌面宠物窗口会重建一次）。
   "trayEnabled": true,
+  // ===================== 环境：天气查哪个城市（只读 main 条目） =====================
+  // 留空（默认）= 按出口 IP 自动定位，IP 归属地库认为你在哪就查哪。
+  // 填了就用它：交给她名接口按城市名查天气，不再走 IP 定位——IP 库把家宽标到省会或邻市时，
+  // 手动填真实城市即可修正。填城市名，不要填省份（「江苏省」会被当成城市、落到省会南京）；
+  // 「扬州」「扬州市」两种写法都可以，上游会自己归一化。清空 = 恢复自动定位。
+  // 设置页「环境与定位」卡的输入框与「检测」按钮写的就是它（检测按钮取当前 IP 定位结果回填）。
+  "environmentCity": "",
   // ===================== 工作状态联动文案（条目级，与 animations/physics 同级；种类文件 pet/<名>-config.json 顶层可覆盖） =====================
   // 工作状态气泡文本（pets[].workStatusEnabled 开启时展示；仅在 events.workStatus 动画触发时弹）。
   // 结构 = 二维数组，外层索引即档位（与 events.workStatus 动画索引一一对应，勿在中间插入新档）：

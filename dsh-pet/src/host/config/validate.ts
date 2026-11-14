@@ -12,6 +12,9 @@ import { FONT_FAMILY_SET } from './constants.ts';
 /** 内置玩法动画的槽位数：`animations.baifan` 必须恰好这么多个（顺序是玩法契约，见 shared/types 的 Animations）。 */
 const ACTIVITY_SLOTS = 5;
 
+/** 天气城市覆盖的最大长度：再长不可能是个地名。 */
+const ENVIRONMENT_CITY_MAX_LENGTH = 32;
+
 /** animations 段完整性校验（与旧 assertAnimationsHost 同一套规则；不 throw，非法返回 false） */
 function animationsValid(a: unknown): boolean {
   if (!a || typeof a !== 'object') return false;
@@ -206,6 +209,10 @@ export function topFieldValid(key: string, value: unknown): boolean {
     case 'speechProvider':
       // 识别实现 id；只验形态，存在性由 hear 解析时判——配置校验拿不到运行时注册表
       return typeof value === 'string' && value.trim().length > 0;
+    case 'environmentCity':
+      // 天气城市覆盖：空串合法（= 跟随 IP 自动定位），所以不判非空；
+      // 只限长度——再长不可能是个地名，而地名能不能查到是上游的事，不该在这里预判
+      return typeof value === 'string' && value.trim().length <= ENVIRONMENT_CITY_MAX_LENGTH;
     case 'chatImageEnabled':
       return typeof value === 'boolean';
     case 'chatAnimationEnabled':

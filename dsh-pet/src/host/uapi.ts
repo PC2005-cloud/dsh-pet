@@ -110,6 +110,8 @@ export interface UapiDeps {
   readonly now?: () => number;
   /** 跳过缓存强制重查（右键「查询天气」走这条）。 */
   readonly force?: boolean;
+  /** 用户配置的城市；非空则按它查，不再由上游按 IP 定位。 */
+  readonly city?: string;
 }
 
 /**
@@ -136,9 +138,12 @@ export async function fetchUapiWeather(deps: UapiDeps = {}): Promise<UapiEnviron
 
 /** 真正打一次上游；任何异常都折成 null。 */
 async function requestUapi(deps: UapiDeps): Promise<UapiEnvironment | null> {
+  // 带 city 就按城市查，不带则由上游按客户端 IP 自动定位；上游认得「扬州」这种不带「市」的写法
+  const city = (deps.city ?? '').trim();
+  const url = city === '' ? UAPI_URL : UAPI_URL + '&city=' + encodeURIComponent(city);
   let body: Record<string, unknown> | undefined;
   try {
-    body = recordOf(await fetchJson(UAPI_URL, { label: 'uapis.cn', fetchImpl: deps.fetchImpl, sleep: deps.sleep }));
+    body = recordOf(await fetchJson(url, { label: 'uapis.cn', fetchImpl: deps.fetchImpl, sleep: deps.sleep }));
   } catch {
     return null;
   }

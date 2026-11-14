@@ -42,6 +42,8 @@ export interface MainConfigPatch {
   voiceNotifyEnabled?: boolean;
   /** 语音识别实现 id；缺省表示这次响应里没有可信值。 */
   speechProvider?: string;
+  /** 天气城市覆盖；空串 = 跟随 IP 自动定位（与缺省不同，空串是可信值）。 */
+  environmentCity?: string;
   /** 物理参数：成品已按「内置默认 ← 用户层」填满，缺子键再用内置默认兜底一次。 */
   physics?: PhysicsParams;
   /** 字体：同物理参数。 */
@@ -96,6 +98,7 @@ export function readMainConfig(merged: MergedConfig): MainConfigPatch | null {
   if (typeof main.voiceTodoEnabled === 'boolean') patch.voiceTodoEnabled = main.voiceTodoEnabled;
   if (typeof main.voiceNotifyEnabled === 'boolean') patch.voiceNotifyEnabled = main.voiceNotifyEnabled;
   if (typeof main.speechProvider === 'string') patch.speechProvider = main.speechProvider;
+  if (typeof main.environmentCity === 'string') patch.environmentCity = main.environmentCity;
   if (main.physics && typeof main.physics === 'object') {
     patch.physics = { ...DEFAULT_PHYSICS, ...(main.physics as PhysicsParams) };
   }

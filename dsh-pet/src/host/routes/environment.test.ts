@@ -38,7 +38,7 @@ function makeDeps(overrides: Partial<PetRouteDeps> = {}): {
   envCalls: { fresh: boolean }[];
 } {
   const writes: { name: string; data: unknown }[] = [];
-  const envCalls: { fresh: boolean }[] = [];
+  const envCalls: { fresh: boolean; city?: string }[] = [];
   const deps = {
     configPaths: { defaultFile: CONFIG_PATH, userFile: '/nonexistent/main-config.jsonc', petDir: '/nonexistent/pet' },
     log: { info: () => {}, warn: () => {}, error: () => {} },
@@ -53,8 +53,8 @@ function makeDeps(overrides: Partial<PetRouteDeps> = {}): {
         : { ok: false as const, res: failResult('unknown-pet', '没有这只桌宠') },
     surfaceBlocked: () => null,
     lockBlocked: () => null,
-    environment: async (opts?: { fresh?: boolean }) => {
-      envCalls.push({ fresh: opts?.fresh === true });
+    environment: async (opts?: { fresh?: boolean; city?: string }) => {
+      envCalls.push({ fresh: opts?.fresh === true, ...(opts?.city === undefined ? {} : { city: opts.city }) });
       return FACTS;
     },
     ...overrides,
@@ -161,5 +161,31 @@ describe('/environment —— 带 pet：写 S 供气泡使用', () => {
     } as Partial<PetRouteDeps>);
     const b = body(await handleEnvironmentRoutes(deps, post('?pet=main')));
     assert.equal(b.reason, 'locked');
+  });
+});
+
+describe('/environment —— 忽略配置城市（ip=1）', () => {
+  test('ip=1 → 传空串给取数口，改按出口 IP 定位', async () => {
+    const { deps, envCalls } = makeDeps();
+    await handleEnvironmentRoutes(deps, post('?ip=1'));
+    assert.deepEqual(envCalls, [{ fresh: false, city: '' }], '必须显式传空串，才压得过配置里的城市');
+  });
+
+  test('不带 ip → 不传 city，交给取数口读配置', async () => {
+    const { deps, envCalls } = makeDeps();
+    await handleEnvironmentRoutes(deps, post(''));
+    assert.deepEqual(envCalls, [{ fresh: false }]);
+  });
+
+  test('ip=0 → 与不带同义，仍尊重配置', async () => {
+    const { deps, envCalls } = makeDeps();
+    await handleEnvironmentRoutes(deps, post('?ip=0'));
+    assert.deepEqual(envCalls, [{ fresh: false }]);
+  });
+
+  test('ip=1 与 fresh=1 可同时生效', async () => {
+    const { deps, envCalls } = makeDeps();
+    await handleEnvironmentRoutes(deps, post('?fresh=1&ip=1'));
+    assert.deepEqual(envCalls, [{ fresh: true, city: '' }]);
   });
 });

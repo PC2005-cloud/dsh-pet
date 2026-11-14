@@ -131,7 +131,7 @@ export interface PetRouteDeps {
   /** 刷新余额（manual 表示用户主动触发；petId 表示这次只让该宠物显示，缺省不写归属）。 */
   readonly refreshBalance: (manual?: boolean, petId?: string) => Promise<void>;
   /** 查此刻的环境（城市 + 天气）；fresh 为真时跳过缓存强制重查。 */
-  readonly environment: (opts?: { fresh?: boolean }) => Promise<EnvironmentFacts>;
+  readonly environment: (opts?: { fresh?: boolean; city?: string }) => Promise<EnvironmentFacts>;
   /** 生成一条碎碎念；image 给了就用这张图（需在池内），缺省 = 按配置随机抽一张或纯文本。
    *  voiceTo 由带 `?surface=` 的路由传请求面；kind=whisper 时按 voiceWhisperEnabled 决定要不要念。 */
   readonly publishWhisper: (

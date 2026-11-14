@@ -351,6 +351,8 @@ paths:
           叶子里的 `petId` 决定哪只宠物点亮环境气泡。
         - `?fresh=1` 跳过三级缓存（城市 6 小时 / 坐标 7 天 / 天气 1 小时）强制重查，
           成功后覆盖缓存；其它情况走缓存，通常不产生网络请求。
+        - `?ip=1` 忽略配置里的天气城市（`environmentCity`），按出口 IP 定位；缺省则优先用配置里的城市。
+          设置页的「检测」固定带它——不带就会把用户已填的城市原样回显。
         - 查不到不是错误：仍返回 `ok: true`，只是省略 `region` / `city` / `weather` 里拿不到的那几个。
       parameters:
         - name: pet
@@ -365,6 +367,15 @@ paths:
           required: false
           description: |
             `1` = 跳过缓存强制重查（右键菜单「查询天气」固定带它）。缺省或其它值 = 走缓存。
+          schema:
+            type: string
+            enum: ["0", "1"]
+        - name: ip
+          in: query
+          required: false
+          description: |
+            `1` = 忽略配置里的天气城市（`environmentCity`），按出口 IP 定位（设置页「检测」固定带它）。
+            缺省或其它值 = 有配置就用配置的城市。
           schema:
             type: string
             enum: ["0", "1"]
