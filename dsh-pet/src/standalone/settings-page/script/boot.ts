@@ -11,7 +11,7 @@
 export function bootScript(): string {
   return `
 let protocolSelect = null;
-let balanceSelect = null;
+let serviceSelect = null;
 
 function mountProtocolSelect() {
   const host = byId('protocol-host');
@@ -28,30 +28,15 @@ function mountProtocolSelect() {
   host.append(protocolSelect.root);
 }
 
-function mountBalanceSelect() {
-  const host = byId('balance-provider-host');
+function mountServiceSelect() {
+  const host = byId('service-host');
   if (!host) return;
-  balanceSelect = createSelect(
-    [
-      { value: '', label: '不查询余额' },
-      { value: 'deepseek-official', label: 'DeepSeek 官方' },
-      { value: 'opencode-go', label: 'opencode Go' },
-      { value: 'commandcode', label: 'commandcode' },
-    ],
-    '',
-    (picked) => {
-      const button = byId('balance-btn');
-      if (button) button.disabled = picked === '';
-      const result = byId('balance-result');
-      if (result) {
-        result.textContent = '';
-        result.dataset.ok = '';
-        result.dataset.error = '';
-      }
-    },
-  );
-  balanceSelect.root.firstElementChild.setAttribute('aria-labelledby', 'balance-provider-label');
-  host.append(balanceSelect.root);
+  // 选项由 populateAi 读到的服务商目录重填；这里先给一项，避免首帧空白。
+  serviceSelect = createSelect([{ value: 'custom', label: '自定义' }], 'custom', (picked) => {
+    onServicePicked(picked);
+  });
+  serviceSelect.root.firstElementChild.setAttribute('aria-labelledby', 'service-label');
+  host.append(serviceSelect.root);
 }
 
 function selectTab(name) {
@@ -143,8 +128,8 @@ function boot() {
   selectTab('chat');
   // 刷新后地址栏里的令牌已被清掉，此时靠首次访问换来的 HttpOnly cookie 继续；
   // cookie 也没了的时候，各面板自己的请求会失败并显示重新打开设置的提示。
+  mountServiceSelect();
   mountProtocolSelect();
-  mountBalanceSelect();
   wireAiPanel();
   byId('pet-save').addEventListener('click', savePets);
   window.addEventListener('beforeunload', (event) => {

@@ -61,12 +61,18 @@ test('persistence failure pauses a previously ready backend and never logs key m
   const logger = { info() {}, warn() {}, debug() {}, error() {} };
   const ai = createStandaloneAi(home, logger);
   try {
-    await ai.saveSettings({ model: 'selected', baseUrl: 'https://example.test', apiKey: 'test-secret', enabled: true });
+    await ai.saveSettings({
+      service: 'custom',
+      keys: { CUSTOM_API_KEY: 'test-secret' },
+      profiles: { custom: { protocol: 'openai-compatible', baseUrl: 'https://example.test', model: 'selected' } },
+    });
     const path = join(home, 'dsh-pet', 'standalone-ai.json');
     rmSync(path);
     mkdirSync(path);
     await assert.rejects(
-      ai.saveSettings({ model: 'changed' }),
+      ai.saveSettings({
+        profiles: { custom: { protocol: 'openai-compatible', baseUrl: 'https://example.test', model: 'changed' } },
+      }),
       /^Error: Cannot securely save standalone AI settings\.$/,
     );
     assert.equal(ai.isReady(), false);

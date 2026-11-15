@@ -3,14 +3,15 @@ import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createAiConfig, validateSettings, DEFAULT_AI_SETTINGS } from './ai-config.ts';
+import { createAiConfig, validateSettings, DEFAULT_AI_SETTINGS, migrateLegacySettings } from './ai-config.ts';
 
+/** 一份「自定义服务商」的完整配置，用作各用例的基线。 */
 const configured = {
-  protocol: 'openai-compatible',
-  baseUrl: 'https://example.test/v1',
-  model: 'chosen-model',
-  apiKey: 'test-secret',
-  enabled: true,
+  service: 'custom' as const,
+  keys: { CUSTOM_API_KEY: 'test-secret' },
+  profiles: {
+    custom: { protocol: 'openai-compatible' as const, baseUrl: 'https://example.test/v1', model: 'chosen-model' },
+  },
 };
 
 test('validates safe endpoints and explicit configuration with fixed redacted errors', () => {
@@ -23,7 +24,7 @@ test('validates safe endpoints and explicit configuration with fixed redacted er
     'https://example.test\\v1',
   ]) {
     assert.throws(
-      () => validateSettings({ ...configured, baseUrl }, DEFAULT_AI_SETTINGS),
+      () => validateSettings({ profiles: { custom: { ...configured.profiles.custom, baseUrl } } }, DEFAULT_AI_SETTINGS),
       /^Error: Invalid standalone AI settings\.$/,
     );
   }
@@ -34,17 +35,24 @@ test('validates safe endpoints and explicit configuration with fixed redacted er
     'http://[::1]:8080',
     'https://example.test/v1',
   ]) {
-    assert.equal(validateSettings({ ...configured, baseUrl }, DEFAULT_AI_SETTINGS).baseUrl, baseUrl);
+    assert.equal(
+      validateSettings({ profiles: { custom: { ...configured.profiles.custom, baseUrl } } }, DEFAULT_AI_SETTINGS)
+        .baseUrl,
+      baseUrl,
+    );
   }
   // 配置填一半是允许保存的：它只是暂时不可用，不该连保存都拒绝。
-  assert.equal(validateSettings({ model: '' }, DEFAULT_AI_SETTINGS).model, '');
+  assert.equal(
+    validateSettings({ profiles: { custom: { ...configured.profiles.custom, model: '' } } }, DEFAULT_AI_SETTINGS).model,
+    '',
+  );
   for (const patch of [
     { timeoutMs: 60001 },
     { whisperIntervalSec: 59 },
     { maxTokens: 100000 },
     { hasKey: true },
-    { enabled: 'true' },
-    { apiKey: 'bad\nkey' },
+    { keys: { CUSTOM_API_KEY: 'bad\nkey' } },
+    { profiles: { nope: { protocol: 'openai-compatible', baseUrl: '', model: '' } } },
   ]) {
     assert.throws(
       () => validateSettings({ ...configured, ...patch }, DEFAULT_AI_SETTINGS),
@@ -53,28 +61,102 @@ test('validates safe endpoints and explicit configuration with fixed redacted er
   }
 });
 
-test('余额服务商：默认不查询，只接受三条可用路由，且随配置持久化', async () => {
-  assert.equal(DEFAULT_AI_SETTINGS.balanceProvider, '');
-  assert.equal(validateSettings({}, DEFAULT_AI_SETTINGS).balanceProvider, '');
-  for (const balanceProvider of ['deepseek-official', 'opencode-go', 'commandcode']) {
-    assert.equal(validateSettings({ balanceProvider }, DEFAULT_AI_SETTINGS).balanceProvider, balanceProvider);
+test('服务商：默认自定义，内置三家的协议与地址由名录回填，未知值拒绝', () => {
+  assert.equal(DEFAULT_AI_SETTINGS.service, 'custom');
+  assert.equal(DEFAULT_AI_SETTINGS.baseUrl, '', '自定义默认没有地址');
+  for (const [service, baseUrl] of [
+    ['deepseek-official', 'https://api.deepseek.com'],
+    ['opencode-go', 'https://opencode.ai/inference/go/openai/v1'],
+    ['commandcode', 'https://api.commandcode.ai/provider/v1'],
+  ] as const) {
+    const next = validateSettings({ service }, DEFAULT_AI_SETTINGS);
+    assert.equal(next.service, service);
+    assert.equal(next.baseUrl, baseUrl, `${service} 的地址应来自名录`);
+    assert.equal(next.protocol, 'openai-compatible');
   }
-  // deepseek-account 读的是 DSH 登录态，独立模式没有账号服务，因此不进可选集合。
-  for (const balanceProvider of ['deepseek-account', 'openai', 'DEEPSEEK-OFFICIAL', ' ']) {
-    assert.throws(() => validateSettings({ balanceProvider }, DEFAULT_AI_SETTINGS), /Invalid standalone AI settings/);
+  for (const service of ['deepseek-account', 'openai', 'DEEPSEEK-OFFICIAL', '']) {
+    assert.throws(() => validateSettings({ service }, DEFAULT_AI_SETTINGS), /Invalid standalone AI settings/);
   }
-  const home = mkdtempSync(join(tmpdir(), 'pet-ai-balance-'));
+});
+
+test('密钥按服务分栏：换服务不覆盖别家，切回来还是原来那把', async () => {
+  const home = mkdtempSync(join(tmpdir(), 'pet-ai-keys-'));
   try {
     const store = createAiConfig(home);
-    assert.equal(store.publicSettings().balanceProvider, '');
-    const saved = await store.save({ ...configured, balanceProvider: 'deepseek-official' });
-    assert.equal(saved.balanceProvider, 'deepseek-official');
-    assert.equal(createAiConfig(home).publicSettings().balanceProvider, 'deepseek-official');
-    // 不传该字段时保留上一份值，不会被默认值冲掉。
-    assert.equal((await store.save({ model: 'next-model' })).balanceProvider, 'deepseek-official');
+    const saved = await store.save({ keys: { CUSTOM_API_KEY: 'custom-key' }, profiles: configured.profiles });
+    assert.equal(saved.hasKey, true);
+    assert.deepEqual(saved.savedKeys, ['CUSTOM_API_KEY']);
+    assert.equal(store.current().apiKey, 'custom-key');
+
+    await store.save({ service: 'deepseek-official', keys: { DEEPSEEK_API_KEY: 'ds-key' } });
+    assert.equal(store.current().apiKey, 'ds-key', '当前服务商换成 DeepSeek');
+    assert.deepEqual(store.publicSettings().savedKeys.sort(), ['CUSTOM_API_KEY', 'DEEPSEEK_API_KEY']);
+
+    // 切回自定义：那把还在，没被 DeepSeek 的写入冲掉
+    await store.save({ service: 'custom' });
+    assert.equal(store.current().apiKey, 'custom-key');
+    assert.equal(store.current().baseUrl, 'https://example.test/v1');
   } finally {
     rmSync(home, { recursive: true, force: true });
   }
+});
+
+test('profile 按服务分栏：地址与模型各自保留，换服务不互相污染', async () => {
+  const home = mkdtempSync(join(tmpdir(), 'pet-ai-profiles-'));
+  try {
+    const store = createAiConfig(home);
+    await store.save({
+      service: 'custom',
+      profiles: { custom: { protocol: 'anthropic', baseUrl: 'https://mine.test/v1', model: 'mine' } },
+    });
+    await store.save({
+      service: 'opencode-go',
+      profiles: { 'opencode-go': { protocol: 'openai-compatible', baseUrl: 'https://opencode.test/v1', model: 'go' } },
+    });
+    assert.equal(store.current().baseUrl, 'https://opencode.test/v1');
+    assert.equal(store.current().protocol, 'openai-compatible');
+    // DeepSeek 没被碰过，仍是名录里的默认值
+    assert.equal(store.publicSettings().profiles['deepseek-official'].baseUrl, 'https://api.deepseek.com');
+    await store.save({ service: 'custom' });
+    assert.equal(store.current().baseUrl, 'https://mine.test/v1');
+    assert.equal(store.current().protocol, 'anthropic');
+    assert.equal(store.current().model, 'mine');
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test('旧配置迁移：地址命中某家就认那家，否则保留自定义且对话不变', () => {
+  const legacy = {
+    protocol: 'openai-compatible',
+    baseUrl: 'https://api.deepseek.com/v1',
+    model: 'deepseek-chat',
+    apiKey: 'legacy-secret',
+    balanceProvider: 'deepseek-official',
+    enabled: true,
+  };
+  const migrated = migrateLegacySettings(legacy) as Record<string, unknown>;
+  assert.equal(migrated.service, 'deepseek-official');
+  assert.equal('balanceProvider' in migrated, false, '旧字段必须丢掉');
+  assert.equal('apiKey' in migrated, false, '统一密钥搬进分栏');
+  assert.deepEqual(migrated.keys, {
+    DEEPSEEK_API_KEY: 'legacy-secret',
+    OPENCODE_GO_API_KEY: '',
+    COMMANDCODE_API_KEY: '',
+    CUSTOM_API_KEY: '',
+  });
+  assert.equal((migrated.profiles as Record<string, { model: string }>)['deepseek-official'].model, 'deepseek-chat');
+
+  const custom = migrateLegacySettings({ ...legacy, baseUrl: 'https://relay.test/v1' }) as Record<string, unknown>;
+  assert.equal(custom.service, 'custom', '地址不是任何一家，保持自定义');
+  assert.equal((custom.profiles as Record<string, { baseUrl: string }>).custom.baseUrl, 'https://relay.test/v1');
+
+  // 已经迁移过的文件原样返回，不会二次搬家
+  assert.deepEqual(migrateLegacySettings({ keys: {}, profiles: {}, service: 'custom' }), {
+    keys: {},
+    profiles: {},
+    service: 'custom',
+  });
 });
 
 test('语音密钥独立于对话密钥：单独保存、单独清空、互不影响', async () => {
@@ -85,12 +167,12 @@ test('语音密钥独立于对话密钥：单独保存、单独清空、互不�
     const saved = await store.save({ ...configured, deepseekApiKey: 'speech-secret' });
     assert.equal(saved.hasDeepseekKey, true);
     assert.equal('deepseekApiKey' in saved, false, '密钥不回显');
-    // 清对话密钥不能连语音那把一起清掉：两者是给不同服务商用的
-    assert.equal((await store.save({ clearApiKey: true })).hasDeepseekKey, true);
+    // 清对话密钥不能连语音那把一起清掉：两者是给不同服务用的
+    assert.equal((await store.save({ clearKey: true })).hasDeepseekKey, true);
     assert.equal(store.current().deepseekApiKey, 'speech-secret');
-    assert.equal(store.current().apiKey, '');
+    assert.equal(store.current().apiKey, '', '当前是自定义服务商，清的就是它那栏');
     // 清语音密钥同样不动对话密钥
-    await store.save({ apiKey: 'talk-secret' });
+    await store.save({ keys: { CUSTOM_API_KEY: 'talk-secret' } });
     assert.equal((await store.save({ clearDeepseekKey: true })).hasDeepseekKey, false);
     assert.equal(store.current().deepseekApiKey, '');
     assert.equal(store.current().apiKey, 'talk-secret');
@@ -99,7 +181,11 @@ test('语音密钥独立于对话密钥：单独保存、单独清空、互不�
   }
 });
 
-test('语音密钥与对话密钥同时清空又写入时拒绝，意图不明', () => {
+test('清空与写入同时出现时拒绝，意图不明', () => {
+  assert.throws(
+    () => validateSettings({ clearKey: true, keys: { CUSTOM_API_KEY: 'x' } }, DEFAULT_AI_SETTINGS),
+    /Invalid standalone AI settings/,
+  );
   assert.throws(
     () => validateSettings({ clearDeepseekKey: true, deepseekApiKey: 'x' }, DEFAULT_AI_SETTINGS),
     /Invalid standalone AI settings/,
@@ -114,16 +200,20 @@ test('persists only in isolated home, redacts keys, supports keep and clear, rel
     const saved = await store.save(configured);
     assert.equal(saved.hasKey, true);
     assert.equal('apiKey' in saved, false);
+    assert.equal('profiles' in saved, true, 'profile 不是密钥，可以回传');
     assert.equal(saved.maxTokens, 1024);
     assert.equal(saved.whisperIntervalSec, 300);
-    assert.equal((await store.save({ apiKey: '', automaticWhispers: true })).hasKey, true);
+    // 空串表示「这次没填」，保留已存的那把
+    assert.equal((await store.save({ keys: { CUSTOM_API_KEY: '' }, automaticWhispers: true })).hasKey, true);
     assert.equal(createAiConfig(home).publicSettings().model, 'chosen-model');
-    assert.match(readFileSync(join(home, 'dsh-pet', 'standalone-ai.json'), 'utf8'), /test-secret/);
+    const raw = readFileSync(join(home, 'dsh-pet', 'standalone-ai.json'), 'utf8');
+    assert.match(raw, /test-secret/);
+    assert.equal(raw.includes('"apiKey"'), false, '落盘只存分栏，不存派生字段');
     // 启用位只为旧文件保留：无论传什么，落盘一律为 true，对外视图也不再暴露。
     const forced = await store.save({ enabled: false });
     assert.equal('enabled' in forced, false);
     assert.match(readFileSync(join(home, 'dsh-pet', 'standalone-ai.json'), 'utf8'), /"enabled":true/);
-    assert.equal((await store.save({ clearApiKey: true })).hasKey, false);
+    assert.equal((await store.save({ clearKey: true })).hasKey, false);
     assert.equal(createAiConfig(home).publicSettings().hasKey, false);
     writeFileSync(join(home, 'dsh-pet', 'standalone-ai.json'), '{broken');
     assert.throws(() => createAiConfig(home), /^Error: Cannot securely load standalone AI settings\.$/);
@@ -136,7 +226,7 @@ test('旧配置文件缺后加字段：铺默认值后仍可读，不因 strict 
   const home = mkdtempSync(join(tmpdir(), 'pet-ai-legacy-'));
   try {
     mkdirSync(join(home, 'dsh-pet'), { recursive: true });
-    // 升级前的落盘形状：没有 balanceProvider。
+    // 升级前的落盘形状：没有 service / keys / profiles，也没有 balanceProvider。
     writeFileSync(
       join(home, 'dsh-pet', 'standalone-ai.json'),
       JSON.stringify({
@@ -154,7 +244,13 @@ test('旧配置文件缺后加字段：铺默认值后仍可读，不因 strict 
     const store = createAiConfig(home);
     assert.equal(store.publicSettings().model, 'legacy-model');
     assert.equal(store.publicSettings().hasKey, true);
-    assert.equal(store.publicSettings().balanceProvider, '', '缺的新字段用默认值补齐');
+    assert.equal(store.publicSettings().service, 'custom', '地址不是内置三家，保持自定义');
+    assert.equal(store.current().baseUrl, 'https://example.test/v1');
+    assert.deepEqual(store.publicSettings().profiles['deepseek-official'], {
+      protocol: 'openai-compatible',
+      baseUrl: 'https://api.deepseek.com',
+      model: '',
+    });
   } finally {
     rmSync(home, { recursive: true, force: true });
   }

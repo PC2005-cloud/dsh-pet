@@ -136,6 +136,7 @@ async function setupPage(): Promise<Page> {
       },
       focus() {},
       scrollIntoView() {},
+      querySelectorAll: () => [],
       getBoundingClientRect: () => ({ left: 0, top: 0, right: 200, bottom: 36, width: 200, height: 36 }),
       get firstElementChild() {
         return (el.children as Array<{ nodeType?: number }>).find((kid) => kid && kid.nodeType === 1) ?? null;
@@ -197,15 +198,33 @@ async function setupPage(): Promise<Page> {
         };
       }
       const clearing =
-        url === '/standalone-ai/settings' && options.body ? JSON.parse(options.body).clearApiKey === true : false;
+        url === '/standalone-ai/settings' && options.body ? JSON.parse(options.body).clearKey === true : false;
       return {
         ok: true,
         status: 200,
         json: async () => ({
+          service: 'deepseek-official',
           protocol: 'anthropic',
           baseUrl: 'https://example.test',
           model: 'x',
-          balanceProvider: 'deepseek-official',
+          profiles: {
+            custom: { protocol: 'openai-compatible', baseUrl: 'https://mine.test', model: 'my-model' },
+            'deepseek-official': { protocol: 'anthropic', baseUrl: 'https://example.test', model: 'x' },
+            'opencode-go': { protocol: 'openai-compatible', baseUrl: 'https://opencode.test/v1', model: 'go-model' },
+            commandcode: { protocol: 'openai-compatible', baseUrl: 'https://cc.test/v1', model: '' },
+          },
+          services: [
+            { id: 'custom', label: '自定义', keyName: 'CUSTOM_API_KEY', protocol: 'openai-compatible' },
+            {
+              id: 'deepseek-official',
+              label: 'DeepSeek 官方',
+              keyName: 'DEEPSEEK_API_KEY',
+              protocol: 'openai-compatible',
+            },
+            { id: 'opencode-go', label: 'opencode Go', keyName: 'OPENCODE_GO_API_KEY', protocol: 'openai-compatible' },
+            { id: 'commandcode', label: 'commandcode', keyName: 'COMMANDCODE_API_KEY', protocol: 'openai-compatible' },
+          ],
+          savedKeys: clearing ? [] : ['DEEPSEEK_API_KEY'],
           hasKey: !clearing,
           automaticWhispers: false,
           whisperIntervalSec: 300,
@@ -241,23 +260,24 @@ async function settle(): Promise<void> {
   await new Promise((resolve) => setImmediate(resolve));
 }
 
-test('settings validation accepts explicit costs and write-only blank/clear key semantics', () => {
+test('settings validation accepts per-service keys and profiles, rejects unknown fields', () => {
   const input = {
-    protocol: 'openai-compatible',
-    baseUrl: 'https://example.test/v1',
-    model: 'model',
-    apiKey: '',
+    service: 'custom',
+    keys: { CUSTOM_API_KEY: '' },
+    profiles: {
+      custom: { protocol: 'openai-compatible', baseUrl: 'https://example.test/v1', model: 'model' },
+    },
     automaticWhispers: false,
     whisperIntervalSec: 300,
     maxTokens: 512,
   };
   assert.deepEqual(validateSettings(input), input);
-  assert.deepEqual(validateSettings({ clearApiKey: true }), { clearApiKey: true });
+  assert.deepEqual(validateSettings({ clearKey: true }), { clearKey: true });
   for (const input of [
     null,
     [],
     { protocol: 'other' },
-    { clearApiKey: 'yes' },
+    { clearKey: 'yes' },
     { whisperIntervalSec: 59 },
     { whisperIntervalSec: 1.5 },
     { maxTokens: 99999 },
@@ -265,8 +285,12 @@ test('settings validation accepts explicit costs and write-only blank/clear key 
     { hasKey: true },
     { enabled: true },
     { baseUrl: 'file:///a' },
-    { baseUrl: 'https://user:secret@example.test/v1' },
-    { baseUrl: 'https://example.test/?key=secret' },
+    {
+      profiles: {
+        custom: { protocol: 'openai-compatible', baseUrl: 'https://user:secret@example.test/v1', model: '' },
+      },
+    },
+    { profiles: { custom: { protocol: 'openai-compatible', baseUrl: 'https://example.test/?key=secret', model: '' } } },
   ]) {
     assert.throws(() => validateSettings(input), Error, JSON.stringify(input));
   }
@@ -275,13 +299,23 @@ test('settings validation accepts explicit costs and write-only blank/clear key 
 test('public settings are an allowlist even if backend accidentally includes credentials', () => {
   const actual = publicSettings({
     protocol: 'anthropic',
+    service: 'deepseek-official',
+    profiles: { custom: { protocol: 'anthropic', baseUrl: '', model: '' } },
+    services: [{ id: 'custom', label: '自定义' }],
     apiKey: 'never expose',
     token: 'never expose',
     hasKey: true,
     model: 'x',
     enabled: false,
   });
-  assert.deepEqual(actual, { protocol: 'anthropic', hasKey: true, model: 'x' });
+  assert.deepEqual(actual, {
+    protocol: 'anthropic',
+    service: 'deepseek-official',
+    profiles: { custom: { protocol: 'anthropic', baseUrl: '', model: '' } },
+    services: [{ id: 'custom', label: '自定义' }],
+    hasKey: true,
+    model: 'x',
+  });
   assert.equal(JSON.stringify(actual).includes('never expose'), false);
 });
 
@@ -310,14 +344,22 @@ test('启动：地址片段被清掉，密钥框清空并显示已保存', async
   );
 });
 
-test('保存：密钥只写不回显，且不再提交启用位', async () => {
+test('保存：密钥只写不回显，按当前服务商提交 keys 与 profile', async () => {
   const page = await setupPage();
   page.element('apiKey').value = 'write-only-fake-key';
   await page.element('settings').listeners.submit({ preventDefault() {} });
+  const body = page.lastAiBody() as unknown as {
+    service: string;
+    keys: Record<string, string>;
+    profiles: Record<string, { protocol: string; baseUrl: string; model: string }>;
+  };
   assert.equal(page.element('apiKey').value, '');
-  assert.equal(page.lastAiBody().apiKey, 'write-only-fake-key');
-  assert.equal('enabled' in page.lastAiBody(), false, '页面不再提交启用位');
-  assert.equal(page.lastAiBody().balanceProvider, 'deepseek-official', '余额服务商随设置一起提交');
+  assert.equal(body.service, 'deepseek-official');
+  assert.deepEqual(body.keys, { DEEPSEEK_API_KEY: 'write-only-fake-key' });
+  assert.deepEqual(body.profiles, {
+    'deepseek-official': { protocol: 'anthropic', baseUrl: 'https://example.test', model: 'x' },
+  });
+  assert.equal('enabled' in body, false, '页面不再提交启用位');
 });
 
 test('查询余额：选了服务商才可点，结果拼成一行金额并带上访问令牌', async () => {
@@ -338,7 +380,7 @@ test('查询余额：选了服务商才可点，结果拼成一行金额并带�
   assert.equal(button.disabled, false, '查询结束后按钮恢复可点');
 });
 
-test('删除密钥：先弹确认框，取消不发请求，确认才提交 clearApiKey', async () => {
+test('删除密钥：先弹确认框，取消不发请求，确认才提交 clearKey 与当前服务商', async () => {
   const page = await setupPage();
   page.element('key-delete').listeners.click();
   await settle();
@@ -353,7 +395,8 @@ test('删除密钥：先弹确认框，取消不发请求，确认才提交 clea
   await settle();
   page.lastDialogActions()[1].listeners.click();
   await settle();
-  assert.equal(page.lastAiBody().clearApiKey, true);
+  assert.equal(page.lastAiBody().clearKey, true);
+  assert.equal(page.lastAiBody().service, 'deepseek-official', '删的必须是用户当前看到的这家');
   assert.equal(page.element('key-state').textContent, '尚未设置');
   assert.equal(page.element('key-actions').hidden, true, '没有密钥时不再显示删除入口');
 });
@@ -379,7 +422,31 @@ test('拉取模型：用表单草稿请求端点，选中后写回输入框并�
   const menus = page.body.children.filter((kid) => kid.className === 'selectMenu');
   const menu = menus[menus.length - 1];
   assert.ok(menu, '拉到模型后必须直接弹出候选菜单');
-  menu.children[0].listeners.click();
+  assert.equal(menu.children[0].className, 'selectSearchRow', '模型菜单必须先给一个搜索框');
+  menu.children[1].listeners.click();
   assert.equal(page.element('model').value, 'm-one');
   assert.equal(page.element('dirty').hidden, false);
+});
+
+test('模型搜索：输入即过滤，大小写无关，清空恢复全部', async () => {
+  const page = await setupPage();
+  page.element('baseUrl').value = 'https://draft.test/v1';
+  page.element('apiKey').value = 'draft-key';
+  page.element('model-toggle').listeners.click();
+  await settle();
+
+  const menu = page.body.children.filter((kid) => kid.className === 'selectMenu').pop() as FakeNode;
+  const search = menu.children[0].children[0];
+  const first = menu.children[1];
+  const second = menu.children[2];
+
+  search.value = 'ONE';
+  search.listeners.input();
+  assert.equal(first.hidden, false, '「ONE」应该命中 M One');
+  assert.equal(second.hidden, true, 'm-two 不该留在结果里');
+
+  search.value = '';
+  search.listeners.input();
+  assert.equal(first.hidden, false);
+  assert.equal(second.hidden, false);
 });

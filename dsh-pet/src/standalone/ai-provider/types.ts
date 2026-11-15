@@ -33,6 +33,8 @@ export interface ModelDiscoveryInput {
   protocol?: string;
   baseUrl?: string;
   apiKey?: string;
+  /** 显式清单地址：内置服务的清单与对话地址不同级时由装配根给出，优先于按 baseUrl 推导。 */
+  modelsUrl?: string;
 }
 
 /** 端点声明的一个可选模型。 */

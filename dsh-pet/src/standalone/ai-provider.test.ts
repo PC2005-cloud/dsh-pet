@@ -8,13 +8,22 @@ import { isolatedFetch } from './ai-transport.ts';
 import { DEFAULT_AI_SETTINGS } from './ai-config.ts';
 
 const silent = { info() {}, warn() {}, error() {}, debug() {} };
-const config = {
+/** 自定义服务商的基线 profile：各用例只改其中一项。 */
+const customProfile: { protocol: 'openai-compatible' | 'anthropic'; baseUrl: string; model: string } = {
   protocol: 'openai-compatible',
   baseUrl: 'https://example.test/v1',
   model: 'test-model',
-  apiKey: 'test-secret',
-  enabled: true,
 };
+const config = {
+  service: 'custom' as const,
+  keys: { CUSTOM_API_KEY: 'test-secret' },
+  profiles: { custom: customProfile },
+};
+/** 改当前服务商 profile 的补丁；profile 是整份替换，改动项必须写全其余字段。 */
+const profilePatch = (patch: Partial<typeof customProfile>) => ({
+  ...config,
+  profiles: { custom: { ...customProfile, ...patch } },
+});
 const options = {
   provider: 'standalone',
   model: 'test-model',
@@ -100,18 +109,84 @@ test('official OpenAI SDK extracts fragmented text once, maps text history and p
 async function fixture(
   run: (ai: ReturnType<typeof createStandaloneAi>, home: string) => Promise<void>,
   fetcher: typeof fetch,
-  protocol = 'openai-compatible',
+  protocol: 'openai-compatible' | 'anthropic' = 'openai-compatible',
 ) {
   const home = mkdtempSync(join(tmpdir(), 'pet-ai-'));
   const ai = createStandaloneAi(home, silent, { fetch: fetcher });
   try {
-    await ai.saveSettings({ ...config, protocol });
+    await ai.saveSettings(profilePatch({ protocol }));
     await run(ai, home);
   } finally {
     ai.dispose();
     rmSync(home, { recursive: true, force: true });
   }
 }
+test('设置视图带服务商目录；切换服务商回填该家 profile，余额跟着服务商走', async () => {
+  await fixture(
+    async (ai) => {
+      const catalog = (ai.getSettings() as unknown as { services: Array<{ id: string }> }).services;
+      assert.deepEqual(
+        catalog.map((entry) => entry.id),
+        ['custom', 'deepseek-official', 'opencode-go', 'commandcode'],
+        '前端靠这份目录渲染下拉，不能漏项',
+      );
+      assert.equal(ai.balanceAuth().provider, 'custom', '默认是自定义，余额在名录外');
+      await ai.saveSettings({ service: 'opencode-go', keys: { OPENCODE_GO_API_KEY: 'go-key' } });
+      const settings = ai.getSettings();
+      assert.equal(settings.service, 'opencode-go');
+      assert.equal(settings.baseUrl, 'https://opencode.ai/inference/go/openai/v1');
+      assert.equal(settings.protocol, 'openai-compatible');
+      assert.equal(settings.model, '', '该家还没选过模型');
+      assert.equal(ai.balanceAuth().provider, 'opencode-go');
+      assert.equal(ai.balanceAuth().apiKey, 'go-key');
+      // 切回自定义，别家那把密钥与地址都还在
+      await ai.saveSettings({ service: 'custom' });
+      assert.equal(ai.getSettings().baseUrl, 'https://example.test/v1');
+      assert.equal(ai.balanceAuth().apiKey, 'test-secret');
+    },
+    async () => new Response(''),
+  );
+});
+
+test('opencode Go 的请求带稳定的会话头，其他地址不带', async () => {
+  const seen: Array<string | null> = [];
+  await fixture(
+    async (ai) => {
+      await ai.saveSettings({
+        service: 'opencode-go',
+        keys: { OPENCODE_GO_API_KEY: 'go-key' },
+        profiles: {
+          'opencode-go': {
+            protocol: 'openai-compatible',
+            baseUrl: 'https://opencode.ai/inference/go/openai/v1',
+            model: 'glm-5.3',
+          },
+        },
+      });
+      assert.equal(await collect(ai.stream({ ...options, model: 'glm-5.3' })), 'hello');
+      assert.equal(await collect(ai.stream({ ...options, model: 'glm-5.3' })), 'hello');
+    },
+    async (_url, init) => {
+      seen.push(new Headers(init?.headers).get('x-opencode-session'));
+      return openAiResponse('hello');
+    },
+  );
+  assert.equal(seen.length, 2);
+  assert.ok(seen[0] && seen[1], '缺这个头 opencode 会直接 400');
+  assert.equal(seen[0], seen[1], '同一进程内会话 ID 必须稳定');
+
+  // 自定义端点不许多带我们的会话 ID：那是给 opencode 的路由信息。
+  await fixture(
+    async (ai) => {
+      assert.equal(await collect(ai.stream(options)), 'hello');
+    },
+    async (_url, init) => {
+      assert.equal(new Headers(init?.headers).has('x-opencode-session'), false);
+      return openAiResponse('hello');
+    },
+  );
+});
+
 const openAiResponse = (content: string) =>
   new Response(`data: ${JSON.stringify({ choices: [{ index: 0, delta: { content } }] })}\n\ndata: [DONE]\n\n`, {
     headers: { 'content-type': 'text/event-stream' },
@@ -219,7 +294,7 @@ test('abort, save changes, and dispose cancel in-flight requests; concurrency st
         await start;
         await assert.rejects(collect(ai.stream(options)), /busy/);
         if (mode === 'abort') controller.abort();
-        if (mode === 'save') await ai.saveSettings({ clearApiKey: true });
+        if (mode === 'save') await ai.saveSettings({ clearKey: true });
         if (mode === 'dispose') ai.dispose();
         await rejected;
         if (mode !== 'abort') assert.equal(ai.isReady(), false);
@@ -249,7 +324,9 @@ test('Anthropic protocol uses explicit key, adaptive Opus without sampling, igno
   for (const refused of [false, true]) {
     await fixture(
       async (ai) => {
-        await ai.saveSettings({ baseUrl: 'https://api.anthropic.com', model: 'claude-opus-5-5' });
+        await ai.saveSettings(
+          profilePatch({ protocol: 'anthropic', baseUrl: 'https://api.anthropic.com', model: 'claude-opus-5-5' }),
+        );
         const stream = ai.stream({ ...options, model: 'claude-opus-5-5' });
         if (refused) await assert.rejects(collect(stream), /could not answer/);
         else assert.equal(await collect(stream), 'hello');
@@ -294,7 +371,7 @@ test('redirects are disabled and unexpected SDK endpoints are rejected; custom A
   assert.equal(calls, 0);
   await fixture(
     async (ai) => {
-      await ai.saveSettings({ model: 'custom-claude' });
+      await ai.saveSettings(profilePatch({ protocol: 'anthropic', model: 'custom-claude' }));
       await assert.rejects(collect(ai.stream({ ...options, model: 'custom-claude' })), /returned no text/);
     },
     async (_url, init) => {
@@ -319,7 +396,7 @@ test('testConnection checks parameters and reports success or friendly error', a
         ok: false,
         message: '请先填写模型名称',
       });
-      await ai.saveSettings({ clearApiKey: true });
+      await ai.saveSettings({ clearKey: true });
       assert.deepEqual(await ai.testConnection({ baseUrl: 'https://example.test/v1', model: 'm', apiKey: '' }), {
         ok: false,
         message: '请先填写 API 密钥',

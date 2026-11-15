@@ -3,6 +3,7 @@
  *
  * 两者都挂在 body 上并用 fixed 定位，避免被面板的滚动容器裁掉；关闭路径统一走 capture 监听，
  * 打开新菜单前一定先关掉旧的。选择器不持有业务状态，值由调用方的 onChange 收走。
+ * 需要搜索的菜单（上百个模型）在顶部固定一个输入框，过滤只影响可见项，不改变候选顺序。
  * @module dsh-pet/src/standalone/settings-page/script/overlay
  */
 
@@ -53,14 +54,25 @@ function placeMenu(menu, trigger, widthOf) {
  * @param current - 当前值。
  * @param onPick - 选中回调。
  * @param widthOf - 菜单对齐宽度的参照元素；缺省与 trigger 同宽，用于触发按钮比菜单窄的组合框。
+ * @param search - 搜索框占位文案；给出时菜单顶部固定一个过滤输入框。
  */
-function openSelectMenu(trigger, options, current, onPick, widthOf) {
+function openSelectMenu(trigger, options, current, onPick, widthOf, search) {
   closeMenu();
   const menu = make('ul', { class: 'selectMenu' });
   menu.setAttribute('role', 'listbox');
   const items = [];
   // 分组标题只是分隔行：不进 items，键盘索引与高亮完全不受影响
   let prevGroup = null;
+  // 搜索框必须先插进菜单，再插候选项，保证它固定在最上面
+  let searchInput = null;
+  if (search) {
+    const row = make('li', { class: 'selectSearchRow' });
+    row.setAttribute('role', 'presentation');
+    searchInput = make('input', { type: 'search', class: 'selectSearch', placeholder: search });
+    searchInput.setAttribute('aria-label', search);
+    row.append(searchInput);
+    menu.append(row);
+  }
   for (const option of options) {
     if (option.group && option.group !== prevGroup) {
       const title = make('li', { class: 'selectGroup', text: option.group });
@@ -75,19 +87,46 @@ function openSelectMenu(trigger, options, current, onPick, widthOf) {
     menu.append(item);
     items.push({ node: item, value: option.value });
   }
+  // 过滤后一个都不剩时的说明行；没有搜索框时永远隐藏
+  const emptyRow = make('li', { class: 'selectEmpty', text: '没有匹配的模型' });
+  emptyRow.setAttribute('role', 'presentation');
+  emptyRow.hidden = true;
+  menu.append(emptyRow);
   document.body.append(menu);
   placeMenu(menu, trigger, widthOf);
   trigger.setAttribute('aria-expanded', 'true');
-  let active = Math.max(0, options.findIndex((option) => option.value === current));
-  highlight(active);
+  // 可见项：没有搜索框时就是全部；过滤后只留命中的那些
+  let visible = items.slice();
+  let active = 0;
+  const start = visible.findIndex((entry) => entry.value === current);
+  highlight(start < 0 ? 0 : start);
 
   function highlight(index) {
-    active = (index + items.length) % items.length;
-    items.forEach((entry, position) => {
+    if (visible.length === 0) {
+      active = 0;
+      return;
+    }
+    active = (index + visible.length) % visible.length;
+    visible.forEach((entry, position) => {
       const on = position === active;
       entry.node.classList.toggle('active', on);
       if (on) entry.node.scrollIntoView({ block: 'nearest' });
     });
+  }
+
+  function applyFilter() {
+    const query = searchInput.value.trim().toLowerCase();
+    visible = [];
+    for (const entry of items) {
+      // 命中判定用渲染出来的文字：id 与显示名都在里面，搜哪个都行
+      const hit = query === '' || entry.node.textContent.toLowerCase().indexOf(query) >= 0;
+      entry.node.hidden = !hit;
+      if (hit) visible.push(entry);
+    }
+    // 搜索期间分组标题只会挡路，有查询词时一并藏起来
+    for (const title of menu.querySelectorAll('.selectGroup')) title.hidden = query !== '';
+    emptyRow.hidden = visible.length > 0;
+    highlight(0);
   }
 
   function pick(value) {
@@ -96,6 +135,8 @@ function openSelectMenu(trigger, options, current, onPick, widthOf) {
   }
 
   function onKey(event) {
+    // 搜索框里的空格是输入，不能被当成「选中当前项」
+    const inSearch = searchInput !== null && event.target === searchInput;
     if (event.key === 'Escape') {
       event.preventDefault();
       event.stopPropagation();
@@ -104,9 +145,12 @@ function openSelectMenu(trigger, options, current, onPick, widthOf) {
     } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       event.preventDefault();
       highlight(active + (event.key === 'ArrowDown' ? 1 : -1));
+    } else if (event.key === ' ' && inSearch) {
+      // 交给输入框
     } else if (event.key === 'Enter' || event.key === ' ') {
+      if (visible.length === 0) return;
       event.preventDefault();
-      pick(items[active].value);
+      pick(visible[active].value);
       trigger.focus();
     } else if (event.key === 'Tab') {
       dispose();
@@ -138,6 +182,10 @@ function openSelectMenu(trigger, options, current, onPick, widthOf) {
   window.addEventListener('scroll', onReflow, true);
   window.addEventListener('resize', onReflow);
   openMenu = dispose;
+  if (searchInput) {
+    searchInput.addEventListener('input', applyFilter);
+    searchInput.focus();
+  }
 }
 
 /**
@@ -145,7 +193,7 @@ function openSelectMenu(trigger, options, current, onPick, widthOf) {
  * @param options - 候选项，每项 { value, label }。
  * @param value - 初始值。
  * @param onChange - 用户选择后回调。
- * @returns 根节点与读写当前值的方法。
+ * @returns 根节点与读写当前值、替换选项的方法。
  */
 function createSelect(options, value, onChange) {
   const root = make('div', { class: 'select' });
@@ -181,6 +229,10 @@ function createSelect(options, value, onChange) {
     getValue: () => current,
     setValue: (next) => {
       current = next;
+      paint();
+    },
+    setOptions: (next) => {
+      options = next;
       paint();
     },
     redraw: paint,

@@ -9,7 +9,7 @@ import { queryBalance as queryProviderBalance, type BalanceResult } from '../../
 
 /**
  * 按设置里选中的服务商查询余额。
- * @param provider - 设置中的 balanceProvider；空串表示未选择，直接返回 unsupported。
+ * @param provider - 当前服务商；自定义（custom）不在余额名录里，由 host 半侧落成 unsupported。
  * @param apiKey - 设置页保存的密钥；为空时由 host 半侧落成 credential-missing。
  * @returns host 半侧的归一化结果；失败绝不带伪造数字。
  */

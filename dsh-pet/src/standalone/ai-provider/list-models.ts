@@ -1,6 +1,7 @@
 /** 独立模式「拉取模型」：按协议向配置的端点要一份模型清单，只读一次响应，不缓存也不落盘。 */
 import type { StandaloneAiSettings } from '../ai-config.ts';
 import type { AiFetch } from '../ai-transport.ts';
+import { serviceHeaders } from '../ai-transport.ts';
 import type { DiscoveredModel, ModelDiscoveryInput, ModelDiscoveryResult } from './types.ts';
 
 /** 发现请求的封顶时长：比正式通道短，用户在设置页等着看结果。 */
@@ -58,11 +59,13 @@ function candidateUrls(protocol: string, base: string): string[] {
 }
 
 /** 两个协议各自的鉴权头；明文密钥只在这一层出现，错误文案不会带它。 */
-function authHeaders(protocol: string, apiKey: string): Record<string, string> {
+function authHeaders(protocol: string, apiKey: string, base: string): Record<string, string> {
+  // 名录要求会话头的服务商（opencode Go）缺它会被判 400，清单请求也要带上。
+  const session = serviceHeaders(base);
   if (protocol === 'anthropic') {
-    return { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', accept: 'application/json' };
+    return { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', accept: 'application/json', ...session };
   }
-  return { authorization: `Bearer ${apiKey}`, accept: 'application/json' };
+  return { authorization: `Bearer ${apiKey}`, accept: 'application/json', ...session };
 }
 
 /** 把数组或「键 → 条目」映射统一成数组，两者都是兼容网关的常见写法。 */
@@ -160,10 +163,13 @@ export async function discoverModels(
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), DISCOVERY_TIMEOUT_MS);
   try {
+    // 内置服务可能给出了与对话地址不同级的清单地址（opencode），先试它，再按惯例容错。
+    const explicit = input.modelsUrl === undefined ? undefined : parseEndpoint(input.modelsUrl);
+    const urls = explicit === undefined ? candidateUrls(protocol, base) : [explicit, ...candidateUrls(protocol, base)];
     let last = failure('http');
     // 只在 404 时换下一个候选：其余失败说明地址对、但凭据或服务有问题，重试别的拼法没有意义。
-    for (const url of candidateUrls(protocol, base)) {
-      const attempt = await requestList(fetcher, url, authHeaders(protocol, apiKey), controller);
+    for (const url of urls) {
+      const attempt = await requestList(fetcher, url, authHeaders(protocol, apiKey, base), controller);
       if (attempt.ok || attempt.code !== 'not-found') return attempt;
       last = attempt;
     }

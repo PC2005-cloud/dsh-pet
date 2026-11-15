@@ -402,7 +402,7 @@ describe('HTTP boundary protects every route and settings', () => {
       const saved = await fetch(base + '/standalone-ai/settings', {
         method: 'POST',
         headers,
-        body: JSON.stringify({ apiKey: '' }),
+        body: JSON.stringify({ keys: { CUSTOM_API_KEY: '' } }),
       });
       assert.equal(saved.status, 200);
       assert.deepEqual(await saved.json(), { hasKey: true });

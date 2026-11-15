@@ -8,7 +8,9 @@
  */
 import OpenAI from 'openai';
 import Anthropic from '@anthropic-ai/sdk';
+import { randomUUID } from 'node:crypto';
 import type { StandaloneAiSettings } from './ai-config.ts';
+import { BUILTIN_SERVICES, sameEndpoint } from './services.ts';
 
 /** fetch 的形状，便于测试替换。 */
 export type AiFetch = typeof globalThis.fetch;
@@ -26,6 +28,33 @@ export interface AiRequest {
 export type AiTransportEvent = { text?: string; refusal?: boolean };
 /** SDK 的静默 logger，避免把请求细节写进日志。 */
 const quiet = { debug() {}, info() {}, warn() {}, error() {} };
+
+/** 会话 ID：进程内只生成一次，保证同一家服务商的每个请求都带同一个值。 */
+let sessionId: string | undefined;
+
+/**
+ * 目标地址要求的额外请求头。
+ *
+ * 只有名录里声明了 `sessionHeader` 的服务商才会带；opencode Go 缺这个头会 400（无法路由）。
+ * @param baseUrl - 本次请求的地址。
+ * @returns 需要附加的头；不需要时为空对象。
+ */
+export function serviceHeaders(baseUrl: string): Record<string, string> {
+  // 先按整条地址匹配；用户手改过路径（比如换成 zen 地址）时，同源也算命中——
+  // 这个头是 opencode 侧的入口要求，跟具体路径无关。
+  const def = BUILTIN_SERVICES.find((entry) => {
+    if (!entry.sessionHeader) return false;
+    if (sameEndpoint(baseUrl, entry.baseUrl)) return true;
+    try {
+      return new URL(baseUrl).origin === new URL(entry.baseUrl).origin;
+    } catch {
+      return false;
+    }
+  });
+  if (!def?.sessionHeader) return {};
+  sessionId ??= randomUUID();
+  return { [def.sessionHeader]: sessionId };
+}
 
 /**
  * 重建请求目标与鉴权头的 fetch 包装。
@@ -53,7 +82,12 @@ export function isolatedFetch(settings: Readonly<StandaloneAiSettings>, fetcher:
         urlStr === base + '/v1/messages' + (beta ? '?beta=true' : ''));
     if (!validOpenAi && !validAnthropic) throw new Error('Unexpected standalone AI endpoint.');
     // 所有头都由本层重建：SDK 可能从环境继承自定义鉴权头，即使已经给出显式密钥。
-    const headers = new Headers({ 'content-type': 'application/json', accept: 'application/json' });
+    // 服务商要求的会话头也在这里补上，缺它会被直接判 400。
+    const headers = new Headers({
+      'content-type': 'application/json',
+      accept: 'application/json',
+      ...serviceHeaders(base),
+    });
     if (settings.protocol === 'anthropic') {
       headers.set('x-api-key', settings.apiKey);
       headers.set('anthropic-version', '2023-06-01');

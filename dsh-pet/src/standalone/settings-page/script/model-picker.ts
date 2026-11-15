@@ -29,6 +29,8 @@ function openModelMenu(trigger) {
       setStatus(byId('model-result'), '已填入模型名称，记得保存。', 'ok');
     },
     byId('model-combo'),
+    // 上百个模型时手翻不现实：顶部给一个过滤框，输入即筛。
+    '搜索模型 ID 或名称',
   );
 }
 

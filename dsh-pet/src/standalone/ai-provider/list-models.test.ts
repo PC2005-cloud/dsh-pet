@@ -142,3 +142,19 @@ test('草稿缺省：沿用已保存的地址与密钥', async () => {
   assert.equal(calls[0].url, 'https://api.example.test/v1/models');
   assert.equal(calls[0].headers.authorization, 'Bearer saved-key');
 });
+
+test('opencode 的清单请求带上会话头，普通端点不带', async () => {
+  const { calls, fetchImpl } = recorder(() => json({ data: [{ id: 'glm-5.3' }] }));
+  await discoverModels(fetchImpl, settings, {
+    baseUrl: 'https://opencode.ai/inference/go/openai/v1',
+    modelsUrl: 'https://opencode.ai/inference/go/v1/models',
+    apiKey: 'k',
+  });
+  // 显式清单地址优先：它比对话地址高一级，不能靠 baseUrl 推导
+  assert.equal(calls[0].url, 'https://opencode.ai/inference/go/v1/models');
+  assert.ok(calls[0].headers['x-opencode-session'], '缺这个头 opencode 会 400');
+
+  const plain = recorder(() => json({ data: [{ id: 'm' }] }));
+  await discoverModels(plain.fetchImpl, settings, {});
+  assert.equal('x-opencode-session' in plain.calls[0].headers, false, '别家不该收到我们的会话 ID');
+});
