@@ -50,7 +50,7 @@ export function makeGlobalCard(rt: SettingsRuntime): FunctionComponent<GlobalCar
       children: [
         cardHead(t('globalTitle'), t('globalHint')),
         h('div', {
-          className: 'dsh-pet-cfg__grid4',
+          className: 'dsh-pet-cfg__grid3',
           children: TOGGLES.map((toggle) =>
             toggleCell(toggle.label, props.values[toggle.key], props.busy, (value) =>
               props.onChange(toggle.key, value),
