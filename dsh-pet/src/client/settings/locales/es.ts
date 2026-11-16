@@ -179,6 +179,9 @@ export const es: Record<Key, string> = {
   voiceNameLabel: 'Voz',
   voiceNameHint:
     'Qué voz lee el texto. Las voces provienen de la implementación de síntesis; aparecen más al instalar otra.',
+  memoryTitle: 'Memoria a largo plazo',
+  memoryHint:
+    'Qué implementación de memoria atiende el chat. La dirección y el token de abajo son de PowerContext y se ocultan con otras implementaciones.',
   memoryProviderLabel: 'Memoria a largo plazo',
   memoryProviderHint:
     'Qué implementación de memoria usan las conversaciones. La integrada solo lleva la ventana reciente; aparecen más opciones al instalar un plugin de memoria de terceros. El id elegido se guarda en la configuración y, si no existe, se vuelve a la integrada dejando un registro.',
@@ -187,6 +190,9 @@ export const es: Record<Key, string> = {
   powercontextTokenLabel: 'Token de acceso',
   powercontextTokenHint:
     'Déjalo vacío si el servidor no tiene autenticación. El token solo vive en la configuración local y nunca llega a los registros.',
+  optimizeQuery: 'Optimización de consultas',
+  optimizeQueryHint:
+    'Al activarlo, un modelo reescribe tu frase como consulta de búsqueda y adjunta los dos últimos turnos para resolver referencias. Desactivado por defecto: las referencias suelen apuntar a lo que se acaba de decir y esos turnos ya están en el historial.',
   speechProviderLabel: 'Reconocimiento de voz',
   speechProviderHint:
     'Qué implementación transcribe la grabación. Solo aparecen varias opciones si hay un complemento de entrada de voz instalado; la elección se guarda y un proveedor ausente falla en vez de cambiarse solo.',

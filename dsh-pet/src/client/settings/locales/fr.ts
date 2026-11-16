@@ -177,6 +177,9 @@ export const fr: Record<Key, string> = {
   voiceNameLabel: 'Voix',
   voiceNameHint:
     "Quelle voix lit le texte. Les voix viennent de l'implémentation de synthèse ; d'autres apparaissent avec une autre implémentation.",
+  memoryTitle: 'Mémoire à long terme',
+  memoryHint:
+    'Quelle implémentation de mémoire traite les conversations. L’adresse et le jeton ci-dessous appartiennent à PowerContext et sont masqués pour les autres.',
   memoryProviderLabel: 'Mémoire à long terme',
   memoryProviderHint:
     "Quelle implémentation de mémoire les conversations utilisent. Celle intégrée ne porte que la fenêtre récente ; d'autres options apparaissent dès qu'un plugin de mémoire tiers est installé. L'id choisi est écrit dans la configuration et, s'il est inconnu, on retombe sur l'intégré avec une ligne de journal.",
@@ -185,6 +188,9 @@ export const fr: Record<Key, string> = {
   powercontextTokenLabel: 'Jeton d’accès',
   powercontextTokenHint:
     'Laissez vide si le serveur n’a pas d’authentification. Le jeton reste dans la configuration locale et n’apparaît jamais dans les journaux.',
+  optimizeQuery: 'Optimisation des requêtes',
+  optimizeQueryHint:
+    'Activé, un modèle réécrit votre phrase en requête de recherche et joint les deux derniers tours pour résoudre les références. Désactivé par défaut : les références visent en général ce qui vient d’être dit, déjà présent dans l’historique.',
   speechProviderLabel: 'Reconnaissance vocale',
   speechProviderHint:
     "Quelle implémentation transcrit l'enregistrement. Plusieurs options n'apparaissent qu'avec un plugin de saisie vocale installé ; le choix est enregistré et un fournisseur absent échoue au lieu de basculer.",

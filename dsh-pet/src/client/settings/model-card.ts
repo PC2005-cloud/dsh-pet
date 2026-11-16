@@ -1,20 +1,17 @@
 /**
  * 「AI 模型与对话上下文」卡：碎碎念 / 对话各自的模型（条目级），对话历史条数与配图张数上限（全局默认），
- * 以及三个与对话相关的开关（碎碎念配图 / 对话配图 / 对话动作联动）；
- * 长期记忆实现的下拉也在这里，选中 PowerContext 时再多出它的地址与令牌两个输入框（选中别家不渲染）。
+ * 以及三个与对话相关的开关（碎碎念配图 / 对话配图 / 对话动作联动）。
+ * 长期记忆的实现选择与它的连接参数在 ./memory-card，不在这张卡里。
  * 都与全局开关同语义：只改本地状态，随「保存」整包写入；宿主生成时优先用模型，失败自动回落。
  * 候选清单拉取失败只在这里提示一行，不阻塞已有配置值的显示与保存。
  * @module dsh-pet/src/client/settings/model-card
  */
 import type { FunctionComponent } from 'react';
-import { POWERCONTEXT_MEMORY_ID } from '../../shared/memory.ts';
-import type { PowerContextConfig } from '../../shared/memory.ts';
 import type { ModelSelection } from '../../shared/types.ts';
-import { makeSelect } from './panel/select.ts';
 import type { ModelCatalogGroup } from './picker/index.ts';
 import type { ModelPickerProps } from './picker/index.ts';
 import type { SettingsRuntime } from './runtime.ts';
-import { INPUT_CLASS, makeUiKit, numberInputProps } from './ui.ts';
+import { makeUiKit, numberInputProps } from './ui.ts';
 
 /** 两个模型字段的键名。 */
 export type ModelFieldKey = 'whisperModel' | 'chatModel';
@@ -58,16 +55,6 @@ export interface ModelCardProps {
   values: ChatFlagValues;
   /** 某个对话开关被切换。 */
   onFlagChange: (key: ChatFlagKey, value: boolean) => void;
-  /** 当前长期记忆实现 id。 */
-  memoryProvider: string;
-  /** 可选记忆实现；为空时下拉只显示当前值（列表还没拉回来或拉取失败）。 */
-  memoryProviders: readonly { readonly id: string; readonly name: string }[];
-  /** 切换长期记忆实现。 */
-  onMemoryProviderChange: (value: string) => void;
-  /** PowerContext 连接配置；只有选中该实现时才有输入框。 */
-  powercontext: PowerContextConfig;
-  /** 改 PowerContext 的某一项（两个输入框共用一个整段对象）。 */
-  onPowerContextChange: (patch: Partial<PowerContextConfig>) => void;
 }
 
 /**
@@ -83,7 +70,6 @@ export function makeModelCard(
 ): FunctionComponent<ModelCardProps> {
   const { h, t } = rt;
   const { cardHead, field, toggleCell } = makeUiKit({ h, t });
-  const Select = makeSelect(rt);
 
   return function ModelCard(props: ModelCardProps) {
     const { busy, catalog, failed } = props;
@@ -113,44 +99,6 @@ export function makeModelCard(
       );
     };
 
-    /**
-     * PowerContext 的连接字段：地址与令牌属于这一个实现，选中别家时整块不渲染。
-     * 令牌用密码框、且不回显到气泡说明里——它只该被写入，不该被围观。
-     */
-    const powerContextFields = () =>
-      props.memoryProvider === POWERCONTEXT_MEMORY_ID
-        ? h('div', {
-            className: 'dsh-pet-cfg__grid2',
-            children: [
-              field(
-                t('powercontextEndpointLabel'),
-                h('input', {
-                  type: 'text',
-                  className: INPUT_CLASS,
-                  value: props.powercontext.endpoint,
-                  disabled: busy,
-                  autoComplete: 'off',
-                  onChange: (e: { target: { value: string } }) =>
-                    props.onPowerContextChange({ endpoint: e.target.value }),
-                }),
-                t('powercontextEndpointHint'),
-              ),
-              field(
-                t('powercontextTokenLabel'),
-                h('input', {
-                  type: 'password',
-                  className: INPUT_CLASS,
-                  value: props.powercontext.token,
-                  disabled: busy,
-                  autoComplete: 'new-password',
-                  onChange: (e: { target: { value: string } }) => props.onPowerContextChange({ token: e.target.value }),
-                }),
-                t('powercontextTokenHint'),
-              ),
-            ],
-          })
-        : null;
-
     return h('div', {
       className: 'dsh-pet-cfg__card',
       children: [
@@ -166,24 +114,6 @@ export function makeModelCard(
           className: 'dsh-pet-cfg__grid2',
           children: [modelCell('whisperModel', props.whisperModel), modelCell('chatModel', props.chatModel)],
         }),
-        // 长期记忆实现：与语音识别实现同构，选项来自宿主注册表，不硬编码 id
-        h('div', {
-          className: 'dsh-pet-cfg__grid2',
-          children: [
-            field(
-              t('memoryProviderLabel'),
-              h(Select, {
-                label: t('memoryProviderLabel'),
-                value: props.memoryProvider,
-                options: props.memoryProviders.map((item) => ({ id: item.id, label: item.name })),
-                disabled: busy,
-                onChange: props.onMemoryProviderChange,
-              }),
-              t('memoryProviderHint'),
-            ),
-          ],
-        }),
-        powerContextFields(),
         h('div', {
           className: 'dsh-pet-cfg__grid4',
           children: [

@@ -141,14 +141,18 @@ export function fontValid(value: unknown): boolean {
   return typeof f.followPet === 'boolean';
 }
 
-/** PowerContext 连接段校验：endpoint 为非空 http(s) 地址、token 为任意字符串（可空）。
- *  与 font 同口径：整段校验——两项都必须是字符串，缺一项即整段非法（告警 + 取默认）。
- *  只判协议前缀，不判连通性：地址能不能连上是运行时的事，配置校验里预判会把「服务还没起」也当成配置错误。 */
-export function powercontextValid(value: unknown): boolean {
+/** 长期记忆段校验：provider 非空、powercontext 三项齐全且合法。
+ *  与 font 同口径：整段校验——provider 缺失或任一子键非法即整段非法（告警 + 取默认），不逐子键补默认。
+ *  provider 只判形态（存在性由运行时解析时判），endpoint 只判协议前缀（能不能连上是运行时的事）。 */
+export function memoryValid(value: unknown): boolean {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
-  const p = value as Record<string, unknown>;
-  if (typeof p.endpoint !== 'string' || typeof p.token !== 'string') return false;
-  return /^https?:\/\/\S+$/i.test(p.endpoint.trim());
+  const memory = value as Record<string, unknown>;
+  if (typeof memory.provider !== 'string' || memory.provider.trim() === '') return false;
+  const conf = memory.powercontext;
+  if (!conf || typeof conf !== 'object' || Array.isArray(conf)) return false;
+  const pc = conf as Record<string, unknown>;
+  if (typeof pc.endpoint !== 'string' || !/^https?:\/\/\S+$/i.test(pc.endpoint.trim())) return false;
+  return typeof pc.token === 'string' && typeof pc.optimizeQuery === 'boolean';
 }
 
 /** whisperModel / chatModel 段校验：{ provider, model } 两个字符串，
@@ -219,12 +223,9 @@ export function topFieldValid(key: string, value: unknown): boolean {
     case 'speechProvider':
       // 识别实现 id；只验形态，存在性由 hear 解析时判——配置校验拿不到运行时注册表
       return typeof value === 'string' && value.trim().length > 0;
-    case 'memoryProvider':
-      // 记忆实现 id；同 speechProvider：只验形态，存在性由运行时解析时判
-      return typeof value === 'string' && value.trim().length > 0;
-    case 'powercontext':
-      // PowerContext 连接段：整段校验，形状不对就整段回默认（不逐子键补）
-      return powercontextValid(value);
+    case 'memory':
+      // 长期记忆段：整段校验，形状不对就整段回默认（不逐子键补）
+      return memoryValid(value);
     case 'environmentCity':
       // 天气城市覆盖：空串合法（= 跟随 IP 自动定位），所以不判非空；
       // 只限长度——再长不可能是个地名，而地名能不能查到是上游的事，不该在这里预判

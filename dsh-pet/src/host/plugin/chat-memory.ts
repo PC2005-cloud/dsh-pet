@@ -421,7 +421,10 @@ export function createChatMemory(deps: ChatMemoryInput) {
     if (context === null) return { ok: false, reason: 'unknown-pet', message: '没有这只桌宠：' + petId };
     const { cfg, found, pool, actions, list, system } = context;
     // 记忆实现：配置里的 id 决定用谁；未注册的 id 在解析时就回落内置，这里补一条日志说明。
-    const configuredId = String(found.conf.memoryProvider ?? '').trim();
+    const memoryConf = found.conf.memory;
+    const configuredId = String(
+      memoryConf && typeof memoryConf === 'object' ? ((memoryConf as Record<string, unknown>).provider ?? '') : '',
+    ).trim();
     const provider = resolveChatMemoryProvider(configuredId);
     if (configuredId !== '' && configuredId !== provider.id) {
       log.warn('[dsh-pet] 记忆 provider 未注册：' + configuredId + '，本轮用 ' + provider.id);

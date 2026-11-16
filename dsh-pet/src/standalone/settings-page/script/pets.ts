@@ -27,12 +27,17 @@ function pickWeights(raw) {
   return base;
 }
 
-/** PowerContext 连接段：两项都是字符串才认，否则给空地址（= 不提交，保留配置里的旧值）。 */
-function pickPowerContext(raw) {
-  if (!raw || typeof raw !== 'object') return { endpoint: '', token: '' };
+/** 长期记忆段：provider 与 powercontext 都齐全才认，否则给空 provider（= 不提交，保留旧值）。 */
+function pickMemory(raw) {
+  const source = raw && typeof raw === 'object' ? raw : {};
+  const conf = source.powercontext && typeof source.powercontext === 'object' ? source.powercontext : {};
   return {
-    endpoint: typeof raw.endpoint === 'string' ? raw.endpoint : '',
-    token: typeof raw.token === 'string' ? raw.token : '',
+    provider: typeof source.provider === 'string' ? source.provider : '',
+    powercontext: {
+      endpoint: typeof conf.endpoint === 'string' ? conf.endpoint : '',
+      token: typeof conf.token === 'string' ? conf.token : '',
+      optimizeQuery: conf.optimizeQuery === true,
+    },
   };
 }
 
@@ -55,10 +60,8 @@ function pickGlobals(main) {
     voiceName: typeof source.voiceName === 'string' && source.voiceName ? source.voiceName : DEFAULT_VOICE_ID,
     // 识别实现：独立模式只有内置几家，缺值时留空——空值不提交，服务端保留原值
     speechProvider: typeof source.speechProvider === 'string' ? source.speechProvider : '',
-    // 长期记忆实现：同 speechProvider，缺值或空串都不提交
-    memoryProvider: typeof source.memoryProvider === 'string' ? source.memoryProvider : '',
-    // PowerContext 连接：地址为空 = 不提交，与 memoryProvider 同一套语义（空地址本身就是非法值）
-    powercontext: pickPowerContext(source.powercontext),
+    // 长期记忆：整段读，缺段或空实现都表示「还没配」
+    memory: pickMemory(source.memory),
     // 天气城市覆盖：空串是有效值（= 跟随 IP 自动定位），与上面 speechProvider 的空值语义不同，照常提交
     environmentCity: typeof source.environmentCity === 'string' ? source.environmentCity : '',
     voiceVolume: typeof source.voiceVolume === 'number' ? source.voiceVolume : 1,
@@ -154,9 +157,8 @@ function petsBody() {
     voiceNotifyEnabled: state.globals.voiceNotifyEnabled,
     // 空串 = 还没读到成品值：不提交，免得用一个本地猜的实现覆盖配置
     ...(state.globals.speechProvider ? { speechProvider: state.globals.speechProvider } : {}),
-    ...(state.globals.memoryProvider ? { memoryProvider: state.globals.memoryProvider } : {}),
-    // 地址为空同样不提交：空地址不是「恢复默认」，而是一个会被宿主拒绝的非法值
-    ...(state.globals.powercontext.endpoint ? { powercontext: state.globals.powercontext } : {}),
+    // 记忆段整段提交；provider 或地址为空 = 还没读到成品值，不提交，免得覆盖配置
+    ...(state.globals.memory.provider && state.globals.memory.powercontext.endpoint ? { memory: state.globals.memory } : {}),
     // 城市覆盖与上面不同：空串是有效值（= 恢复自动定位），必须照常提交
     environmentCity: state.globals.environmentCity || '',
     physics: physicsBody(),

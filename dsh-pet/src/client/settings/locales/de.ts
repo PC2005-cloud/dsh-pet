@@ -176,6 +176,9 @@ export const de: Record<Key, string> = {
   voiceNameLabel: 'Stimme',
   voiceNameHint:
     'Welche Stimme den Text liest. Stimmen stammen von der Synthese-Implementierung; weitere erscheinen mit weiteren Implementierungen.',
+  memoryTitle: 'Langzeitgedächtnis',
+  memoryHint:
+    'Welche Speicher-Implementierung den Chat bedient. Adresse und Token unten gehören zu PowerContext und werden bei anderen Implementierungen ausgeblendet.',
   memoryProviderLabel: 'Langzeitgedächtnis',
   memoryProviderHint:
     'Welche Gedächtnis-Implementierung der Chat nutzt. Die eingebaute trägt nur das aktuelle Fenster; weitere Optionen erscheinen, sobald ein Gedächtnis-Plugin von Drittanbietern installiert ist. Die gewählte id landet in der Konfiguration; eine unbekannte id fällt mit einem Logeintrag auf die eingebaute zurück.',
@@ -184,6 +187,9 @@ export const de: Record<Key, string> = {
   powercontextTokenLabel: 'Zugriffstoken',
   powercontextTokenHint:
     'Leer lassen, wenn der Server ohne Authentifizierung läuft. Das Token steht nur in der lokalen Konfiguration und landet nie im Log.',
+  optimizeQuery: 'Abfrage-Optimierung',
+  optimizeQueryHint:
+    'Aktiviert schreibt ein Modell den Satz in eine Suchabfrage um und hängt die letzten zwei Runden an, um Bezüge aufzulösen. Standardmäßig aus: Bezüge meinen meist das eben Gesagte, und diese Runden stehen schon im Verlauf.',
   speechProviderLabel: 'Spracherkennung',
   speechProviderHint:
     'Welche Implementierung die Aufnahme transkribiert. Mehrere Optionen erscheinen nur mit installiertem Spracheingabe-Plugin; die Auswahl wird gespeichert, ein fehlender Anbieter führt zu einem Fehler statt zu einem stillen Wechsel.',

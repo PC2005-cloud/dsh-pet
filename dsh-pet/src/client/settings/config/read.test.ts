@@ -31,14 +31,27 @@ describe('readMainConfig —— 成品聚合 → 表单补丁', () => {
   });
 
   test('PowerContext 连接段：两项都是字符串且地址非空才带出', () => {
-    const ok = readMainConfig({
-      main: { pets: [], powercontext: { endpoint: 'http://127.0.0.1:8000', token: 'tk' } },
+    const patchOf = (memory: unknown) => readMainConfig({ main: { pets: [], memory } }) ?? {};
+    const ok = patchOf({
+      provider: 'powercontext',
+      powercontext: { endpoint: 'http://127.0.0.1:8000', token: 'tk', optimizeQuery: true },
     });
-    assert.deepEqual(ok?.powercontext, { endpoint: 'http://127.0.0.1:8000', token: 'tk' });
-    const patchOf = (powercontext: unknown) => readMainConfig({ main: { pets: [], powercontext } }) ?? {};
-    assert.equal('powercontext' in patchOf(undefined), false, '缺段当作没写');
-    assert.equal('powercontext' in patchOf({ endpoint: '', token: '' }), false, '空地址当作没写');
-    assert.equal('powercontext' in patchOf({ endpoint: 'http://127.0.0.1:8000' }), false, '缺 token 当作没写');
+    assert.deepEqual(ok.memory, {
+      provider: 'powercontext',
+      powercontext: { endpoint: 'http://127.0.0.1:8000', token: 'tk', optimizeQuery: true },
+    });
+    assert.equal('memory' in patchOf(undefined), false, '缺段当作没写');
+    assert.equal('memory' in patchOf({ provider: 'native' }), false, '缺 powercontext 当作没写');
+    assert.equal(
+      'memory' in patchOf({ provider: '', powercontext: { endpoint: 'http://x', token: '' } }),
+      false,
+      '空 provider 当作没写',
+    );
+    assert.equal(
+      'memory' in patchOf({ provider: 'native', powercontext: { endpoint: '', token: '' } }),
+      false,
+      '空地址当作没写',
+    );
   });
 
   test('物理参数与字体：成品缺子键时用内置默认补满', () => {

@@ -503,7 +503,11 @@ describe('createChatMemory —— 第三方记忆提供者', () => {
       name: 'PC',
       recall: (req) => ({ ...req.prepared, system: '改后的人设', userText: '改后的问题' }),
     });
-    const ws = tempWorkspace({ memoryProvider: 'pc', chatImageEnabled: false, chatAnimationEnabled: false });
+    const ws = tempWorkspace({
+      memory: { provider: 'pc', powercontext: { endpoint: 'http://127.0.0.1:8000', token: '', optimizeQuery: false } },
+      chatImageEnabled: false,
+      chatAnimationEnabled: false,
+    });
     const captured: Record<string, unknown>[] = [];
     try {
       await createMemory('记住啦', ws, undefined, undefined, captured).chatWithPet('main', '在吗');
@@ -522,7 +526,11 @@ describe('createChatMemory —— 第三方记忆提供者', () => {
         throw new Error('服务不可用');
       },
     });
-    const ws = tempWorkspace({ memoryProvider: 'pc', chatImageEnabled: false, chatAnimationEnabled: false });
+    const ws = tempWorkspace({
+      memory: { provider: 'pc', powercontext: { endpoint: 'http://127.0.0.1:8000', token: '', optimizeQuery: false } },
+      chatImageEnabled: false,
+      chatAnimationEnabled: false,
+    });
     const captured: Record<string, unknown>[] = [];
     try {
       const r = await createMemory('在的', ws, undefined, undefined, captured).chatWithPet('main', '在吗');
@@ -535,7 +543,11 @@ describe('createChatMemory —— 第三方记忆提供者', () => {
 
   test('召回超时：按 provider 声明的超时放弃，回复照常', async () => {
     registerChatMemoryProvider({ id: 'pc', name: 'PC', timeoutMs: 10, recall: () => new Promise<undefined>(() => {}) });
-    const ws = tempWorkspace({ memoryProvider: 'pc', chatImageEnabled: false, chatAnimationEnabled: false });
+    const ws = tempWorkspace({
+      memory: { provider: 'pc', powercontext: { endpoint: 'http://127.0.0.1:8000', token: '', optimizeQuery: false } },
+      chatImageEnabled: false,
+      chatAnimationEnabled: false,
+    });
     const captured: Record<string, unknown>[] = [];
     try {
       const r = await createMemory('在的', ws, undefined, undefined, captured).chatWithPet('main', '在吗');
@@ -548,7 +560,11 @@ describe('createChatMemory —— 第三方记忆提供者', () => {
 
   test('召回返回 undefined：用核心拼好的那份', async () => {
     registerChatMemoryProvider({ id: 'pc', name: 'PC', recall: () => undefined });
-    const ws = tempWorkspace({ memoryProvider: 'pc', chatImageEnabled: false, chatAnimationEnabled: false });
+    const ws = tempWorkspace({
+      memory: { provider: 'pc', powercontext: { endpoint: 'http://127.0.0.1:8000', token: '', optimizeQuery: false } },
+      chatImageEnabled: false,
+      chatAnimationEnabled: false,
+    });
     const captured: Record<string, unknown>[] = [];
     try {
       await createMemory('在的', ws, undefined, undefined, captured).chatWithPet('main', '在吗');
@@ -564,7 +580,11 @@ describe('createChatMemory —— 第三方记忆提供者', () => {
       name: 'PC',
       recall: () => ({ system: '只剩这一段' }) as unknown as ChatRequest,
     });
-    const ws = tempWorkspace({ memoryProvider: 'pc', chatImageEnabled: false, chatAnimationEnabled: false });
+    const ws = tempWorkspace({
+      memory: { provider: 'pc', powercontext: { endpoint: 'http://127.0.0.1:8000', token: '', optimizeQuery: false } },
+      chatImageEnabled: false,
+      chatAnimationEnabled: false,
+    });
     const captured: Record<string, unknown>[] = [];
     try {
       const r = await createMemory('在的', ws, undefined, undefined, captured).chatWithPet('main', '在吗');
@@ -584,7 +604,9 @@ describe('createChatMemory —— 第三方记忆提供者', () => {
         captured.push(input as unknown as Record<string, unknown>);
       },
     });
-    const ws = tempWorkspace({ memoryProvider: 'pc' });
+    const ws = tempWorkspace({
+      memory: { provider: 'pc', powercontext: { endpoint: 'http://127.0.0.1:8000', token: '', optimizeQuery: false } },
+    });
     try {
       const r = await createMemory('你好呀～', ws).chatWithPet('main', '你好');
       await new Promise((resolve) => setImmediate(resolve));
@@ -610,7 +632,9 @@ describe('createChatMemory —— 第三方记忆提供者', () => {
         throw new Error('上传失败');
       },
     });
-    const ws = tempWorkspace({ memoryProvider: 'pc' });
+    const ws = tempWorkspace({
+      memory: { provider: 'pc', powercontext: { endpoint: 'http://127.0.0.1:8000', token: '', optimizeQuery: false } },
+    });
     try {
       const r = await createMemory('在的', ws).chatWithPet('main', '在吗');
       assert.equal(r.ok, true);
@@ -629,7 +653,9 @@ describe('createChatMemory —— 第三方记忆提供者', () => {
         captured.push(turn as unknown as Record<string, unknown>);
       },
     });
-    const ws = tempWorkspace({ memoryProvider: 'pc' });
+    const ws = tempWorkspace({
+      memory: { provider: 'pc', powercontext: { endpoint: 'http://127.0.0.1:8000', token: '', optimizeQuery: false } },
+    });
     let release!: () => void;
     const gate = new Promise<void>((resolve) => (release = resolve));
     let started!: () => void;

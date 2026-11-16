@@ -175,6 +175,9 @@ export const en: Record<Key, string> = {
   voiceNameLabel: 'Voice',
   voiceNameHint:
     'Which voice reads the text. Voices come from the synthesis implementation; more appear when another implementation is installed.',
+  memoryTitle: 'Long-term memory',
+  memoryHint:
+    'Which memory backend handles chats. The address and token below belong to PowerContext and are hidden for other backends.',
   memoryProviderLabel: 'Long-term memory',
   memoryProviderHint:
     'Which memory implementation chats use. The built-in one carries only the recent window; more options appear once a third-party memory plugin is installed. The selected id goes into your config, and an unknown id falls back to the built-in one with a log entry.',
@@ -183,6 +186,9 @@ export const en: Record<Key, string> = {
   powercontextTokenLabel: 'Access token',
   powercontextTokenHint:
     'Leave empty when the server runs without authentication. The token only lives in your local config and never reaches the logs.',
+  optimizeQuery: 'Query optimization',
+  optimizeQueryHint:
+    'When on, a model rewrites your sentence into a search query and attaches the last two turns to resolve references. Off by default: references usually point at what was just said, and those turns are already in the chat history.',
   speechProviderLabel: 'Speech recognition',
   speechProviderHint:
     'Which implementation transcribes a held recording. More than one option appears only when a matching voice-input plugin is installed; the choice is saved to your config and a missing provider fails explicitly instead of falling back.',

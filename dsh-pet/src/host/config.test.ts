@@ -488,58 +488,76 @@ describe('readAllConfig —— 天气城市覆盖（只读 main）', () => {
   });
 });
 
-describe('saveUserConfig —— PowerContext 连接（powercontext 整段）', () => {
-  test('非法值整包拒绝：缺 token、非 http(s) 地址、空地址、非对象都不收', () => {
-    assert.equal(saveUserConfig({ pets: PETS, powercontext: { endpoint: 'http://127.0.0.1:8000' } }, undefined), null);
+describe('saveUserConfig —— 长期记忆（memory 整段）', () => {
+  const MEMORY = {
+    provider: 'powercontext',
+    powercontext: { endpoint: 'http://127.0.0.1:8000', token: 'tk', optimizeQuery: true },
+  };
+
+  test('非法值整包拒绝：缺 provider、缺 powercontext、地址非 http(s)、开关非布尔都不收', () => {
+    assert.equal(saveUserConfig({ pets: PETS, memory: { provider: 'native' } }, undefined), null);
+    assert.equal(saveUserConfig({ pets: PETS, memory: { ...MEMORY, provider: '   ' } }, undefined), null);
     assert.equal(
-      saveUserConfig({ pets: PETS, powercontext: { endpoint: '127.0.0.1:8000', token: '' } }, undefined),
+      saveUserConfig(
+        { pets: PETS, memory: { ...MEMORY, powercontext: { endpoint: 'x', token: '', optimizeQuery: false } } },
+        undefined,
+      ),
       null,
     );
-    assert.equal(saveUserConfig({ pets: PETS, powercontext: { endpoint: '   ', token: '' } }, undefined), null);
-    assert.equal(saveUserConfig({ pets: PETS, powercontext: 'http://127.0.0.1:8000' }, undefined), null);
+    assert.equal(
+      saveUserConfig(
+        { pets: PETS, memory: { ...MEMORY, powercontext: { ...MEMORY.powercontext, optimizeQuery: 'yes' } } },
+        undefined,
+      ),
+      null,
+    );
+    assert.equal(saveUserConfig({ pets: PETS, memory: 'powercontext' }, undefined), null);
   });
 
-  test('两项 trim 后落盘，请求体多带的键不写进用户层', () => {
+  test('整段 trim 后落盘，请求体多带的键不写进用户层', () => {
     const out = saveUserConfig(
-      { pets: PETS, powercontext: { endpoint: ' http://127.0.0.1:8000 ', token: ' tk ', extra: 1 } },
-      undefined,
-    ) as Record<string, unknown>;
-    assert.deepEqual(out.powercontext, { endpoint: 'http://127.0.0.1:8000', token: 'tk' });
-  });
-
-  test('令牌留空合法：服务端没开认证时本来就不校验', () => {
-    const out = saveUserConfig(
-      { pets: PETS, powercontext: { endpoint: 'http://127.0.0.1:8000', token: '' } },
-      undefined,
-    ) as Record<string, unknown>;
-    assert.deepEqual(out.powercontext, { endpoint: 'http://127.0.0.1:8000', token: '' });
-  });
-
-  test('请求体没带 → 透传磁盘旧值（不得把已配的地址抹掉）', () => {
-    const out = saveUserConfig(
-      { pets: PETS },
       {
-        powercontext: { endpoint: 'http://10.0.0.2:9000', token: 'tk' },
+        pets: PETS,
+        memory: {
+          provider: ' powercontext ',
+          powercontext: { endpoint: ' http://127.0.0.1:8000 ', token: ' tk ', optimizeQuery: true, extra: 1 },
+          extra: 2,
+        },
       },
+      undefined,
     ) as Record<string, unknown>;
-    assert.deepEqual(out.powercontext, { endpoint: 'http://10.0.0.2:9000', token: 'tk' });
+    assert.deepEqual(out.memory, MEMORY);
+  });
+
+  test('请求体没带 → 透传磁盘旧值（不得把已配的记忆段抹掉）', () => {
+    const out = saveUserConfig({ pets: PETS }, { memory: MEMORY }) as Record<string, unknown>;
+    assert.deepEqual(out.memory, MEMORY);
   });
 });
 
-describe('readAllConfig —— PowerContext 连接', () => {
-  const BASE = { powercontext: { endpoint: '', token: '' } };
+describe('readAllConfig —— 长期记忆', () => {
+  const BASE = { memory: { provider: 'native', powercontext: { endpoint: '', token: '', optimizeQuery: false } } };
 
   test('用户层写了 → 取用户层的值', () => {
-    const merged = readAllConfig(withBase(BASE, { powercontext: { endpoint: 'http://127.0.0.1:8000', token: 'tk' } }));
-    assert.deepEqual(merged.main.powercontext, { endpoint: 'http://127.0.0.1:8000', token: 'tk' });
+    const merged = readAllConfig(
+      withBase(BASE, {
+        memory: {
+          provider: 'powercontext',
+          powercontext: { endpoint: 'http://127.0.0.1:8000', token: 'tk', optimizeQuery: false },
+        },
+      }),
+    );
+    assert.deepEqual(merged.main.memory, {
+      provider: 'powercontext',
+      powercontext: { endpoint: 'http://127.0.0.1:8000', token: 'tk', optimizeQuery: false },
+    });
   });
 
   test('用户层写了非法值 → 告警并回退内置默认（整段替换，不逐子键补）', () => {
-    const merged = readAllConfig(withBase(BASE, { powercontext: { endpoint: 'nope' } }));
-    assert.deepEqual(merged.main.powercontext, { endpoint: '', token: '' });
+    const merged = readAllConfig(withBase(BASE, { memory: { provider: 'powercontext' } }));
+    assert.deepEqual(merged.main.memory, BASE.memory);
   });
 });
-
 describe('JSONC 配置读取：字符串中的注释标记与转义', () => {
   const prompts = [
     '请原样解释 // 示例 这段文字',

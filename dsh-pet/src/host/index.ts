@@ -133,20 +133,28 @@ export function apply(ctx: any): void {
   ensureDeepseekTtsProvider({ resolveKey: resolveDeepseekKey });
   ensureDeepseekAsrProvider({ resolveKey: resolveDeepseekKey });
 
-  /** 读配置里 `powercontext` 段的字符串字段：每次现读，改完配置不必重启。 */
+  /** 读配置里的长期记忆段：每次现读，改完配置不必重启。 */
+  const memoryBlock = (): Record<string, unknown> => {
+    const block = readAllConfig(configPaths).main?.memory;
+    return block && typeof block === 'object' ? (block as Record<string, unknown>) : {};
+  };
+  /** 读 `memory.powercontext` 里的一项；缺段或类型不对回默认。 */
   const powerContextField = (key: 'endpoint' | 'token'): string => {
-    const conf = readAllConfig(configPaths).main?.powercontext;
+    const conf = memoryBlock().powercontext;
     if (!conf || typeof conf !== 'object') return '';
     const value = (conf as Record<string, unknown>)[key];
     return typeof value === 'string' ? value : '';
   };
   // 长期记忆：PowerContext 是本机自建服务，地址与令牌来自配置。
-  // 改写查询复用对话模型——空配图池加空动作名单就是纯文本生成，既不注入指令也不解析动作；
-  // 带上最近两轮是为了还原「它」「那家」这类指代，没有历史时就是空数组。
+  // 查询优化默认关闭——指代指向的通常是刚说过的话，那些轮次本来就在对话历史里；
+  // 打开后才复用对话模型改写（空配图池加空动作名单 = 纯文本生成，不注入指令也不解析动作），并带上最近两轮。
   ensurePowerContextMemory({
     endpoint: () => powerContextField('endpoint'),
     token: () => powerContextField('token'),
     rewrite: async ({ userText, history }) => {
+      const conf = memoryBlock().powercontext;
+      const enabled = conf && typeof conf === 'object' && (conf as Record<string, unknown>).optimizeQuery === true;
+      if (!enabled) return undefined;
       const result = await generateChat({
         ctx,
         system: REWRITE_QUERY_SYSTEM,
