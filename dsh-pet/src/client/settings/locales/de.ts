@@ -225,6 +225,9 @@ export const de: Record<Key, string> = {
   physicsCeilingBounceHint: 'Aus: Würfe können oben aus dem Bildschirm fliegen (die Schwerkraft holt sie zurück)',
   physicsPetCollision: 'Pet-Kollisionen',
   physicsPetCollisionHint: 'Ein fliegendes Pet prallt mit Impulserhaltung von anderen ab (Masse ∝ Größe²)',
+  physicsDragSpring: 'Feder-Folgen',
+  physicsDragSpringHint:
+    'An (Standard): Eine überdämpfte Feder folgt dem Zeiger, das Pet hängt leicht zurück und wirkt weich. Aus: starres Echtzeit-Folgen, das Pet klebt am Cursor. Die Wurfkraft bleibt unverändert.',
   physicsHaptic: 'Kollisions-Vibration',
   physicsHapticHint:
     'Ein Impuls pro Treffer (Wand, Boden, Decke, andere Pets). Funktioniert in Chrome/Edge; nicht auf iOS oder in WebView-Hüllen wie Via. „Nicht stören“ blockiert die Vibration.',

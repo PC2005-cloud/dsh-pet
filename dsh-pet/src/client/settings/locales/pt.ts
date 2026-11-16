@@ -225,6 +225,9 @@ export const pt: Record<Key, string> = {
     'Desligado, o arremesso pode sair pelo topo da tela (a gravidade ainda traz o pet de volta)',
   physicsPetCollision: 'Colisão entre pets',
   physicsPetCollisionHint: 'Um pet em voo quica nos outros com conservação de momento (massa ∝ tamanho²)',
+  physicsDragSpring: 'Seguir com mola',
+  physicsDragSpringHint:
+    'Ligado (padrão): uma mola sobreamortecida segue o ponteiro, o pet fica um pouco atrás e o toque é suave. Desligado: seguir rígido em tempo real, o pet gruda no cursor. A força de arremesso não muda.',
   physicsHaptic: 'Vibração ao colidir',
   physicsHapticHint:
     'Uma vibração por impacto (paredes, chão, teto, outros pets). Funciona no Chrome/Edge; não no iOS nem em navegadores WebView como o Via. O modo Não perturbe bloqueia o vibrador.',

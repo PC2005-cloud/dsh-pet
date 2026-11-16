@@ -208,6 +208,9 @@ export const zh = {
   physicsCeilingBounceHint: '关掉后抛掷可飞出屏幕顶部（重力仍会把它拉回来）',
   physicsPetCollision: '宠物互撞',
   physicsPetCollisionHint: '飞行中的宠物撞到别的宠物按动量守恒弹开（质量 ∝ 尺寸²）',
+  physicsDragSpring: '弹簧跟手',
+  physicsDragSpringHint:
+    '开（默认）= 拖拽时用过阻尼弹簧追指针，会有一点跟手延迟、手感柔和；关 = 刚性实时跟随，宠物直接贴住鼠标。不影响甩出力度。',
   physicsHaptic: '碰撞震动',
   physicsHapticHint:
     '撞墙、落地、撞顶、互撞各震一下。Chrome / Edge 可用；iOS 与 Via 等 WebView 壳不生效；勿扰模式会挡住振动。',

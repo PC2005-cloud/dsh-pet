@@ -229,6 +229,9 @@ export const es: Record<Key, string> = {
     'Desactívalo para que un lanzamiento pueda salir por la parte superior de la pantalla (la gravedad sigue tirando de él hacia abajo)',
   physicsPetCollision: 'Colisiones entre mascotas',
   physicsPetCollisionHint: 'Una mascota en vuelo rebota contra las demás conservando el momento (masa ∝ tamaño²)',
+  physicsDragSpring: 'Seguimiento con muelle',
+  physicsDragSpringHint:
+    'Activado (predeterminado): un muelle sobreamortiguado sigue al puntero, la mascota va un poco por detrás y el tacto es suave. Desactivado: seguimiento rígido en tiempo real, la mascota se pega al cursor. No afecta a la fuerza de lanzamiento.',
   physicsHaptic: 'Vibración al chocar',
   physicsHapticHint:
     'Una vibración por impacto (paredes, suelo, techo, otras mascotas). Funciona en Chrome/Edge; no en iOS ni en navegadores WebView como Via. El modo No molestar la bloquea.',

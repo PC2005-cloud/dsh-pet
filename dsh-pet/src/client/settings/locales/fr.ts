@@ -228,6 +228,9 @@ export const fr: Record<Key, string> = {
   physicsPetCollision: 'Collisions entre compagnons',
   physicsPetCollisionHint:
     'Un compagnon en vol rebondit sur les autres en conservant la quantité de mouvement (masse ∝ taille²)',
+  physicsDragSpring: 'Suivi à ressort',
+  physicsDragSpringHint:
+    "Activé (par défaut) : un ressort sur-amorti suit le pointeur, le compagnon accuse un léger retard et le rendu est souple. Désactivé : suivi rigide en temps réel, le compagnon colle au curseur. La force de lancer n'est pas modifiée.",
   physicsHaptic: 'Vibration aux collisions',
   physicsHapticHint:
     'Une vibration par impact (murs, sol, plafond, autres compagnons). Fonctionne dans Chrome/Edge ; pas sur iOS ni dans les coques WebView comme Via. Le mode Ne pas déranger la bloque.',

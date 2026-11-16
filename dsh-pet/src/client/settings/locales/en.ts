@@ -225,6 +225,9 @@ export const en: Record<Key, string> = {
     'Turn this off to let a throw fly out through the top of the screen (gravity still pulls it back)',
   physicsPetCollision: 'Pet collisions',
   physicsPetCollisionHint: 'A flying pet bounces off the others with momentum conservation (mass ∝ size²)',
+  physicsDragSpring: 'Spring follow',
+  physicsDragSpringHint:
+    'On (default): an overdamped spring chases the pointer, so the pet trails slightly and feels soft. Off: rigid real-time follow — the pet sticks to the cursor. Throw strength is unaffected.',
   physicsHaptic: 'Collision haptics',
   physicsHapticHint:
     'One buzz per hit (walls, floor, ceiling, other pets). Works in Chrome/Edge; not on iOS or WebView shells like Via. Do Not Disturb blocks it.',

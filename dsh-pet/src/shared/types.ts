@@ -186,6 +186,10 @@ export interface PhysicsParams {
    *  仅浏览器半侧生效，且要求环境有 Vibration API——iOS 与桌面端没有，静默跳过。
    *  缺省按 true；旧配置里没有这个键也算开。 */
   hapticEnabled?: boolean;
+  /** 拖拽跟手方式：true（默认）= 过阻尼弹簧追指针，追的过程就是那点跟手延迟；
+   *  false = 刚性实时跟随，每帧直接把盒子贴到指针目标。
+   *  只改跟随，不改甩出初速（初速取指针轨迹）与 throwPower 的抛掷增益。缺键按 true。 */
+  dragSpring?: boolean;
 }
 
 /** 字体种类预设 id（font.family 白名单；清单与对应字体栈见 shared/fonts.ts）。 */

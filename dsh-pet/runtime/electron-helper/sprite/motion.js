@@ -61,10 +61,12 @@ Object.assign(PetSprite.prototype, {
     this.dragVel = { vx: 0, vy: 0 };
   },
 
-  /** rAF 弹簧跟随：窗口朝拖拽目标过阻尼追赶（不再硬贴指针），抹平高频抖动 */
+  /** rAF 跟随：窗口朝拖拽目标追过去，抹平高频抖动。默认过阻尼弹簧（就是那点跟手延迟）；
+   *  physics.dragSpring 为 false 时改为刚性跟随——每帧直接贴住目标。 */
   startDragFollow() {
     if (this.dragFollow !== null) return;
     const token = ++this.dragFollowToken;
+    const springFollow = this.physics.dragSpring !== false; // 缺键按弹簧：旧配置行为不变
     let last = performance.now();
     const step = () => {
       if (this.dragFollowToken !== token) return;
@@ -79,10 +81,15 @@ Object.assign(PetSprite.prototype, {
       const vel = this.dragVel;
       let x = this.pos.x;
       let y = this.pos.y;
-      vel.vx = S.springStep(vel.vx, x, target.x, dt, this.physics.throwPower);
-      vel.vy = S.springStep(vel.vy, y, target.y, dt, this.physics.throwPower);
-      x += vel.vx * dt;
-      y += vel.vy * dt;
+      if (springFollow) {
+        vel.vx = S.springStep(vel.vx, x, target.x, dt, this.physics.throwPower);
+        vel.vy = S.springStep(vel.vy, y, target.y, dt, this.physics.throwPower);
+        x += vel.vx * dt;
+        y += vel.vy * dt;
+      } else {
+        x = target.x;
+        y = target.y;
+      }
       this.sendBounds(x, y); // 移动的是窗口（this.pos 实时更新）；本体偏移由 sendBounds 统一算
       this.dragFollow = requestAnimationFrame(step);
     };
