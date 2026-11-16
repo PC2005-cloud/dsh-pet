@@ -16,6 +16,8 @@ import { registerSessionWatch } from './plugin/session-watch.ts';
 import { createDesktopHelper } from './plugin/desktop-helper.ts';
 import { createBalancePoll } from './plugin/balance-poll.ts';
 import { createChatMemory } from './plugin/chat-memory.ts';
+import { generateChat } from './chat.ts';
+import { ensurePowerContextMemory } from './memory/powercontext.ts';
 import { createSessionNotify } from './plugin/session-notify.ts';
 import { createPetLookup } from './plugin/pet-lookup.ts';
 import { createDownloadReport } from './plugin/download-report.ts';
@@ -38,6 +40,10 @@ import type { PetRouteDeps } from './routes/types.ts';
 export const name = 'pet';
 /** 需要注入的服务：webServer（路由）+ agentDefaultModel（当前服务商）+ credentials（凭证）+ llm（对话模型调用）+ commands（/balance 斜杠命令）+ connection（桌面 Helper「打开 AI 设置」用的已鉴权站点 URL） */
 export const inject = ['webServer', 'agentDefaultModel', 'credentials', 'llm', 'commands', 'connection'];
+
+/** 检索查询的改写提示词：结合最近几轮还原指代，只要一条能拿去检索的查询，不要解释、不要多行。 */
+const REWRITE_QUERY_SYSTEM =
+  '把用户这句话改写成一条用于检索长期记忆的查询：结合最近几轮对话还原「它」「那个」「继续」这类指代，保留检索需要的名词与限定词，去掉寒暄、语气词与称呼，不要解释、不要引号、不要换行。只输出这条查询本身。';
 
 /** 宿主插件主体：注册 `/dsh-pet-7340` 前缀路由与斜杠命令（/balance /pet /chat）；ctx 暂用 any（peer 类型包本地不可解析）。 */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- DSH 注入的 ctx（webServer/locale 等 service 无静态类型）
@@ -126,6 +132,32 @@ export function apply(ctx: any): void {
   };
   ensureDeepseekTtsProvider({ resolveKey: resolveDeepseekKey });
   ensureDeepseekAsrProvider({ resolveKey: resolveDeepseekKey });
+
+  /** 读配置里 `powercontext` 段的字符串字段：每次现读，改完配置不必重启。 */
+  const powerContextField = (key: 'endpoint' | 'token'): string => {
+    const conf = readAllConfig(configPaths).main?.powercontext;
+    if (!conf || typeof conf !== 'object') return '';
+    const value = (conf as Record<string, unknown>)[key];
+    return typeof value === 'string' ? value : '';
+  };
+  // 长期记忆：PowerContext 是本机自建服务，地址与令牌来自配置。
+  // 改写查询复用对话模型——空配图池加空动作名单就是纯文本生成，既不注入指令也不解析动作；
+  // 带上最近两轮是为了还原「它」「那家」这类指代，没有历史时就是空数组。
+  ensurePowerContextMemory({
+    endpoint: () => powerContextField('endpoint'),
+    token: () => powerContextField('token'),
+    rewrite: async ({ userText, history }) => {
+      const result = await generateChat({
+        ctx,
+        system: REWRITE_QUERY_SYSTEM,
+        history,
+        userText,
+        pool: [],
+        actions: [],
+      });
+      return result.ok ? result.text : undefined;
+    },
+  });
 
   const deps: PetRouteDeps = {
     ...setup,
