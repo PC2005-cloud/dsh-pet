@@ -209,6 +209,9 @@ export function topFieldValid(key: string, value: unknown): boolean {
     case 'speechProvider':
       // 识别实现 id；只验形态，存在性由 hear 解析时判——配置校验拿不到运行时注册表
       return typeof value === 'string' && value.trim().length > 0;
+    case 'memoryProvider':
+      // 记忆实现 id；同 speechProvider：只验形态，存在性由运行时解析时判
+      return typeof value === 'string' && value.trim().length > 0;
     case 'environmentCity':
       // 天气城市覆盖：空串合法（= 跟随 IP 自动定位），所以不判非空；
       // 只限长度——再长不可能是个地名，而地名能不能查到是上游的事，不该在这里预判

@@ -126,6 +126,16 @@ function holidayClauseOf(date: Date): string {
   return best ? best.clause : '';
 }
 
+/**
+ * 节日从句。
+ *
+ * @param date - 当前时刻。
+ * @returns 如「今天是大年初一」；无节日或 `date` 非法时返回空串。
+ */
+export function festivalOf(date: Date): string {
+  return Number.isNaN(date.getTime()) ? '' : holidayClauseOf(date);
+}
+
 /** 数值转口语：整数不带小数点，非整数留一位。 */
 function numText(value: number): string {
   return Number.isInteger(value) ? String(value) : value.toFixed(1);

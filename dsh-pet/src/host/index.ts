@@ -29,6 +29,7 @@ import { ensureEdgeProvider } from './voice/builtin-edge.ts';
 import { credentialRef } from '@deepseek-ai/dsh-credentials';
 import { createVoiceService } from './voice/speak.ts';
 import { createHearService } from './voice/hear.ts';
+import { listChatMemoryProviders } from './chat-memory-provider.ts';
 import { TODO_FILE_NAME, TodoStore } from './todo/store.ts';
 import { join } from 'node:path';
 import type { PetRouteDeps } from './routes/types.ts';
@@ -161,6 +162,8 @@ export function apply(ctx: any): void {
         return typeof provider === 'string' && provider ? provider : undefined;
       },
     }),
+    // 长期记忆实现目录：设置页据此渲染下拉，配置项 memoryProvider 的取值就来自它
+    memory: { list: listChatMemoryProviders },
   };
   const httpRoute = createHttpRoute(deps);
   registerHttpRoute(ctx, httpRoute.handlePetRoute);

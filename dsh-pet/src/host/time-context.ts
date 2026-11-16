@@ -7,5 +7,5 @@
  */
 export { dayKindOf, timeSlotOf } from './time-context/constants.ts';
 export type { TimeSlot } from './time-context/constants.ts';
-export { historyStampOf, timeContextOf } from './time-context/context.ts';
+export { festivalOf, historyStampOf, timeContextOf } from './time-context/context.ts';
 export type { TimeContextEnv, WeatherFacts } from './time-context/context.ts';

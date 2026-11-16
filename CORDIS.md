@@ -370,3 +370,72 @@ export function apply(ctx) {
 ctx.get('petApi7340').speech.list();
 // { providers: [{ id: 'dsh', name: 'DSH 语音插件' }] }
 ```
+
+### memory.register
+
+第三方插件注册自己的长期记忆实现。可以注册多个，配置里写哪个 `id` 就走哪个。内置的 `native` 也只是一个普通实现，没有特权。
+
+**参数**
+
+| 名称 | 类型 | 说明 |
+| --- | --- | --- |
+| `id` | string | 唯一标识，kebab-case；重复注册抛错、不覆盖；不能占用 `native` |
+| `name` | string | 展示名，设置页下拉里的文字 |
+| `timeoutMs` | number? | 单次召回超时（ms），缺省 15000 |
+| `recall` | function? | 入参 `{ petId, userText, prepared, raw }` 与 `signal`；返回整个请求体，或 `undefined` 表示不介入 |
+| `capture` | function? | 入参 `{ petId, userText, replyText, action?, image?, ts }`；返回值被忽略 |
+
+`recall` 与 `capture` 至少要有一个。
+
+**返回**：`() => void`，注销函数。配合 `ctx.effect` 使用，插件卸载时自动注销。
+
+**抛错**：定义不是对象、`id` 不是 kebab-case、`id` 占用 `native`、`name` 为空、两个方法都缺失、`timeoutMs` 不是正数、`id` 已被注册。
+
+**行为**
+
+- **多实现并存**：每个 `id` 一份，互不覆盖；注销只清「仍是自己那份」，迟到的注销不会顶掉后来者。
+- 配置项是 `memoryProvider`，存 provider id；解析不到时回落 `native` 并记一条日志——聊天不会因为配置写错而中断。
+- `recall` 返回**整个请求体** `{ system, history, userText }`，核心直接用它生成，不再拼装；返回 `undefined` 表示本轮不介入，用核心拼好的那份。
+- 返回值要过形状校验：三个字段缺一个就整份丢弃、记日志、按不介入处理。
+- `prepared` 是核心拼好的那份（人设 + 时间环境 + 最近 N 轮）；`raw` 是原始事实（人设正文、当前时刻、城市天气、节日、配图池、动作名、宠物身份），想自己拼就用后者。
+- 超过 `timeoutMs` 按不介入处理并 abort `signal`；实现忽略 `signal` 也不会拖住回复。
+- `capture` 在本地记忆落盘之后调用，核心不等待，抛错只记日志。
+- **写入始终由核心完成**：选哪个实现都不影响 `memory.json` 的读写，聊天记录不会因为切到第三方而丢。
+
+```js
+export const inject = ['petApi7340'];
+
+export function apply(ctx) {
+  ctx.effect(() =>
+    ctx.get('petApi7340').memory.register({
+      id: 'my-memory',
+      name: '我的记忆',
+      timeoutMs: 8000,
+      async recall({ userText, prepared }, signal) {
+        const res = await fetch('http://127.0.0.1:9002/search?q=' + encodeURIComponent(userText), { signal });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const hits = await res.json();
+        if (hits.length === 0) return undefined;
+        return { ...prepared, userText: '【记忆】' + hits.join('；') + '\n\n' + prepared.userText };
+      },
+      async capture({ userText, replyText }) {
+        await fetch('http://127.0.0.1:9002/remember', {
+          method: 'POST',
+          body: JSON.stringify({ userText, replyText }),
+        });
+      },
+    }),
+  );
+}
+```
+
+### memory.list
+
+**参数**：无。
+
+**返回**：`{ providers: [{ id, name }] }`；内置的 `native` 恒在首位，第三方按注册顺序追加。
+
+```js
+ctx.get('petApi7340').memory.list();
+// { providers: [{ id: 'native', name: '内置记忆' }, { id: 'my-memory', name: '我的记忆' }] }
+```

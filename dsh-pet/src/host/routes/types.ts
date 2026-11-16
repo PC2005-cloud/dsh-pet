@@ -7,6 +7,7 @@
  * @module dsh-pet/src/host/routes/types
  */
 import type { ChatMemoryMessage } from '../chat.ts';
+import type { MemoryCatalog } from '../chat-memory-provider.ts';
 import type { ConfigPaths } from '../config.ts';
 import type { EnvironmentFacts } from '../environment.ts';
 import type { RouteResult } from '../http.ts';
@@ -165,4 +166,6 @@ export interface PetRouteDeps {
   readonly voice: VoiceService;
   /** 语音识别服务（音频转文字；宿主没启用语音输入时由它自己回 unsupported）。 */
   readonly speech: HearService;
+  /** 长期记忆实现目录（配置项 `memoryProvider` 的取值来源）。 */
+  readonly memory: { list: () => MemoryCatalog };
 }

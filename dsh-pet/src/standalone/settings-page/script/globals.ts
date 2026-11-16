@@ -146,7 +146,9 @@ function motionCard() {
 
 function modelCard() {
   const g = state.globals;
-  return card('对话上下文', '模型与接入方式在「AI 服务商」页配置；这里只管对话保留多少上下文。', [
+  const memoryProviders = state.memoryProviders || [];
+  return card('对话上下文', '模型与接入方式在「AI 服务商」页配置；这里管对话用哪个记忆实现、保留多少上下文。', [
+    selectField('g-memory-provider', '长期记忆', g.memoryProvider, memoryProviders.map((item) => ({ value: item.id, label: item.name })), (value) => setGlobal('memoryProvider', value), '对话时用哪个记忆实现。内置的只带最近若干轮历史；装了第三方记忆插件才会出现更多选项，找不到对应实现时回落内置。'),
     make('div', { class: 'grid2' }, [
       numberField('g-memory', '对话记忆轮数', g.chatMemoryRounds, (value) => setGlobal('chatMemoryRounds', Math.round(clampNumber(value, 0, 100, 0))), { min: 0, max: 100, step: 1, hint: '0 表示不带历史。' }),
       numberField('g-image-limit', '配图张数上限', g.chatImageLimit, (value) => setGlobal('chatImageLimit', Math.round(clampNumber(value, 0, 50, 0))), { min: 0, max: 50, step: 1, hint: '0 表示不限制。' }),

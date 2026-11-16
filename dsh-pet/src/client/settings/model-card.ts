@@ -7,6 +7,7 @@
  */
 import type { FunctionComponent } from 'react';
 import type { ModelSelection } from '../../shared/types.ts';
+import { makeSelect } from './panel/select.ts';
 import type { ModelCatalogGroup } from './picker/index.ts';
 import type { ModelPickerProps } from './picker/index.ts';
 import type { SettingsRuntime } from './runtime.ts';
@@ -54,6 +55,12 @@ export interface ModelCardProps {
   values: ChatFlagValues;
   /** 某个对话开关被切换。 */
   onFlagChange: (key: ChatFlagKey, value: boolean) => void;
+  /** 当前长期记忆实现 id。 */
+  memoryProvider: string;
+  /** 可选记忆实现；为空时下拉只显示当前值（列表还没拉回来或拉取失败）。 */
+  memoryProviders: readonly { readonly id: string; readonly name: string }[];
+  /** 切换长期记忆实现。 */
+  onMemoryProviderChange: (value: string) => void;
 }
 
 /**
@@ -69,6 +76,7 @@ export function makeModelCard(
 ): FunctionComponent<ModelCardProps> {
   const { h, t } = rt;
   const { cardHead, field, toggleCell } = makeUiKit({ h, t });
+  const Select = makeSelect(rt);
 
   return function ModelCard(props: ModelCardProps) {
     const { busy, catalog, failed } = props;
@@ -112,6 +120,23 @@ export function makeModelCard(
         h('div', {
           className: 'dsh-pet-cfg__grid2',
           children: [modelCell('whisperModel', props.whisperModel), modelCell('chatModel', props.chatModel)],
+        }),
+        // 长期记忆实现：与语音识别实现同构，选项来自宿主注册表，不硬编码 id
+        h('div', {
+          className: 'dsh-pet-cfg__grid2',
+          children: [
+            field(
+              t('memoryProviderLabel'),
+              h(Select, {
+                label: t('memoryProviderLabel'),
+                value: props.memoryProvider,
+                options: props.memoryProviders.map((item) => ({ id: item.id, label: item.name })),
+                disabled: busy,
+                onChange: props.onMemoryProviderChange,
+              }),
+              t('memoryProviderHint'),
+            ),
+          ],
         }),
         h('div', {
           className: 'dsh-pet-cfg__grid4',

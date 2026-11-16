@@ -175,6 +175,9 @@ export const pt: Record<Key, string> = {
     'Fala uma frase configurada de estado de trabalho quando uma tarefa termina, falha ou aguarda sua confirmação. Como as notificações do sistema, só fala enquanto você não está nesta página (outro aplicativo, sem foco, minimizado) — sem interromper enquanto você olha para a tela. Só a frase configurada é falada, nunca o detalhe da tarefa. Desligado por padrão.',
   voiceNameLabel: 'Voz',
   voiceNameHint: 'Qual voz lê o texto. As vozes vêm da implementação de síntese; mais aparecem ao instalar outra.',
+  memoryProviderLabel: 'Memória de longo prazo',
+  memoryProviderHint:
+    'Qual implementação de memória as conversas usam. A integrada carrega apenas a janela recente; mais opções aparecem quando um plugin de memória de terceiros é instalado. O id escolhido vai para a configuração e, se não existir, volta para a integrada com um registro no log.',
   speechProviderLabel: 'Reconhecimento de voz',
   speechProviderHint:
     'Qual implementação transcreve a gravação. Mais de uma opção aparece apenas com o plugin de entrada de voz instalado; a escolha é salva e um provedor ausente falha em vez de trocar sozinho.',

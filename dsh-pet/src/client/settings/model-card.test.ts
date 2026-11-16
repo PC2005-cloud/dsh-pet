@@ -51,6 +51,9 @@ function props(values: ChatFlagValues, over: Record<string, unknown> = {}): Reco
     chatImageLimit: 10,
     onChatMemoryChange: () => {},
     onChatImageLimitChange: () => {},
+    memoryProvider: 'native',
+    memoryProviders: [{ id: 'native', name: '内置记忆' }],
+    onMemoryProviderChange: () => {},
     values,
     onFlagChange: () => {},
     ...over,
@@ -95,5 +98,26 @@ describe('ModelCard —— 对话开关', () => {
     const pickers = flatten(tree).filter((node) => (node.tag as unknown) === Picker);
     assert.equal(pickers.length, 2, '两个模型格子各有一个选择器');
     for (const picker of pickers) assert.equal(picker.props.disabled, true);
+  });
+});
+
+describe('ModelCard —— 长期记忆实现', () => {
+  test('下拉的值与选项来自 props，不硬编码 id', () => {
+    const tree = ModelCard(
+      props(allOff, {
+        memoryProvider: 'pc',
+        memoryProviders: [
+          { id: 'native', name: '内置记忆' },
+          { id: 'pc', name: 'PowerContext' },
+        ],
+      }) as never,
+    );
+    const select = flatten(tree).find((node) => node.props?.label === 'memoryProviderLabel');
+    assert.ok(select, '卡片上要有记忆实现下拉');
+    assert.equal(select.props.value, 'pc');
+    assert.deepEqual(
+      (select.props.options as Array<{ id: string }>).map((option) => option.id),
+      ['native', 'pc'],
+    );
   });
 });

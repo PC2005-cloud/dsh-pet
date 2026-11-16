@@ -114,6 +114,9 @@ export function saveUserConfig(
   // 识别实现（全局）：只验形态，存在性由 hear 解析时判——配置校验拿不到运行时注册表
   const sp = o.speechProvider;
   if (sp !== undefined && !topFieldValid('speechProvider', sp)) return null;
+  // 记忆实现（全局）：只验形态，存在性由运行时解析时判
+  const mp = o.memoryProvider;
+  if (mp !== undefined && !topFieldValid('memoryProvider', mp)) return null;
   // 天气城市覆盖（全局，只读 main）：空串是有效值（= 跟随 IP 自动定位），
   // 因此这里与其它可选字段不同——判的是 undefined 而不是真值，清空输入框必须能写回空串。
   const ec = o.environmentCity;
@@ -189,6 +192,7 @@ export function saveUserConfig(
   if (vte !== undefined) outConfig.voiceTodoEnabled = vte;
   if (vne !== undefined) outConfig.voiceNotifyEnabled = vne;
   if (sp !== undefined) outConfig.speechProvider = sp;
+  if (mp !== undefined) outConfig.memoryProvider = String(mp).trim();
   if (ec !== undefined) outConfig.environmentCity = String(ec).trim();
   if (te !== undefined) outConfig.trayEnabled = te;
   if (ph !== undefined) outConfig.physics = ph;
@@ -218,6 +222,7 @@ export function saveUserConfig(
   if (vte !== undefined) bodyOwned.add('voiceTodoEnabled');
   if (vne !== undefined) bodyOwned.add('voiceNotifyEnabled');
   if (sp !== undefined) bodyOwned.add('speechProvider');
+  if (mp !== undefined) bodyOwned.add('memoryProvider');
   if (ec !== undefined) bodyOwned.add('environmentCity');
   if (te !== undefined) bodyOwned.add('trayEnabled');
   if (ph !== undefined) bodyOwned.add('physics');

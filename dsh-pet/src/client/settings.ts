@@ -161,6 +161,21 @@ export function makePetConfigSection(
       };
     }, []);
 
+    // 记忆实现列表：同样一次性拉取，选项来自宿主注册表，不在前端硬编码 id。
+    useEffect(() => {
+      let alive = true;
+      void fetch(ROUTE_PATH + '/memory/providers')
+        .then((response) => (response.ok ? response.json() : null))
+        .then((body: { providers?: { id: string; name: string }[] } | null) => {
+          if (!alive || !body || !Array.isArray(body.providers)) return;
+          setMemoryProviders(body.providers);
+        })
+        .catch(() => undefined);
+      return () => {
+        alive = false;
+      };
+    }, []);
+
     // 系统通知总开关：与其余全局开关同构，切换只改本地状态、随「保存」整包写入。
     // 不做即时写入：PUT /config 会重启桌面 Helper，全部桌面宠物窗口重建（拖拽落点清空、宠物跳回角落）。
     // 引擎重读放在保存成功后（persist 里调 reloadNotifications），保存后即时生效、无需刷新。
@@ -194,6 +209,10 @@ export function makePetConfigSection(
     const [speechProvider, setSpeechProvider] = useState('');
     // 可选识别实现：来自宿主 /voice/hear-providers，拉不到就留空（下拉只显示当前值）。
     const [speechProviders, setSpeechProviders] = useState<{ id: string; name: string }[]>([]);
+    // 长期记忆实现：空串表示「还没拿到成品值」，保存时该项不提交。
+    const [memoryProvider, setMemoryProvider] = useState('');
+    // 可选记忆实现：来自宿主 /memory/providers，拉不到就留空。
+    const [memoryProviders, setMemoryProviders] = useState<{ id: string; name: string }[]>([]);
     // 天气城市覆盖（全局，只读 main）：空串是有效值 = 跟随 IP 自动定位，所以初值就是空串。
     const [environmentCity, setEnvironmentCity] = useState('');
     // 物理参数（全局）：只改本地状态，随「保存」整包写入；初值仅占位，成品加载成功后才允许编辑与保存。
@@ -237,6 +256,7 @@ export function makePetConfigSection(
         if (patch.voiceTodoEnabled !== undefined) setVoiceTodoEnabled(patch.voiceTodoEnabled);
         if (patch.voiceNotifyEnabled !== undefined) setVoiceNotifyEnabled(patch.voiceNotifyEnabled);
         if (patch.speechProvider !== undefined) setSpeechProvider(patch.speechProvider);
+        if (patch.memoryProvider !== undefined) setMemoryProvider(patch.memoryProvider);
         if (patch.environmentCity !== undefined) setEnvironmentCity(patch.environmentCity);
         if (patch.physics !== undefined) setPhysics(patch.physics);
         if (patch.font !== undefined) setFont(patch.font);
@@ -357,6 +377,8 @@ export function makePetConfigSection(
         voiceNotifyEnabled,
         // 空串 = 还没加载到成品值：不提交，免得用一个本地猜的识别实现覆盖配置
         ...(speechProvider === '' ? {} : { speechProvider }),
+        // 同上：记忆实现的选择只来自注册表，没拉到就不提交
+        ...(memoryProvider === '' ? {} : { memoryProvider }),
         // 城市覆盖与上面两项不同：空串是有效值（= 恢复自动定位），必须照常提交
         environmentCity,
         physics,
@@ -466,6 +488,9 @@ export function makePetConfigSection(
           chatImageLimit,
           onChatMemoryChange: setChatMemory,
           onChatImageLimitChange: setChatImageLimit,
+          memoryProvider,
+          memoryProviders,
+          onMemoryProviderChange: setMemoryProvider,
           values: chatFlags,
           onFlagChange: setChatFlag,
         }),

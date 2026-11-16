@@ -252,6 +252,7 @@ describe('buildSaveBody —— 请求体字段', () => {
       'confineToScreen',
       'environmentCity',
       'font',
+      'memoryProvider',
       'notificationsEnabled',
       'notifyWhenFocused',
       'pets',

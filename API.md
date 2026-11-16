@@ -51,6 +51,7 @@ dsh-pet 的宿主半侧向 DSH 自己的 Web 服务注册了**一条前缀路由
 | `DELETE /dsh-pet-7340/chat?pet=`       | **删除对话记忆**：带 `?ts=`（可重复，取自 `GET /chat` 的 `messages[].ts`）只删这些轮——一轮两条共享 `ts`，成对删；不带 `ts` 清空整只。响应 `{ ok: true, removed }`，删空后不留空对象                                                                      |
 | `GET /dsh-pet-7340/chat/memory`        | 列出**已删宠物**残留的对话历史（宠物删了但历史还在，`GET /chat` 读不到）；只给条数与最后时间                                                                                                                                                             |
 | `DELETE /dsh-pet-7340/chat/memory`     | 一次清空这些残留历史                                                                                                                                                                                                                                     |
+| `GET /dsh-pet-7340/memory/providers`   | 记忆实现目录：`{ providers: [{ id, name }] }`，即配置项 `main.memoryProvider` 的取值来源；内置 `native` 恒在首位，其余按注册顺序追加                                                                                                                     |
 | `POST /dsh-pet-7340/balance`           | 立即刷新一次余额（可见效果同样是弹气泡 + 档位动画）；带 `?pet=`（需 `surface=`）时只让这只弹，不带则所有开启余额的宠物都弹 |
 | `POST /dsh-pet-7340/environment`       | **查环境**：城市 + 天气；带 `?pet=`（需 `surface=`）时写进 `sections.env`，`?fresh=1` 跳过缓存 |
 

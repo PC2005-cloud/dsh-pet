@@ -177,6 +177,9 @@ export const fr: Record<Key, string> = {
   voiceNameLabel: 'Voix',
   voiceNameHint:
     "Quelle voix lit le texte. Les voix viennent de l'implémentation de synthèse ; d'autres apparaissent avec une autre implémentation.",
+  memoryProviderLabel: 'Mémoire à long terme',
+  memoryProviderHint:
+    "Quelle implémentation de mémoire les conversations utilisent. Celle intégrée ne porte que la fenêtre récente ; d'autres options apparaissent dès qu'un plugin de mémoire tiers est installé. L'id choisi est écrit dans la configuration et, s'il est inconnu, on retombe sur l'intégré avec une ligne de journal.",
   speechProviderLabel: 'Reconnaissance vocale',
   speechProviderHint:
     "Quelle implémentation transcrit l'enregistrement. Plusieurs options n'apparaissent qu'avec un plugin de saisie vocale installé ; le choix est enregistré et un fournisseur absent échoue au lieu de basculer.",

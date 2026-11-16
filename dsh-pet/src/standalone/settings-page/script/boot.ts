@@ -93,6 +93,12 @@ async function loadVoiceCatalog() {
   } catch {
     /* 回落空列表：下拉只显示当前值 */
   }
+  try {
+    const body = await callApi('GET', '/memory/providers');
+    if (body && Array.isArray(body.providers)) state.memoryProviders = body.providers;
+  } catch {
+    /* 回落空列表：下拉只显示当前值 */
+  }
 }
 
 async function loadPets() {

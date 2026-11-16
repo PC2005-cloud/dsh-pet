@@ -29,8 +29,8 @@ dsh-pet 提供两个 Cordis 服务：页面内的 `petApi7340`（浏览器半侧
 | `voice.list()` | 列出全部实现与音色（`{ providers: [{ id, name, voices }] }`），与 `GET /voice/voices` 同源 |
 | `speech.register(def)` | 注册一个语音识别实现（`{ id, name, timeoutMs?, transcribe }`）：注册后出现在 `GET /voice/hear-providers`；多实现并存，`id` 唯一，重复注册抛错不覆盖；`transcribe` 收 `{ audio, signal }` 回文字 |
 | `speech.list()` | 列出全部识别实现（`{ providers: [{ id, name }] }`），与 `GET /voice/hear-providers` 同源 |
-| `memory.register(def)` | 注册一个第三方记忆实现（`{ id, recall?, capture? }`）：`recall` 在生成前改本轮 `system/history/userText`，`capture` 在落盘后收这一轮；同一时刻只有一个生效，后注册覆盖先注册 |
-| `memory.list()` | 列出原生与已注册的记忆实现 id，用来确认注册是否生效 |
+| `memory.register(def)` | 注册一个第三方长期记忆实现（`{ id, name, timeoutMs?, recall?, capture? }`）：`recall` 在生成前返回整个请求体（`undefined` = 本轮不介入），`capture` 在落盘后收这一轮；多实现并存，配置里写哪个 `id` 就走哪个 |
+| `memory.list()` | 列出全部实现（`{ providers: [{ id, name }] }`），内置的 `native` 恒在首位 |
 
 ---
 

@@ -19,7 +19,7 @@ import { tmpdir } from 'node:os';
 import { Writable } from 'node:stream';
 
 import { apply } from './index.ts';
-import { activeChatMemoryProvider } from './chat-memory-provider.ts';
+import { NATIVE_MEMORY_ID, resolveChatMemoryProvider } from './chat-memory-provider.ts';
 
 /** 用户根之外的诱饵内容：任何响应体出现它都说明越根读盘成功 */
 const SECRET = 'TOP-SECRET-BYTES';
@@ -891,8 +891,8 @@ describe('对外 Cordis 服务 —— 第三方注册余额查询', () => {
 
 describe('对外 Cordis 服务 —— 第三方注册记忆', () => {
   interface MemoryApi {
-    register: (def: { id: string; recall?: () => Promise<{ userText?: string }> }) => () => void;
-    list: () => { builtin: string[]; external: string[] };
+    register: (def: { id: string; name: string; recall?: () => undefined }) => () => void;
+    list: () => { providers: Array<{ id: string; name: string }> };
   }
   const api = (): MemoryApi => {
     const value = provided.get('petApi7340') as { memory?: MemoryApi } | undefined;
@@ -907,17 +907,27 @@ describe('对外 Cordis 服务 —— 第三方注册记忆', () => {
     assert.equal('unregister' in memory, false);
   });
 
-  test('通过服务注册后 list 与聊天路径都看得到，disposer 后回落原生', () => {
-    const def = { id: 'route-test-memory', recall: async () => ({ userText: '改后的问题' }) };
+  test('通过服务注册后 list 与解析都看得到，disposer 后回落内置', () => {
+    const def = { id: 'route-test-memory', name: '路由测试', recall: () => undefined };
     const dispose = api().register(def);
     try {
-      assert.ok(api().list().external.includes('route-test-memory'));
-      assert.equal(activeChatMemoryProvider(), def, '聊天路径读到的必须是服务注册的这一份');
+      assert.ok(
+        api()
+          .list()
+          .providers.some((item) => item.id === 'route-test-memory'),
+        '注册后必须出现在目录里',
+      );
+      assert.equal(resolveChatMemoryProvider('route-test-memory'), def, '解析到的必须是服务注册的这一份');
     } finally {
       dispose();
     }
-    assert.equal(api().list().external.includes('route-test-memory'), false);
-    assert.equal(activeChatMemoryProvider(), null);
+    assert.equal(
+      api()
+        .list()
+        .providers.some((item) => item.id === 'route-test-memory'),
+      false,
+    );
+    assert.equal(resolveChatMemoryProvider('route-test-memory').id, NATIVE_MEMORY_ID);
   });
 });
 

@@ -175,6 +175,9 @@ export const en: Record<Key, string> = {
   voiceNameLabel: 'Voice',
   voiceNameHint:
     'Which voice reads the text. Voices come from the synthesis implementation; more appear when another implementation is installed.',
+  memoryProviderLabel: 'Long-term memory',
+  memoryProviderHint:
+    'Which memory implementation chats use. The built-in one carries only the recent window; more options appear once a third-party memory plugin is installed. The selected id goes into your config, and an unknown id falls back to the built-in one with a log entry.',
   speechProviderLabel: 'Speech recognition',
   speechProviderHint:
     'Which implementation transcribes a held recording. More than one option appears only when a matching voice-input plugin is installed; the choice is saved to your config and a missing provider fails explicitly instead of falling back.',

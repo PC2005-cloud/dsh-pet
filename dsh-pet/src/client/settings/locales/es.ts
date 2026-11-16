@@ -179,6 +179,9 @@ export const es: Record<Key, string> = {
   voiceNameLabel: 'Voz',
   voiceNameHint:
     'Qué voz lee el texto. Las voces provienen de la implementación de síntesis; aparecen más al instalar otra.',
+  memoryProviderLabel: 'Memoria a largo plazo',
+  memoryProviderHint:
+    'Qué implementación de memoria usan las conversaciones. La integrada solo lleva la ventana reciente; aparecen más opciones al instalar un plugin de memoria de terceros. El id elegido se guarda en la configuración y, si no existe, se vuelve a la integrada dejando un registro.',
   speechProviderLabel: 'Reconocimiento de voz',
   speechProviderHint:
     'Qué implementación transcribe la grabación. Solo aparecen varias opciones si hay un complemento de entrada de voz instalado; la elección se guarda y un proveedor ausente falla en vez de cambiarse solo.',

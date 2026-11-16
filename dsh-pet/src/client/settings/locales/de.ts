@@ -176,6 +176,9 @@ export const de: Record<Key, string> = {
   voiceNameLabel: 'Stimme',
   voiceNameHint:
     'Welche Stimme den Text liest. Stimmen stammen von der Synthese-Implementierung; weitere erscheinen mit weiteren Implementierungen.',
+  memoryProviderLabel: 'Langzeitgedächtnis',
+  memoryProviderHint:
+    'Welche Gedächtnis-Implementierung der Chat nutzt. Die eingebaute trägt nur das aktuelle Fenster; weitere Optionen erscheinen, sobald ein Gedächtnis-Plugin von Drittanbietern installiert ist. Die gewählte id landet in der Konfiguration; eine unbekannte id fällt mit einem Logeintrag auf die eingebaute zurück.',
   speechProviderLabel: 'Spracherkennung',
   speechProviderHint:
     'Welche Implementierung die Aufnahme transkribiert. Mehrere Optionen erscheinen nur mit installiertem Spracheingabe-Plugin; die Auswahl wird gespeichert, ein fehlender Anbieter führt zu einem Fehler statt zu einem stillen Wechsel.',

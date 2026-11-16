@@ -96,6 +96,8 @@ tags:
     description: 字体、通知图标、表情包、动画素材
   - name: Voice
     description: 语音合成——参数校验、排队与缓存都在宿主，成功时直接返回 mp3 文件
+  - name: Memory
+    description: 长期记忆实现目录——第三方注册进来，配置项 memoryProvider 的取值来源
 
 paths:
   /dsh-pet-7340/state:
@@ -2535,6 +2537,39 @@ paths:
                         name:
                           type: string
                           description: 展示名，如 `DSH 语音插件`。
+        "405":
+          description: 方法不是 GET。
+
+  /dsh-pet-7340/memory/providers:
+    get:
+      tags: [Memory]
+      operationId: getMemoryProviders
+      summary: 列出可用的长期记忆实现
+      description: 与配置项 `main.memoryProvider` 同源；内置的 `native` 恒在首位，其余按注册顺序。前端据此渲染选择器，不要硬编码 id。
+      responses:
+        "200":
+          description: 记忆实现目录。
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, providers]
+                properties:
+                  ok:
+                    type: boolean
+                    const: true
+                  providers:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, name]
+                      properties:
+                        id:
+                          type: string
+                          description: provider id，如 `native`；写进配置 `main.memoryProvider` 的就是它。
+                        name:
+                          type: string
+                          description: 展示名，如 `内置记忆`。
         "405":
           description: 方法不是 GET。
 

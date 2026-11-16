@@ -20,7 +20,7 @@ import { createChatMemory, type ChatMemoryInput } from './plugin/chat-memory.ts'
 import type { ChatMemoryMessage } from './chat.ts';
 import type { ConfigPaths } from './config.ts';
 import type { PetImageRef } from './image-attachment.ts';
-import { registerChatMemoryProvider, resetChatMemoryProviders } from './chat-memory-provider.ts';
+import { registerChatMemoryProvider, resetChatMemoryProviders, type ChatRequest } from './chat-memory-provider.ts';
 
 /** 一条已落盘的图片引用：字段与附件服务返回的一致。 */
 const IMAGE: PetImageRef = {
@@ -70,9 +70,10 @@ function createMemory(
     records?: Array<{ petId: string; leaf: string; data: Record<string, unknown> }>;
   },
   captured?: Record<string, unknown>[],
+  ctxOverride?: unknown,
 ) {
   return createChatMemory({
-    ctx: fakeCtx(reply, captured),
+    ctx: ctxOverride ?? fakeCtx(reply, captured),
     configPaths: ws.configPaths,
     log: { info: () => {}, warn: () => {}, error: () => {} },
     memeDirsFor: () => (memeDir === undefined ? [] : [memeDir]),
@@ -496,12 +497,13 @@ describe('createChatMemory —— 第三方记忆提供者', () => {
     }
   });
 
-  test('召回：补丁覆盖 system 与 userText，核心用改后的内容生成', async () => {
+  test('召回：返回的请求体整份生效，核心不再拼装', async () => {
     registerChatMemoryProvider({
       id: 'pc',
-      recall: async () => ({ system: '改后的人设', userText: '改后的问题' }),
+      name: 'PC',
+      recall: (req) => ({ ...req.prepared, system: '改后的人设', userText: '改后的问题' }),
     });
-    const ws = tempWorkspace({ chatImageEnabled: false, chatAnimationEnabled: false });
+    const ws = tempWorkspace({ memoryProvider: 'pc', chatImageEnabled: false, chatAnimationEnabled: false });
     const captured: Record<string, unknown>[] = [];
     try {
       await createMemory('记住啦', ws, undefined, undefined, captured).chatWithPet('main', '在吗');
@@ -512,14 +514,15 @@ describe('createChatMemory —— 第三方记忆提供者', () => {
     }
   });
 
-  test('召回抛错：回复照常，内容不修改', async () => {
+  test('召回抛错：回复照常，用核心拼好的那份', async () => {
     registerChatMemoryProvider({
       id: 'pc',
+      name: 'PC',
       recall: async () => {
         throw new Error('服务不可用');
       },
     });
-    const ws = tempWorkspace({ chatImageEnabled: false, chatAnimationEnabled: false });
+    const ws = tempWorkspace({ memoryProvider: 'pc', chatImageEnabled: false, chatAnimationEnabled: false });
     const captured: Record<string, unknown>[] = [];
     try {
       const r = await createMemory('在的', ws, undefined, undefined, captured).chatWithPet('main', '在吗');
@@ -530,9 +533,38 @@ describe('createChatMemory —— 第三方记忆提供者', () => {
     }
   });
 
-  test('召回超时：1.5s 后按不修改继续，回复照常', async () => {
-    registerChatMemoryProvider({ id: 'pc', recall: () => new Promise<undefined>(() => {}) });
-    const ws = tempWorkspace({ chatImageEnabled: false, chatAnimationEnabled: false });
+  test('召回超时：按 provider 声明的超时放弃，回复照常', async () => {
+    registerChatMemoryProvider({ id: 'pc', name: 'PC', timeoutMs: 10, recall: () => new Promise<undefined>(() => {}) });
+    const ws = tempWorkspace({ memoryProvider: 'pc', chatImageEnabled: false, chatAnimationEnabled: false });
+    const captured: Record<string, unknown>[] = [];
+    try {
+      const r = await createMemory('在的', ws, undefined, undefined, captured).chatWithPet('main', '在吗');
+      assert.equal(r.ok, true);
+      assert.equal(userTextOf(captured[0]), '在吗');
+    } finally {
+      rmSync(ws.dir, { recursive: true, force: true });
+    }
+  });
+
+  test('召回返回 undefined：用核心拼好的那份', async () => {
+    registerChatMemoryProvider({ id: 'pc', name: 'PC', recall: () => undefined });
+    const ws = tempWorkspace({ memoryProvider: 'pc', chatImageEnabled: false, chatAnimationEnabled: false });
+    const captured: Record<string, unknown>[] = [];
+    try {
+      await createMemory('在的', ws, undefined, undefined, captured).chatWithPet('main', '在吗');
+      assert.equal(userTextOf(captured[0]), '在吗');
+    } finally {
+      rmSync(ws.dir, { recursive: true, force: true });
+    }
+  });
+
+  test('召回返回形状非法：按不介入处理，回复照常', async () => {
+    registerChatMemoryProvider({
+      id: 'pc',
+      name: 'PC',
+      recall: () => ({ system: '只剩这一段' }) as unknown as ChatRequest,
+    });
+    const ws = tempWorkspace({ memoryProvider: 'pc', chatImageEnabled: false, chatAnimationEnabled: false });
     const captured: Record<string, unknown>[] = [];
     try {
       const r = await createMemory('在的', ws, undefined, undefined, captured).chatWithPet('main', '在吗');
@@ -547,11 +579,12 @@ describe('createChatMemory —— 第三方记忆提供者', () => {
     const captured: Array<Record<string, unknown>> = [];
     registerChatMemoryProvider({
       id: 'pc',
+      name: 'PC',
       capture: (input) => {
         captured.push(input as unknown as Record<string, unknown>);
       },
     });
-    const ws = tempWorkspace();
+    const ws = tempWorkspace({ memoryProvider: 'pc' });
     try {
       const r = await createMemory('你好呀～', ws).chatWithPet('main', '你好');
       await new Promise((resolve) => setImmediate(resolve));
@@ -572,15 +605,99 @@ describe('createChatMemory —— 第三方记忆提供者', () => {
   test('接收抛错：不影响回复，也不影响已落盘的记忆', async () => {
     registerChatMemoryProvider({
       id: 'pc',
+      name: 'PC',
       capture: () => {
         throw new Error('上传失败');
       },
     });
-    const ws = tempWorkspace();
+    const ws = tempWorkspace({ memoryProvider: 'pc' });
     try {
       const r = await createMemory('在的', ws).chatWithPet('main', '在吗');
       assert.equal(r.ok, true);
       assert.equal(readMessages(ws.userRoot).length, 2);
+    } finally {
+      rmSync(ws.dir, { recursive: true, force: true });
+    }
+  });
+
+  test('生成期间删除历史：本轮不写回、不通知接收，回复照常', async () => {
+    const captured: Record<string, unknown>[] = [];
+    registerChatMemoryProvider({
+      id: 'pc',
+      name: 'PC',
+      capture: (turn) => {
+        captured.push(turn as unknown as Record<string, unknown>);
+      },
+    });
+    const ws = tempWorkspace({ memoryProvider: 'pc' });
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    let started!: () => void;
+    const startedAt = new Promise<void>((resolve) => (started = resolve));
+    const ctx = {
+      agentDefaultModel: { currentSelection: () => ({ provider: 'test', model: 'test-model' }) },
+      llm: {
+        stream: () => {
+          started();
+          return (async function* () {
+            await gate;
+            yield { type: 'text-delta', index: 0, text: '在的' };
+          })();
+        },
+      },
+    };
+    const memory = createMemory('在的', ws, undefined, undefined, undefined, ctx);
+    try {
+      const pending = memory.chatWithPet('main', '在吗');
+      // 生成已经开始（读上下文早已完成），此刻删除历史
+      await startedAt;
+      await memory.deleteHistory('main');
+      release();
+      const r = await pending;
+      assert.equal(r.ok, true, '回复照常返回');
+      assert.equal(captured.length, 0, '这一轮不通知第三方');
+      assert.throws(() => readMessages(ws.userRoot), '这一轮不写回：记忆文件不该被创建');
+    } finally {
+      rmSync(ws.dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('createChatMemory —— 并发', () => {
+  test('两轮对话可以同时在生成：模型调用不在串行队列里', async () => {
+    let inFlight = 0;
+    let peak = 0;
+    let entered = 0;
+    let open!: () => void;
+    const gate = new Promise<void>((resolve) => (open = resolve));
+    let bothIn!: () => void;
+    const both = new Promise<void>((resolve) => (bothIn = resolve));
+    const ctx = {
+      agentDefaultModel: { currentSelection: () => ({ provider: 'test', model: 'test-model' }) },
+      llm: {
+        stream: () => {
+          inFlight += 1;
+          peak = Math.max(peak, inFlight);
+          entered += 1;
+          if (entered === 2) bothIn();
+          return (async function* () {
+            await gate;
+            inFlight -= 1;
+            yield { type: 'text-delta', index: 0, text: '在的' };
+          })();
+        },
+      },
+    };
+    const ws = tempWorkspace();
+    const memory = createMemory('在的', ws, undefined, undefined, undefined, ctx);
+    try {
+      const first = memory.chatWithPet('main', '一');
+      const second = memory.chatWithPet('main', '二');
+      // 有界等待：真串行时第二个 stream 永远不会进入，这里超时后 peak 会是 1。
+      await Promise.race([both, new Promise((resolve) => setTimeout(resolve, 1_000))]);
+      open();
+      await Promise.all([first, second]);
+      assert.equal(peak, 2, '两轮应当同时在生成（模型调用不在锁内）');
     } finally {
       rmSync(ws.dir, { recursive: true, force: true });
     }
