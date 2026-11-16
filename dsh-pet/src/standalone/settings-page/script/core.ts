@@ -31,6 +31,8 @@ export interface ScriptConsts {
   readonly font: unknown;
   /** 动作频率默认值（来自 shared/weights.ts）。 */
   readonly weights: unknown;
+  /** 内置 PowerContext 记忆实现的 id（来自 shared/memory.ts）。 */
+  readonly powerContextProviderId: string;
 }
 
 /**
@@ -53,6 +55,7 @@ const CORNERS = ${JSON.stringify(consts.corners)};
 const FALLBACK_PHYSICS = ${JSON.stringify(consts.physics)};
 const FALLBACK_FONT = ${JSON.stringify(consts.font)};
 const FALLBACK_WEIGHTS = ${JSON.stringify(consts.weights)};
+const POWERCONTEXT_ID = ${JSON.stringify(consts.powerContextProviderId)};
 const FALLBACK_INTERVAL_SEC = 300;
 const state = { config: null, meta: null, globals: null, pets: {}, prompts: {}, entry: 'main', petIndex: 0, dirty: false, voiceOptions: null, speechProviders: null, memoryProviders: null };
 

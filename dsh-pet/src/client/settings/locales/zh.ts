@@ -167,6 +167,10 @@ export const zh = {
   memoryProviderLabel: '长期记忆',
   memoryProviderHint:
     '对话时用哪个记忆实现。内置的「内置记忆」只带最近若干轮历史；装了第三方记忆插件才会出现更多选项，选中的 id 写进用户配置，找不到对应实现时回落内置并记一条日志。',
+  powercontextEndpointLabel: 'PowerContext 地址',
+  powercontextEndpointHint: '本机 PowerContext 服务的根地址，例如 http://127.0.0.1:8000。',
+  powercontextTokenLabel: '访问令牌',
+  powercontextTokenHint: '服务端没开认证时留空。令牌只存在本机配置里，不进日志。',
   speechProviderLabel: '语音识别',
   speechProviderHint:
     '按住录音后交给哪个实现转写。只有装了对应的语音输入插件才会出现多个选项；选中的值写进用户配置，识别不到就报错，不会自动换一个。',

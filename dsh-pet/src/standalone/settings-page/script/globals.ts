@@ -147,8 +147,22 @@ function motionCard() {
 function modelCard() {
   const g = state.globals;
   const memoryProviders = state.memoryProviders || [];
+  // PowerContext 的两个连接字段：只有选中该实现时才显示，由下面的下拉切换显隐。
+  // 用 hidden 切换而不是整卡重渲染：重渲染会把正在输入的光标位置丢掉。
+  const powercontextBox = make('div', { class: 'grid2', hidden: g.memoryProvider !== POWERCONTEXT_ID }, [
+    textField('g-pc-endpoint', 'PowerContext 地址', g.powercontext.endpoint, (value) => {
+      g.powercontext = Object.assign({}, g.powercontext, { endpoint: value });
+    }, { hint: '本机 PowerContext 服务的根地址，例如 http://127.0.0.1:8000。' }),
+    textField('g-pc-token', '访问令牌', g.powercontext.token, (value) => {
+      g.powercontext = Object.assign({}, g.powercontext, { token: value });
+    }, { secret: true, hint: '服务端没开认证时留空。令牌只存在本机配置里，不进日志。' }),
+  ]);
   return card('对话上下文', '模型与接入方式在「AI 服务商」页配置；这里管对话用哪个记忆实现、保留多少上下文。', [
-    selectField('g-memory-provider', '长期记忆', g.memoryProvider, memoryProviders.map((item) => ({ value: item.id, label: item.name })), (value) => setGlobal('memoryProvider', value), '对话时用哪个记忆实现。内置的只带最近若干轮历史；装了第三方记忆插件才会出现更多选项，找不到对应实现时回落内置。'),
+    selectField('g-memory-provider', '长期记忆', g.memoryProvider, memoryProviders.map((item) => ({ value: item.id, label: item.name })), (value) => {
+      setGlobal('memoryProvider', value);
+      powercontextBox.hidden = value !== POWERCONTEXT_ID;
+    }, '对话时用哪个记忆实现。内置的只带最近若干轮历史；装了第三方记忆插件才会出现更多选项，找不到对应实现时回落内置。'),
+    powercontextBox,
     make('div', { class: 'grid2' }, [
       numberField('g-memory', '对话记忆轮数', g.chatMemoryRounds, (value) => setGlobal('chatMemoryRounds', Math.round(clampNumber(value, 0, 100, 0))), { min: 0, max: 100, step: 1, hint: '0 表示不带历史。' }),
       numberField('g-image-limit', '配图张数上限', g.chatImageLimit, (value) => setGlobal('chatImageLimit', Math.round(clampNumber(value, 0, 50, 0))), { min: 0, max: 50, step: 1, hint: '0 表示不限制。' }),

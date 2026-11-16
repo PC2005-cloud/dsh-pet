@@ -176,6 +176,11 @@ export const ja: Record<Key, string> = {
   memoryProviderLabel: '長期記憶',
   memoryProviderHint:
     '会話が使う記憶の実装。内蔵のものは直近の数往復だけを持ちます。第三者の記憶プラグインを入れると選択肢が増えます。選んだ id はユーザー設定に書き込まれ、見つからない場合はログを残して内蔵に戻ります。',
+  powercontextEndpointLabel: 'PowerContext のアドレス',
+  powercontextEndpointHint: 'ローカルで動かしている PowerContext のルートアドレス（例: http://127.0.0.1:8000）。',
+  powercontextTokenLabel: 'アクセストークン',
+  powercontextTokenHint:
+    'サーバーで認証を有効にしていない場合は空欄。トークンはローカル設定にのみ保存され、ログには出ません。',
   speechProviderLabel: '音声認識',
   speechProviderHint:
     '録音をどの実装で文字起こしするか。対応する音声入力プラグインを入れたときだけ複数の選択肢が出ます。選んだ値は設定に保存され、見つからない場合は別の実装に切り替えずエラーになります。',

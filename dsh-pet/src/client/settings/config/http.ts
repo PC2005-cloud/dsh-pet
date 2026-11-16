@@ -5,6 +5,7 @@
  * @module dsh-pet/src/client/settings/config/http
  */
 import { ROUTE_PATH } from '../../../shared/constants.ts';
+import type { PowerContextConfig } from '../../../shared/memory.ts';
 import type { FontConfig, ModelSelection, Pet, PhysicsParams, Weights } from '../../../shared/types.ts';
 import type { ModelCatalogGroup } from '../picker/index.ts';
 import type { MergedConfig } from './read.ts';
@@ -55,6 +56,8 @@ export interface SaveFields {
   speechProvider?: string;
   /** 长期记忆实现 id；缺省表示不提交这一项，服务端保留原值。 */
   memoryProvider?: string;
+  /** PowerContext 连接配置；缺省表示不提交这一项，服务端保留原值。 */
+  powercontext?: PowerContextConfig;
   /** 天气城市覆盖：空串 = 跟随 IP 自动定位，是有效值，所以必填而不是可选（清空必须能写回）。 */
   environmentCity: string;
   physics: PhysicsParams;
@@ -99,6 +102,7 @@ export function buildSaveBody(fields: SaveFields): Record<string, unknown> {
     voiceNotifyEnabled: fields.voiceNotifyEnabled,
     speechProvider: fields.speechProvider,
     memoryProvider: fields.memoryProvider,
+    powercontext: fields.powercontext,
     environmentCity: fields.environmentCity,
     physics: fields.physics,
     whisperModel: fields.whisperModel,

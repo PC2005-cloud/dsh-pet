@@ -10,6 +10,7 @@ import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { runInNewContext } from 'node:vm';
 
+import { POWERCONTEXT_MEMORY_ID } from '../../shared/memory.ts';
 import { coreScript } from './script/core.ts';
 import { globalsScript } from './script/globals.ts';
 import { petsScript } from './script/pets.ts';
@@ -76,6 +77,7 @@ function probe(): Probe {
       physics: {},
       font: {},
       weights: { idle: 10, turn: 5, move: 5 },
+      powerContextProviderId: POWERCONTEXT_MEMORY_ID,
     }),
     widgetsScript(),
     globalsScript(),

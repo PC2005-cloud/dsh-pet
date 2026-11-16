@@ -180,6 +180,11 @@ export const fr: Record<Key, string> = {
   memoryProviderLabel: 'Mémoire à long terme',
   memoryProviderHint:
     "Quelle implémentation de mémoire les conversations utilisent. Celle intégrée ne porte que la fenêtre récente ; d'autres options apparaissent dès qu'un plugin de mémoire tiers est installé. L'id choisi est écrit dans la configuration et, s'il est inconnu, on retombe sur l'intégré avec une ligne de journal.",
+  powercontextEndpointLabel: 'Adresse de PowerContext',
+  powercontextEndpointHint: 'Adresse racine de votre serveur PowerContext local, par exemple http://127.0.0.1:8000.',
+  powercontextTokenLabel: 'Jeton d’accès',
+  powercontextTokenHint:
+    'Laissez vide si le serveur n’a pas d’authentification. Le jeton reste dans la configuration locale et n’apparaît jamais dans les journaux.',
   speechProviderLabel: 'Reconnaissance vocale',
   speechProviderHint:
     "Quelle implémentation transcrit l'enregistrement. Plusieurs options n'apparaissent qu'avec un plugin de saisie vocale installé ; le choix est enregistré et un fournisseur absent échoue au lieu de basculer.",

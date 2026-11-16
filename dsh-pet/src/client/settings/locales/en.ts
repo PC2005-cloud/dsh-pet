@@ -178,6 +178,11 @@ export const en: Record<Key, string> = {
   memoryProviderLabel: 'Long-term memory',
   memoryProviderHint:
     'Which memory implementation chats use. The built-in one carries only the recent window; more options appear once a third-party memory plugin is installed. The selected id goes into your config, and an unknown id falls back to the built-in one with a log entry.',
+  powercontextEndpointLabel: 'PowerContext endpoint',
+  powercontextEndpointHint: 'Root address of your local PowerContext server, e.g. http://127.0.0.1:8000.',
+  powercontextTokenLabel: 'Access token',
+  powercontextTokenHint:
+    'Leave empty when the server runs without authentication. The token only lives in your local config and never reaches the logs.',
   speechProviderLabel: 'Speech recognition',
   speechProviderHint:
     'Which implementation transcribes a held recording. More than one option appears only when a matching voice-input plugin is installed; the choice is saved to your config and a missing provider fails explicitly instead of falling back.',

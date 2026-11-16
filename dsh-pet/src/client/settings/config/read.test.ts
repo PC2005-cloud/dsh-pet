@@ -30,6 +30,17 @@ describe('readMainConfig —— 成品聚合 → 表单补丁', () => {
     assert.equal(merged.main.pets[0].position.marginX, 1, '不允许共享同一份 position 对象');
   });
 
+  test('PowerContext 连接段：两项都是字符串且地址非空才带出', () => {
+    const ok = readMainConfig({
+      main: { pets: [], powercontext: { endpoint: 'http://127.0.0.1:8000', token: 'tk' } },
+    });
+    assert.deepEqual(ok?.powercontext, { endpoint: 'http://127.0.0.1:8000', token: 'tk' });
+    const patchOf = (powercontext: unknown) => readMainConfig({ main: { pets: [], powercontext } }) ?? {};
+    assert.equal('powercontext' in patchOf(undefined), false, '缺段当作没写');
+    assert.equal('powercontext' in patchOf({ endpoint: '', token: '' }), false, '空地址当作没写');
+    assert.equal('powercontext' in patchOf({ endpoint: 'http://127.0.0.1:8000' }), false, '缺 token 当作没写');
+  });
+
   test('物理参数与字体：成品缺子键时用内置默认补满', () => {
     const patch = readMainConfig({ main: { pets: [], physics: { gravity: 3 }, font: { size: 20 } } });
     assert.deepEqual(patch?.physics, { ...DEFAULT_PHYSICS, gravity: 3 });

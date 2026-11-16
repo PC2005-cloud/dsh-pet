@@ -22,6 +22,10 @@ function textField(id, label, value, onChange, opts) {
   if (opts && opts.maxLength) input.maxLength = opts.maxLength;
   if (opts && opts.disabled) input.disabled = true;
   if (opts && opts.placeholder) input.placeholder = opts.placeholder;
+  if (opts && opts.secret) {
+    input.type = 'password';
+    input.autocomplete = 'new-password';
+  }
   input.addEventListener('input', () => {
     onChange(input.value);
     markDirty(true);

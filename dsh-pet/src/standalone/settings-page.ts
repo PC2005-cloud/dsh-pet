@@ -14,6 +14,7 @@ import { LOGO_URL } from '../shared/avatar.ts';
 import { PET_DISPLAYS } from '../shared/config.ts';
 import { ROUTE_SEGMENT } from '../shared/constants.ts';
 import { DEFAULT_FONT, FONT_PRESETS } from '../shared/fonts.ts';
+import { POWERCONTEXT_MEMORY_ID } from '../shared/memory.ts';
 import { DEFAULT_PHYSICS } from '../shared/physics.ts';
 import { DEFAULT_WEIGHTS } from '../shared/weights.ts';
 import { aiScript } from './settings-page/script/ai.ts';
@@ -51,6 +52,7 @@ export const settingsScript = [
     physics: DEFAULT_PHYSICS,
     font: DEFAULT_FONT,
     weights: DEFAULT_WEIGHTS,
+    powerContextProviderId: POWERCONTEXT_MEMORY_ID,
   }),
   widgetsScript(),
   overlayScript(),

@@ -182,6 +182,11 @@ export const es: Record<Key, string> = {
   memoryProviderLabel: 'Memoria a largo plazo',
   memoryProviderHint:
     'Qué implementación de memoria usan las conversaciones. La integrada solo lleva la ventana reciente; aparecen más opciones al instalar un plugin de memoria de terceros. El id elegido se guarda en la configuración y, si no existe, se vuelve a la integrada dejando un registro.',
+  powercontextEndpointLabel: 'Dirección de PowerContext',
+  powercontextEndpointHint: 'Dirección raíz de tu servidor PowerContext local, por ejemplo http://127.0.0.1:8000.',
+  powercontextTokenLabel: 'Token de acceso',
+  powercontextTokenHint:
+    'Déjalo vacío si el servidor no tiene autenticación. El token solo vive en la configuración local y nunca llega a los registros.',
   speechProviderLabel: 'Reconocimiento de voz',
   speechProviderHint:
     'Qué implementación transcribe la grabación. Solo aparecen varias opciones si hay un complemento de entrada de voz instalado; la elección se guarda y un proveedor ausente falla en vez de cambiarse solo.',

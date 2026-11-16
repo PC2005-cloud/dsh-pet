@@ -8,6 +8,7 @@
 import { ROUTE_PATH } from '../shared/constants.ts';
 import { avatarUrl } from '../shared/avatar.ts';
 import { DEFAULT_FONT } from '../shared/fonts.ts';
+import type { PowerContextConfig } from '../shared/memory.ts';
 import { DEFAULT_PHYSICS } from '../shared/physics.ts';
 import type { FontConfig, ModelSelection, PhysicsParams, Weights } from '../shared/types.ts';
 import type { FunctionComponent } from 'react';
@@ -213,6 +214,8 @@ export function makePetConfigSection(
     const [memoryProvider, setMemoryProvider] = useState('');
     // 可选记忆实现：来自宿主 /memory/providers，拉不到就留空。
     const [memoryProviders, setMemoryProviders] = useState<{ id: string; name: string }[]>([]);
+    // PowerContext 连接（全局默认）：地址为空 = 还没拿到成品值，保存时这一项不提交。
+    const [powercontext, setPowercontext] = useState<PowerContextConfig>({ endpoint: '', token: '' });
     // 天气城市覆盖（全局，只读 main）：空串是有效值 = 跟随 IP 自动定位，所以初值就是空串。
     const [environmentCity, setEnvironmentCity] = useState('');
     // 物理参数（全局）：只改本地状态，随「保存」整包写入；初值仅占位，成品加载成功后才允许编辑与保存。
@@ -257,6 +260,7 @@ export function makePetConfigSection(
         if (patch.voiceNotifyEnabled !== undefined) setVoiceNotifyEnabled(patch.voiceNotifyEnabled);
         if (patch.speechProvider !== undefined) setSpeechProvider(patch.speechProvider);
         if (patch.memoryProvider !== undefined) setMemoryProvider(patch.memoryProvider);
+        if (patch.powercontext !== undefined) setPowercontext(patch.powercontext);
         if (patch.environmentCity !== undefined) setEnvironmentCity(patch.environmentCity);
         if (patch.physics !== undefined) setPhysics(patch.physics);
         if (patch.font !== undefined) setFont(patch.font);
@@ -348,6 +352,10 @@ export function makePetConfigSection(
     const patchFont = (patch: Partial<FontConfig>): void => setFont((current) => ({ ...current, ...patch }));
     const patchPhysics = (patch: Partial<PhysicsParams>): void => setPhysics((current) => ({ ...current, ...patch }));
 
+    /** PowerContext 的两个输入框共用一个整段对象，按字段打补丁。 */
+    const patchPowerContext = (patch: Partial<PowerContextConfig>): void =>
+      setPowercontext((current) => ({ ...current, ...patch }));
+
     /** 两个模型字段各有一份状态，卡片只回传键名。 */
     const setModel = (key: ModelFieldKey, value: ModelSelection): void => {
       if (key === 'whisperModel') setWhisperModel(value);
@@ -379,6 +387,8 @@ export function makePetConfigSection(
         ...(speechProvider === '' ? {} : { speechProvider }),
         // 同上：记忆实现的选择只来自注册表，没拉到就不提交
         ...(memoryProvider === '' ? {} : { memoryProvider }),
+        // 地址为空 = 还没加载到成品值：不提交，免得用空地址覆盖配置
+        ...(powercontext.endpoint === '' ? {} : { powercontext }),
         // 城市覆盖与上面两项不同：空串是有效值（= 恢复自动定位），必须照常提交
         environmentCity,
         physics,
@@ -491,6 +501,8 @@ export function makePetConfigSection(
           memoryProvider,
           memoryProviders,
           onMemoryProviderChange: setMemoryProvider,
+          powercontext,
+          onPowerContextChange: patchPowerContext,
           values: chatFlags,
           onFlagChange: setChatFlag,
         }),

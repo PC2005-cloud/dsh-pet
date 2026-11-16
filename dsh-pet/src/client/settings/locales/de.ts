@@ -179,6 +179,11 @@ export const de: Record<Key, string> = {
   memoryProviderLabel: 'Langzeitgedächtnis',
   memoryProviderHint:
     'Welche Gedächtnis-Implementierung der Chat nutzt. Die eingebaute trägt nur das aktuelle Fenster; weitere Optionen erscheinen, sobald ein Gedächtnis-Plugin von Drittanbietern installiert ist. Die gewählte id landet in der Konfiguration; eine unbekannte id fällt mit einem Logeintrag auf die eingebaute zurück.',
+  powercontextEndpointLabel: 'PowerContext-Adresse',
+  powercontextEndpointHint: 'Wurzeladresse deines lokalen PowerContext-Servers, z. B. http://127.0.0.1:8000.',
+  powercontextTokenLabel: 'Zugriffstoken',
+  powercontextTokenHint:
+    'Leer lassen, wenn der Server ohne Authentifizierung läuft. Das Token steht nur in der lokalen Konfiguration und landet nie im Log.',
   speechProviderLabel: 'Spracherkennung',
   speechProviderHint:
     'Welche Implementierung die Aufnahme transkribiert. Mehrere Optionen erscheinen nur mit installiertem Spracheingabe-Plugin; die Auswahl wird gespeichert, ein fehlender Anbieter führt zu einem Fehler statt zu einem stillen Wechsel.',

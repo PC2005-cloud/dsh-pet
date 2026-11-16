@@ -488,6 +488,58 @@ describe('readAllConfig —— 天气城市覆盖（只读 main）', () => {
   });
 });
 
+describe('saveUserConfig —— PowerContext 连接（powercontext 整段）', () => {
+  test('非法值整包拒绝：缺 token、非 http(s) 地址、空地址、非对象都不收', () => {
+    assert.equal(saveUserConfig({ pets: PETS, powercontext: { endpoint: 'http://127.0.0.1:8000' } }, undefined), null);
+    assert.equal(
+      saveUserConfig({ pets: PETS, powercontext: { endpoint: '127.0.0.1:8000', token: '' } }, undefined),
+      null,
+    );
+    assert.equal(saveUserConfig({ pets: PETS, powercontext: { endpoint: '   ', token: '' } }, undefined), null);
+    assert.equal(saveUserConfig({ pets: PETS, powercontext: 'http://127.0.0.1:8000' }, undefined), null);
+  });
+
+  test('两项 trim 后落盘，请求体多带的键不写进用户层', () => {
+    const out = saveUserConfig(
+      { pets: PETS, powercontext: { endpoint: ' http://127.0.0.1:8000 ', token: ' tk ', extra: 1 } },
+      undefined,
+    ) as Record<string, unknown>;
+    assert.deepEqual(out.powercontext, { endpoint: 'http://127.0.0.1:8000', token: 'tk' });
+  });
+
+  test('令牌留空合法：服务端没开认证时本来就不校验', () => {
+    const out = saveUserConfig(
+      { pets: PETS, powercontext: { endpoint: 'http://127.0.0.1:8000', token: '' } },
+      undefined,
+    ) as Record<string, unknown>;
+    assert.deepEqual(out.powercontext, { endpoint: 'http://127.0.0.1:8000', token: '' });
+  });
+
+  test('请求体没带 → 透传磁盘旧值（不得把已配的地址抹掉）', () => {
+    const out = saveUserConfig(
+      { pets: PETS },
+      {
+        powercontext: { endpoint: 'http://10.0.0.2:9000', token: 'tk' },
+      },
+    ) as Record<string, unknown>;
+    assert.deepEqual(out.powercontext, { endpoint: 'http://10.0.0.2:9000', token: 'tk' });
+  });
+});
+
+describe('readAllConfig —— PowerContext 连接', () => {
+  const BASE = { powercontext: { endpoint: '', token: '' } };
+
+  test('用户层写了 → 取用户层的值', () => {
+    const merged = readAllConfig(withBase(BASE, { powercontext: { endpoint: 'http://127.0.0.1:8000', token: 'tk' } }));
+    assert.deepEqual(merged.main.powercontext, { endpoint: 'http://127.0.0.1:8000', token: 'tk' });
+  });
+
+  test('用户层写了非法值 → 告警并回退内置默认（整段替换，不逐子键补）', () => {
+    const merged = readAllConfig(withBase(BASE, { powercontext: { endpoint: 'nope' } }));
+    assert.deepEqual(merged.main.powercontext, { endpoint: '', token: '' });
+  });
+});
+
 describe('JSONC 配置读取：字符串中的注释标记与转义', () => {
   const prompts = [
     '请原样解释 // 示例 这段文字',

@@ -5,6 +5,7 @@
  * @module dsh-pet/src/client/settings/config/read
  */
 import { DEFAULT_FONT } from '../../../shared/fonts.ts';
+import type { PowerContextConfig } from '../../../shared/memory.ts';
 import { DEFAULT_PHYSICS } from '../../../shared/physics.ts';
 import type { FontConfig, ModelSelection, Pet, PhysicsParams, Weights } from '../../../shared/types.ts';
 import { parseWeights } from '../../../shared/weights.ts';
@@ -44,6 +45,8 @@ export interface MainConfigPatch {
   speechProvider?: string;
   /** 长期记忆实现 id；缺省表示这次响应里没有可信值。 */
   memoryProvider?: string;
+  /** PowerContext 连接配置；缺省表示这次响应里没有可信值。 */
+  powercontext?: PowerContextConfig;
   /** 天气城市覆盖；空串 = 跟随 IP 自动定位（与缺省不同，空串是可信值）。 */
   environmentCity?: string;
   /** 物理参数：成品已按「内置默认 ← 用户层」填满，缺子键再用内置默认兜底一次。 */
@@ -69,6 +72,13 @@ const readModel = (value: unknown): ModelSelection | undefined => {
   const model = value as Partial<ModelSelection> | undefined;
   if (!model || typeof model.provider !== 'string' || typeof model.model !== 'string') return undefined;
   return { provider: model.provider, model: model.model };
+};
+
+/** PowerContext 连接段：两项都是字符串且地址非空才算写全，否则视为没写（宿主会按非法拒绝）。 */
+const readPowerContext = (value: unknown): PowerContextConfig | undefined => {
+  const conf = value as Partial<PowerContextConfig> | undefined;
+  if (!conf || typeof conf.endpoint !== 'string' || typeof conf.token !== 'string') return undefined;
+  return conf.endpoint.trim() === '' ? undefined : { endpoint: conf.endpoint, token: conf.token };
 };
 
 /**
@@ -101,6 +111,8 @@ export function readMainConfig(merged: MergedConfig): MainConfigPatch | null {
   if (typeof main.voiceNotifyEnabled === 'boolean') patch.voiceNotifyEnabled = main.voiceNotifyEnabled;
   if (typeof main.speechProvider === 'string') patch.speechProvider = main.speechProvider;
   if (typeof main.memoryProvider === 'string') patch.memoryProvider = main.memoryProvider;
+  const powercontext = readPowerContext(main.powercontext);
+  if (powercontext) patch.powercontext = powercontext;
   if (typeof main.environmentCity === 'string') patch.environmentCity = main.environmentCity;
   if (main.physics && typeof main.physics === 'object') {
     patch.physics = { ...DEFAULT_PHYSICS, ...(main.physics as PhysicsParams) };

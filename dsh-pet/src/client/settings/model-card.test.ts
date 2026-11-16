@@ -1,14 +1,16 @@
 /**
  * 「AI 模型与对话上下文」卡（src/client/settings/model-card.ts）的契约测试。
  *
- * 两条契约：
+ * 三条契约：
  *   1. 三个对话开关的勾选态来自 `values`，切换回传的是配置字段名（键名错位会静默写坏别的开关）；
- *   2. 忙时全部控件禁用，模型选择器也拿到同一个 busy。
+ *   2. 忙时全部控件禁用，模型选择器也拿到同一个 busy；
+ *   3. PowerContext 的地址与令牌只在选中该实现时渲染。
  */
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { jsx } from 'react/jsx-runtime';
 
+import { POWERCONTEXT_MEMORY_ID } from '../../shared/memory.ts';
 import { makeModelCard, type ChatFlagValues } from './model-card.ts';
 
 interface Node {
@@ -54,6 +56,8 @@ function props(values: ChatFlagValues, over: Record<string, unknown> = {}): Reco
     memoryProvider: 'native',
     memoryProviders: [{ id: 'native', name: '内置记忆' }],
     onMemoryProviderChange: () => {},
+    powercontext: { endpoint: '', token: '' },
+    onPowerContextChange: () => {},
     values,
     onFlagChange: () => {},
     ...over,
@@ -119,5 +123,28 @@ describe('ModelCard —— 长期记忆实现', () => {
       (select.props.options as Array<{ id: string }>).map((option) => option.id),
       ['native', 'pc'],
     );
+  });
+
+  test('未选中 PowerContext 时不渲染地址与令牌输入框', () => {
+    const secrets = flatten(ModelCard(props(allOff) as never)).filter(
+      (node) => node.tag === 'input' && node.props.type === 'password',
+    );
+    assert.equal(secrets.length, 0, '选内置记忆时不该出现令牌输入框');
+  });
+
+  test('选中 PowerContext 时渲染地址与令牌，值来自 props', () => {
+    const tree = ModelCard(
+      props(allOff, {
+        memoryProvider: POWERCONTEXT_MEMORY_ID,
+        powercontext: { endpoint: 'http://127.0.0.1:8000', token: 'tk' },
+      }) as never,
+    );
+    const password = flatten(tree).find((node) => node.tag === 'input' && node.props.type === 'password');
+    assert.ok(password, '令牌输入框应该出现');
+    assert.equal(password.props.value, 'tk');
+    const endpoint = flatten(tree).find(
+      (node) => node.tag === 'input' && node.props.type === 'text' && node.props.value === 'http://127.0.0.1:8000',
+    );
+    assert.ok(endpoint, '地址输入框应该出现且带回成品值');
   });
 });
