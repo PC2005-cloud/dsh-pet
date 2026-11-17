@@ -167,17 +167,16 @@ export function createPowerContextMemory(deps: PowerContextDeps): ChatMemoryProv
   const capture = async (turn: CaptureTurn): Promise<void> => {
     const scopeId = await ensureScope(turn.petId);
     if (scopeId === undefined) return;
-    // 写的是 CaptureContentSourceRequest（202 受理，抽取在服务端后台跑）：
-    // source_id 由宠物与轮次时间戳推出来，同一轮重试不会在服务端留下两条证据。
+    // 写的是 CaptureContentSourceRequest（202 受理，抽取在服务端后台跑）。
+    // source_id 只带轮次时间戳：唯一性按 (scope, source_id) 算，而 scope 已是「一只宠物一个」，重试仍得同一个 id。
     // 注意不能走 /v1/scopes/{id}/sources——那条路收的是 CreateSourceRequest，不认 scope_id 与 source_id。
     await callApi(deps, {
       method: 'POST',
       path: '/v1/sources/content',
       body: {
         scope_id: scopeId,
-        source_id: 'dsh-pet:' + turn.petId + ':' + turn.ts,
+        source_id: 'dsh-pet:' + turn.ts,
         content: '用户：' + turn.userText + '\n宠物：' + turn.replyText,
-        metadata: { petId: turn.petId },
       },
       timeoutMs: CRUD_TIMEOUT_MS,
     });

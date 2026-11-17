@@ -486,10 +486,11 @@ describe('PowerContext —— 存储', () => {
       await provider.capture?.(turn);
       const posts = stub.requests.filter((req) => req.method === 'POST' && req.path === '/v1/sources/content');
       assert.equal(posts.length, 2);
-      const body = posts[0].body as { scope_id: string; source_id: string; content: string };
+      const body = posts[0].body as { scope_id: string; source_id: string; content: string; metadata?: unknown };
       assert.equal(body.scope_id, 'scp_1');
-      assert.equal(body.source_id, 'dsh-pet:main:1700000000000');
+      assert.equal(body.source_id, 'dsh-pet:1700000000000');
       assert.ok(body.content.includes('以后别放香菜') && body.content.includes('记住啦'), '问答都要写进去');
+      assert.equal(body.metadata, undefined, '只传 scope_id / source_id / content 三个必填字段');
       assert.equal((posts[1].body as { source_id: string }).source_id, body.source_id, '重试不该产生第二条');
     } finally {
       await stub.close();
