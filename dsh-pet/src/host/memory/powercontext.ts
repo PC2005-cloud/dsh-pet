@@ -1,8 +1,10 @@
 /**
  * 内置长期记忆实现：把本机 PowerContext 服务接到 {@link ChatMemoryProvider} 契约上。
  *
- * 召回四步：探到 scope → 可选地把这句话连同最近两轮改写成检索查询 → 检索原子记忆 → 把命中拼成证据块前插到 userText。
+ * 召回：探到 scope → 可选地把这句话连同最近两轮改写成检索查询 → 并行检索主题记忆与原子记忆 → 分层拼成证据块前插到 userText。
  * 每步失败只放弃这一步：探测与检索失败整轮不介入，改写失败退回原句，任何情况都不阻塞对话。
+ * 两层都要查：主题记忆是服务端把多轮对话沉淀成的摘要（「姐姐会缝扣子」这类关系事实只在这里），
+ * 原子记忆是逐条偏好与事实（「红烧肉放两颗冰糖」这类细节只在这里），少查一层就会答不出其中一类。
  * 配置只经装配层注入的 getter 读，本模块不碰文件、不持有进程级状态（scope 缓存闭在实例里）。
  * @module dsh-pet/src/host/memory/powercontext
  */
@@ -35,14 +37,19 @@ const REWRITE_BUDGET_MS = 800;
 const RECALL_TIMEOUT_MS = 6_000;
 /** 改写查询时带上的历史轮数（1 轮 = 1 问 1 答）：只用来还原「它」「那家」这类指代。 */
 const REWRITE_HISTORY_ROUNDS = 2;
-/** 检索条数：三条足够，再多只是把无关内容塞进上下文。 */
+/** 原子记忆检索条数：三条足够，再多只是把无关内容塞进上下文。 */
 const RECALL_LIMIT = 3;
+/** 主题记忆检索条数：一条主题就是整段对话的摘要，比原子记忆长得多，两条已能占满半个证据块。 */
+const TOPIC_RECALL_LIMIT = 2;
 /** 查询串的字节上限：服务端收 8192，留一半余量给中文。 */
 const QUERY_BYTES = 4_096;
 /** 证据块的总字节上限：超了从尾部丢句子，越靠后的命中分越低。 */
 const EVIDENCE_BYTES = 3_072;
 /** 证据块的表头：明确告诉模型这是检索到的旧信息，冲突时以用户当次输入为准。 */
 const EVIDENCE_HEADER = '以下是从长期记忆里检索到的相关信息，供你参考；与用户这次说的话冲突时，以用户为准：';
+/** 证据块的分层标题：先给概括再给细节，模型更容易把原子条目挂到对的关系上。 */
+const TOPIC_SECTION = '[主题记忆]';
+const ATOM_SECTION = '[原子记忆]';
 
 /** 一次改写的输入。 */
 export interface RewriteInput {
@@ -66,6 +73,18 @@ export interface PowerContextDeps {
 interface MemoryHit {
   readonly kind: string;
   readonly text: string;
+}
+
+/** 主题记忆命中：服务端只给标题与摘要，本模块用这两段拼一行证据。 */
+interface TopicHit {
+  readonly title: string;
+  readonly summary: string;
+}
+
+/** 一次召回的两层结果；`undefined` 表示该层失败，空数组表示查到了但没有命中。 */
+interface RecallLayers {
+  readonly topics: readonly TopicHit[] | undefined;
+  readonly atoms: readonly MemoryHit[] | undefined;
 }
 
 /**
@@ -135,10 +154,13 @@ export function createPowerContextMemory(deps: PowerContextDeps): ChatMemoryProv
     if (scopeId === undefined) return undefined;
     const query = await buildQuery(req);
     if (query === '') return undefined;
-    const hits = await search(deps, scopeId, query);
-    if (hits === undefined || hits.length === 0) return undefined;
-    const evidence = formatEvidence(hits);
-    if (evidence === '') return undefined;
+    // 两层并行：总耗时取较慢的那一路，不让一层慢拖成两层的和。
+    const [topics, atoms] = await Promise.all([searchTopics(deps, scopeId, query), search(deps, scopeId, query)]);
+    const evidence = formatEvidence({ topics, atoms });
+    if (evidence === '') {
+      logEmptyRecall(req.petId, topics, atoms);
+      return undefined;
+    }
     return { ...req.prepared, userText: evidence + '\n\n' + req.prepared.userText };
   };
 
@@ -230,7 +252,7 @@ async function callApi(deps: PowerContextDeps, call: ApiCall): Promise<unknown> 
   }
 }
 
-/** 检索原子记忆；响应形状不对按失败处理。 */
+/** 检索原子记忆（逐条偏好与事实）；响应形状不对按失败处理。 */
 async function search(deps: PowerContextDeps, scopeId: string, query: string): Promise<MemoryHit[] | undefined> {
   const result = await callApi(deps, {
     method: 'POST',
@@ -248,6 +270,23 @@ async function search(deps: PowerContextDeps, scopeId: string, query: string): P
   return hits.map(toHit).filter((hit): hit is MemoryHit => hit !== undefined);
 }
 
+/** 检索主题记忆（多轮对话沉淀成的摘要）；响应形状不对同样按失败处理。 */
+async function searchTopics(deps: PowerContextDeps, scopeId: string, query: string): Promise<TopicHit[] | undefined> {
+  const result = await callApi(deps, {
+    method: 'POST',
+    path: '/v1/topic-memory/search',
+    body: {
+      scope_id: scopeId,
+      query,
+      limit: TOPIC_RECALL_LIMIT,
+    },
+    timeoutMs: SEARCH_TIMEOUT_MS,
+  });
+  const hits = (result as { hits?: unknown } | undefined)?.hits;
+  if (!Array.isArray(hits)) return undefined;
+  return hits.map(toTopicHit).filter((hit): hit is TopicHit => hit !== undefined);
+}
+
 /** 一条命中 → `{ kind, text }`；缺字段或空文本当没有这一条。 */
 function toHit(value: unknown): MemoryHit | undefined {
   const memory = (value as { memory?: unknown } | undefined)?.memory;
@@ -257,40 +296,114 @@ function toHit(value: unknown): MemoryHit | undefined {
   return { kind: typeof record.kind === 'string' ? record.kind : '', text: record.text };
 }
 
-/**
- * 把检索命中拼成证据块。
- *
- * 超长从尾部丢整条：越靠后的命中分越低，先丢它们的损失最小。
- * 一条都放不下时把最相关的那条截到预算内——单条啰嗦记忆不该让整轮召回作废。
- *
- * @param hits - 已过滤成 `{ kind, text }` 的命中，按分数降序。
- * @returns 以表头开头的证据块；空串表示没有任何可用命中。
- */
-function formatEvidence(hits: readonly MemoryHit[]): string {
-  const headerBytes = Buffer.byteLength(EVIDENCE_HEADER, 'utf8');
-  const lines: string[] = [];
-  let used = headerBytes;
-  for (const hit of hits) {
-    const line = evidenceLine(hit.kind, hit.text);
-    const size = Buffer.byteLength('\n' + line, 'utf8');
-    if (used + size > EVIDENCE_BYTES) break;
-    lines.push(line);
-    used += size;
-  }
-  if (lines.length === 0) {
-    const first = hits[0];
-    if (first === undefined) return '';
-    const prefix = evidenceLine(first.kind, '');
-    const room = EVIDENCE_BYTES - headerBytes - 1 - Buffer.byteLength(prefix, 'utf8');
-    if (room <= 0) return '';
-    lines.push(prefix + truncateBytes(first.text, room));
-  }
-  return EVIDENCE_HEADER + '\n' + lines.join('\n');
+/** 一条主题命中 → `{ title, summary }`；只有标题没有正文的条目对模型没有信息量，丢弃。 */
+function toTopicHit(value: unknown): TopicHit | undefined {
+  const hit = value as { title?: unknown; summary?: unknown; snippet?: unknown } | undefined;
+  const summary = textField(hit?.summary) || textField(hit?.snippet);
+  if (summary === '') return undefined;
+  return { title: textField(hit?.title), summary };
 }
 
-/** 一条命中的展示行：`- [kind] 正文`。 */
+/** 取一个字符串字段并去首尾空白；非字符串按空串处理。 */
+function textField(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+/** 一条主题命中的展示行：`- 标题：摘要`；标题为空时只给摘要。 */
+function topicLine(hit: TopicHit): string {
+  return '- ' + (hit.title === '' ? '' : hit.title + '：') + hit.summary;
+}
+
+/** 证据块的一段：段标题与已按分数降序排好的行。 */
+type EvidenceSection = readonly [title: string, lines: readonly string[]];
+
+/**
+ * 把两层命中分层拼成证据块。
+ *
+ * 主题段在原子段之前：主题概括的是一整段关系，原子条目是细节，先给概括模型才挂得对地方。
+ *
+ * @param layers - 两层的命中；某一层为 `undefined` 时按空处理，只剩一层也照常输出。
+ * @returns 以表头开头的证据块；空串表示没有任何可用命中。
+ */
+function formatEvidence(layers: RecallLayers): string {
+  const lines = fitSections([
+    [TOPIC_SECTION, (layers.topics ?? []).map(topicLine)],
+    [ATOM_SECTION, (layers.atoms ?? []).map((hit) => evidenceLine(hit.kind, hit.text))],
+  ]);
+  return lines.length === 0 ? '' : EVIDENCE_HEADER + '\n' + lines.join('\n');
+}
+
+/**
+ * 在字节预算内摆放各段，段标题与每一行都计入。
+ *
+ * 超长从尾部丢整条：越靠后的命中分越低，先丢它们的损失最小。
+ * 首条就放不下时截断塞进去——单条啰嗦记忆不该让整轮召回作废。
+ *
+ * @param sections - 按展示顺序排列的段。
+ * @returns 放得下的行；空数组表示连第一个段标题都放不下。
+ */
+function fitSections(sections: readonly EvidenceSection[]): string[] {
+  const out: string[] = [];
+  let used = Buffer.byteLength(EVIDENCE_HEADER, 'utf8');
+  let hasContent = false;
+  for (const [title, lines] of sections) {
+    if (lines.length === 0) continue;
+    const titleCost = Buffer.byteLength('\n' + title, 'utf8');
+    if (used + titleCost > EVIDENCE_BYTES) break;
+    out.push(title);
+    used += titleCost;
+    for (const line of lines) {
+      const size = Buffer.byteLength('\n' + line, 'utf8');
+      if (used + size <= EVIDENCE_BYTES) {
+        out.push(line);
+        used += size;
+        hasContent = true;
+        continue;
+      }
+      if (hasContent) return out;
+      const room = EVIDENCE_BYTES - used - 1;
+      const truncated = room > 0 ? truncateBytes(line, room) : '';
+      if (truncated === '') return out;
+      out.push(truncated);
+      return out;
+    }
+  }
+  return out;
+}
+
+/** 一条原子记忆命中的展示行：`- [kind] 正文`。 */
 function evidenceLine(kind: string, text: string): string {
   return '- ' + (kind === '' ? '' : '[' + kind + '] ') + text;
+}
+
+/**
+ * 记一行「这轮召回是空的」。
+ *
+ * 召回为空有三条路：scope 探不到、检索失败、命中 0 条。过去三条都是静默返回，
+ * 出问题时只能手工去问服务端；分层的状态写进同一行，看日志就能分清是哪条路。
+ *
+ * @param petId - 目标宠物；日志按它定位。
+ * @param topics - 主题记忆那一路的结果。
+ * @param atoms - 原子记忆那一路的结果。
+ */
+function logEmptyRecall(
+  petId: string,
+  topics: readonly TopicHit[] | undefined,
+  atoms: readonly MemoryHit[] | undefined,
+): void {
+  const describe = (list: readonly unknown[] | undefined): string =>
+    list === undefined ? '失败' : list.length + ' 条';
+  const line =
+    'dsh-pet: PowerContext 记忆召回无命中 pet=' +
+    petId +
+    '（主题 ' +
+    describe(topics) +
+    '，原子 ' +
+    describe(atoms) +
+    '）';
+  // 两层都失败多半是服务没起、地址或令牌不对，与「查到了但没命中」不是一类问题
+  if (topics === undefined && atoms === undefined) defaultLog('warn', line);
+  else defaultLog('info', line);
 }
 
 /** 在预算内改写查询；超时、抛错、返回空串都当没改写。 */

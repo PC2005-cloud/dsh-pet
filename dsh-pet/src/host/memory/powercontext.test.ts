@@ -5,7 +5,8 @@
  *   1. 地址没配就不发任何请求，整轮不介入；
  *   2. scope 先查后建——已存在时不再 POST，不存在时按标题创建并用返回的 id 检索；
  *   3. 召回把命中拼成证据块前插到 userText，system 与 history 原样不动；没命中就返回 undefined；
- *   4. 任何一步失败（HTTP 非 2xx、响应形状不对、改写超时）都不抛错，最多退回原句继续。
+ *   4. 任何一步失败（HTTP 非 2xx、响应形状不对、改写超时）都不抛错，最多退回原句继续；
+ *   5. 两层都查：主题记忆与原子记忆并行，分层写进证据块，任一层失败都不影响另一层。
  */
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -226,6 +227,65 @@ describe('PowerContext —— 召回', () => {
       assert.ok(result.userText.endsWith('\n\n晚饭吃什么好'), '用户原话必须在证据块之后');
       assert.equal(result.system, req.prepared.system);
       assert.deepEqual(result.history, req.prepared.history);
+    } finally {
+      await stub.close();
+    }
+  });
+
+  test('主题记忆有命中 → 分层写进证据块，主题段排在原子段之前', async () => {
+    const stub = await startStub((req) => {
+      if (req.method === 'GET' && req.path.startsWith('/v1/scopes')) {
+        return { json: { items: [{ scope_id: 'scp_1', title: 'dsh-pet:main' }] } };
+      }
+      if (req.path === '/v1/topic-memory/search') {
+        return {
+          json: {
+            mode: 'hybrid',
+            hits: [
+              {
+                title: '家庭成员特长',
+                summary: '姐姐缝扣子手巧，弟弟专拆遥控器',
+                snippet: '姐姐缝扣子手可巧了',
+                score: 50,
+              },
+            ],
+          },
+        };
+      }
+      return { json: { mode: 'hybrid', hits: [{ memory: { kind: 'preference', text: '用户不吃香菜' } }] } };
+    });
+    try {
+      const provider = createPowerContextMemory({ endpoint: () => stub.endpoint, token: () => '' });
+      const result = await provider.recall?.(recallRequest('介绍一下你的家人'), new AbortController().signal);
+      assert.ok(result, '两层都有命中时应该返回请求体');
+      assert.ok(result.userText.includes('[主题记忆]'), '主题段要有自己的标题');
+      assert.ok(result.userText.includes('- 家庭成员特长：姐姐缝扣子手巧，弟弟专拆遥控器'), '主题行带标题与摘要');
+      assert.ok(result.userText.includes('[原子记忆]'), '原子段要有自己的标题');
+      assert.ok(result.userText.includes('[preference] 用户不吃香菜'), '原子记忆的 kind 与正文都要在');
+      assert.ok(
+        result.userText.indexOf('[主题记忆]') < result.userText.indexOf('[原子记忆]'),
+        '主题段必须排在原子段之前',
+      );
+      assert.ok(result.userText.endsWith('\n\n介绍一下你的家人'), '用户原话仍在证据块之后');
+    } finally {
+      await stub.close();
+    }
+  });
+
+  test('主题记忆那条路失败 → 原子记忆照常进证据块', async () => {
+    const stub = await startStub((req) => {
+      if (req.method === 'GET' && req.path.startsWith('/v1/scopes')) {
+        return { json: { items: [{ scope_id: 'scp_1', title: 'dsh-pet:main' }] } };
+      }
+      if (req.path === '/v1/topic-memory/search') return { status: 500, json: {} };
+      return { json: { mode: 'hybrid', hits: [{ memory: { kind: 'fact', text: '用户养了一只猫' } }] } };
+    });
+    try {
+      const provider = createPowerContextMemory({ endpoint: () => stub.endpoint, token: () => '' });
+      const result = await provider.recall?.(recallRequest(), new AbortController().signal);
+      assert.ok(result, '一层失败不该让整轮召回作废');
+      assert.ok(result.userText.includes('用户养了一只猫'));
+      assert.ok(!result.userText.includes('[主题记忆]'), '没有主题命中就不该出现主题段标题');
     } finally {
       await stub.close();
     }
