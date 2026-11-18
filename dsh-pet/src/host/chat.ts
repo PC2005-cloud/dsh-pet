@@ -13,7 +13,7 @@
 import { BlockAssembler, createAssistantMessage, createUserMessage, ReasoningEffortId } from '@deepseek-ai/dsh-llm';
 import { actionInstruction, extractChatAction } from './chat-action.ts';
 import type { PetImageRef } from './image-attachment.ts';
-import { PET_CALL_IDENTITY, noTextReason } from './llm-call.ts';
+import { PET_CALL_IDENTITY, PET_CHAT_PURPOSE, noTextReason } from './llm-call.ts';
 import { supportsReasoningOff } from './llm-reasoning.ts';
 import { defaultLog } from './log-file.ts';
 import { extractChatImage, memeCatalog, type MemeEntry } from './memes.ts';
@@ -205,6 +205,8 @@ async function generateWith(ctx: { llm?: unknown }, once: GenerateOnce): Promise
     model: sel.model,
     // 调用身份（见 llm-call.ts）：缺它时 opencode-go 回 400
     sessionId: PET_CALL_IDENTITY,
+    // 调用性质（见 llm-call.ts）：声明为辅助调用，代理据此不再按 system 指纹另开会话
+    purpose: PET_CHAT_PURPOSE,
     messages: [
       ...historyMessages,
       createUserMessage({

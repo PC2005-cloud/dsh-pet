@@ -11,7 +11,7 @@
  */
 
 import { BlockAssembler, createUserMessage, ReasoningEffortId } from '@deepseek-ai/dsh-llm';
-import { PET_CALL_IDENTITY, noTextReason } from './llm-call.ts';
+import { PET_CALL_IDENTITY, PET_WHISPER_PURPOSE, noTextReason } from './llm-call.ts';
 import { supportsReasoningOff } from './llm-reasoning.ts';
 import { defaultLog } from './log-file.ts';
 import { modelCandidates, modelLabel, type ModelRef } from './model-selection.ts';
@@ -120,6 +120,8 @@ async function generateWith(
     model: sel.model,
     // 调用身份（见 llm-call.ts）：缺它时 opencode-go 回 400
     sessionId: PET_CALL_IDENTITY,
+    // 调用性质（见 llm-call.ts）：声明为辅助调用，代理据此不再按 system 指纹另开会话
+    purpose: PET_WHISPER_PURPOSE,
     messages: [
       createUserMessage({
         content: [
