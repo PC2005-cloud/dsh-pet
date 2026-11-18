@@ -14,6 +14,19 @@
 export const PET_CALL_IDENTITY = 'dsh-pet';
 
 /**
+ * 碎碎念的调用性质（dsh-llm `GenerateOptions.purpose`）：辅助调用，不是对话。
+ *
+ * 不声明时下游只能按内容猜：billion-context 对 dsh 插件流量按 `system` 指纹分车道，
+ * 而碎碎念的 system 带实时时间，于是每条都派生一条 `<身份>|sub:<fp>` 会话记录，
+ * 几分钟一条，把正常会话挤出列表。声明后走 side 车道并归并到调用身份（#6880/#6883）。
+ * 只为可打印 ASCII、长度 ≤64：该值会被代理原样放进请求头。
+ */
+export const PET_WHISPER_PURPOSE = 'pet-whisper';
+
+/** 陪聊的调用性质：同样是辅助调用，不占会话车道（理由同 `PET_WHISPER_PURPOSE`）。 */
+export const PET_CHAT_PURPOSE = 'pet-chat';
+
+/**
  * 没有正文时，按流终止原因给出要展示的原因。
  * @param finish - 流终止块（`BlockAssembler.finish`；dsh-llm 把适配器抛错折进这里，不在流里抛出）。
  * @returns 上层拼在「对话失败：」之后的文案。
