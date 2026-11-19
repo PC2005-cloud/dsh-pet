@@ -206,6 +206,9 @@ export const pt: Record<Key, string> = {
   'physics.throwPower': 'Força de arremesso',
   'physics.throwPowerHint':
     '> 0, multiplicador geral da mola que segue o cursor e da velocidade de saída (1 = padrão; maior = mais colado ao cursor e arremessos mais fortes)',
+  'physics.dizzyImpactSpeed': 'Limiar de tontura',
+  'physics.dizzyImpactSpeedHint':
+    'px/s — anima tontura se o impacto ao pousar ≥ este valor (e o pool não estiver vazio); pouso suave nunca dispara',
   physicsCeilingBounce: 'Quicar no teto',
   physicsCeilingBounceHint:
     'Desligado, o arremesso pode sair pelo topo da tela (a gravidade ainda traz o pet de volta)',

@@ -53,6 +53,9 @@ export const RESTITUTION = 0.78;
 /** 接触面切向摩擦（/s）：撞墙、落地、撞顶后沿接触面方向的速度衰减率；0 = 四面都像冰面。 */
 export const GROUND_FRICTION = 2.5;
 
+/** 落地冲击 ≥ 此值才进晕眩（px/s）；介于 SQ_SOFT / SQ_HARD 之间。 */
+export const DIZZY_IMPACT_SPEED = 1200;
+
 /** 抛掷物理的默认参数（与内置配置一致；仅作配置缺失时的兜底）。 */
 export const DEFAULT_PHYSICS: PhysicsParams = {
   gravity: GRAVITY,
@@ -64,6 +67,7 @@ export const DEFAULT_PHYSICS: PhysicsParams = {
   hapticEnabled: true,
   tiltGravity: true,
   shakeThrow: true,
+  dizzyImpactSpeed: DIZZY_IMPACT_SPEED,
 };
 
 /** 总力度默认量（throwPower=1 即现状）。 */

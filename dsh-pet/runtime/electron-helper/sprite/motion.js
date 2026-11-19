@@ -111,6 +111,7 @@ Object.assign(PetSprite.prototype, {
     let state = { x: px, y: py, vx, vy };
     let last = performance.now();
     let prevGrounded = false; // 落地 Q 弹：只在空中→地面转换帧触发一次
+    let peakImpact = 0; // 本趟抛掷最大落地冲击（晕眩判定用）
     const step = () => {
       if (this.throwToken !== token) return;
       const now = performance.now();
@@ -158,6 +159,8 @@ Object.assign(PetSprite.prototype, {
       const curBounds = sp.bounds[res.screen] || sp.bounds[0];
       const grounded = curBounds ? res.y >= curBounds.maxY - 1 : false;
       if (res.bounced && grounded && !prevGrounded) {
+        const impact = Math.hypot(state.vx, fallingVy);
+        if (impact > peakImpact) peakImpact = impact;
         const frontEl = this.front === 0 ? this.videoA : this.videoB;
         this.startSquash(frontEl, S.landingSquash(fallingVy));
       }
@@ -167,6 +170,22 @@ Object.assign(PetSprite.prototype, {
         this.throwState = null;
         this.customPos = { rx: (this.pos.x + this.halfW) / VIEW.w, ry: (this.pos.y + this.halfH) / VIEW.h };
         window.__dshPetDebug.lastDragRelease = { x: this.pos.x, y: this.pos.y };
+        // 冲击够猛且晕眩池非空 → 落定后播晕眩（空池则静默）
+        const dizzyPool = (this.animations && this.animations.dizzy) || [];
+        if (dizzyPool.length && S.shouldDizzy(peakImpact, this.physics)) {
+          const name = S.pick(dizzyPool);
+          console.log(
+            '[dsh-pet] ' +
+              new Date().toTimeString().slice(0, 8) +
+              ' pet=' +
+              this.pet.id +
+              ' -> [DIZZY] ' +
+              name +
+              ' impact=' +
+              Math.round(peakImpact),
+          );
+          this.playOnce(name);
+        }
         return;
       }
       this.throwRef = requestAnimationFrame(step);

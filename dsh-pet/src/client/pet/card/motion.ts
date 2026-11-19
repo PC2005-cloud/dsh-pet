@@ -10,7 +10,8 @@ import { canReadMotionSensors, shakeImpulse, subscribeShake, subscribeTilt, tilt
 import { createPositionFollow, type PositionFollow } from '../motion/position-follow.ts';
 import { createSquashDriver, type SquashDriver } from '../motion/squash.ts';
 import { createWalk, type Walk } from '../motion/walk.ts';
-import { landingSquash, throwVelocity } from '../../../shared/physics.ts';
+import { landingSquash, shouldDizzy, throwVelocity } from '../../../shared/physics.ts';
+import { pick } from '../../../shared/pickers.ts';
 import type { CardLive } from './live.ts';
 import type { CardStateApi } from './state.ts';
 import type { MovesConfig } from '../../../shared/types.ts';
@@ -175,6 +176,24 @@ export function createCardMotion(rt: CardMotionRuntime) {
       },
       onImpact: (impact) => {
         haptics.hit(impact.kind, impact.speed);
+      },
+      onSettled: (peakImpact) => {
+        // 冲击够猛且晕眩池非空 → 落定后播晕眩（空池则静默）。
+        const dizzyPool = cfgRef.current.animations.dizzy ?? [];
+        if (!dizzyPool.length || !shouldDizzy(peakImpact, cfgRef.current.physics)) return;
+        const name = pick(dizzyPool);
+        console.log(
+          '[dsh-pet] ' +
+            new Date().toTimeString().slice(0, 8) +
+            ' pet=' +
+            cfgRef.current.id +
+            ' -> [DIZZY] ' +
+            name +
+            ' impact=' +
+            Math.round(peakImpact),
+        );
+        setAnim(name);
+        setOnce(true);
       },
       // 只在常驻（倾斜）模式被读：倾斜没开或还没有采样时退回竖直重力，行为与关掉体感一致。
       gravity: () => {

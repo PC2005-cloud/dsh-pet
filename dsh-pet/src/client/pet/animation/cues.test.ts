@@ -42,6 +42,13 @@ describe('decideEndedCue —— 播完之后进哪条分支', () => {
     });
   });
 
+  test('晕眩动画播完：回互动结束分支', () => {
+    const withDizzy = { ...animations, dizzy: ['dizzy1'] } as Animations;
+    assert.deepEqual(decideEndedCue({ animations: withDizzy, current: 'dizzy1', workState: null }), {
+      kind: 'interaction-done',
+    });
+  });
+
   test('档位动画 + 非终态 + 多候选：轮换到下一候选', () => {
     const cue = decideEndedCue({ animations, current: 'ws-run-a', workState: 'working' });
     assert.equal(cue.kind, 'work-rotate');

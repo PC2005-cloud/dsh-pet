@@ -210,6 +210,9 @@ export const es: Record<Key, string> = {
   'physics.throwPower': 'Fuerza de lanzamiento',
   'physics.throwPowerHint':
     '> 0, multiplicador general del seguimiento con resorte y de la velocidad de salida (1 = predeterminado; más alto = sigue más pegado y lanza más fuerte)',
+  'physics.dizzyImpactSpeed': 'Umbral de mareo',
+  'physics.dizzyImpactSpeedHint':
+    'px/s — animación de mareo si el impacto al aterrizar ≥ este valor (y el pool no está vacío); soltar con cuidado nunca dispara',
   physicsCeilingBounce: 'Rebote en el techo',
   physicsCeilingBounceHint:
     'Desactívalo para que un lanzamiento pueda salir por la parte superior de la pantalla (la gravedad sigue tirando de él hacia abajo)',

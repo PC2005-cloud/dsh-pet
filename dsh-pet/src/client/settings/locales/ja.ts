@@ -202,6 +202,9 @@ export const ja: Record<Key, string> = {
   'physics.throwPower': '投げる力',
   'physics.throwPowerHint':
     '> 0。バネの追従性と投げ出しの初速の全体倍率（1 = デフォルト。大きいほどよく追従し、勢いよく飛びます）',
+  'physics.dizzyImpactSpeed': 'めまい衝撃しきい値',
+  'physics.dizzyImpactSpeedHint':
+    'px/s。着地衝撃がこの値以上かつめまいアニメ設定ありのとき再生。やさしく置くと発火しません',
   physicsCeilingBounce: '天井での跳ね返り',
   physicsCeilingBounceHint: 'オフにすると、投げたペットが画面の上端を越えて飛び出せます（重力が引き戻します）',
   physicsPetCollision: 'ペット同士の衝突',

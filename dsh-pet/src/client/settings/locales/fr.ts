@@ -209,6 +209,9 @@ export const fr: Record<Key, string> = {
   'physics.throwPower': 'Force de lancer',
   'physics.throwPowerHint':
     '> 0, multiplicateur global du suivi ressort et de la vitesse de lancer (1 = valeur par défaut ; plus haut = suivi plus ferme et lancers plus violents)',
+  'physics.dizzyImpactSpeed': 'Seuil d’étourdissement',
+  'physics.dizzyImpactSpeedHint':
+    'px/s — jouer l’anim d’étourdissement si l’impact à l’atterrissage ≥ cette valeur (et pool non vide) ; un dépôt doux ne déclenche jamais',
   physicsCeilingBounce: 'Rebond au plafond',
   physicsCeilingBounceHint: "Désactivé, un lancer peut sortir par le haut de l'écran (la gravité le ramène)",
   physicsPetCollision: 'Collisions entre compagnons',

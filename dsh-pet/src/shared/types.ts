@@ -67,6 +67,8 @@ export interface Animations {
   turn: string[];
   drag: string[];
   clicks: string[];
+  /** 甩出落地后的晕眩池（可选；空/缺失 = 不播晕眩）。素材可后补。 */
+  dizzy?: string[];
   moves: MovesConfig;
   categories: Category[];
   events: Events;
@@ -186,6 +188,8 @@ export interface PhysicsParams {
    *  仅浏览器半侧生效，且要求环境有 Vibration API——iOS 与桌面端没有，静默跳过。
    *  缺省按 true；旧配置里没有这个键也算开。 */
   hapticEnabled?: boolean;
+  /** 落地冲击速度 ≥ 此值（px/s）才进晕眩；缺省 = 1200；温柔放下不抛故永不触发。 */
+  dizzyImpactSpeed?: number;
 }
 
 /** 字体种类预设 id（font.family 白名单；清单与对应字体栈见 shared/fonts.ts）。 */
