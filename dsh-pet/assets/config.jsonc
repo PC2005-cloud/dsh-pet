@@ -235,6 +235,7 @@
   //   两个体感开关都只在 HTTPS / localhost 下有效（传感器 API 只在安全上下文存在）。
   // dragSpring：拖拽跟手方式。true（默认）= 过阻尼弹簧追指针，有跟手延迟、手感柔和；
   //   false = 刚性实时跟随，宠物直接贴住鼠标。只改拖拽跟随，甩出力度仍按指针轨迹算。
+  // dizzyImpactSpeed：落地冲击速度（px/s）≥ 此值才播 animations.dizzy；温柔放下不抛故永不触发。
   "physics": {
     "gravity": 1400,
     "restitution": 0.78,
@@ -245,7 +246,8 @@
     "hapticEnabled": true,
     "tiltGravity": true,
     "shakeThrow": true,
-    "dragSpring": true
+    "dragSpring": true,
+    "dizzyImpactSpeed": 1200
   },
   // ===================== 字体（全局默认，所有宠物共用；种类文件顶层可覆盖） =====================
   // family：字体种类（预设 id，必须在白名单内，写错即配置错误 → 告警并取默认 candy）。
@@ -332,6 +334,10 @@
       "点击回应-挠痒咯咯笑",
       "点击回应-元气挥手"
     ],
+    // 甩出落地晕眩池（可选；空 = 不播晕眩）。
+    // 触发：抛掷落地冲击 ≥ physics.dizzyImpactSpeed 且本池非空 → 落定后随机抽 1 个播完再回 idle。
+    // 素材：放入 main-animation/webm/（或包内 assets/webm/）同名 .webm 后，把动画名写进本数组即可。
+    "dizzy": ["甩出落地晕眩"],
     // 移动动画池：default 是每个动作都用的默认参数；actions 里每项可覆盖部分参数，
     // 未写的字段取 default。minDist/maxDist=单次行进距离(px)——以「基准宠物宽 462px」为准，
     //   运行时按 实际size/462 等比缩放（小宠物挪小步、大宠物挪大步，与人物大小匹配）；
