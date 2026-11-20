@@ -301,8 +301,10 @@ Object.assign(PetSprite.prototype, {
       petId: this.pet.id,
       baseUrl: BASE + '/chat',
       surface: 'desktop',
-      x: Math.max(4, this.hit.getBoundingClientRect().right + 6),
-      y: Math.max(4, this.hit.getBoundingClientRect().top + 6),
+      getAnchor: () => {
+        const hit = this.hit.getBoundingClientRect();
+        return { x: Math.max(4, hit.right + 6), y: Math.max(4, hit.top + 6) };
+      },
       // 拖拽落到宠物身上时直接带着图开弹窗
       ...(image ? { initialImage: image } : {}),
       // 截图快捷键：截到的帧是 base64，没有 File
@@ -310,7 +312,8 @@ Object.assign(PetSprite.prototype, {
       // 截屏：主进程取宠物所在屏的一帧（JPEG base64），形状与浏览器侧一致
       capture: () => this.captureEncoded(),
       // 弹窗同菜单：只允许在「窗口 ∩ 工作区」内显示，贴边时不被屏幕裁掉
-      clamp: this.visibleClampRect(),
+      clamp: () => this.visibleClampRect(),
+      onPlace: () => this.syncInputRegions(),
       onSent: () => {
         // 发送成功：回复已写进 S → 版本号变 → 挂着的长轮询立刻返回并弹气泡
         console.info('[dsh-pet] 对话已发送 pet=' + this.pet.id);
