@@ -7,8 +7,9 @@ import { type EncodedImage, encodeImageFile } from './encode.ts';
 import { createHearControl } from './hear-control.ts';
 import { IMAGE_ACCEPT, firstImageFromClipboard, isImageFile } from './image-pick.ts';
 import { cameraIcon, micIcon, pictureIcon } from './icons.ts';
+import { CHAT_MESSAGE_LIMIT, isChatMessageTooLong } from './length.ts';
 import type { ChatAttachment } from './send.ts';
-import { CHAT_H_PAD, CHAT_MAX_W, CHAT_MIN_W } from './styles.ts';
+import { CHAT_H_PAD, CHAT_INPUT_MIN_H, CHAT_MAX_W, CHAT_MIN_W } from './styles.ts';
 
 /** 提示自动收起的时间（ms）。 */
 const HINT_MS = 2200;
@@ -21,6 +22,8 @@ export interface ChatDom {
   readonly shotBtn: HTMLButtonElement;
   /** 输入框与根宽度随文本自适应；挂到文档后调用一次，输入时自动重算。 */
   readonly resizeInput: () => void;
+  /** 更新超长提示，不修改草稿；返回是否符合发送长度。 */
+  readonly validateLength: () => boolean;
   /** 清掉待发送图片（含 file input 的值）。 */
   readonly clearAttach: () => void;
   /** 放进一张待发送图片（上传、拖拽、粘贴共用）；类型不接受或编码失败时提示并返回 false。 */
@@ -54,20 +57,24 @@ function iconButton(title: string, icon: SVGElement): HTMLButtonElement {
   return btn;
 }
 
-/** 输入框宽度随文本自适应：宽度按测量值，封顶后由高度接住折行。 */
-function enableAutoResize(input: HTMLTextAreaElement, root: HTMLElement): () => void {
+/** 折行后高度由内容撑开，超过 CSS 上限则在输入框内滚动。 */
+function enableAutoResize(input: HTMLTextAreaElement, root: HTMLElement, updateLimit: () => boolean): () => void {
   let measureCtx: CanvasRenderingContext2D | null = null;
-  const resize = (): void => {
+  const resize = (editing = false): void => {
     const ctx =
       measureCtx ?? (measureCtx = document.createElement('canvas').getContext('2d') as CanvasRenderingContext2D);
     ctx.font = getComputedStyle(input).font; // 每次取当前计算样式（挂载前后都准）
     const textW = ctx.measureText(input.value || ' ').width;
     const w = Math.max(CHAT_MIN_W, Math.min(Math.ceil(textW + CHAT_H_PAD), CHAT_MAX_W));
     root.style.width = w + 'px'; // 根宽度跟随 → 夹回仍按实际宽
+    const scrollTop = input.scrollTop;
     input.style.height = 'auto';
-    input.style.height = Math.max(input.scrollHeight, 22) + 'px';
+    input.style.height = Math.max(input.scrollHeight, CHAT_INPUT_MIN_H) + 'px';
+    updateLimit();
+    // 从末尾输入或粘贴时跟随光标；窗口调整时不要把在看上文的用户拉回末尾。
+    input.scrollTop = editing && input.selectionStart === input.value.length ? input.scrollHeight : scrollTop;
   };
-  input.addEventListener('input', resize);
+  input.addEventListener('input', () => resize(true));
   return resize;
 }
 
@@ -85,8 +92,22 @@ export function createChatDom(opts: { capture?: () => Promise<EncodedImage>; hea
   const input = document.createElement('textarea');
   input.className = 'dsh-pet-chat-input';
   input.placeholder = '说点什么…';
-  input.maxLength = 2000;
+  input.setAttribute('aria-label', '桌宠对话消息');
+  input.title = '回车发送 · Shift + 回车换行';
   input.rows = 1;
+
+  const limit = document.createElement('div');
+  limit.className = 'dsh-pet-chat-limit';
+  limit.setAttribute('role', 'status');
+  const validateLength = (): boolean => {
+    const tooLong = isChatMessageTooLong(input.value);
+    const warning = tooLong ? `超过 ${CHAT_MESSAGE_LIMIT} 字。原文已保留，请删减或分段发送。` : '';
+    if (limit.textContent !== warning) limit.textContent = warning;
+    limit.hidden = !tooLong;
+    if (tooLong) input.setAttribute('aria-invalid', 'true');
+    else input.removeAttribute('aria-invalid');
+    return !tooLong;
+  };
 
   const err = document.createElement('div');
   err.className = 'dsh-pet-chat-err';
@@ -136,10 +157,10 @@ export function createChatDom(opts: { capture?: () => Promise<EncodedImage>; hea
   actions.className = 'dsh-pet-chat-actions';
   actions.append(pickBtn, shotBtn, micBtn, fileInput, attach);
 
-  root.append(input, actions, hint, err);
+  root.append(input, limit, actions, hint, err);
   document.body.appendChild(root);
 
-  const resizeInput = enableAutoResize(input, root);
+  const resizeInput = enableAutoResize(input, root, validateLength);
 
   let attachment: ChatAttachment | undefined;
   let encoding = false;
@@ -226,6 +247,7 @@ export function createChatDom(opts: { capture?: () => Promise<EncodedImage>; hea
     err,
     shotBtn,
     resizeInput,
+    validateLength,
     clearAttach,
     setImageFile,
     setEncoded: applyEncoded,

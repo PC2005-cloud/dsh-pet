@@ -167,6 +167,7 @@ class PetSprite {
     this.pos = { x: Math.round(fit.x + fit.offsetX), y: Math.round(fit.y + fit.offsetY) };
     window.__dshPetDebug.dragPos = { x: this.pos.x, y: this.pos.y };
     this.reportWindow(fit);
+    this.chatMount?.refreshLayout();
     // 位置变了：提示跟的是光标，而光标存视口坐标，窗口一移就必须重摆，否则提示会跟着窗口漂走。
     // 只在显示时重摆（漫游逐帧调本函数，没显示提示时不做无谓的 DOM 写入）。
     if (this.tipOn) this.renderTip();

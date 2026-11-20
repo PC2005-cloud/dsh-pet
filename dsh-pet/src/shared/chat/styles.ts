@@ -4,9 +4,12 @@
  * @module dsh-pet/src/shared/chat/styles
  */
 
+/** 一行文字（14px × 1.45）加上上下 padding（8px + 9px）。 */
+export const CHAT_INPUT_MIN_H = 38;
+
 /** 弹窗样式。
  *  一条自适应输入框（无标题）+ 一行图标按钮（上传 / 截屏 / 按住说话）+ 可选的图片预览；
- *  初始 160px，随输入增宽、封顶 340px 后折行增高；回车发送，Esc 或点外关闭。
+ *  初始 160px，随输入增宽、封顶 340px 后折行，达到可用高度后滚动；回车发送，Esc 或点外关闭。
  *  宽度由 JS 按文本测量覆盖根元素宽度。 */
 export const CHAT_CSS = [
   '.dsh-pet-chat{position:fixed;z-index:2147483001;width:160px;max-width:80vw;',
@@ -16,11 +19,13 @@ export const CHAT_CSS = [
   // 字体族走全局配置变量 --dsh-pet-font-family：弹窗挂在 body 下、继承不到宠物根容器，由两端注入在 documentElement。
   // 字号保持固定 14px：配置里的 font.size 只作用于气泡与悬浮提示。
   "font-family:var(--dsh-pet-font-family,'ShangshouSoftCandy','Yuanti SC','YouYuan','幼圆','Comic Sans MS','PingFang SC','Microsoft YaHei',sans-serif);",
-  'user-select:none}',
+  'box-sizing:border-box;user-select:none;display:flex;flex-direction:column;overflow:auto;overscroll-behavior:contain}',
   '.dsh-pet-chat *{box-sizing:border-box}',
   '.dsh-pet-chat-input{display:block;width:100%;border:none;outline:none;background:transparent;',
   'padding:8px 11px 9px;font-size:14px;line-height:1.45;color:#2b2b2b;font-family:inherit;',
-  'resize:none;overflow:hidden;white-space:pre-wrap;overflow-wrap:anywhere}',
+  `resize:none;flex:0 1 auto;min-height:${CHAT_INPUT_MIN_H}px;max-height:220px;overflow-x:hidden;overflow-y:auto;`,
+  'user-select:text;white-space:pre-wrap;overflow-wrap:anywhere}',
+  '.dsh-pet-chat-actions,.dsh-pet-chat-limit,.dsh-pet-chat-hint,.dsh-pet-chat-err{flex-shrink:0}',
   '.dsh-pet-chat-input::placeholder{color:rgba(43,43,43,.45)}',
   '.dsh-pet-chat-input:disabled{opacity:.55}',
   // 操作行：上传 / 截屏 / 按住说话三枚图标按钮（无边框、悬停才显底）
@@ -45,7 +50,7 @@ export const CHAT_CSS = [
   'font-size:12px;line-height:1;padding:2px 3px;border-radius:4px}',
   '.dsh-pet-chat-attach-x:hover{background:rgba(0,0,0,.08);color:rgba(43,43,43,.85)}',
   '.dsh-pet-chat-hint{display:none;color:rgba(43,43,43,.55);font-size:12px;padding:0 12px 8px}',
-  '.dsh-pet-chat-err{color:#d94f3d;font-size:12px;padding:0 12px 8px;white-space:pre-wrap;overflow-wrap:anywhere}',
+  '.dsh-pet-chat-err,.dsh-pet-chat-limit{color:#d94f3d;font-size:12px;padding:0 12px 8px;white-space:pre-wrap;overflow-wrap:anywhere}',
 ].join('');
 
 /** 输入框宽度自适应参数：初始小宽，随文本增宽，封顶后折行增高。 */

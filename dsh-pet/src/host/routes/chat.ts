@@ -5,6 +5,7 @@
  * 依赖（PetRouteDeps）显式传入，模块内不读全局、不建状态。
  * @module dsh-pet/src/host/routes/chat
  */
+import { CHAT_MESSAGE_LIMIT } from '../../shared/chat/length.ts';
 import { readAllConfig, sliceMemoryRounds } from '../config.ts';
 import { parseImageAttachment, type PetImageRef, type PetImageSink } from '../image-attachment.ts';
 import type { PetRouteDeps, RouteInput } from './types.ts';
@@ -125,7 +126,7 @@ async function postChat(deps: PetRouteDeps, petId: string, body: string | undefi
   }
   const text = typeof parsed.text === 'string' ? parsed.text.trim() : '';
   if (!text) return failResult('bad-request', '消息为空');
-  if (text.length > 2000) return failResult('bad-request', '消息过长（限 2000 字）');
+  if (text.length > CHAT_MESSAGE_LIMIT) return failResult('bad-request', `消息过长（限 ${CHAT_MESSAGE_LIMIT} 字）`);
   // 图片缺省时直接返回空结论，下面的调用与加入图片前逐字一致（回归测试钉的就是这条）
   const admitted = await admitImage(deps, parsed.attachment);
   if (!admitted.ok) return admitted.res;

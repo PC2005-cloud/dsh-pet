@@ -2,6 +2,7 @@
  * 斜杠命令 /chat：把一句话转给宠物并回帖。
  * @module dsh-pet/src/host/plugin/command-chat
  */
+import { CHAT_MESSAGE_LIMIT } from '../../shared/chat/length.ts';
 import type { ChatMemory } from './chat-memory.ts';
 import type { BalancePoll } from './balance-poll.ts';
 import type { PetLookup } from './pet-lookup.ts';
@@ -43,7 +44,8 @@ export function registerChatCommand(deps: CommandChatInput): void {
             );
             return { kind: 'success', text: '已让桌宠碎碎念一句' };
           }
-          if (text.length > 2000) return { kind: 'error', text: '消息过长（限 2000 字）' };
+          if (text.length > CHAT_MESSAGE_LIMIT)
+            return { kind: 'error', text: `消息过长（限 ${CHAT_MESSAGE_LIMIT} 字）` };
           void chatWithPet(petId, text)
             .then((r) => {
               if (!r.ok) {

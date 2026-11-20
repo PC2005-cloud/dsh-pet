@@ -9,6 +9,7 @@ import { ROUTE_PATH } from '../constants.ts';
 import { createChatDom } from './dom.ts';
 import { createCompositionWatch, decideEnter } from './enter.ts';
 import type { EncodedImage } from './encode.ts';
+import { chatDialogBounds, chatDialogPosition, type ChatAnchor, type ChatClampRect } from './layout.ts';
 import { sendChat, type ChatAttachment } from './send.ts';
 import { injectChatCss } from './styles.ts';
 
@@ -18,6 +19,8 @@ export interface ChatDialogMount {
   el: HTMLElement;
   /** 关闭并清理（幂等） */
   close: () => void;
+  /** 原生窗口移动或工作区变化后重算边界与锚点。 */
+  refreshLayout: () => void;
   /** 开录：快捷键「按住说话」按下时用（麦克风已在录、环境不支持时无动作）。 */
   startHear: () => void;
   /** 收尾：快捷键松开时用（没在录时无动作）。 */
@@ -45,6 +48,7 @@ interface SendBinding {
   readonly attachment: () => ChatAttachment | undefined;
   /** 是否还在压缩图片：是的话先提示，别发出去把图丢掉。 */
   readonly isEncoding: () => boolean;
+  readonly validateLength: () => boolean;
   /** 非错误提示（"图片还在处理"这类）。 */
   readonly notify: (text: string) => void;
 }
@@ -76,7 +80,8 @@ function bindSend(binding: SendBinding): void {
       return;
     }
     const text = binding.input.value.trim();
-    if (!text) return;
+    if (!text || !binding.validateLength()) return;
+    binding.err.style.display = 'none';
     sending = true;
     binding.input.disabled = true;
     sendChat(binding.url, text, binding.attachment())
@@ -126,13 +131,17 @@ export interface ChatDialogOptions {
   baseUrl?: string;
   /** 这个弹窗开在哪一端：POST /chat 的 ?surface= 是必填的，宿主据此提前拒掉不可能的组合。 */
   surface: 'web' | 'desktop';
-  x: number;
-  y: number;
+  x?: number;
+  y?: number;
+  /** 在随原生窗口或身体命中区移动时读取当前锚点。 */
+  getAnchor?: () => ChatAnchor;
   /** 发送成功后调用（弹窗此时已关闭）：回复本身不从这里回传，数据只有 /state 一个出口。 */
   onSent?: () => void;
   onClose?: () => void;
   /** 弹窗允许占用的矩形（视口局部坐标）；缺省 = 整个视口。 */
-  clamp?: { x: number; y: number; w: number; h: number };
+  clamp?: ChatClampRect | (() => ChatClampRect | null);
+  /** 重摆完成后通知桌面端更新可交互区域。 */
+  onPlace?: () => void;
   /** 打开时就带着的图片（拖拽落到宠物身上走的这条）；缺省 = 空弹窗。 */
   initialImage?: File;
   /** 打开时就带着的已编码图片（截图快捷键走的这条：截屏没有 File，只有 base64）。 */
@@ -152,30 +161,42 @@ export interface ChatDialogOptions {
  *  clamp 由调用方给：桌面传「窗口 ∩ 工作区」，宠物贴边时弹窗照样完整显示、窗口零移动。 */
 export function mountChatDialog(opts: ChatDialogOptions): ChatDialogMount {
   injectChatCss();
-  const { petId, surface, x, y, onSent, onClose, clamp } = opts;
+  const { petId, surface, x = 4, y = 4, onSent, onClose, clamp } = opts;
   const baseUrl = opts.baseUrl ?? ROUTE_PATH + '/chat';
   // `surface` 必填（宿主校验）；这个 URL 只用于 POST 发送——GET 读记忆那条路不需要它
   const withPet = baseUrl + '?pet=' + encodeURIComponent(petId) + '&surface=' + surface;
-  const c =
-    clamp && Number.isFinite(clamp.x + clamp.y + clamp.w + clamp.h)
-      ? clamp
-      : { x: 0, y: 0, w: window.innerWidth, h: window.innerHeight };
-
   const dom = createChatDom({ capture: opts.capture, hearUrl: opts.hearUrl ?? hearUrlOf(baseUrl) });
   const { root, input, err } = dom;
 
-  /** 以 (x,y) 落点，超出 clamp 矩形夹回。 */
+  let bounds: ChatClampRect;
   const place = (): void => {
-    const r = root.getBoundingClientRect();
-    root.style.left = Math.max(c.x + 4, Math.min(x, c.x + c.w - r.width - 4)) + 'px';
-    root.style.top = Math.max(c.y + 4, Math.min(y, c.y + c.h - r.height - 4)) + 'px';
+    const anchor = opts.getAnchor?.() ?? { x, y };
+    const { width, height } = root.getBoundingClientRect();
+    const pos = chatDialogPosition(bounds, anchor, width, height);
+    root.style.left = pos.x + 'px';
+    root.style.top = pos.y + 'px';
+    opts.onPlace?.();
   };
+  const refreshLayout = (): void => {
+    bounds = chatDialogBounds(typeof clamp === 'function' ? clamp() : clamp, window.innerWidth, window.innerHeight);
+    const maxWidth = `min(80vw, ${bounds.w}px)`;
+    if (root.style.maxWidth !== maxWidth || root.style.maxHeight !== bounds.h + 'px') {
+      root.style.maxWidth = maxWidth;
+      root.style.maxHeight = bounds.h + 'px';
+      dom.resizeInput();
+    }
+    place();
+  };
+  // 换行、附图和提示都会改变弹窗尺寸；先让 CSS 限制尺寸，再按新矩形重摆。
+  const observer = new ResizeObserver(place);
 
   let closed = false;
   let unbindDismiss = (): void => {};
   const close = (): void => {
     if (closed) return;
     closed = true;
+    observer.disconnect();
+    window.removeEventListener('resize', refreshLayout);
     unbindDismiss();
     dom.dispose();
     dom.clearAttach();
@@ -194,18 +215,21 @@ export function mountChatDialog(opts: ChatDialogOptions): ChatDialogMount {
     },
     attachment: () => dom.getAttachment(),
     isEncoding: () => dom.isEncoding(),
+    validateLength: dom.validateLength,
     notify: (text) => dom.flash(text),
   });
   // 截屏按钮的接线在 dom 里（依赖注入的 capture），这里只负责发送与关闭
 
-  dom.resizeInput(); // append 后再量一次（此时样式已生效）
-  place();
+  refreshLayout();
+  observer.observe(root);
+  window.addEventListener('resize', refreshLayout);
   if (opts.initialImage) void dom.setImageFile(opts.initialImage);
   if (opts.initialEncoded) dom.setEncoded(opts.initialEncoded);
   input.focus();
   return {
     el: root,
     close,
+    refreshLayout,
     startHear: dom.startHear,
     stopHear: dom.stopHear,
     isHearing: dom.isHearing,
