@@ -6,6 +6,7 @@
  * @module dsh-pet/src/client/settings/physics-card
  */
 import type { FunctionComponent } from 'react';
+import { DEFAULT_PHYSICS } from '../../shared/physics.ts';
 import type { PhysicsParams } from '../../shared/types.ts';
 import type { SettingsRuntime } from './runtime.ts';
 import { makeUiKit, numberInputProps } from './ui.ts';
@@ -34,12 +35,20 @@ export function makePhysicsCard(rt: SettingsRuntime): FunctionComponent<PhysicsC
     const { busy, physics } = props;
 
     /** 物理参数的一格：标签与问号在上、数字输入在下。 */
-    const physField = (key: 'gravity' | 'restitution' | 'groundFriction' | 'throwPower', step: string, min: string) =>
+    const physField = (
+      key: 'gravity' | 'restitution' | 'groundFriction' | 'throwPower' | 'dizzyImpactSpeed',
+      step: string,
+      min: string,
+    ) =>
       field(
         t('physics.' + key),
         h(
           'input',
-          numberInputProps(physics[key], (v) => props.onChange({ [key]: v }), { step, min, disabled: busy }),
+          numberInputProps(physics[key] ?? DEFAULT_PHYSICS[key] ?? 0, (v) => props.onChange({ [key]: v }), {
+            step,
+            min,
+            disabled: busy,
+          }),
         ),
         t('physics.' + key + 'Hint'),
       );
@@ -56,6 +65,10 @@ export function makePhysicsCard(rt: SettingsRuntime): FunctionComponent<PhysicsC
             physField('groundFriction', '0.1', '0'),
             physField('throwPower', '0.05', '0.05'),
           ],
+        }),
+        h('div', {
+          className: 'dsh-pet-cfg__grid4',
+          children: [physField('dizzyImpactSpeed', '50', '0')],
         }),
         h('div', {
           className: 'dsh-pet-cfg__grid3',

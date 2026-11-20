@@ -36,16 +36,21 @@ const petValid = (pet: Pet): boolean =>
   Number.isFinite(pet.position.marginY);
 
 /** 物理参数：与宿主 `physicsValid` 同名规则，客户端只覆盖数值字段（布尔项由宿主兜底）。 */
-const physicsValid = (physics: PhysicsParams): boolean =>
-  Number.isFinite(physics.gravity) &&
-  physics.gravity >= 0 &&
-  Number.isFinite(physics.restitution) &&
-  physics.restitution >= 0 &&
-  physics.restitution <= 1 &&
-  Number.isFinite(physics.groundFriction) &&
-  physics.groundFriction >= 0 &&
-  Number.isFinite(physics.throwPower) &&
-  physics.throwPower > 0;
+const physicsValid = (physics: PhysicsParams): boolean => {
+  const dizzy = physics.dizzyImpactSpeed;
+  return (
+    Number.isFinite(physics.gravity) &&
+    physics.gravity >= 0 &&
+    Number.isFinite(physics.restitution) &&
+    physics.restitution >= 0 &&
+    physics.restitution <= 1 &&
+    Number.isFinite(physics.groundFriction) &&
+    physics.groundFriction >= 0 &&
+    Number.isFinite(physics.throwPower) &&
+    physics.throwPower > 0 &&
+    (dizzy === undefined || (Number.isFinite(dizzy) && dizzy >= 0))
+  );
+};
 
 /** 字体：种类必须在预设白名单内，字号在闭区间内。 */
 const fontValid = (font: FontConfig): boolean =>

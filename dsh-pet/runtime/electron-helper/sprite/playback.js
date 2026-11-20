@@ -356,8 +356,12 @@ Object.assign(PetSprite.prototype, {
       const next = this.facing === 'left' ? 'right' : 'left';
       this.facing = next; // 立即同步：翻转后的 pickNext 用新朝向过滤 noMirror
     }
-    if (animations.drag.includes(this.anim) || animations.clicks.includes(this.anim)) {
-      // 互动动画播完：workStatus 非终态时恢复状态循环，否则回 idle（与浏览器同一语义）
+    if (
+      animations.drag.includes(this.anim) ||
+      animations.clicks.includes(this.anim) ||
+      (animations.dizzy || []).includes(this.anim)
+    ) {
+      // 互动 / 晕眩动画播完：workStatus 非终态时恢复状态循环，否则回 idle（与浏览器同一语义）
       if (this.resumeWorkStatusAnim()) return;
       if (animations.idle.length) this.playOnce(S.pick(animations.idle, this.anim));
       return;

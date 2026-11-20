@@ -53,6 +53,7 @@ export function animationNames(animations: unknown): string[] {
   push(strings(a.turn));
   push(strings(a.drag));
   push(strings(a.clicks));
+  push(strings(a.dizzy));
 
   // 移动：actions 是 { name, ... } 对象数组，只取 name
   const moves = (a.moves && typeof a.moves === 'object' ? a.moves : {}) as Record<string, unknown>;

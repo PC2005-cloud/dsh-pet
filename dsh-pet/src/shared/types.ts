@@ -67,6 +67,8 @@ export interface Animations {
   turn: string[];
   drag: string[];
   clicks: string[];
+  /** 甩出落地后的晕眩池（可选；空/缺失 = 不播晕眩）。素材可后补。 */
+  dizzy?: string[];
   moves: MovesConfig;
   categories: Category[];
   events: Events;
@@ -190,6 +192,8 @@ export interface PhysicsParams {
    *  false = 刚性实时跟随，每帧直接把盒子贴到指针目标。
    *  只改跟随，不改甩出初速（初速取指针轨迹）与 throwPower 的抛掷增益。缺键按 true。 */
   dragSpring?: boolean;
+  /** 落地冲击速度 ≥ 此值（px/s）才进晕眩；缺省 = 1200；温柔放下不抛故永不触发。 */
+  dizzyImpactSpeed?: number;
 }
 
 /** 字体种类预设 id（font.family 白名单；清单与对应字体栈见 shared/fonts.ts）。 */
