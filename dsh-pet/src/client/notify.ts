@@ -9,7 +9,7 @@
  * @module dsh-pet/src/client/notify
  */
 
-import { frameToToast, truncate, NOTIFY_ICONS as ICON_NAMES, type NotifyFrame } from '../shared/notify.ts';
+import { clip, frameToToast, NOTIFY_ICONS as ICON_NAMES, type NotifyFrame } from '../shared/notify.ts';
 import { ROUTE_PATH } from '../shared/constants.ts';
 
 let pageVisible = typeof document !== 'undefined' && !document.hidden;
@@ -154,7 +154,7 @@ function toast(title: string, body?: string, icon?: string, sessionId?: string):
   console.log('[dsh-pet] 【弹窗】' + title + (body ? '：' + body : ''));
   try {
     const opts: NotificationOptions = {};
-    if (body) opts.body = truncate(body);
+    if (body) opts.body = clip(body);
     if (icon) opts.icon = icon;
     // 点击行为与真实事件通知共用 wireNotificationClick；图标加载失败只降级为无图标，不会关闭弹窗。
     const n = new Notification(title, opts);

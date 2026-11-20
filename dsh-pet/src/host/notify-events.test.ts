@@ -65,7 +65,7 @@ describe('reduceNotifyFrame —— session/event 子事件 → 帧', () => {
     assert.equal(reduceNotifyFrame({ type: 'turn/end', data: { reason: { kind: 'aborted' } } }), null);
   });
 
-  test('approval/asked → approval/requested 帧（toolName/reason 带上）', () => {
+  test('approval/asked → approval/requested 帧，带工具名与理由', () => {
     const frame = reduceNotifyFrame({
       type: 'approval/asked',
       data: { id: 'a1', toolName: 'pwsh', reason: '需要权限', callId: 'c1' },
@@ -73,11 +73,8 @@ describe('reduceNotifyFrame —— session/event 子事件 → 帧', () => {
     assert.deepEqual(frame, { type: 'approval/requested', toolName: 'pwsh', reason: '需要权限' });
   });
 
-  test('approval/asked 无 reason → 帧不带 reason 字段', () => {
-    assert.deepEqual(reduceNotifyFrame({ type: 'approval/asked', data: { toolName: 'pwsh' } }), {
-      type: 'approval/requested',
-      toolName: 'pwsh',
-    });
+  test('approval/asked 无 toolName → 帧不带 toolName 字段', () => {
+    assert.deepEqual(reduceNotifyFrame({ type: 'approval/asked', data: {} }), { type: 'approval/requested' });
   });
 
   test('tool/call ask_user_question → question/requested 帧（解析 arguments）', () => {
@@ -294,12 +291,12 @@ describe('lastAssistantText —— 从 assistant/message 里取最后一段正�
     );
   });
 
-  test('超长截断到 200 字，非 assistant/message 一律 null', () => {
+  test('超长截断到 4000 字，非 assistant/message 一律 null', () => {
     const long = lastAssistantText({
       type: 'assistant/message',
-      data: { message: { content: [{ type: 'text', text: 'x'.repeat(300) }] } },
+      data: { message: { content: [{ type: 'text', text: 'x'.repeat(4100) }] } },
     });
-    assert.equal(long?.length, 200);
+    assert.equal(long?.length, 4000);
     assert.equal(lastAssistantText({ type: 'turn/end', data: {} }), null);
     assert.equal(lastAssistantText({ type: 'assistant/message', data: {} }), null);
   });
