@@ -182,7 +182,7 @@
         gap: calc(var(--f) * 0.6593);
         flex-wrap: wrap;
       }
-      /* 档位行由多个片段拼成：只允许在片段之间换行，片段内部不拆字 */
+      /* 键值行只在两列之间换行，避免把单个字段拆成竖排。 */
       .pet-bub-row > span {
         white-space: nowrap;
       }
