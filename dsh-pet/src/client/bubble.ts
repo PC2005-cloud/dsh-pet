@@ -65,7 +65,7 @@ const bubbleCss = [
   // 配图样式在 shared 的 MEME_BUBBLE_CSS，这里只保留标题与行样式。
   '.dsh-pet-bubble .pet-bub-title{font-size:calc(var(--f)*0.7692);color:rgba(43,43,43,.6);margin-bottom:calc(var(--f)*0.1978)}',
   '.dsh-pet-bubble .pet-bub-row{display:flex;justify-content:space-between;gap:calc(var(--f)*0.6593);flex-wrap:wrap}',
-  // 档位行由多个片段拼成：只在片段之间换行，片段内部不拆字，避免竖排。
+  // 键值行只在两列之间换行，避免把单个字段拆成竖排。
   '.dsh-pet-bubble .pet-bub-row>span{white-space:nowrap}',
   '.dsh-pet-bubble .pet-bub-sub{font-size:calc(var(--f)*0.7692);color:rgba(43,43,43,.6)}',
   '.dsh-pet-bubble .pet-bub-val{font-variant-numeric:tabular-nums;font-weight:650;color:#1f1f1f}',
@@ -141,10 +141,9 @@ function injectBubbleCss(): void {
 
 /** 把余额行数据映射成 React 节点。 */
 function rowsToNodes(h: typeof jsx, rows: BalanceBubbleRow[]): ReactNode {
-  // 含档位段时同一行内联渲染，峰/谷着色。
+  // 档位与金额是一句连续文本，按行内文字排版，避免用键值行的 flex 把括号拆开。
   if (rows.some((r) => r.role === 'tier')) {
     return h('div', {
-      className: 'pet-bub-row',
       children: rows.map((r, i) => {
         // 进度条行不会与档位段同现。
         if (r.role === 'quota') return null;

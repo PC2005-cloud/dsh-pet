@@ -152,9 +152,8 @@ Object.assign(PetSprite.prototype, {
       const rows = this.balanceState ? S.balancePageView(this.balanceState, this.balanceViewIndex) : this.balanceView;
       const hasTier = rows.some((r) => r.role === 'tier');
       if (hasTier) {
-        // deepseek 余额单行：余额（峰/谷）¥x — 档位字着色
+        // 档位与金额是一句连续文本，按行内文字排版，避免用键值行的 flex 把括号拆开。
         const line = document.createElement('div');
-        line.className = 'pet-bub-row';
         for (const r of rows) {
           const span = document.createElement('span');
           if (r.role === 'tier') span.className = 'pet-bub-tier pet-bub-tier-' + r.tier;
