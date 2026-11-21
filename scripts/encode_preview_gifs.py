@@ -1,18 +1,18 @@
 """Generate animated GIF previews from the playing assets (dsh-pet/assets/webm -> dsh-pet/assets/preview).
 
 素材处理链的附属步骤：把插件实际播放的透明 WebM（dsh-pet/assets/webm/）转成 GIF 预览
-（dsh-pet/assets/preview/），供 GitHub README 等 Markdown 页面展示。
+（dsh-pet/assets/preview/），供动画图鉴和 README 的预览区展示。
 
 为什么需要这一步：
 - GitHub 的 Markdown 渲染器只为「网页端上传的附件」生成内联视频播放器；
   仓库内通过 <video> 引用的 webm 不会播放（raw 返回 audio/webm MIME）。
 - 仓库内图片（含 GIF）用 Markdown 图片语法可以正常内联显示。
-- 故 README 预览区用 GIF 演示，完整透明视频仍以 webm 形式保留在 assets/webm/。
+- 动画图鉴和 README 的预览区使用 GIF，完整透明视频仍以 webm 形式保留在 assets/webm/。
 
 透明处理：GIF 支持 1bit 透明。源 webm 是透明背景，直接转 GIF 会把透明区域
 转成黑色；本脚本用 palettegen/paletteuse 保留 alpha，透明部分在页面上显示为底色。
 
-输出命名：按仓库约定输出拼音文件名（README 效果预览的
+输出命名：按仓库约定输出拼音文件名（ANIMATION-GALLERY.md 中的
 <img src="dsh-pet/assets/preview/<拼音>.gif"> 与 PINYIN 表一一对应）；
 表中没有的动画名回退用中文名。
 
@@ -37,7 +37,7 @@ FFMPEG = str(ROOT / ".tools" / "ffmpeg-9.0.1-essentials_build" / "bin" / "ffmpeg
 WIDTH = 220    # 预览宽度（保持宽高比）
 FPS = 12       # 预览帧率（webm 24fps → 12fps，体积减半且足够流畅）
 
-# 动画名 → 拼音输出文件名（与 README 效果预览的 img src 一致）
+# 动画名 → 拼音输出文件名（与 ANIMATION-GALLERY.md 中的 img src 一致）
 PINYIN = {
     "待机呼吸休闲": "daiji-huxi-xiuxian",
     "东张西望": "dongzhangxiwang",
