@@ -23,6 +23,36 @@ export const SIZE_PX_MIN = 120;
 export const SIZE_PX_MAX = 1600;
 
 /**
+ * 内置默认画框宽度（px）：`assets/config.jsonc` 里 main 的 `size`。
+ *
+ * 滑块按它的百分比显示——100% 就是「出厂大小」，与设置页里那串 px 保持同一份存储，
+ * 所以两边改的是同一个字段，只是滑块把 px 换成更好读的百分比。
+ */
+export const SIZE_PX_DEFAULT = 462;
+
+/**
+ * 画框宽度 → 滑块百分比（四舍五入到整数 %）。
+ *
+ * @param sizePx - 画框宽度（px）；非正数按默认宽度处理。
+ * @returns 以 {@link SIZE_PX_DEFAULT} 为 100% 的百分比，最小 1。
+ */
+export function sizePxToPercent(sizePx: number): number {
+  const px = Number.isFinite(sizePx) && sizePx > 0 ? sizePx : SIZE_PX_DEFAULT;
+  return Math.max(1, Math.round((px / SIZE_PX_DEFAULT) * 100));
+}
+
+/**
+ * 滑块百分比 → 画框宽度（px）。
+ *
+ * @param percent - 百分比；非有限数按 100% 处理。
+ * @returns 四舍五入后的画框宽度（px），最小 1。
+ */
+export function percentToSizePx(percent: number): number {
+  const pct = Number.isFinite(percent) ? percent : 100;
+  return Math.max(1, Math.round((SIZE_PX_DEFAULT * pct) / 100));
+}
+
+/**
  * 百分比是否可用：必须是有限数字，且不小于下限。
  *
  * @param value - 配置里的原始值，可能未定义。

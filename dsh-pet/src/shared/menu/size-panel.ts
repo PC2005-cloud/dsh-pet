@@ -6,7 +6,7 @@
  * 面板只负责取值范围、预览与发请求，写盘仍由宿主 `POST /pet-size` 完成（设置页不动）。
  * @module dsh-pet/src/shared/menu/size-panel
  */
-import { resolveSizeBounds } from '../pet-size.ts';
+import { percentToSizePx, resolveSizeBounds, sizePxToPercent } from '../pet-size.ts';
 
 /** 成品的配置聚合：与 `GET /config` 的响应同形，直接交给宿主侧的重载。 */
 export type MergedPetConfig = Record<string, Record<string, unknown>>;
@@ -147,6 +147,11 @@ export async function savePetSize(baseUrl: string, petId: string, sizePx: number
  */
 export function mountSizePanel(options: SizePanelOptions): SizePanelMount {
   const bounds = resolveSizeBounds(options.sizePx, options.sizePercent, options.viewportWidthPx);
+  // 滑块按百分比走（100% = 内置默认宽度）：存储仍是 px，换算集中在这两个纯函数里。
+  const minPercent = sizePxToPercent(bounds.min);
+  const maxPercent = Math.max(minPercent, sizePxToPercent(bounds.max));
+  const initialPercent = Math.min(maxPercent, Math.max(minPercent, sizePxToPercent(bounds.value)));
+  const initialPx = percentToSizePx(initialPercent);
   const livePreview = options.livePreview !== false;
   let closed = false;
 
@@ -164,22 +169,27 @@ export function mountSizePanel(options: SizePanelOptions): SizePanelMount {
   title.textContent = '调整大小';
   const value = document.createElement('span');
   value.className = 'dsh-pet-size-value';
-  value.textContent = formatSize(bounds.value);
+  value.textContent = formatPercent(initialPercent);
+  const defaultButton = document.createElement('button');
+  defaultButton.type = 'button';
+  defaultButton.className = 'dsh-pet-size-default';
+  defaultButton.title = '恢复默认大小（100%）';
+  defaultButton.textContent = '默认';
   const closeButton = document.createElement('button');
   closeButton.type = 'button';
   closeButton.className = 'dsh-pet-size-close';
   closeButton.setAttribute('aria-label', '关闭');
   closeButton.textContent = '×';
-  head.append(title, value, closeButton);
+  head.append(title, value, defaultButton, closeButton);
 
   const range = document.createElement('input');
   range.type = 'range';
   range.className = 'dsh-pet-size-range';
   range.setAttribute('aria-label', '宠物大小');
-  range.min = String(bounds.min);
-  range.max = String(bounds.max);
+  range.min = String(minPercent);
+  range.max = String(maxPercent);
   range.step = '1';
-  range.value = String(bounds.value);
+  range.value = String(initialPercent);
 
   const foot = document.createElement('div');
   foot.className = 'dsh-pet-size-foot';
@@ -189,7 +199,7 @@ export function mountSizePanel(options: SizePanelOptions): SizePanelMount {
   hint.textContent = livePreview ? '拖动即时预览' : '松手后按新尺寸重建窗口';
   const limit = document.createElement('span');
   limit.className = 'dsh-pet-size-limit';
-  limit.textContent = '最大 ' + formatSize(bounds.max);
+  limit.textContent = '上限 ' + formatPercent(maxPercent);
   foot.append(hint, limit);
 
   panel.append(head, range, foot);
@@ -216,16 +226,26 @@ export function mountSizePanel(options: SizePanelOptions): SizePanelMount {
     }
   }
 
+  /** 百分比落到 DOM 与回调：`commit` 为 true 时值变了才写盘。 */
+  function applyPercent(percent: number, commit: boolean): void {
+    value.textContent = formatPercent(percent);
+    const sizePx = percentToSizePx(percent);
+    if (livePreview) options.onPreview?.(sizePx);
+    if (commit && sizePx !== initialPx) options.onCommit(sizePx);
+  }
+
   // 拖动只改渲染：input 连续触发，松手（change）才落盘——避免拖一次写几十遍配置文件。
   range.addEventListener('input', () => {
-    const next = Number(range.value);
-    value.textContent = formatSize(next);
-    if (livePreview) options.onPreview?.(next);
+    applyPercent(Number(range.value), false);
   });
   range.addEventListener('change', () => {
-    const next = Number(range.value);
-    if (next === bounds.value) return;
-    options.onCommit(next);
+    applyPercent(Number(range.value), true);
+  });
+  // 「默认」= 100%（内置默认宽度）：点一下直接落盘，与拖到同一格的 change 等价。
+  defaultButton.addEventListener('click', () => {
+    const percent = Math.min(maxPercent, Math.max(minPercent, 100));
+    range.value = String(percent);
+    applyPercent(percent, true);
   });
   closeButton.addEventListener('click', () => close());
   // 面板自己吃掉右键，别让宿主的菜单跟着弹。
@@ -254,9 +274,9 @@ export function mountSizePanel(options: SizePanelOptions): SizePanelMount {
   };
 }
 
-/** 数字后面统一补单位，避免滑块与页脚两处各写一份格式。 */
-function formatSize(sizePx: number): string {
-  return Math.round(sizePx) + ' px';
+/** 百分比文案：滑块与页脚共用，避免两处各写一份格式。 */
+function formatPercent(percent: number): string {
+  return Math.round(percent) + '%';
 }
 
 /** 大小的滑块浮层样式：与右键菜单同一套白底浅描边，两端注入同一份。 */
@@ -267,6 +287,8 @@ export const SIZE_PANEL_CSS = [
   '.dsh-pet-size-head{display:flex;align-items:center;gap:8px;margin-bottom:8px}',
   '.dsh-pet-size-title{flex:1 1 auto;font-weight:600}',
   '.dsh-pet-size-value{color:#2b63ff;font-variant-numeric:tabular-nums}',
+  '.dsh-pet-size-default{border:none;background:transparent;color:#9aa0a6;font-size:12px;padding:0 2px;cursor:pointer}',
+  '.dsh-pet-size-default:hover{color:#2b63ff}',
   '.dsh-pet-size-close{border:none;background:transparent;color:#9aa0a6;font-size:16px;line-height:1;padding:0 2px;cursor:pointer}',
   '.dsh-pet-size-close:hover{color:#2b2b2b}',
   '.dsh-pet-size-range{width:100%;margin:0;accent-color:#2b63ff;cursor:pointer}',

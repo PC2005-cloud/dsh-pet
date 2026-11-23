@@ -76,7 +76,7 @@ dsh-pet 的宿主半侧向 DSH 自己的 Web 服务注册了**一条前缀路由
 | `PUT /dsh-pet-7340/config`       | 保存用户层配置（白名单重建，用户手写的精调字段会保留）                                                                 |
 | `POST /dsh-pet-7340/config`      | 用内置默认整份覆盖用户配置，即「恢复默认」                                                                             |
 | `POST /dsh-pet-7340/pet-display` | **改单只宠物的显示位置**（`web` / `desktop` / `both` / `none`），只传 `{ id, display }`                                |
-| `POST /dsh-pet-7340/pet-size`    | **改单只宠物的大小**（`size` = 画框宽度 px，只传 `{ id, size }`）；右键「调整大小」滑块走它                             |
+| `POST /dsh-pet-7340/pet-size`    | **改单只宠物的大小**（`size` = 画框宽度 px，只传 `{ id, size }`）；浏览器与桌面的右键「调整大小」滑块走它（滑块按 % 显示，100% = 默认 462px）                             |
 | `POST /dsh-pet-7340/pet-config`  | **按种类写回全部实例**（`{ entry, pets }`，`entry` = `pet/<名>-config.json` 的前缀）；白名单重建，顶层动画池与人设保留 |
 | `POST /dsh-pet-7340/reload`      | 重载桌面端（重启桌面宠物进程，按最新配置重建窗口）                                                                     |
 

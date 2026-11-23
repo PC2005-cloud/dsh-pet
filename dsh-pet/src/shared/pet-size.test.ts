@@ -8,11 +8,14 @@ import assert from 'node:assert/strict';
 
 import {
   isValidSizePercent,
+  percentToSizePx,
   resolvePetSizePx,
   resolveSizeBounds,
   SIZE_PERCENT_MIN,
+  SIZE_PX_DEFAULT,
   SIZE_PX_MAX,
   SIZE_PX_MIN,
+  sizePxToPercent,
 } from './pet-size.ts';
 
 describe('isValidSizePercent —— 不小于 1 的有限数（不设上限）', () => {
@@ -94,5 +97,32 @@ describe('resolveSizeBounds —— 滑块范围由百分比上限与当前值共
     });
     assert.equal(resolveSizeBounds(264.6, 20, 1920).value, 265);
     assert.equal(resolveSizeBounds(50, 20, 1920).value, SIZE_PX_MIN);
+  });
+});
+
+describe('sizePxToPercent / percentToSizePx —— 滑块按内置默认宽度换算百分比', () => {
+  test('默认宽度就是 100%：462px = 100%，231px = 50%，924px = 200%', () => {
+    assert.equal(SIZE_PX_DEFAULT, 462);
+    assert.equal(sizePxToPercent(462), 100);
+    assert.equal(sizePxToPercent(231), 50);
+    assert.equal(sizePxToPercent(924), 200);
+    assert.equal(percentToSizePx(100), 462);
+    assert.equal(percentToSizePx(50), 231);
+    assert.equal(percentToSizePx(200), 924);
+  });
+
+  test('边界与脏值：取整、最小 120px 对应 26%、非数按默认/100%', () => {
+    assert.equal(sizePxToPercent(SIZE_PX_MIN), 26);
+    assert.equal(percentToSizePx(26), 120);
+    assert.equal(sizePxToPercent(0), 100);
+    assert.equal(sizePxToPercent(Number.NaN), 100);
+    assert.equal(percentToSizePx(Number.NaN), SIZE_PX_DEFAULT);
+    assert.equal(percentToSizePx(0), 1);
+  });
+
+  test('往返：常见百分比换算回 px 不漂移', () => {
+    for (const percent of [26, 50, 72, 100, 150, 200]) {
+      assert.equal(sizePxToPercent(percentToSizePx(percent)), percent);
+    }
   });
 });

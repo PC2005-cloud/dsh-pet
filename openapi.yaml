@@ -2143,7 +2143,7 @@ paths:
 
         与 `POST /pet-display` 同族的**单只快捷形式**：调用方不必回传整段 `pets[]`，层归属也由宿主
         用 `findPetInstance` 反查——`main` 条目写 `$DSH_HOME/dsh-pet/main-config.jsonc`，文件宠物写
-        `pet/<前缀>-config.json`。浏览器端右键菜单「调整大小」的滑块走它。
+        `pet/<前缀>-config.json`。浏览器端与桌面端的右键「调整大小」滑块走它（滑块按百分比显示，100% = 内置默认 462px，接口本身仍收 px）。
 
         **`size` 与 `sizePercent` 是两套口径**：`size` 是画框宽度的像素上限，`sizePercent` 是浏览器
         端的屏宽占比上限（缺省 20）。实际生效值 = `min(size, 屏宽 × sizePercent% / 身体占宽比)`，
