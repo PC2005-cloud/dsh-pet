@@ -39,6 +39,8 @@ export interface MenuActionDeps {
   report: (playbackId: string, status: 'failed', reason: string) => void;
   /** 显示位置切换后，把宿主回的成品聚合交给容器重渲染。 */
   applyMerged: (merged: Record<string, Record<string, unknown>>) => void;
+  /** 打开大小滑块浮层（无副作用由调用方负责写盘）。缺省 = 该端没有大小入口。 */
+  openSizePanel?: () => void;
   /** 动作失败时打一行告警（文案自带原因）。 */
   warn: (message: string) => void;
   /** 是否在睡：睡着时任何「打扰类」动作只弹拒绝台词、不执行。缺省视为醒着。 */
@@ -175,6 +177,11 @@ export function createMenuActions(deps: MenuActionDeps): MenuActions {
       if (!display) return;
       console.info('[dsh-pet] 菜单切换显示位置 pet=' + petId + ' display=' + display);
       void switchDisplay(deps, display);
+      return;
+    }
+    if (leaf.action === 'set-size') {
+      // 调大小只开浮层：入参是当前渲染尺寸，写盘在松手时由入口发起（这里不碰配置）。
+      deps.openSizePanel?.();
       return;
     }
     if (leaf.action === 'home') {

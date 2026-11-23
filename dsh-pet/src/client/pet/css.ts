@@ -7,6 +7,7 @@
 import { PET_ALPHA_FIX_ENABLED, ROUTE_PATH } from '../../shared/constants.ts';
 import { MENU_CSS } from '../../shared/menu.ts';
 import { TOOLTIP_CSS } from '../../shared/tooltip.ts';
+import { SIZE_PANEL_CSS } from './size-panel.ts';
 
 /** 视频的 alpha 修正声明（带前导分号）：开关关闭时为空串，样式表里不留 filter。 */
 const ALPHA_FIX_FILTER = PET_ALPHA_FIX_ENABLED ? ';filter:url(#dsh-pet-alpha-fix)' : '';
@@ -31,6 +32,8 @@ const PET_CSS = [
   MENU_CSS,
   // 悬浮提示样式，与桌面注入同一份。
   TOOLTIP_CSS,
+  // 大小滑块浮层：只有网页端点「调整大小」才用得到，随主样式一起注入。
+  SIZE_PANEL_CSS,
 ].join('\n');
 
 /** 注入去重用的标记值，写在 `<style>` 的 `data-plugin-css` 上。 */

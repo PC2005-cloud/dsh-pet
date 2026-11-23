@@ -6,7 +6,14 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { isValidSizePercent, resolvePetSizePx, SIZE_PERCENT_MIN } from './pet-size.ts';
+import {
+  isValidSizePercent,
+  resolvePetSizePx,
+  resolveSizeBounds,
+  SIZE_PERCENT_MIN,
+  SIZE_PX_MAX,
+  SIZE_PX_MIN,
+} from './pet-size.ts';
 
 describe('isValidSizePercent —— 不小于 1 的有限数（不设上限）', () => {
   test('合法：包含超过 100 的值', () => {
@@ -55,5 +62,37 @@ describe('resolvePetSizePx —— 百分比按人物本体换算成画框宽度'
 
   test('平板竖屏：15% 人物 → 画框 307.2（本体 115.2 = 768 的 15%）', () => {
     assert.equal(resolvePetSizePx(462, 15, 768), 307.2);
+  });
+});
+
+describe('resolveSizeBounds —— 滑块范围由百分比上限与当前值共同决定', () => {
+  test('1080p 默认 20%：上限 1024，当前 462', () => {
+    assert.deepEqual(resolveSizeBounds(462, undefined, 1920), { min: SIZE_PX_MIN, max: 1024, value: 462 });
+  });
+
+  test('平板竖屏 15%：调用方传实际渲染值 307，滑块只在 120~307 里走', () => {
+    assert.deepEqual(resolveSizeBounds(307.2, 15, 768), { min: SIZE_PX_MIN, max: 307, value: 307 });
+  });
+
+  test('当前值超过百分比上限：上限放宽到当前值，滑块不会一拖就跳', () => {
+    assert.deepEqual(resolveSizeBounds(2000, 20, 1920), { min: SIZE_PX_MIN, max: 2000, value: 2000 });
+  });
+
+  test('上限比下限还小：两头一起收到上限（小屏塞不下 120px）', () => {
+    assert.deepEqual(resolveSizeBounds(20, 2, 375), { min: 20, max: 20, value: 20 });
+  });
+
+  test('视口拿不到 → 用兜底上限 SIZE_PX_MAX', () => {
+    assert.deepEqual(resolveSizeBounds(462, 20, 0), { min: SIZE_PX_MIN, max: SIZE_PX_MAX, value: 462 });
+  });
+
+  test('脏值与小数：当前值先取整再夹进范围', () => {
+    assert.deepEqual(resolveSizeBounds(Number.NaN, 20, 1920), {
+      min: SIZE_PX_MIN,
+      max: 1024,
+      value: SIZE_PX_MIN,
+    });
+    assert.equal(resolveSizeBounds(264.6, 20, 1920).value, 265);
+    assert.equal(resolveSizeBounds(50, 20, 1920).value, SIZE_PX_MIN);
   });
 });

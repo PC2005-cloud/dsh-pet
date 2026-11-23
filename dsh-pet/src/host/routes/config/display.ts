@@ -62,9 +62,9 @@ export async function setPetDisplay(deps: PetRouteDeps, input: RouteInput): Prom
     return failResult('generate-error', e instanceof Error ? e.message : String(e));
   }
   // 配置变更信号（只在写盘成功之后：失败时不该动版本号，否则浏览器白重拉一次 /config）。
-  // 这是全插件唯一写 sections.config 的地方：保存 / 同步配置的调用方自己就拿到了成品聚合
-  // （响应体），桌面端由下面的 requestRestart() 重启，都不需要这个信号；
-  // 而桌面端右键改 display 时浏览器页面不是发起方，只能靠它发现「配置被别处改过」。
+  // 单只端点（本路由与 /pet-size）是 sections.config 的写方：保存 / 同步配置的调用方自己就拿到了
+  // 成品聚合（响应体），桌面端由下面的 requestRestart() 重启，都不需要这个信号；而桌面端右键改
+  // display / 大小 时浏览器页面不是发起方，只能靠它发现「配置被别处改过」。
   deps.state.writeSection('config', {});
   // 占用锁：改成 `none`（桌面端右键「关闭桌面显示」）＝ 用户主动隐藏/关闭，属于抢占——
   // 撤销本轮占用（cause: preempted）。不做的话宠物会被锁到 TTL 到点，而用户明明已经把它藏了

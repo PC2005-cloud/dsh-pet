@@ -29,8 +29,11 @@ import {
   type MenuNode,
 } from '../../../shared/menu.ts';
 import { ROUTE_PATH } from '../../../shared/constants.ts';
+import { resolvePetSizePx } from '../../../shared/pet-size.ts';
 import { TOOLTIP_GAP_RATIO, tooltipPlacement } from '../../../shared/tooltip.ts';
 import type { MenuMoreItem } from '../../../shared/menu.ts';
+import { petBridge } from '../../settings/bridge.ts';
+import { mountSizePanel, savePetSize, type SizePanelMount } from '../size-panel.ts';
 import type { CardLive } from './live.ts';
 import type { CardMotion } from './motion.ts';
 import type { CardStateApi } from './state.ts';
@@ -83,6 +86,8 @@ export interface CardEntry {
   openChat: (image?: File) => void;
   /** 打开待办面板（右键菜单入口）。 */
   openTodo: () => void;
+  /** 打开大小滑块（右键菜单「调整大小」入口）。 */
+  openSizePanel: () => void;
   /** 指针进入：先摆位再显示。 */
   onPointerEnter: (e: ReactNS.PointerEvent<HTMLDivElement>) => void;
   /** 指针离开：收起提示。 */
@@ -104,6 +109,9 @@ export function createCardEntry(rt: CardEntryRuntime) {
     // 右键菜单与对话弹窗当前的句柄，卸载或重开前清理。对话弹窗还要按住说话遥控开录/收尾。
     const menuRef = useRef<{ close: () => void } | null>(null);
     const chatRef = useRef<ChatDialogMount | null>(null);
+    // 大小滑块句柄，以及弹出菜单那一刻的落点：点「调整大小」时菜单已经关掉，落点只能先记下来。
+    const sizePanelRef = useRef<SizePanelMount | null>(null);
+    const menuPosRef = useRef({ x: 0, y: 0 });
 
     /** 把提示框摆到光标右下，放不下时翻边并夹回视口。
      *  直接写 DOM style：每次鼠标移动都走 React 状态会让整个 PetCard 重渲染。
@@ -132,6 +140,10 @@ export function createCardEntry(rt: CardEntryRuntime) {
         if (chatRef.current) {
           chatRef.current.close();
           chatRef.current = null;
+        }
+        if (sizePanelRef.current) {
+          sizePanelRef.current.close();
+          sizePanelRef.current = null;
         }
       },
       [],
@@ -176,6 +188,41 @@ export function createCardEntry(rt: CardEntryRuntime) {
 
     /** 打开待办面板：面板占气泡槽，重复点击是幂等的。 */
     const openTodo = (): void => showTodo();
+
+    /** 关掉大小滑块（幂等）：重开、卸载都走它，句柄由面板的 onClose 置空。 */
+    const closeSizePanel = (): void => {
+      sizePanelRef.current?.close();
+    };
+
+    /** 打开大小滑块：贴着右键落点弹出，起点是当前实际渲染宽度。 */
+    const openSizePanel = (): void => {
+      closeSizePanel();
+      const cfg = cfgRef.current;
+      const pos = menuPosRef.current;
+      sizePanelRef.current = mountSizePanel({
+        // 窄屏上 size 会被百分比夹小；滑块必须从眼前看到的宽度出发，否则一拖就跳。
+        sizePx: resolvePetSizePx(cfg.size, cfg.sizePercent, window.innerWidth),
+        sizePercent: cfg.sizePercent,
+        viewportWidthPx: window.innerWidth,
+        x: pos.x,
+        y: pos.y,
+        onPreview: (sizePx) => card.actions.setSize(sizePx),
+        onCommit: (sizePx) => {
+          void savePetSize(cfg.id, sizePx).then((outcome) => {
+            if (outcome.kind === 'ok') {
+              // 响应体就是成品聚合：与设置页保存同一条路，不必再拉一次 /config。
+              petBridge.reload(outcome.merged);
+              return;
+            }
+            const detail = outcome.kind === 'invalid' && outcome.message !== '' ? '：' + outcome.message : '';
+            console.warn('[dsh-pet] 保存宠物大小失败' + detail);
+          });
+        },
+        onClose: () => {
+          sizePanelRef.current = null;
+        },
+      });
+    };
 
     /** 「按住说话」按下：弹窗没开就先开一个，再让它开录；已开着就直接在它上面开录。 */
     const startChatHear = (): void => {
@@ -365,6 +412,8 @@ export function createCardEntry(rt: CardEntryRuntime) {
       const tail: MenuNode[] = [
         // 显示位置子菜单与桌面端同一份；改成不含 web 的值后本宠物会从页面消失。
         displayMenuBranch(),
+        // 大小滑块：两端都注入（桌面端窗口随重载改尺寸），比去设置页翻数字输入框直观。
+        { label: '调整大小', action: 'set-size' },
         { label: '回到初始位置', action: 'home' },
       ];
       const tree: MenuNode[] = [
@@ -380,6 +429,8 @@ export function createCardEntry(rt: CardEntryRuntime) {
       motion.flight.stop(); // 菜单弹出前停住飞行中的宠物。
       motion.stopMove(); // 菜单悬停期间宠物不漫游。
       if (menuRef.current) menuRef.current.close();
+      // 记住落点：菜单项被点时菜单已经关闭，滑块要贴着当初右键的位置弹出。
+      menuPosRef.current = { x: e.clientX, y: e.clientY };
       menuRef.current = mountContextMenu({
         tree,
         x: e.clientX,
@@ -405,6 +456,7 @@ export function createCardEntry(rt: CardEntryRuntime) {
       },
       openChat,
       openTodo,
+      openSizePanel,
       placeTip,
     };
   };

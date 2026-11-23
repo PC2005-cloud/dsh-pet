@@ -14,7 +14,8 @@ export interface MenuLeaf {
   anim?: string;
   /** 自定义动作：打开网站 / 查看余额 / 查询天气 / 立即碎碎念 / 打开对话弹窗 / 打开待办面板 / 回到初始位置 /
    *  重载配置（桌面端专属，重启桌面 Helper 并按最新配置重建窗口）/ 改显示位置（目标值见 display，
-   *  两端都注入）/ 第三方菜单项（只把 owner 与 label 上报给注册方，具体做什么由它决定）。
+   *  两端都注入）/ 调大小（打开大小滑块浮层，两端都注入）/
+   *  第三方菜单项（只把 owner 与 label 上报给注册方，具体做什么由它决定）。
    *  手动触发均不受 whisperEnabled 影响——那个字段只关自动轮询。 */
   action?:
     | 'open-site'
@@ -26,6 +27,7 @@ export interface MenuLeaf {
     | 'home'
     | 'reload'
     | 'set-display'
+    | 'set-size'
     | 'sleep'
     | 'wake'
     | 'third-party';

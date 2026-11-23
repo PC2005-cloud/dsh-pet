@@ -202,6 +202,7 @@ export function createCardRuntime(rt: PetRuntime) {
       faceLeft: () => actions.setFacing('left'),
       isFacingRight: () => card.facingRef.current === 'right',
       openChat: () => entryRef.current?.openChat(),
+      openSizePanel: () => entryRef.current?.openSizePanel(),
       openTodo: () => entryRef.current?.openTodo(),
       petId: cfg.id,
       playOnce: (anim, playbackId) => {

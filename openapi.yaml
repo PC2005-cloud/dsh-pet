@@ -148,8 +148,8 @@ paths:
           碎碎念与对话回复**不写**这两个字段，消费端按缺省处理——行为与改造前完全一致。
         - **`sections.config` 是配置变更信号**（`data` 恒为 `{}`，只看 `counter`）：它变了就说明配置
           被写过，消费端应重拉 `GET /config`。**当前写方是 `POST /pet-display`（桌面端右键改显示
-          位置）与 `POST /pet-config`（整条目写回）**——两者都可能**不是发起页面自己**的配置改动，
-          浏览器端只能靠这个信号知道。
+          位置）、`POST /pet-size`（右键「调整大小」滑块）与 `POST /pet-config`（整条目写回）**
+          ——它们都可能**不是发起页面自己**的配置改动，浏览器端只能靠这个信号知道。
           配置本体太大，不能塞进每秒一次的 `/state`，所以这里只放一个信号。
           保存 / 同步配置（`PUT` / `POST /config`）**不写它**：它们的调用方自己就拿到了成品聚合。
           **用户手工编辑 `main-config.jsonc` / `pet/*.json` 不会被感知**——宿主不再读盘比对 mtime
@@ -2133,6 +2133,74 @@ paths:
         "405":
           $ref: "#/components/responses/MethodNotAllowed"
 
+  /dsh-pet-7340/pet-size:
+    post:
+      tags: [Config]
+      operationId: setPetSize
+      summary: 改单只宠物的大小
+      description: |
+        按宠物 id 改它的 `size`（画框宽度，px），并返回改动后的成品聚合（与 `GET /config` 同一份）。
+
+        与 `POST /pet-display` 同族的**单只快捷形式**：调用方不必回传整段 `pets[]`，层归属也由宿主
+        用 `findPetInstance` 反查——`main` 条目写 `$DSH_HOME/dsh-pet/main-config.jsonc`，文件宠物写
+        `pet/<前缀>-config.json`。浏览器端右键菜单「调整大小」的滑块走它。
+
+        **`size` 与 `sizePercent` 是两套口径**：`size` 是画框宽度的像素上限，`sizePercent` 是浏览器
+        端的屏宽占比上限（缺省 20）。实际生效值 = `min(size, 屏宽 × sizePercent% / 身体占宽比)`，
+        所以拖动滑块只改 `size`，窄屏上仍会被 `sizePercent` 压住——滑块的最大值由客户端按同一公式
+        算出来并显示，不需要服务端再算一遍。
+
+        写入语义与 `PUT /config` 一致：白名单重建 + 磁盘原值透传。写盘后同样**异步**重启桌面
+        Helper、不阻塞响应，调用方按 fire-and-forget 处理即可（响应体里已经带着新配置）。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id, size]
+              properties:
+                id:
+                  type: string
+                  description: 宠物实例 id（合并后全局唯一）
+                size:
+                  type: number
+                  minimum: 1
+                  description: |
+                    画框宽度上限（px）。按整数像素语义取整，取整后 ≤ 0 一律拒绝；没有上限——
+                    真正的上限由浏览器端的 `sizePercent` 决定。
+            examples:
+              bigger:
+                summary: 调到 600px
+                value:
+                  id: main
+                  size: 600
+      responses:
+        "200":
+          description: |
+            **改动成功** → 改动后的成品聚合（与 `GET /config` 同一份）；
+            **业务失败** → `{ ok: false, reason, message }`（业务结论不用 400/404 表达）。
+
+            `reason` 取值：`pet-required`（缺 `id` / 空串 / 全空白）、`bad-request`（`size` 不是
+            有限数 / 取整后 ≤ 0 / 该层宠物配置非法）、`unknown-pet`（找不到这只宠物）、
+            `generate-error`（配置读取失败 / 写盘失败 / 条目配置文件找不到）。
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - type: object
+                    additionalProperties:
+                      $ref: "#/components/schemas/PetConfigEntry"
+                  - $ref: "#/components/schemas/FailureResponse"
+        "400":
+          description: "请求体不是合法 JSON（`reason: invalid-json`）。"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FailureResponse"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+
   /dsh-pet-7340/pet-config:
     post:
       tags: [Config]
@@ -3994,9 +4062,9 @@ components:
         为什么是信号而不是配置本体：配置聚合很大，而 `/state` 每次请求都会返回**全部叶子的完整
         data**，把配置塞进来等于每秒（桌面端还是一窗一宠各一次）传一整份配置。
 
-        **写方**：`POST /pet-display`（桌面端右键改显示位置）与 `POST /pet-config`（整条目写回）
-        ——两者都可能不是发起页面自己的配置改动。保存 / 同步配置（`PUT` / `POST /config`）不写它，
-        因为它们的调用方自己就拿到了成品聚合。
+        **写方**：`POST /pet-display`（桌面端右键改显示位置）、`POST /pet-size`（右键「调整大小」
+        滑块）与 `POST /pet-config`（整条目写回）——它们都可能不是发起页面自己的配置改动。保存 /
+        同步配置（`PUT` / `POST /config`）不写它，因为它们的调用方自己就拿到了成品聚合。
 
         **用户手工编辑 `main-config.jsonc` / `pet/*.json` 不会被感知**：宿主不再读盘比对 mtime
         （早先的做法等于每拍读一次盘），改完需要重载。

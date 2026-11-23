@@ -790,6 +790,55 @@ describe('/pet-display —— 业务失败 200 + 实体，协议失败用真实�
   });
 });
 
+describe('/pet-size —— 业务失败 200 + 实体，协议失败用真实状态码', () => {
+  test('GET → 405 + method-not-allowed（方法错是协议失败，不由 handler 决定）', async () => {
+    const r = await call('/dsh-pet-7340/pet-size');
+    assert.equal(r.status, 405);
+    assert.equal((JSON.parse(r.body) as { reason: string }).reason, 'method-not-allowed');
+  });
+
+  test('请求体不是合法 JSON → 400 + invalid-json（协议失败）', async () => {
+    const r = await call('/dsh-pet-7340/pet-size', 'POST', '{ 不是 json');
+    assert.equal(r.status, 400);
+    assert.equal((JSON.parse(r.body) as { reason: string }).reason, 'invalid-json');
+  });
+
+  test('缺 id → 200 + pet-required（与 /pet-display 同一对词汇）', async () => {
+    for (const body of [{ size: 300 }, { id: '   ', size: 300 }, { id: '', size: 300 }]) {
+      const r = await call('/dsh-pet-7340/pet-size', 'POST', JSON.stringify(body));
+      assert.equal(r.status, 200, JSON.stringify(body));
+      const parsed = JSON.parse(r.body) as { ok: boolean; reason: string };
+      assert.equal(parsed.ok, false);
+      assert.equal(parsed.reason, 'pet-required');
+    }
+  });
+
+  test('size 非法 → 200 + bad-request（0 / 负数 / 非数字 / 缺省 / 对象 / 取整成 0）', async () => {
+    for (const body of [
+      { id: 'main', size: 0 },
+      { id: 'main', size: -5 },
+      { id: 'main', size: 'abc' },
+      { id: 'main' },
+      { id: 'main', size: {} },
+      { id: 'main', size: 0.4 },
+    ]) {
+      const r = await call('/dsh-pet-7340/pet-size', 'POST', JSON.stringify(body));
+      assert.equal(r.status, 200, JSON.stringify(body));
+      const parsed = JSON.parse(r.body) as { ok: boolean; reason: string };
+      assert.equal(parsed.ok, false, JSON.stringify(body));
+      assert.equal(parsed.reason, 'bad-request', JSON.stringify(body));
+    }
+  });
+
+  test('size 合法 → 走到读配置那一步（源码形态下配置不可达 → generate-error）', async () => {
+    const r = await call('/dsh-pet-7340/pet-size', 'POST', JSON.stringify({ id: 'main', size: 300 }));
+    assert.equal(r.status, 200);
+    const body = JSON.parse(r.body) as { ok: boolean; reason: string };
+    assert.equal(body.ok, false);
+    assert.equal(body.reason, 'generate-error');
+  });
+});
+
 describe('/work-status —— 外部写入工作状态', () => {
   type StateBody = { sections: { workStatus: { data: { state: string | null; task: string | null } } } };
   const work = async () => JSON.parse((await call('/dsh-pet-7340/state')).body) as StateBody;

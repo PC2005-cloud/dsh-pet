@@ -43,10 +43,12 @@ export function createHttpRoute(deps: PetRouteDeps): { handlePetRoute: HttpRoute
     const url = new URL(rawUrl, 'http://localhost');
     const rest = decodeURIComponent(url.pathname.slice(ROUTE_SEGMENT.length + 1));
     const run = (): Promise<RouteResult> => dispatchPetRoute(url, rest, method, body, signal);
-    // 写配置的三条路径（PUT/POST /config、POST /pet-display、POST /pet-config）都是「读当前配置
+    // 写配置的四条路径（PUT/POST /config、POST /pet-display、POST /pet-size、POST /pet-config）都是「读当前配置
     // → 白名单重建整段 pets → 写盘」，并发交错会互相覆盖，必须共用一条串行队列；
     // GET /config 同样排队，避免写入尚未完成时读到空文件而回退内置默认。
-    const isConfigQueue = rest === 'config' || ((rest === 'pet-display' || rest === 'pet-config') && method === 'POST');
+    const isConfigQueue =
+      rest === 'config' ||
+      ((rest === 'pet-display' || rest === 'pet-size' || rest === 'pet-config') && method === 'POST');
     if (isConfigQueue) {
       const pending = configQueue.then(run, run);
       configQueue = pending.then(
