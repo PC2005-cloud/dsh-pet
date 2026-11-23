@@ -428,12 +428,15 @@ Object.assign(PetSprite.prototype, {
     }
     const hit = this.hit.getBoundingClientRect();
     const pos = this.menuPos || { x: hit.right, y: hit.top };
+    // 桌面窗口本身就是画框：开始值直接取 pet.size；上限按「整屏宽 × sizePercent」算。
+    // 不能拿本窗口的 innerWidth 当视口——窗口宽度就等于当前 size，那样 max 会被锁在眼前这个宽度，
+    // 滑块只能缩小、不能放大。
+    const screenWidthPx = Math.max(window.screen?.availWidth || 0, window.innerWidth, 1);
     const m = S.mountSizePanel({
       baseUrl: BASE,
-      // 窄屏上 size 会被 sizePercent 夹小：滑块从眼前这个宽度出发，与浏览器端同一条判据。
-      sizePx: S.resolvePetSizePx(this.pet.size, this.pet.sizePercent, window.innerWidth),
+      sizePx: this.pet.size,
       sizePercent: this.pet.sizePercent,
-      viewportWidthPx: window.innerWidth,
+      viewportWidthPx: screenWidthPx,
       x: pos.x,
       y: pos.y,
       livePreview: false,

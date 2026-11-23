@@ -261,7 +261,8 @@ function formatSize(sizePx: number): string {
 
 /** 大小的滑块浮层样式：与右键菜单同一套白底浅描边，两端注入同一份。 */
 export const SIZE_PANEL_CSS = [
-  '.dsh-pet-size-panel{position:fixed;z-index:2147483001;box-sizing:border-box;width:220px;padding:10px 12px 12px;background:rgba(255,255,255,.98);border:1px solid rgba(0,0,0,.12);border-radius:8px;box-shadow:0 8px 28px rgba(0,0,0,.2);color:#2b2b2b;font-size:13px;font-family:"Microsoft YaHei","Segoe UI","PingFang SC",sans-serif;user-select:none}',
+  // 桌面小窗的宽高跟着宠物走：把浮层宽度夹在视口内，宠物缩得很小时也不会被窗口裁掉。
+  '.dsh-pet-size-panel{position:fixed;z-index:2147483001;box-sizing:border-box;width:220px;max-width:calc(100vw - 16px);padding:10px 12px 12px;background:rgba(255,255,255,.98);border:1px solid rgba(0,0,0,.12);border-radius:8px;box-shadow:0 8px 28px rgba(0,0,0,.2);color:#2b2b2b;font-size:13px;font-family:"Microsoft YaHei","Segoe UI","PingFang SC",sans-serif;user-select:none}',
   '.dsh-pet-size-panel *{box-sizing:border-box}',
   '.dsh-pet-size-head{display:flex;align-items:center;gap:8px;margin-bottom:8px}',
   '.dsh-pet-size-title{flex:1 1 auto;font-weight:600}',
