@@ -17,5 +17,14 @@ export {
   readMenuItems,
 } from './menu/tree.ts';
 export { buildMemeBranch, groupMemes, memeThumbUrl } from './menu/memes.ts';
+export type {
+  MergedPetConfig,
+  SizePanelMount,
+  SizePanelOptions,
+  SizePanelPoint,
+  SizePanelRect,
+  SizeSaveOutcome,
+} from './menu/size-panel.ts';
+export { SIZE_PANEL_CSS, mountSizePanel, placeSizePanel, savePetSize } from './menu/size-panel.ts';
 export { MENU_CSS } from './menu/css.ts';
 export { mountContextMenu } from './menu/mount.ts';

@@ -66,6 +66,8 @@ Object.assign(PetSprite.prototype, {
     // 右键菜单（统一自绘组件，两端共用同一份：树+渲染均来自 shared-core）
     this.menuOpen = false; // 菜单开启期间强制整窗可交互（悬停菜单不触发穿透翻转）
     this.menuClose = null; // 当前菜单的 close()（打开时挂载，关闭后置空）
+    this.menuPos = null; // 最近一次右键落点（视口坐标）：大小滑块贴着它弹出
+    this.sizePanel = null; // 大小滑块浮层的句柄（「调整大小」菜单项开）
     // 余额气泡
     this.bubbleOn = false;
     this.bubbleTimer = null;

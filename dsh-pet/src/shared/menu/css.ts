@@ -7,6 +7,7 @@
  * 必须始终成立：菜单配色只出现在本文件，调用方不得另行覆盖。
  * @module dsh-pet/src/shared/menu/css
  */
+import { SIZE_PANEL_CSS } from './size-panel.ts';
 
 /** 菜单样式 —— 两端注入同一份。每级面板是独立的绝对定位盒子，位置由 JS 内联写入，互不嵌套。 */
 export const MENU_CSS = [
@@ -41,4 +42,6 @@ export const MENU_CSS = [
   // 右侧快捷键提示（菜单项 hint）：与 label 同一 flex 行，space-between 自动贴右
   '.dsh-pet-menu-hint{color:#9aa0a6;font-size:12px;flex:none;white-space:nowrap}',
   '.dsh-pet-menu-arrow{color:#9aa0a6;font-size:12px;flex:none}',
+  // 大小滑块与菜单同源：两端各注入一次菜单样式，滑块样式搭车，避免再挂一个 <style>。
+  ...SIZE_PANEL_CSS,
 ].join('');

@@ -26,14 +26,16 @@ import {
   displayMenuBranch,
   memeThumbUrl,
   mountContextMenu,
+  mountSizePanel,
+  savePetSize,
+  type MenuMoreItem,
   type MenuNode,
+  type SizePanelMount,
 } from '../../../shared/menu.ts';
 import { ROUTE_PATH } from '../../../shared/constants.ts';
 import { resolvePetSizePx } from '../../../shared/pet-size.ts';
 import { TOOLTIP_GAP_RATIO, tooltipPlacement } from '../../../shared/tooltip.ts';
-import type { MenuMoreItem } from '../../../shared/menu.ts';
 import { petBridge } from '../../settings/bridge.ts';
-import { mountSizePanel, savePetSize, type SizePanelMount } from '../size-panel.ts';
 import type { CardLive } from './live.ts';
 import type { CardMotion } from './motion.ts';
 import type { CardStateApi } from './state.ts';
@@ -200,6 +202,7 @@ export function createCardEntry(rt: CardEntryRuntime) {
       const cfg = cfgRef.current;
       const pos = menuPosRef.current;
       sizePanelRef.current = mountSizePanel({
+        baseUrl: ROUTE_PATH,
         // 窄屏上 size 会被百分比夹小；滑块必须从眼前看到的宽度出发，否则一拖就跳。
         sizePx: resolvePetSizePx(cfg.size, cfg.sizePercent, window.innerWidth),
         sizePercent: cfg.sizePercent,
@@ -208,7 +211,7 @@ export function createCardEntry(rt: CardEntryRuntime) {
         y: pos.y,
         onPreview: (sizePx) => card.actions.setSize(sizePx),
         onCommit: (sizePx) => {
-          void savePetSize(cfg.id, sizePx).then((outcome) => {
+          void savePetSize(ROUTE_PATH, cfg.id, sizePx).then((outcome) => {
             if (outcome.kind === 'ok') {
               // 响应体就是成品聚合：与设置页保存同一条路，不必再拉一次 /config。
               petBridge.reload(outcome.merged);

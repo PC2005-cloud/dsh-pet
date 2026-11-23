@@ -10,6 +10,7 @@
 export * from './types.ts';
 export * from './constants.ts';
 export * from './pickers.ts';
+export * from './pet-size.ts';
 export * from './displays.ts';
 export * from './motion.ts';
 export * from './balance/index.ts';

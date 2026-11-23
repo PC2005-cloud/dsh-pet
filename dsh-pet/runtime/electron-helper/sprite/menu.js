@@ -20,6 +20,8 @@ Object.assign(PetSprite.prototype, {
     e.preventDefault();
     this.stopThrow(); // 菜单弹出前停住飞行中的宠物
     this.stopMove(); // 菜单悬停期间宠物不漫游
+    // 记下落点：大小滑块贴它弹出。菜单本身由 mountContextMenu 摆，不需要这个坐标。
+    this.menuPos = { x: e.clientX, y: e.clientY };
     // 桌面专属工具根项 + 共享菜单树（动作 → 分类 → 具体动画）。碎碎念/对话无条件显示：手动触发
     // 不受 whisperEnabled 限制（该字段只影响自动轮询）。首项文案与去向随宿主形态变，见 OPEN_LABEL。
     // 顺序：打开软件 / 余额 / 待办 / 碎碎念 / 对话 / 配图 / 睡觉 → 动作树 → 显示位置 / 重载配置 / 回到初始位置。
@@ -57,6 +59,8 @@ Object.assign(PetSprite.prototype, {
       // 与浏览器端注入同一份子菜单，两端文案与取值不会漂移。不就地开关窗：窗口是进程启动时按
       // DSH_PET_PETS 一次性建的，就地增删既改不了磁盘配置也改不了窗口数量。
       S.displayMenuBranch(),
+      // 调整大小：弹出只改 px 的滑块。桌面窗口尺寸由宿主建窗时决定，这里松手才落盘、由宿主重建窗口。
+      { label: '调整大小', action: 'set-size' },
       // 重载配置：请宿主重启桌面 Helper，全部窗口按最新配置重建。维护动作，排在回到初始位置之前。
       { label: '重载配置', action: 'reload' },
       { label: '回到初始位置', action: 'home' },
@@ -147,6 +151,10 @@ Object.assign(PetSprite.prototype, {
     }
     if (leaf.action === 'set-display') {
       this.setPetDisplay(leaf.display); // 改这只宠物的显示位置：写 display 配置，由宿主重载生效
+      return;
+    }
+    if (leaf.action === 'set-size') {
+      this.openSizePanel(); // 弹大小滑块（再点一次收起）；拖动不改窗口，落盘后由宿主重建
       return;
     }
     if (leaf.action === 'reload') {
@@ -410,6 +418,57 @@ Object.assign(PetSprite.prototype, {
     });
   },
 
+  // 「调整大小」菜单：弹一只只改 px 的滑块。桌面窗口是进程启动时按 DSH_PET_PETS 建的，渲染端改不了
+  // 自己窗口的大小，所以这里不做拖动预览（livePreview:false），松手 POST /pet-size 后请宿主重载重建窗口。
+  // 再点一次同一项收起，与「对话」「待办」的开关手感一致。
+  openSizePanel() {
+    if (this.sizePanel) {
+      this.closeSizePanel();
+      return;
+    }
+    const hit = this.hit.getBoundingClientRect();
+    const pos = this.menuPos || { x: hit.right, y: hit.top };
+    const m = S.mountSizePanel({
+      baseUrl: BASE,
+      // 窄屏上 size 会被 sizePercent 夹小：滑块从眼前这个宽度出发，与浏览器端同一条判据。
+      sizePx: S.resolvePetSizePx(this.pet.size, this.pet.sizePercent, window.innerWidth),
+      sizePercent: this.pet.sizePercent,
+      viewportWidthPx: window.innerWidth,
+      x: pos.x,
+      y: pos.y,
+      livePreview: false,
+      // 只允许在「窗口 ∩ 工作区」内显示：宠物贴边时滑块不会被屏幕裁掉
+      clamp: this.visibleClampRect(),
+      onCommit: (sizePx) => {
+        S.savePetSize(BASE, this.pet.id, sizePx)
+          .then((outcome) => {
+            if (outcome.kind !== 'ok') {
+              const detail = outcome.kind === 'invalid' && outcome.message !== '' ? '：' + outcome.message : '';
+              console.warn('[dsh-pet] 保存宠物大小失败' + detail);
+              return;
+            }
+            // 配置已落盘，但窗口尺寸只能由宿主重建：走「重载配置」同一条路（本进程会被换掉）。
+            this.reloadDesktop();
+          })
+          .catch((e) => console.warn('[dsh-pet] 保存宠物大小请求失败（宿主不可达？）', e));
+      },
+      onClose: () => {
+        this.sizePanel = null;
+        this.syncInputBusy(); // 滑块关：若没有别的占用则交还常规判定
+        if (!this.inputBusy()) this.setInteractive(false);
+      },
+    });
+    this.sizePanel = m;
+    this.syncInputBusy();
+    this.setInteractive(true);
+  },
+
+  // 收起大小滑块（幂等）：面板自己的 onClose 也会置空句柄，这里是主动关闭的那条路。
+  closeSizePanel() {
+    if (!this.sizePanel) return;
+    this.sizePanel.close();
+    this.sizePanel = null;
+  },
   /**
    * 自定义节点树 → DOM（custom 形态的渲染器）。
    *

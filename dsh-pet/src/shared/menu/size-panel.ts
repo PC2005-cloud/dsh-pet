@@ -1,14 +1,14 @@
 /**
- * 宠物大小滑块浮层：右键菜单「调整大小」弹出的轻量面板，拖动即时改渲染宽度，松手写配置。
+ * 宠物大小滑块浮层：「调整大小」菜单项弹出的轻量面板，拖动改画框宽度，松手写配置。
  *
- * 不依赖 React：菜单、提示与这只面板都是同一个宿主页面里的 DOM 浮层，用同一套白底样式；
- * 面板只负责取值范围、预览与提交请求，写盘由宿主 `POST /pet-size` 完成（设置页不动）。
- * @module dsh-pet/src/client/pet/size-panel
+ * 两端共用同一份 DOM 与判据：浏览器浮层用相对路由访问宿主，桌面渲染进程是 file:// 页面，
+ * 必须传绝对 BASE；桌面端改了大小要由宿主重建窗口，所以那边关掉拖动即时预览。
+ * 面板只负责取值范围、预览与发请求，写盘仍由宿主 `POST /pet-size` 完成（设置页不动）。
+ * @module dsh-pet/src/shared/menu/size-panel
  */
-import { ROUTE_PATH } from '../../shared/constants.ts';
-import { resolveSizeBounds } from '../../shared/pet-size.ts';
+import { resolveSizeBounds } from '../pet-size.ts';
 
-/** 成品的配置聚合：与 `GET /config` 的响应同形，直接交给 `petBridge.reload`。 */
+/** 成品的配置聚合：与 `GET /config` 的响应同形，直接交给宿主侧的重载。 */
 export type MergedPetConfig = Record<string, Record<string, unknown>>;
 
 /** 存取结果的判别联合：失败不抛给调用方，面板只管选一句文案。 */
@@ -17,8 +17,22 @@ export type SizeSaveOutcome =
   | { readonly kind: 'invalid'; readonly message: string }
   | { readonly kind: 'error' };
 
+/** 可用区域：桌面端传窗口 ∩ 工作区，浏览器端不传即整块视口。 */
+export interface SizePanelRect {
+  /** 左边界（视口坐标）。 */
+  x: number;
+  /** 上边界（视口坐标）。 */
+  y: number;
+  /** 宽度。 */
+  w: number;
+  /** 高度。 */
+  h: number;
+}
+
 /** 挂载参数。 */
 export interface SizePanelOptions {
+  /** 宿主路由基址：浏览器传 `ROUTE_PATH`，桌面传绝对 `BASE`。 */
+  baseUrl: string;
   /** 当前实际渲染的画框宽度（px）：滑块从这个值出发。 */
   sizePx: number;
   /** 人物占屏宽的百分比：只用来算滑块上限，不写回。 */
@@ -29,8 +43,12 @@ export interface SizePanelOptions {
   x: number;
   /** 右键落点（clientY）。 */
   y: number;
-  /** 拖动过程中：只改渲染，不写盘。 */
-  onPreview: (sizePx: number) => void;
+  /** 是否在拖动时即时改渲染。桌面端传 false：窗口尺寸由宿主重建，松手才有意义。 */
+  livePreview?: boolean;
+  /** 可用区域；省略时按整块视口算。 */
+  clamp?: SizePanelRect | null;
+  /** 拖动过程中：只改渲染，不写盘。`livePreview` 为 false 时不调。 */
+  onPreview?: (sizePx: number) => void;
   /** 松手（或键盘放开）时：值变了才调，负责写盘。 */
   onCommit: (sizePx: number) => void;
   /** 面板已关闭（点外、Esc、×）：持有句柄的一方据此置空。 */
@@ -45,44 +63,59 @@ export interface SizePanelMount {
   close: () => void;
 }
 
-/** 面板定位点：视口坐标，已夹进可视区。 */
+/** 面板定位点：视口坐标，已夹进可用区域。 */
 export interface SizePanelPoint {
   left: number;
   top: number;
 }
 
-/** 面板离视口边缘的安全距离（px）。 */
+/** 面板离可用区域边缘的安全距离（px）。 */
 const VIEWPORT_MARGIN = 8;
 
 /**
- * 把面板摆到落点附近，放不下时翻到另一侧并夹回视口。
+ * 把面板摆到落点附近，放不下时翻到另一侧并夹回可用区域。
  *
  * @param x - 右键落点横坐标。
  * @param y - 右键落点纵坐标。
  * @param w - 面板宽度。
  * @param h - 面板高度。
- * @param vw - 视口宽。
- * @param vh - 视口高。
+ * @param vw - 视口宽（没有 `rect` 时用它当区域）。
+ * @param vh - 视口高（没有 `rect` 时用它当区域）。
+ * @param rect - 可用区域；桌面端传窗口与工作区的交集。
  * @returns `{ left, top }`，单位 px。
  */
-export function placeSizePanel(x: number, y: number, w: number, h: number, vw: number, vh: number): SizePanelPoint {
-  const left = Math.max(VIEWPORT_MARGIN, Math.min(x, vw - w - VIEWPORT_MARGIN));
-  // 先按落点摆；下方塞不下就翻到上面，仍塞不下再夹回视口内。
-  const preferredTop = y + h + VIEWPORT_MARGIN > vh ? y - h : y;
-  const top = Math.max(VIEWPORT_MARGIN, Math.min(preferredTop, vh - h - VIEWPORT_MARGIN));
+export function placeSizePanel(
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  vw: number,
+  vh: number,
+  rect?: SizePanelRect | null,
+): SizePanelPoint {
+  const area = rect ?? { x: 0, y: 0, w: vw, h: vh };
+  const minLeft = area.x + VIEWPORT_MARGIN;
+  const minTop = area.y + VIEWPORT_MARGIN;
+  // 区域比面板还窄/矮时下限会超过上限：先夹出下限，避免面板被推出边界。
+  const left = Math.max(minLeft, Math.min(x, Math.max(minLeft, area.x + area.w - w - VIEWPORT_MARGIN)));
+  // 先按落点摆；下方塞不下就翻到上面，仍塞不下再夹回可用区域。
+  const preferredTop = y + h + VIEWPORT_MARGIN > area.y + area.h ? y - h : y;
+  const top = Math.max(minTop, Math.min(preferredTop, Math.max(minTop, area.y + area.h - h - VIEWPORT_MARGIN)));
   return { left, top };
 }
 
 /**
  * 把一只宠物的大小写回配置。
  *
+ * @param baseUrl - 宿主路由基址（相对 `ROUTE_PATH` 或绝对 `BASE`，末尾斜杠可有可无）。
  * @param petId - 宠物 id（层归属由宿主反查，调用方不用知道它在哪个种类文件里）。
  * @param sizePx - 新的画框宽度（px），必须大于 0。
  * @returns 写后的成品聚合，或失败分类；`invalid` 带出宿主给的就地文案。
  */
-export async function savePetSize(petId: string, sizePx: number): Promise<SizeSaveOutcome> {
+export async function savePetSize(baseUrl: string, petId: string, sizePx: number): Promise<SizeSaveOutcome> {
+  const root = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
   try {
-    const response = await fetch(ROUTE_PATH + '/pet-size', {
+    const response = await fetch(root + '/pet-size', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ id: petId, size: sizePx }),
@@ -114,7 +147,7 @@ export async function savePetSize(petId: string, sizePx: number): Promise<SizeSa
  */
 export function mountSizePanel(options: SizePanelOptions): SizePanelMount {
   const bounds = resolveSizeBounds(options.sizePx, options.sizePercent, options.viewportWidthPx);
-  let current = bounds.value;
+  const livePreview = options.livePreview !== false;
   let closed = false;
 
   const panel = document.createElement('div');
@@ -131,7 +164,7 @@ export function mountSizePanel(options: SizePanelOptions): SizePanelMount {
   title.textContent = '调整大小';
   const value = document.createElement('span');
   value.className = 'dsh-pet-size-value';
-  value.textContent = formatSize(current);
+  value.textContent = formatSize(bounds.value);
   const closeButton = document.createElement('button');
   closeButton.type = 'button';
   closeButton.className = 'dsh-pet-size-close';
@@ -152,7 +185,8 @@ export function mountSizePanel(options: SizePanelOptions): SizePanelMount {
   foot.className = 'dsh-pet-size-foot';
   const hint = document.createElement('span');
   hint.className = 'dsh-pet-size-hint';
-  hint.textContent = '拖动即时预览';
+  // 桌面端没有拖动预览：窗口尺寸归 Electron 宿主管，只能落盘后重建。
+  hint.textContent = livePreview ? '拖动即时预览' : '松手后按新尺寸重建窗口';
   const limit = document.createElement('span');
   limit.className = 'dsh-pet-size-limit';
   limit.textContent = '最大 ' + formatSize(bounds.max);
@@ -170,7 +204,8 @@ export function mountSizePanel(options: SizePanelOptions): SizePanelMount {
   };
 
   function onOutside(event: MouseEvent): void {
-    if (event.target instanceof Node && panel.contains(event.target)) return;
+    // 不用 instanceof Node：运行时门禁（eslint.runtime.config.js）只声明契约里真实存在的浏览器全局，Node 不在其中。
+    if (event.target !== null && panel.contains(event.target as Node)) return;
     close();
   }
 
@@ -183,17 +218,17 @@ export function mountSizePanel(options: SizePanelOptions): SizePanelMount {
 
   // 拖动只改渲染：input 连续触发，松手（change）才落盘——避免拖一次写几十遍配置文件。
   range.addEventListener('input', () => {
-    current = Number(range.value);
-    value.textContent = formatSize(current);
-    options.onPreview(current);
+    const next = Number(range.value);
+    value.textContent = formatSize(next);
+    if (livePreview) options.onPreview?.(next);
   });
   range.addEventListener('change', () => {
-    if (Number(range.value) === bounds.value) return;
-    current = Number(range.value);
-    options.onCommit(current);
+    const next = Number(range.value);
+    if (next === bounds.value) return;
+    options.onCommit(next);
   });
   closeButton.addEventListener('click', () => close());
-  // 面板自己吃掉右键与滚轮切换，别让宿主的菜单/页面跟着动。
+  // 面板自己吃掉右键，别让宿主的菜单跟着弹。
   panel.addEventListener('contextmenu', (event) => event.preventDefault());
 
   document.body.appendChild(panel);
@@ -204,6 +239,7 @@ export function mountSizePanel(options: SizePanelOptions): SizePanelMount {
     panel.offsetHeight,
     window.innerWidth,
     window.innerHeight,
+    options.clamp ?? null,
   );
   panel.style.left = point.left + 'px';
   panel.style.top = point.top + 'px';
@@ -223,7 +259,7 @@ function formatSize(sizePx: number): string {
   return Math.round(sizePx) + ' px';
 }
 
-/** 大小的滑块浮层样式：与右键菜单同一套白底浅描边，只在本页面注入一次。 */
+/** 大小的滑块浮层样式：与右键菜单同一套白底浅描边，两端注入同一份。 */
 export const SIZE_PANEL_CSS = [
   '.dsh-pet-size-panel{position:fixed;z-index:2147483001;box-sizing:border-box;width:220px;padding:10px 12px 12px;background:rgba(255,255,255,.98);border:1px solid rgba(0,0,0,.12);border-radius:8px;box-shadow:0 8px 28px rgba(0,0,0,.2);color:#2b2b2b;font-size:13px;font-family:"Microsoft YaHei","Segoe UI","PingFang SC",sans-serif;user-select:none}',
   '.dsh-pet-size-panel *{box-sizing:border-box}',
@@ -235,4 +271,4 @@ export const SIZE_PANEL_CSS = [
   '.dsh-pet-size-range{width:100%;margin:0;accent-color:#2b63ff;cursor:pointer}',
   '.dsh-pet-size-foot{display:flex;justify-content:space-between;gap:8px;margin-top:6px;color:#9aa0a6;font-size:12px}',
   '.dsh-pet-size-limit{font-variant-numeric:tabular-nums}',
-].join('\n');
+];
