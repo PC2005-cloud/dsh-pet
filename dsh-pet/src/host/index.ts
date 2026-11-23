@@ -34,6 +34,7 @@ import { createHearService } from './voice/hear.ts';
 import { listChatMemoryProviders } from './chat-memory-provider.ts';
 import { TODO_FILE_NAME, TodoStore } from './todo/store.ts';
 import { join } from 'node:path';
+import { FEATURED_SOURCE, integrateFeaturedPlugins } from './featured-source.ts';
 import type { PetRouteDeps } from './routes/types.ts';
 
 /** 插件行 id（与 cordis.patch.yml 一致） */
@@ -272,4 +273,13 @@ export function apply(ctx: any): void {
 
   // 路由就绪后拉起桌面 Helper（Electron 缺失时仅告警，不影响 DSH 与浏览器 overlay）
   startHelper();
+
+  // 精选插件推荐源：向社区「精选插件」生态登记本插件，首个激活的接入方持有聚合路由。
+  // 失败只告警——桌宠本体不依赖精选入口；standalone / 桌面模式的伪 ctx 无 inject，
+  // featured-source 内部的桩守卫会直接跳过。
+  try {
+    integrateFeaturedPlugins(ctx, FEATURED_SOURCE);
+  } catch (error) {
+    console.error('[dsh-pet] featured-plugins integration failed; continuing', error);
+  }
 }

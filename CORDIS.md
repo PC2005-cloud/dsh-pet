@@ -439,3 +439,21 @@ export function apply(ctx) {
 ctx.get('petApi7340').memory.list();
 // { providers: [{ id: 'native', name: '内置记忆' }, { id: 'my-memory', name: '我的记忆' }] }
 ```
+
+### featured-plugins（精选插件目录聚合）
+
+dsh-featured 生态约定：接入「精选插件」入口 tab 的插件共用一个宿主侧目录聚合服务。首个激活的接入方 `ctx.provide('featured-plugins', registry)` 并持有聚合路由；后续接入方只登记自己的源，不重复挂路由。
+
+**registry.register(source)**
+
+| 名称 | 类型 | 说明 |
+| --- | --- | --- |
+| `source` | object | `{ id, title, entries }`；`entries` 是本插件收录的精选条目（`{ package, title, ... }`，按 `package` 去重、先到者优先）。只登记自己真正收录的插件，**不要把自己塞进去** |
+
+**返回**：`() => void`，注销函数。配合 `ctx.effect` 使用，插件卸载时自动注销。
+
+dsh-pet 自身的 `FEATURED_SOURCE.entries` 恒为空数组——它只提供入口 tab 与聚合服务，收录哪些插件由各接入方（或 dsh-featured 完整版的远程目录）决定。
+
+**聚合 HTTP 接口**：`GET /dsh-plugins-plugin/featured`——汇总所有登记源的条目并合并远程目录（jsdelivr / GitHub 原始文件），仅同源请求可访问（跨源 403，非 GET 405）。
+
+**客户端约定**：入口 tab 挂 `plugins.tab` 插槽；`window.__DSH_FEATURED_APPLIED__` 判重保证全页只有一个精选 tab，`window.__DSH_FEATURED_FULL__` 为真（完整版 dsh-featured 已接管）时轻量入口自动让位。集成约定出处见 [AI-INTEGRATION.md](https://github.com/skillpie/dsh-plugins/blob/main/dsh-featured/AI-INTEGRATION.md)。

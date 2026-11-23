@@ -292,6 +292,14 @@ export const zh = {
   'motion.move': '移动',
   'motion.action': '随机动作',
   uninstallCmd: 'dsh plugin --profile {profile} remove dsh-pet',
+  // 「精选插件」入口 tab（plugins.tab 插槽）：dsh-featured 完整版未装时的引导位。
+  'featured.tabLabel': '精选插件',
+  'featured.welcome': '精选插件完整版（dsh-featured）未安装。',
+  'featured.installFull': '安装完整版',
+  'featured.installing': '正在安装完整版…',
+  'featured.installed': '已安装，刷新后即可使用完整功能。',
+  'featured.installedShort': '已安装',
+  'featured.desc': '一个入口逛完社区精选的好插件：搜索、标签筛选、一键安装、README 详情。',
 };
 
 /** 文案键；zh 的键集即全集。 */
