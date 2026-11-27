@@ -86,6 +86,10 @@ export const en: Record<Key, string> = {
   'display.desktop': 'Desktop only',
   'display.both': 'Both',
   'display.none': 'Neither',
+  visibleTitle: 'Visible pets',
+  visibleHint:
+    'Tick the characters to show on screen. Unticking hides a pet from both the web UI and the desktop without deleting its config, avatar or persona — tick it again to bring it back. Click "Save" at the bottom to apply.',
+  visibleCount: 'Showing {n} of {m} pets',
   cornerLabel: 'Position',
   'corner.top-left': 'Top-left',
   'corner.top-right': 'Top-right',

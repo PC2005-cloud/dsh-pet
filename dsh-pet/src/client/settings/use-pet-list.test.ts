@@ -1,14 +1,15 @@
 /**
- * 种类归纳（petKinds）的契约测试。
+ * 种类归纳（groupPetsByKind / petKinds）的契约测试。
  *
- * 两条契约：
- *   1. 按首次出现顺序去重，并统计每种有多少只实例（标签上的括注）；
- *   2. 没有 `assetRoot` 的实例算 main —— 老数据 / 容器拍平缺字段时不能凭空造出一个种类。
+ * 三条契约：
+ *   1. 按首次出现顺序分组，`groupPetsByKind` 保留所属种类的全部实例；
+ *   2. `petKinds` 在分组之上统计每种有多少只实例（标签上的括注）；
+ *   3. 没有 `assetRoot` 的实例算 main —— 老数据 / 容器拍平缺字段时不能凭空造出一个种类。
  */
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { mainPetsOf, petKinds } from './use-pet-list.ts';
+import { groupPetsByKind, mainPetsOf, petKinds } from './use-pet-list.ts';
 import type { Pet } from '../../shared/types.ts';
 
 /** 一只最小实例；`assetRoot` 省略时模拟「没打标的实例」。 */
@@ -23,6 +24,32 @@ const pet = (id: string, assetRoot?: string): Pet => ({
   display: 'web',
   position: { corner: 'top-right', marginX: 0, marginY: 0 },
   ...(assetRoot === undefined ? {} : { assetRoot }),
+});
+
+describe('groupPetsByKind —— 实例列表 → 分组', () => {
+  test('按首次出现顺序分组，每组保留自己的实例', () => {
+    const groups = groupPetsByKind([pet('m1', 'main'), pet('d1', 'daily'), pet('d2', 'daily'), pet('f1', 'festival')]);
+    assert.deepEqual(
+      groups.map((group) => [group.entry, group.kind, group.pets.map((item) => item.id)]),
+      [
+        ['main', 'main', ['m1']],
+        ['daily', 'pack', ['d1', 'd2']],
+        ['festival', 'pack', ['f1']],
+      ],
+    );
+  });
+
+  test('没有 assetRoot 的实例归到 main', () => {
+    const groups = groupPetsByKind([pet('x1')]);
+    assert.deepEqual(
+      groups.map((group) => [group.entry, group.pets.map((item) => item.id)]),
+      [['main', ['x1']]],
+    );
+  });
+
+  test('空列表：没有分组', () => {
+    assert.deepEqual(groupPetsByKind([]), []);
+  });
 });
 
 describe('petKinds —— 实例列表 → 种类条', () => {

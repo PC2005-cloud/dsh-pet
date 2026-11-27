@@ -16,6 +16,9 @@ export const isWebVisible = (display: PetDisplay): boolean => display === 'web' 
 /** 该宠物是否参与桌面模式（Electron 透明窗）渲染。 */
 export const isDesktopVisible = (display: PetDisplay): boolean => display === 'desktop' || display === 'both';
 
+/** 该宠物是否会被渲染（网页或桌面任一）；用于「显示哪些宠物」的勾选态。 */
+export const isPetVisible = (display: PetDisplay): boolean => isWebVisible(display) || isDesktopVisible(display);
+
 /** 把成品聚合拍平成渲染用宠物列表。
  *  条目级字段（animations / physics / font 等）由所属条目一份、多实例共享；assetRoot 取条目 key，
  *  即素材根。非 main 条目打 extra 标记：文件宠物在设置页不可编辑、保存时排除。 */

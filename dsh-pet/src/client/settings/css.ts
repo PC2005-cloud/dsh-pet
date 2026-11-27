@@ -118,6 +118,17 @@ const SETTINGS_CSS = [
   '.dsh-pet-cfg__toggle>label>span{overflow-wrap:anywhere}',
   '.dsh-pet-cfg__toggle input[type=checkbox]{flex:none;width:16px;height:16px;margin:0;accent-color:var(--dsw-alias-state-business-primary);cursor:pointer}',
 
+  // 「显示哪些宠物」：种类一组、每只一行；勾选框与名字同一个 label，显示位置靠右只读。
+  '.dsh-pet-cfg__picks{display:flex;flex-direction:column;gap:10px}',
+  '.dsh-pet-cfg__pickGroup{display:flex;flex-direction:column;gap:4px}',
+  '.dsh-pet-cfg__pickKind{font-size:12px;color:var(--dsw-alias-label-secondary)}',
+  '.dsh-pet-cfg__pickRow{display:flex;align-items:center;gap:8px;min-width:0;font-size:13px}',
+  '.dsh-pet-cfg__pickRow>label{display:inline-flex;align-items:center;gap:6px;min-width:0;cursor:pointer}',
+  '.dsh-pet-cfg__pickRow input[type=checkbox]{flex:none;width:16px;height:16px;margin:0;accent-color:var(--dsw-alias-state-business-primary);cursor:pointer}',
+  '.dsh-pet-cfg__pickRow input[type=checkbox]:disabled{cursor:default}',
+  '.dsh-pet-cfg__pickName{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}',
+  '.dsh-pet-cfg__pickMeta{flex:none;margin-left:auto;font-size:11px;line-height:16px;color:var(--dsw-alias-label-tertiary)}',
+
   // 悬浮说明气泡：由 ./tip-layer 按光标挂到 body 上，不画在触发元素里——右列与贴顶的说明
   // 会被窗口边缘或滚动容器裁掉。这里只管外观，坐标由 tooltipPlacement 写进 style。
   '.pet-cfg-tip{position:fixed;left:0;top:0;z-index:2147483000;max-width:320px;padding:6px 10px;border-radius:8px;background:var(--dsw-alias-tooltip-bg);color:var(--dsw-static-neutral-00);font-size:12px;font-style:normal;font-weight:400;line-height:18px;text-align:left;white-space:pre-wrap;overflow-wrap:anywhere;pointer-events:none;opacity:0;transition:opacity .12s ease;box-shadow:var(--dsw-elevation-prominent,0 6px 20px rgba(0,0,0,.22))}',

@@ -25,25 +25,60 @@ export interface PetKind {
   readonly count: number;
 }
 
+/** 一组同种类的实例。 */
+export interface PetGroup {
+  /** 条目名：`main` 或 pet/<前缀>-config.json 的前缀。 */
+  readonly entry: string;
+  /** `main` 表示内置条目，其余为 pet/ 目录里的角色包。 */
+  readonly kind: 'main' | 'pack';
+  /** 该种类的实例，顺序即实例在成品里的顺序。 */
+  readonly pets: Pet[];
+}
+
 /**
- * 把拍平的实例列表按 `assetRoot` 归纳成种类列表（顺序即首次出现顺序）。
+ * 把拍平的实例列表按 `assetRoot` 分组（顺序即首次出现顺序）。
  *
  * @param pets - 全条目的实例列表。
- * @returns 种类列表；没有 `assetRoot` 的实例归到 main。
+ * @returns 分组结果；没有 `assetRoot` 的实例归到 main。
  */
-export function petKinds(pets: readonly Pet[]): PetKind[] {
+export function groupPetsByKind(pets: readonly Pet[]): PetGroup[] {
   const order: string[] = [];
-  const counts = new Map<string, number>();
+  const groups = new Map<string, Pet[]>();
   for (const pet of pets) {
     const entry = pet.assetRoot ?? 'main';
-    if (!counts.has(entry)) order.push(entry);
-    counts.set(entry, (counts.get(entry) ?? 0) + 1);
+    const list = groups.get(entry);
+    if (list === undefined) {
+      groups.set(entry, [pet]);
+      order.push(entry);
+    } else {
+      list.push(pet);
+    }
   }
   return order.map((entry) => ({
     entry,
     kind: entry === 'main' ? 'main' : 'pack',
-    count: counts.get(entry) ?? 0,
+    pets: groups.get(entry) ?? [],
   }));
+}
+
+/**
+ * 把拍平的实例列表按 `assetRoot` 归纳成种类列表。
+ *
+ * @param pets - 全条目的实例列表。
+ * @returns 种类列表；分组与顺序见 {@link groupPetsByKind}。
+ */
+export function petKinds(pets: readonly Pet[]): PetKind[] {
+  return groupPetsByKind(pets).map((group) => ({
+    entry: group.entry,
+    kind: group.kind,
+    count: group.pets.length,
+  }));
+}
+
+/** 把补丁摊到一只实例上；`position` 子字段整体替换，其余字段平铺覆盖。 */
+function applyPetPatch(pet: Pet, patch: PetPatch): Pet {
+  const { position: posPatch, ...rest } = patch;
+  return { ...pet, ...rest, position: posPatch ? { ...pet.position, ...posPatch } : pet.position };
 }
 
 /**
@@ -81,6 +116,8 @@ export interface PetList {
   selectKind: (entry: string) => void;
   /** 改选中宠物的字段。 */
   update: (patch: PetPatch) => void;
+  /** 按 id 改任意一只实例：勾选卡要跨种类批量改，不能只改选中项。 */
+  updatePet: (id: string, patch: PetPatch) => void;
   /** 往当前种类加一只并选中它。 */
   add: () => void;
   /** 请求删除当前宠物（交给弹窗确认）。 */
@@ -116,15 +153,13 @@ export function usePetList(
   const kindRef = useRef(kind);
   kindRef.current = kind;
 
-  // 更新选中的宠物：size 走顶层；position 子字段整体替换
+  // 更新选中的宠物
   const update = (patch: PetPatch): void =>
-    setPets((list) =>
-      list.map((pet) => {
-        if (pet.id !== selId) return pet;
-        const { position: posPatch, ...rest } = patch;
-        return { ...pet, ...rest, position: posPatch ? { ...pet.position, ...posPatch } : pet.position };
-      }),
-    );
+    setPets((list) => list.map((pet) => (pet.id === selId ? applyPetPatch(pet, patch) : pet)));
+
+  // 按 id 更新：勾选卡一屏列出全部种类，改的不是当前选中那只。
+  const updatePet = (id: string, patch: PetPatch): void =>
+    setPets((list) => list.map((pet) => (pet.id === id ? applyPetPatch(pet, patch) : pet)));
 
   const add = (): void => {
     const group = pets.filter((pet) => (pet.assetRoot ?? 'main') === kind);
@@ -195,6 +230,7 @@ export function usePetList(
     select: setSelId,
     selectKind,
     update,
+    updatePet,
     add,
     requestRemove,
     remove,

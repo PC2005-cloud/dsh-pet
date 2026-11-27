@@ -88,6 +88,10 @@ export const es: Record<Key, string> = {
   'display.desktop': 'Solo escritorio',
   'display.both': 'Ambos',
   'display.none': 'Ninguno',
+  visibleTitle: 'Mascotas visibles',
+  visibleHint:
+    'Marca los personajes que quieres ver. Si desmarcas, la mascota no se dibuja ni en el navegador ni en el escritorio, pero su configuración, avatar y personalidad se conservan y puedes volver a marcarla. Pulsa «Guardar» abajo para aplicar.',
+  visibleCount: 'Mostrando {n} de {m}',
   cornerLabel: 'Posición',
   'corner.top-left': 'Arriba a la izquierda',
   'corner.top-right': 'Arriba a la derecha',

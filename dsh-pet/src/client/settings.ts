@@ -10,7 +10,7 @@ import { avatarUrl } from '../shared/avatar.ts';
 import { DEFAULT_FONT } from '../shared/fonts.ts';
 import type { MemoryConfig } from '../shared/memory.ts';
 import { DEFAULT_PHYSICS } from '../shared/physics.ts';
-import type { FontConfig, ModelSelection, PhysicsParams, Weights } from '../shared/types.ts';
+import type { FontConfig, ModelSelection, PetDisplay, PhysicsParams, Weights } from '../shared/types.ts';
 import type { FunctionComponent } from 'react';
 import { requestNotificationPermission } from './notify.ts';
 import { injectSettingsCss } from './settings/css.ts';
@@ -32,6 +32,7 @@ import { runNotificationTest } from './settings/notify-test.ts';
 import { makeKindTabs } from './settings/kind-tabs.ts';
 import { makePathsCards } from './settings/paths-cards.ts';
 import { makePetCard } from './settings/pet-card.ts';
+import { makeVisibilityCard } from './settings/visibility-card.ts';
 import { uploadPetAvatar } from './settings/avatar-upload.ts';
 import { makePetTabs } from './settings/pet-tabs.ts';
 import { createWriteFlow } from './settings/config/index.ts';
@@ -78,6 +79,7 @@ export function makePetConfigSection(
   const PetTabs = makePetTabs({ h, t });
   const KindTabs = makeKindTabs({ h, t });
   const PetCard = makePetCard(rt);
+  const VisibilityCard = makeVisibilityCard(rt);
   const GlobalCard = makeGlobalCard(rt);
   const EnvironmentCard = makeEnvironmentCard(rt);
   const MemoryCard = makeMemoryCard(rt);
@@ -114,6 +116,7 @@ export function makePetConfigSection(
       select,
       selectKind,
       update,
+      updatePet,
       add,
       requestRemove,
       remove,
@@ -294,6 +297,20 @@ export function makePetConfigSection(
     // 头像只能属于 pet pack：main（含没有 assetRoot 的实例）用插件默认 logo，不给上传入口。
     const avatarEditable = cur !== null && cur.assetRoot !== undefined && cur.assetRoot !== 'main';
 
+    // 「显示哪些宠物」的勾选：取消时记住原来的显示位置（web / desktop / both），重新勾回时恢复；
+    // 刷新后记忆为空，回落 both——比一律 none 更符合「勾上就该看得见」的预期。
+    const lastShown = useRef(new Map<string, PetDisplay>());
+    const setPetVisible = (id: string, visible: boolean): void => {
+      const pet = pets.find((item) => item.id === id);
+      if (pet === undefined) return;
+      if (visible) {
+        updatePet(id, { display: lastShown.current.get(id) ?? 'both' });
+        return;
+      }
+      if (pet.display !== 'none') lastShown.current.set(id, pet.display);
+      updatePet(id, { display: 'none' });
+    };
+
     /** 上传当前宠物的头像：直接落盘、不经过「保存」——头像不是配置字段，改完不必再点保存。
      *  归属看素材根（文件宠物是目录前缀，同一素材根的多只实例共用一张）。 */
     const uploadAvatar = (file: File): void => {
@@ -435,7 +452,7 @@ export function makePetConfigSection(
       return () => document.removeEventListener('keydown', onKey);
     }, []);
 
-    // 卡片顺序即阅读顺序：先编辑宠物，再改全局默认，最后是落盘位置与弹窗。
+    // 卡片顺序即阅读顺序：先编辑宠物，再勾选显示清单，然后改全局默认，最后是落盘位置与弹窗。
     return h('section', {
       ref: rootRef,
       className: 'dsh-pet-cfg',
@@ -468,6 +485,7 @@ export function makePetConfigSection(
           onSave: () => void write.save(),
           onRemove: requestRemove,
         }),
+        h(VisibilityCard, { pets, busy, onChange: setPetVisible }),
         h(GlobalCard, { busy, values: globalFlags, onChange: setGlobalFlag }),
         h(VoiceCard, {
           busy,
