@@ -113,8 +113,9 @@ export function sessionTitleFrom(
 /**
  * 切到指定会话，并把窗口叫到前台。
  *
- * 先切会话再叫窗口，用户看到窗口的那一刻就是目标会话；`dsh://open` 只在 Electron 宿主里发，
- * 浏览器里导航该协议会弹拦截框。
+ * 先切会话再叫窗口，用户看到窗口的那一刻就是目标会话；叫窗口只在 Electron 宿主里做——
+ * 浏览器宿主点通知本来就由系统把标签页带到前台，再导航 `dsh://` 只会弹拦截框。
+ * 宿主侧实现见 `POST /reveal`（{@link ../../host/reveal.ts}）。
  *
  * @param sessionId - 目标会话；缺省只尝试叫窗口。会话已删或服务缺失时静默跳过切换。
  */
@@ -129,6 +130,18 @@ export function jumpToSession(sessionId?: string): void {
   }
   window.focus();
   if (!/electron/i.test(navigator.userAgent)) return;
+  // 叫窗口走宿主侧 `/reveal`：宿主用 explorer 转发 dsh://open，前台权限由系统 shell 转交，
+  // 被别的窗口盖住时也带得起来（页内直连 `dsh://` 只有最小化场景有效）。
+  void fetch(ROUTE_PATH + '/reveal', { method: 'POST' })
+    .then((r) => {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+    })
+    // 旧版宿主没有这个路由：退回页内深链，至少把最小化的窗口叫回来。
+    .catch(() => openProtocolFrame());
+}
+
+/** 页内深链兜底：隐藏 iframe 导航 `dsh://open`，由协议拉起宿主第二实例（只对最小化有效）。 */
+function openProtocolFrame(): void {
   const frame = document.createElement('iframe');
   frame.style.display = 'none';
   frame.src = 'dsh://open';
