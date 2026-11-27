@@ -2306,6 +2306,44 @@ paths:
         "405":
           $ref: "#/components/responses/MethodNotAllowed"
 
+  /dsh-pet-7340/reveal:
+    post:
+      tags: [Action]
+      operationId: revealDesktopWindow
+      summary: 把 DSH 桌面窗口叫回前台
+      description: |
+        点系统通知时由浏览器半侧调用（`notify.ts` 的 `jumpToSession`，先切会话再叫窗口）。
+
+        Windows 上**不自己调窗口 API**：宿主是后台进程，`SetForegroundWindow` 会被前台锁拒绝——
+        调用返回成功、窗口纹丝不动（实测：窗口可见但被盖住时完全不生效，只有最小化后 `restore()`
+        带得起来）。这里改为经 `explorer` 转发 `dsh://open`，前台权限由系统 shell 转交，
+        被别的窗口盖住时同样生效；macOS / Linux 分别走 `open` / `xdg-open`。
+
+        非桌面宿主（`dsh web` / 独立模式）不做任何事，回 `revealed:false` 仍是 `200`——
+        这是结论不是协议错误（与 `POST /pet-display` 同一口径）。
+      responses:
+        "200":
+          description: 已转交唤起请求，或说明为何没有执行
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [revealed]
+                properties:
+                  revealed:
+                    type: boolean
+                  reason:
+                    type: string
+                    enum: [not-desktop, spawn-failed]
+                    description: 只有 `revealed:false` 时出现
+              examples:
+                desktop:
+                  value: { revealed: true }
+                web:
+                  value: { revealed: false, reason: not-desktop }
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+
   /dsh-pet-7340/reload:
     post:
       tags: [Action]

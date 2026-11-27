@@ -21,6 +21,7 @@ import { handleMenuRoutes } from './menu.ts';
 import { handleMemoryRoutes } from './memory.ts';
 import { handleMotionRoutes } from './motion.ts';
 import { handlePlaybackRoutes } from './playback.ts';
+import { handleRevealRoutes } from './reveal.ts';
 import { handleSessionRoutes } from './session.ts';
 import { handleStateRoutes } from './state.ts';
 import { handleSleepRoutes } from './sleep.ts';
@@ -32,6 +33,7 @@ import type { PetRouteDeps, RouteHandler } from './types.ts';
 const HANDLERS: readonly RouteHandler[] = [
   handleConfigRoutes,
   handleDesktopRoutes,
+  handleRevealRoutes,
   handleMenuRoutes,
   handleStateRoutes,
   handleSessionRoutes,
