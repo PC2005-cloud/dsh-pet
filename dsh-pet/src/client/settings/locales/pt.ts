@@ -86,6 +86,10 @@ export const pt: Record<Key, string> = {
   'display.desktop': 'Só no desktop',
   'display.both': 'Nos dois',
   'display.none': 'Em nenhum',
+  visibleTitle: 'Pets visíveis',
+  visibleHint:
+    'Marque os personagens que devem aparecer. Ao desmarcar, o pet deixa de ser renderizado no navegador e no desktop, mas a configuração, o avatar e a persona continuam salvos — basta marcar de novo para trazê-lo de volta. Clique em "Salvar" no fim da página para aplicar.',
+  visibleCount: 'Exibindo {n} de {m}',
   cornerLabel: 'Posição',
   'corner.top-left': 'Canto superior esquerdo',
   'corner.top-right': 'Canto superior direito',

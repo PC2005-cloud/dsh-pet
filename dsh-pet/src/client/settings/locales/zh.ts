@@ -82,6 +82,10 @@ export const zh = {
   'display.desktop': '仅桌面',
   'display.both': '两者都显示',
   'display.none': '都不显示',
+  visibleTitle: '显示哪些宠物',
+  visibleHint:
+    '一屏勾选要显示的角色：取消勾选 = 该宠物不渲染（网页与桌面都不出现），但配置、头像与人设都保留，随时能再勾回来。改完点最下面的「保存」生效。',
+  visibleCount: '已显示 {n} / 共 {m} 只',
   cornerLabel: '位置',
   'corner.top-left': '左上角',
   'corner.top-right': '右上角',

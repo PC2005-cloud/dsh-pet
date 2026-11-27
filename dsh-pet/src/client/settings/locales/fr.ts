@@ -87,6 +87,10 @@ export const fr: Record<Key, string> = {
   'display.desktop': 'Bureau seul',
   'display.both': 'Les deux',
   'display.none': 'Aucun',
+  visibleTitle: 'Mascottes visibles',
+  visibleHint:
+    'Cochez les personnages à afficher. Décochée, une mascotte n’est rendue ni dans le navigateur ni sur le bureau, mais sa configuration, son avatar et sa personnalité sont conservés ; recochez-la pour la retrouver. Cliquez sur « Enregistrer » en bas pour appliquer.',
+  visibleCount: 'Affichées : {n} sur {m}',
   cornerLabel: 'Position',
   'corner.top-left': 'En haut à gauche',
   'corner.top-right': 'En haut à droite',

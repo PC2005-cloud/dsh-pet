@@ -86,6 +86,10 @@ export const ja: Record<Key, string> = {
   'display.desktop': 'デスクトップのみ',
   'display.both': '両方に表示',
   'display.none': 'どちらも非表示',
+  visibleTitle: '表示するペット',
+  visibleHint:
+    '表示したいキャラクターにチェックを入れます。チェックを外すと、ブラウザ側でもデスクトップ側でも描画されません（設定・アバター・人格は保持され、いつでも戻せます）。反映するには下の「保存」を押してください。',
+  visibleCount: '表示中 {n} / 全 {m} 匹',
   cornerLabel: '位置',
   'corner.top-left': '左上',
   'corner.top-right': '右上',

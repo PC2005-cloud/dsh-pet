@@ -86,6 +86,10 @@ export const de: Record<Key, string> = {
   'display.desktop': 'Nur Desktop',
   'display.both': 'Beides',
   'display.none': 'Nichts',
+  visibleTitle: 'Sichtbare Pets',
+  visibleHint:
+    'Hake die Figuren an, die angezeigt werden sollen. Ohne Haken wird ein Pet weder im Browser noch auf dem Desktop gerendert; Konfiguration, Avatar und Persona bleiben erhalten, und ein erneuter Haken holt es zurück. Zum Übernehmen unten auf „Speichern“ klicken.',
+  visibleCount: 'Angezeigt: {n} von {m}',
   cornerLabel: 'Position',
   'corner.top-left': 'Oben links',
   'corner.top-right': 'Oben rechts',
