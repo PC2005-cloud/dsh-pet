@@ -322,4 +322,12 @@ export const ru: Record<Key, string> = {
   'motion.move': 'Движение',
   'motion.action': 'Случайное действие',
   uninstallCmd: 'dsh plugin --profile {profile} remove dsh-pet',
+  'featured.tabLabel': 'Избранные плагины',
+  'featured.welcome': 'Полная версия модуля (dsh-featured) не установлена.',
+  'featured.installFull': 'Установить полную версию',
+  'featured.installing': 'Установка…',
+  'featured.installed': 'Установлено — обновите страницу, чтобы получить полную версию.',
+  'featured.installedShort': 'Установлено',
+  'featured.desc':
+    'Одна вкладка для избранных плагинов сообщества: поиск, фильтры по тегам, установка в один клик и подробности из README.',
 };

@@ -328,4 +328,12 @@ export const fr: Record<Key, string> = {
   'motion.move': 'Déplacement',
   'motion.action': 'Action aléatoire',
   uninstallCmd: 'dsh plugin --profile {profile} remove dsh-pet',
+  'featured.tabLabel': 'Plugins en vedette',
+  'featured.welcome': "Le module complet (dsh-featured) n'est pas installé.",
+  'featured.installFull': 'Installer la version complète',
+  'featured.installing': 'Installation…',
+  'featured.installed': 'Installé — actualisez pour profiter de la version complète.',
+  'featured.installedShort': 'Installé',
+  'featured.desc':
+    'Un onglet pour les plugins en vedette de la communauté : recherche, filtres par étiquettes, installation en un clic et détails du README.',
 };

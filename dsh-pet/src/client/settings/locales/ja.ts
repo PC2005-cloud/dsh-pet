@@ -317,4 +317,12 @@ export const ja: Record<Key, string> = {
   'motion.move': '移動',
   'motion.action': 'ランダムアクション',
   uninstallCmd: 'dsh plugin --profile {profile} remove dsh-pet',
+  'featured.tabLabel': '精選プラグイン',
+  'featured.welcome': '完全版モジュール（dsh-featured）がインストールされていません。',
+  'featured.installFull': '完全版をインストール',
+  'featured.installing': 'インストール中…',
+  'featured.installed': 'インストール済み — 更新すると完全版が使えます。',
+  'featured.installedShort': 'インストール済み',
+  'featured.desc':
+    'コミュニティ厳選プラグインをひとつのタブで：検索、タグ絞り込み、ワンクリックインストール、README 詳細。',
 };

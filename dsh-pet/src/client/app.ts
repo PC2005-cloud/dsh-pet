@@ -20,6 +20,7 @@ import { registerPetChatTab, openPetChatTab } from './chat/register.ts';
 import { PET_CHAT_COMMAND_ID, registerPetChatShortcut } from './chat/shortcut.ts';
 import { dicts as chatDicts, NS as CHAT_NS } from './chat/locales/index.ts';
 import { registerPetCardShortcuts } from './pet/card/shortcut.ts';
+import { makeFeaturedEntry } from './featured-entry.ts';
 import type * as ReactNS from 'react';
 import type * as PrimitivesNS from '@deepseek-ai/dsh-client-ui-primitives';
 
@@ -66,6 +67,9 @@ export function makeFactory(): (require: (mod: string) => any) => any {
 
     // 宠物 overlay 与设置页各自独立成文件，这里只组装和注册。
     const PetMulti = makePetUI({ h, useState, useEffect, useRef });
+
+    // 精选插件入口 tab 的安装器：react 原语在 factory 层注入一次，激活时对 ctx 调用。
+    const installFeaturedEntry = makeFeaturedEntry({ createElement: react.createElement, useState, useEffect });
 
     const name = 'pet';
     // commandUi 声明为服务依赖，确保「/」命令服务就绪后才 apply，/pet 装饰必然注册成功。
@@ -245,6 +249,17 @@ export function makeFactory(): (require: (mod: string) => any) => any {
           return () => {};
         }
       }, 'dsh-pet: sidebar chat tab');
+
+      // 精选插件入口 tab：dsh-featured 完整版未装时给引导安装位，已装自动让位。
+      // 注册失败只丢这个入口，不影响前面已注册的桌宠本体。
+      ctx.effect(() => {
+        try {
+          return installFeaturedEntry(ctx);
+        } catch (error) {
+          console.error('[dsh-pet] featured entry install failed; continuing', error);
+          return () => {};
+        }
+      }, 'dsh-pet: featured entry');
     }
 
     module.exports = { apply, inject, name };
