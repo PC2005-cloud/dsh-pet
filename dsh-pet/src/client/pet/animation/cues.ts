@@ -53,6 +53,12 @@ export function decideEndedCue(input: EndedInput): EndedCue {
   }
   if (isEvent) return { kind: 'event-done' };
   if (animations.turn.includes(current)) return { kind: 'turn' };
-  if (animations.drag.includes(current) || animations.clicks.includes(current)) return { kind: 'interaction-done' };
+  if (
+    animations.drag.includes(current) ||
+    animations.clicks.includes(current) ||
+    (animations.dizzy ?? []).includes(current)
+  ) {
+    return { kind: 'interaction-done' };
+  }
   return { kind: 'random' };
 }

@@ -221,6 +221,9 @@ export const de: Record<Key, string> = {
   'physics.throwPower': 'Wurfkraft',
   'physics.throwPowerHint':
     '> 0, Gesamtfaktor für Federfolge und Abwurfgeschwindigkeit (1 = Standard; höher = folgt enger, wirft härter)',
+  'physics.dizzyImpactSpeed': 'Schwindel-Schwelle',
+  'physics.dizzyImpactSpeedHint':
+    'px/s — Schwindel-Animation bei Landungsstoß ≥ diesem Wert (und nicht-leerem Pool); sanftes Absetzen löst nie aus',
   physicsCeilingBounce: 'Deckenabprall',
   physicsCeilingBounceHint: 'Aus: Würfe können oben aus dem Bildschirm fliegen (die Schwerkraft holt sie zurück)',
   physicsPetCollision: 'Pet-Kollisionen',

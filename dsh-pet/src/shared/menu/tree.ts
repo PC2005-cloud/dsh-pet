@@ -114,6 +114,7 @@ export function buildMenuTree(animations: Animations): MenuNode[] {
     ['转向', animations.turn],
     ['拖拽', animations.drag],
     ['点击回应', animations.clicks],
+    ['晕眩', animations.dizzy ?? []],
     ['移动', animations.moves.actions.map((m) => m.name)],
   ];
   for (const [label, pool] of pools) {

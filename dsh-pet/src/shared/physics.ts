@@ -11,6 +11,7 @@ export {
   DEAD_ZONE_SPEED,
   DEFAULT_PHYSICS,
   DEFAULT_THROW_POWER,
+  DIZZY_IMPACT_SPEED,
   GRAVITY,
   GROUND_FRICTION,
   MAX_STEP_DT,
@@ -39,6 +40,7 @@ export {
   TRAIL_KEEP_MS,
 } from './physics/constants.ts';
 export { landingSquash, squashScale } from './physics/squash.ts';
+export { dizzyImpactSpeed, shouldDizzy } from './physics/dizzy.ts';
 export {
   screenOfBox,
   throwBounds,

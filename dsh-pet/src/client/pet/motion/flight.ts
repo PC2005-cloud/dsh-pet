@@ -61,6 +61,11 @@ export interface FlightDeps {
   onImpact?(impact: FlightImpact): void;
   /** 体感模式下的重力向量；缺省用 physics.gravity 竖直向下。只在常驻模式里读。 */
   gravity?(): GravityVector;
+  /**
+   * 抛掷落定回调：入参为本趟最大落地冲击（px/s），供晕眩判定。
+   * 只在抛掷模式 `atRest` 时调用；体感常驻落定不调（温柔放下也不走抛掷）。
+   */
+  onSettled?(peakImpact: number): void;
 }
 
 /** 飞行驱动：一个宠物一个实例。 */
@@ -194,6 +199,7 @@ export function createFlight(deps: FlightDeps): Flight {
     let current: ThrowState = { x: px, y: py, vx, vy };
     let last = performance.now();
     let prevGrounded = false; // 落地挤压只在空中到地面的转换帧触发一次。
+    let peakImpact = 0; // 本趟抛掷最大落地冲击（晕眩判定用）。
     const rootEl = deps.root();
 
     /** 写回本帧位置：DOM、包围盒与归一化中心（后者供重渲染时按它重排）。 */
@@ -235,7 +241,11 @@ export function createFlight(deps: FlightDeps): Flight {
       const center = commitPose(current);
       // 落地挤压：只在空中到地面的转换帧触发，力度随冲击速度。
       const grounded = current.y >= bounds.maxY - 1;
-      if (res.bounced && grounded && !prevGrounded) deps.onLanding(fallingVy);
+      if (res.bounced && grounded && !prevGrounded) {
+        const impact = Math.hypot(current.vx, fallingVy);
+        if (impact > peakImpact) peakImpact = impact;
+        deps.onLanding(fallingVy);
+      }
       prevGrounded = grounded;
       if (held) {
         // 常驻模式没有固定地面：重力为零且速度低就累计静默，到点停帧。
@@ -249,6 +259,7 @@ export function createFlight(deps: FlightDeps): Flight {
         }
       } else if (res.atRest && !disturbed) {
         deps.commitFinal(center);
+        deps.onSettled?.(peakImpact);
         stop();
         return;
       }
