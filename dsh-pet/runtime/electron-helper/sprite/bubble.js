@@ -113,6 +113,8 @@ Object.assign(PetSprite.prototype, {
       return;
     }
     this.bubble.innerHTML = '';
+    // 档位气泡的宽度开关只属于本次渲染：先清掉，避免从余额切到其它 slot 时残留
+    this.bubble.classList.remove('is-tier');
     if (slot === 'work') {
       const line = document.createElement('div');
       line.className = 'pet-bub-row';
@@ -153,8 +155,10 @@ Object.assign(PetSprite.prototype, {
       const hasTier = rows.some((r) => r.role === 'tier');
       if (hasTier) {
         // deepseek 余额单行：余额（峰/谷）¥x — 档位字着色
+        // 档位行是连成一句的三段：改用左对齐并单独放宽宽度（见 index.html 的 is-tier）
+        this.bubble.classList.add('is-tier');
         const line = document.createElement('div');
-        line.className = 'pet-bub-row';
+        line.className = 'pet-bub-row pet-bub-tier-line';
         for (const r of rows) {
           const span = document.createElement('span');
           if (r.role === 'tier') span.className = 'pet-bub-tier pet-bub-tier-' + r.tier;

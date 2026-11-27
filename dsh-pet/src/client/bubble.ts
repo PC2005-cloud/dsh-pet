@@ -67,6 +67,12 @@ const bubbleCss = [
   '.dsh-pet-bubble .pet-bub-row{display:flex;justify-content:space-between;gap:calc(var(--f)*0.6593);flex-wrap:wrap}',
   // 档位行由多个片段拼成：只在片段之间换行，片段内部不拆字，避免竖排。
   '.dsh-pet-bubble .pet-bub-row>span{white-space:nowrap}',
+  // 档位行是连成一句的三段：space-between 只服务「标签 + 数值」两端对齐的行，
+  // 用在句子上会把换行后的首行顶成两段，中间空出一片。
+  '.dsh-pet-bubble .pet-bub-tier-line{justify-content:flex-start}',
+  // 档位句拼起来比宠物宽，宠物宽度装不下只能断行；只放宽这一种气泡到窗口可用
+  // 宽度（左右各半个宠物宽，窗口 = 2 × 宠物），其余气泡仍按宠物宽度收口。
+  '.dsh-pet-bubble.is-tier{max-width:min(calc(var(--f)*16),calc(var(--dsh-pet-size)*2 - var(--f)*0.6593*2))}',
   '.dsh-pet-bubble .pet-bub-sub{font-size:calc(var(--f)*0.7692);color:rgba(43,43,43,.6)}',
   '.dsh-pet-bubble .pet-bub-val{font-variant-numeric:tabular-nums;font-weight:650;color:#1f1f1f}',
   '.dsh-pet-bubble .pet-bub-err{color:#d94f3d;font-size:calc(var(--f)*0.7692)}',
@@ -144,7 +150,7 @@ function rowsToNodes(h: typeof jsx, rows: BalanceBubbleRow[]): ReactNode {
   // 含档位段时同一行内联渲染，峰/谷着色。
   if (rows.some((r) => r.role === 'tier')) {
     return h('div', {
-      className: 'pet-bub-row',
+      className: 'pet-bub-row pet-bub-tier-line',
       children: rows.map((r, i) => {
         // 进度条行不会与档位段同现。
         if (r.role === 'quota') return null;
@@ -319,6 +325,7 @@ export function makeBalanceBubble(rt: {
       className:
         'dsh-pet-bubble' +
         wrap +
+        (rows.some((r) => r.role === 'tier') ? ' is-tier' : '') +
         (on ? ' is-on' : '') +
         (clickable ? ' is-clickable' : '') +
         (!isCustom && shown > 0 ? ' is-expanded' : '') +

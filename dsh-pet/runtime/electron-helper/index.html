@@ -186,6 +186,16 @@
       .pet-bub-row > span {
         white-space: nowrap;
       }
+      /* 档位行是连成一句的三段：space-between 只服务「标签 + 数值」两端对齐的行，
+         用在句子上会把换行后的首行顶成两段，中间空出一片。 */
+      .pet-bub-tier-line {
+        justify-content: flex-start;
+      }
+      /* 档位句拼起来比宠物宽，宠物宽度装不下只能断行；只放宽这一种气泡到窗口可用
+         宽度（左右各半个宠物宽，窗口 = 2 × 宠物），其余气泡仍按宠物宽度收口。 */
+      .pet-bubble.is-tier {
+        max-width: min(calc(var(--f) * 16), calc(var(--pet-size, 462px) * 2 - var(--f) * 0.6593 * 2));
+      }
       .pet-bub-sub {
         font-size: calc(var(--f) * 0.7692);
         color: rgba(43, 43, 43, 0.6);
