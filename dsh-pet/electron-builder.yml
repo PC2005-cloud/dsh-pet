@@ -14,8 +14,9 @@ directories:
   output: dist-app
 
 # 应用主进程入口不是插件入口（package.json 的 main 必须留给 DSH 插件加载），所以在打包元数据里覆盖
+# 指向 runtime/bootstrap.mjs：探测子进程要在进入 lib/app.js 之前分叉，否则会再次抢单实例锁并空等超时。
 extraMetadata:
-  main: lib/app.js
+  main: runtime/bootstrap.mjs
 
 files:
   - lib/**
