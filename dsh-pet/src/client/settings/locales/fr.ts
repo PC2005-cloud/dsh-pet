@@ -71,10 +71,11 @@ export const fr: Record<Key, string> = {
     "Ne concerne que ce compagnon. Laissez vide pour suivre le persona de l'entrée — le texte grisé dans le champ est exactement celui-ci. Le system réellement envoyé au modèle = ce texte + la ligne « votre nom est <nom> » ajoutée automatiquement + le contexte temporel courant ; ne répétez donc ni le nom ni la date ici.",
   personaCount: '{n} caractères',
   balanceEnabled: 'Fonction solde',
-  balanceEnabledHint: "Une fois activée, ce compagnon joue l'animation de solde et affiche la bulle de solde.",
+  balanceEnabledHint:
+    "Une fois activée, ce compagnon joue l'animation de solde et affiche la bulle ; le solde est rafraîchi en arrière-plan par minuterie (30 min par défaut). Désactivé = plus de rafraîchissement auto ; le clic droit reste disponible.",
   whisperEnabled: 'Murmures',
   whisperEnabledHint:
-    "Une fois activé, ce compagnon génère périodiquement une phrase via l'IA et joue l'animation de murmure (persona = le champ ci-dessous ; vide = celui de l'entrée).",
+    "Une fois activé, ce compagnon génère une phrase via l'IA à intervalle régulier et joue l'animation de murmure (persona = le champ ci-dessous ; 5 min par défaut) ; désactivé = plus de somniloquie non plus, le clic droit reste disponible.",
   workStatusEnabled: "Suivi de l'état de travail",
   workStatusEnabledHint:
     "Une fois activé, ce compagnon suit l'état de travail de DSH : réflexion / travail / attente de confirmation / terminé / erreur déclenchent l'animation correspondante et une bulle (le pool se trouve au niveau supérieur de la configuration ; écoute seule, aucun appel au modèle).",

@@ -70,10 +70,11 @@ export const de: Record<Key, string> = {
     'Gilt nur für dieses Pet. Leer lassen = Persona des Eintrags übernehmen – der graue Text im Feld ist genau diese. Das tatsächlich an das Modell gesendete System = dieser Text + automatisch angehängtem Hinweis „Dein Name ist <Name>" + aktuellem Zeitkontext; Name und Datum hier also nicht wiederholen.',
   personaCount: '{n} Zeichen',
   balanceEnabled: 'Guthaben-Funktion',
-  balanceEnabledHint: 'Wenn aktiv, spielt dieses Pet Guthaben-Animationen und zeigt die Guthaben-Blase.',
+  balanceEnabledHint:
+    'Wenn aktiv, spielt dieses Pet Guthaben-Animationen und zeigt die Guthaben-Blase; das Guthaben wird im Hintergrund per Timer aktualisiert (standardmäßig alle 30 Min.). Aus = keine automatische Abfrage, Rechtsklick auf „Guthaben anzeigen" geht weiter.',
   whisperEnabled: 'Flüstern',
   whisperEnabledHint:
-    'Wenn aktiv, erzeugt dieses Pet regelmäßig per KI einen Satz und spielt die Flüstern-Animation (Persona siehe Feld „Persona" unten; leer = Eintrag übernehmen).',
+    'Wenn aktiv, erzeugt dieses Pet regelmäßig per KI einen Satz und spielt die Flüstern-Animation (Persona = Feld unten, standardmäßig alle 5 Min.); aus = auch kein Schlafreden, Rechtsklick auf „Flüstern" geht weiter.',
   workStatusEnabled: 'Arbeitsstatus-Kopplung',
   workStatusEnabledHint:
     'Wenn aktiv, folgt dieses Pet dem DSH-Arbeitsstatus: Denken / Arbeiten / Warten auf Bestätigung / Fertig / Fehler wechseln automatisch die passende Animation und zeigen eine Blase (Animationspool in der Top-Level-Konfiguration; nur Zuhören, keine Modellaufrufe).',

@@ -72,10 +72,11 @@ export const es: Record<Key, string> = {
     'Solo afecta a esta mascota. Déjalo vacío para seguir la persona de la entrada: el texto gris del cuadro es exactamente ese contenido. El system que se envía al modelo = este texto + una línea añadida con "tu nombre es <nombre>" + el contexto de la hora actual, así que no repitas aquí el nombre ni la fecha.',
   personaCount: '{n} caracteres',
   balanceEnabled: 'Saldo',
-  balanceEnabledHint: 'Cuando está activado, esta mascota reproduce animaciones de saldo y muestra el globo de saldo.',
+  balanceEnabledHint:
+    'Cuando está activado, esta mascota reproduce la animación de saldo y muestra el globo; el saldo se actualiza en segundo plano por temporizador (30 min por defecto). Al apagarlo deja de actualizarse solo; el clic derecho sigue funcionando.',
   whisperEnabled: 'Susurros',
   whisperEnabledHint:
-    'Cuando está activado, esta mascota genera periódicamente una frase con IA y reproduce la animación de susurro (la persona está en el campo de abajo; vacío sigue la entrada).',
+    'Cuando está activado, esta mascota genera una frase con IA periódicamente y reproduce la animación de susurro (persona = el campo de abajo; 5 min por defecto); al apagarlo también se detiene el hablar dormido.',
   workStatusEnabled: 'Estado de trabajo',
   workStatusEnabledHint:
     'Cuando está activado, esta mascota sigue el estado de trabajo de DSH: pensando / trabajando / esperando confirmación / terminado / error cambian la animación y muestran globos (el pool está en la configuración de nivel superior; solo escucha, no llama al modelo).',

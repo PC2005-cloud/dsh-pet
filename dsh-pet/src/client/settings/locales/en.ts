@@ -70,10 +70,11 @@ export const en: Record<Key, string> = {
     'Applies to this pet only. Leave empty to follow the entry persona — the grey text inside the box is exactly that. The system prompt actually sent = this text + an appended 「your name is "<name>"」 line + the current time context, so do not repeat the name or the date here.',
   personaCount: '{n} chars',
   balanceEnabled: 'Balance',
-  balanceEnabledHint: 'When enabled, this pet plays balance animations and shows the balance bubble.',
+  balanceEnabledHint:
+    'When enabled, this pet plays balance animations and shows the balance bubble; the balance is refreshed in the background on a timer (30 min by default). Turning it off stops that refresh — right-click balance check still works.',
   whisperEnabled: 'Whisper',
   whisperEnabledHint:
-    'When enabled, this pet periodically generates a line via AI and plays the whisper animation (persona = the field below; empty follows the entry).',
+    'When enabled, this pet periodically generates a line via AI and plays the whisper animation (persona = the field below; 5 min by default); turning it off also stops sleep talk — right-click whisper still works.',
   workStatusEnabled: 'Work status',
   workStatusEnabledHint:
     'When enabled, this pet follows DSH work state: thinking / working / waiting / done / error switch animations and show bubbles (pool in top-level config; listening only, no model calls).',

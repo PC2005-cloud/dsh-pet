@@ -70,10 +70,11 @@ export const pt: Record<Key, string> = {
     'Vale só para este pet. Vazio = segue a persona da entrada — o texto cinza na caixa é exatamente isso. O system enviado ao modelo = este texto + uma linha "seu nome é <nome>" anexada automaticamente + o contexto de hora atual, então não repita o nome nem a data aqui.',
   personaCount: '{n} caracteres',
   balanceEnabled: 'Saldo',
-  balanceEnabledHint: 'Quando ativado, este pet toca as animações de saldo e mostra o balão de saldo.',
+  balanceEnabledHint:
+    'Quando ativado, este pet toca a animação de saldo e mostra o balão; o saldo é atualizado em segundo plano por temporizador (30 min por padrão). Desligado = sem atualização automática; o clique direito continua funcionando.',
   whisperEnabled: 'Sussurro',
   whisperEnabledHint:
-    'Quando ativado, este pet gera uma frase com IA periodicamente e toca a animação de sussurro (persona = o campo abaixo; vazio segue a entrada).',
+    'Quando ativado, este pet gera uma frase com IA periodicamente e toca a animação de sussurro (persona = o campo abaixo; 5 min por padrão); desligado também para o falar dormindo.',
   workStatusEnabled: 'Status de trabalho',
   workStatusEnabledHint:
     'Quando ativado, este pet segue o estado de trabalho do DSH: pensando / trabalhando / aguardando confirmação / concluído / erro trocam a animação e mostram balões (o pool fica na configuração de topo; apenas escuta, sem chamar o modelo).',
