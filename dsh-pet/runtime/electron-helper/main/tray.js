@@ -1,6 +1,6 @@
 'use strict';
 /**
- * 系统托盘：桌面模式的显示开关与「退出」入口。
+ * 系统托盘：桌面模式的显示开关、「开机自启」与「退出」入口。
  *
  * 托盘是桌面模式唯一不进浏览器的入口——某只宠物改成 web/none 后窗口与右键菜单一起消失，
  * 只有托盘还能把它切回来。菜单是静态的：切换 display 后宿主会重启本进程，新进程按新配置重建。
@@ -83,6 +83,30 @@ function createTray({
     }
   }
 
+  /** 读系统里的登录项状态：系统是唯一真源，不另存配置文件。 */
+  function isAutostartOn() {
+    try {
+      return app.getLoginItemSettings().openAtLogin === true;
+    } catch (e) {
+      console.error('[dsh-pet-desktop-helper] read login item failed:', String(e && e.message ? e.message : e));
+      return false;
+    }
+  }
+
+  /**
+   * 翻转登录项后重建菜单。
+   *
+   * 成败都以系统回读为准：写失败时菜单显示原值，不假装已经打开。
+   */
+  async function toggleAutostart() {
+    try {
+      app.setLoginItemSettings({ openAtLogin: !isAutostartOn() });
+    } catch (e) {
+      console.error('[dsh-pet-desktop-helper] set login item failed:', String(e && e.message ? e.message : e));
+    }
+    await refreshTray();
+  }
+
   /**
    * 按当前配置拼托盘菜单；返回 null 表示此时不该有托盘（开关关掉 / 配置里没有宠物）。
    *
@@ -107,6 +131,9 @@ function createTray({
       .filter((pet) => pet.id);
     if (!pets.length) return null; // 配置里没有任何宠物：没有可切换的对象，不建托盘
     const canQuit = await canQuitSelf();
+    // 只给独立应用：bridge 下 helper 由宿主拉起，自己起来会被存活检查判死；
+    // Linux 上 Electron 没有登录项实现，不自己写 .desktop。
+    const canAutostart = appMode && !isBridge && (process.platform === 'win32' || process.platform === 'darwin');
     const quitApp = () => {
       if (!isBridge || appMode) {
         app.quit();
@@ -117,6 +144,21 @@ function createTray({
         console.error('[dsh-pet-desktop-helper] tray quit failed:', String(e && e.message ? e.message : e));
       });
     };
+    // 宠物勾选是「每只宠物显示在哪」，自启与退出是应用级动作：靠一条分隔线把两类分开，
+    // 免得「开机自启」看起来像某只宠物的属性。
+    const appItems = [
+      ...(canAutostart
+        ? [
+            {
+              label: '开机自启',
+              type: 'checkbox',
+              checked: isAutostartOn(),
+              click: () => void toggleAutostart(),
+            },
+          ]
+        : []),
+      ...(canQuit ? [{ label: '退出', click: quitApp }] : []),
+    ];
     return Menu.buildFromTemplate([
       ...pets.map((pet) => ({
         label: pet.name || pet.id,
@@ -124,7 +166,7 @@ function createTray({
         checked: isDesktopDisplay(pet.display),
         click: () => traySetPetDisplay(pet.id, toggleDisplay(pet.display)),
       })),
-      ...(canQuit ? [{ type: 'separator' }, { label: '退出', click: quitApp }] : []),
+      ...(appItems.length ? [{ type: 'separator' }, ...appItems] : []),
     ]);
   }
 
