@@ -43,6 +43,8 @@ function registerIpc({ ipcMain, petWindows, shell, openTarget, petRoute }) {
     if (Number.isFinite(ml) && Number.isFinite(mt) && Number.isFinite(bodyWidth)) {
       petWindows.state.winMargins.set(win.id, { l: ml, t: mt, r: rect.width - ml - bodyWidth });
     }
+    // 固定输入区域路径：窗口移动/缩放后按新几何重写 X Shape 输入区
+    petWindows.applyInputShape(win);
     // 碰撞站场的位置必须用包围盒左上角（渲染端显式上报 boxX/boxY）：窗口坐标 = 包围盒 − margin，
     // 直接拿窗口坐标会让跨窗检测整体错位。
     const petId = [...petWindows.state.windows.keys()].find((id) => petWindows.state.windows.get(id) === win);
@@ -86,6 +88,8 @@ function registerIpc({ ipcMain, petWindows, shell, openTarget, petRoute }) {
   ipcMain.on('pet:set-interactive', (event, interactive) => {
     const win = BrowserWindow.fromWebContents(event.sender);
     if (!win || win.isDestroyed()) return;
+    // Linux 固定输入区域路径：输入区由 X Shape 静态维护，不再按交互状态翻窗口
+    if (petWindows.hasInputShape) return;
     const input = petWindows.state.inputRegions.get(win.id);
     // 渲染端的旧 menuOpen/chatOpen 守卫会请求整窗可交互；这里按真实光标和控件矩形裁定。
     const ignoring =
@@ -109,6 +113,7 @@ function registerIpc({ ipcMain, petWindows, shell, openTarget, petRoute }) {
     const win = BrowserWindow.fromWebContents(event.sender);
     if (!win || win.isDestroyed()) return;
     petWindows.state.inputBusy.set(win.id, !!busy);
+    petWindows.applyInputShape(win);
   });
 
   ipcMain.on('pet:input-regions', (event, input) => {
@@ -118,6 +123,7 @@ function registerIpc({ ipcMain, petWindows, shell, openTarget, petRoute }) {
       (r) => r && [r.x, r.y, r.width, r.height].every(Number.isFinite) && r.width > 0 && r.height > 0,
     );
     petWindows.state.inputRegions.set(win.id, { dragging: input.dragging === true, rects });
+    petWindows.applyInputShape(win);
   });
 
   // 文本输入框拿到 DOM 焦点不等于窗口拿到键盘焦点：窗口是 showInactive 显示的，从不主动请求焦点，
