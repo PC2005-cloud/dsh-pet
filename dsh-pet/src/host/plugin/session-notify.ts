@@ -39,10 +39,10 @@ export function createSessionNotify(deps: SessionNotifyInput) {
 
   const turnFlags = new Map<string, WorkStatusTurnContext>();
 
-  /** 终态（success/error）展示窗口定时器：约 60s 后清掉该会话条目，陈旧完成态不再浮上来。 */
+  /** 终态（success/error）展示窗口定时器：约 5s 后清掉该会话条目，陈旧完成态不再浮上来。 */
   const terminalTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
-  const TERMINAL_KEEP_MS = 60 * 1000;
+  const TERMINAL_KEEP_MS = 5 * 1000;
 
   /**
    * 每会话最近一条 todo 文案：工具跑完要把气泡「还」给它。没有这份缓存，`tool/result` 写 null

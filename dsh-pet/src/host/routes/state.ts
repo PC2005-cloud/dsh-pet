@@ -106,7 +106,7 @@ export async function handleStateRoutes(deps: PetRouteDeps, input: RouteInput): 
 
   // 外部写入工作状态：POST 设置固定外部槽 `api` 的档位（task 省略 = 保留，null = 清空），
   // DELETE 清空回空闲（幂等）。只解决「外部程序把状态告诉桌宠」，不做多写者仲裁/租约/会话管理；
-  // 外部槽与会话一起参与现有优先级（waiting > error > working > thinking > result > success）。
+  // 外部槽与会话一起参与现有优先级（waiting > error > success > working > thinking > result）。
   if (rest === 'work-status') {
     if (method === 'DELETE') {
       if (workStatus.clear(EXTERNAL_WORK_SESSION)) publishWorkStatus();

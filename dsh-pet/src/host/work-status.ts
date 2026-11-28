@@ -146,15 +146,16 @@ export interface SessionWorkEntry {
   sessionId: string;
 }
 
-/** 展示优先级：waiting > error > working > thinking > result > success。
- *  result 高于 success：任何会话的进行中过渡态都不被别处已完成态压过，防中途庆祝；同档按最近更新优先。 */
+/** 展示优先级：waiting > error > success > working > thinking > result。
+ *  success 高于 working：别的会话刚完成时要立刻可见，不被进行中的长任务压住——代价是完成态会短暂
+ *  盖住长任务（终态条目 5 秒后自动清理）。同档按最近更新优先。 */
 export const WORK_STATUS_PRIORITY: Record<HostWorkStatusState, number> = {
   waiting: 60,
   error: 50,
+  success: 45,
   working: 40,
   thinking: 30,
   result: 25,
-  success: 20,
 };
 
 /** 展示用条目：所有会话里优先级最高者（同优先级取 seq 更大者）；无会话返回 undefined。 */

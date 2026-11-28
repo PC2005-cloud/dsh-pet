@@ -234,7 +234,7 @@ paths:
         - 只接受 6 个档位；`task` 可选，省略 = 保留上一次，`null` / 空串 = 清空。
         - 不传 session/seq，不做多写者仲裁或租约；最后写入者生效。
         - 外部槽与 DSH 会话一起参与现有优先级
-          （waiting > error > working > thinking > result > success）。
+          （waiting > error > success > working > thinking > result）。
         - `success` / `error` 的气泡 10 秒后自动收起，但状态本身不会自动清；
           要回空闲必须显式 `DELETE`。
       requestBody:

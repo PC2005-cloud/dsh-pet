@@ -358,7 +358,7 @@ describe('任务文案生命周期 —— 现场场景 2：任务结束后永久
     assert.equal(snap.task, null);
   });
 
-  test('终态展示窗口（60s）过后条目连同文案一起清掉', async (t) => {
+  test('终态展示窗口（5s）过后条目连同文案一起清掉', async (t) => {
     const h = setup();
     t.after(h.dispose);
     h.emit('r3', TURN_START(1));
@@ -367,7 +367,7 @@ describe('任务文案生命周期 —— 现场场景 2：任务结束后永久
     t.after(() => t.mock.timers.reset());
     h.emit('r3', TURN_END(3, 'completed'));
     assert.equal((await h.snapshot()).task, '完成即清的任务');
-    t.mock.timers.tick(60 * 1000);
+    t.mock.timers.tick(5 * 1000);
     const snap = await h.snapshot();
     assert.equal(snap.state, null);
     assert.equal(snap.task, null);

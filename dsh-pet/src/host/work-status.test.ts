@@ -220,8 +220,8 @@ describe('WorkStatusStore —— 按会话聚合与展示（issue #59）', () =>
     assert.equal(s.snapshot().task, null);
   });
 
-  test('展示优先级表：waiting > error > working > thinking > result > success', () => {
-    const order: HostWorkStatusState[] = ['waiting', 'error', 'working', 'thinking', 'result', 'success'];
+  test('展示优先级表：waiting > error > success > working > thinking > result', () => {
+    const order: HostWorkStatusState[] = ['waiting', 'error', 'success', 'working', 'thinking', 'result'];
     for (let i = 0; i < order.length - 1; i += 1) {
       const s = new WorkStatusStore();
       s.setState('low', order[i + 1], 10); // 序号更大：只有优先级能决定胜负
