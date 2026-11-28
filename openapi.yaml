@@ -4076,6 +4076,11 @@ components:
                       properties:
                         message:
                           type: string
+                text:
+                  type: string
+                  description: |
+                    `completed` 时宿主附带最后一条回复的开头（最多 4000 字）；
+                    客户端去掉 Markdown 后只取第一句；不足 12 个字符时顺延到整段开头。
 
     ApprovalFrame:
       type: object
@@ -4092,7 +4097,7 @@ components:
           description: 申请权限的工具名（可选）
         reason:
           type: string
-          description: 申请原因（可选）
+          description: 申请理由（可选，宿主透传 `approval/asked` 的 `reason`）
 
     QuestionFrame:
       type: object
