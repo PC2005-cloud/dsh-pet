@@ -190,6 +190,10 @@ export interface PhysicsParams {
    *  false = 刚性实时跟随，每帧直接把盒子贴到指针目标。
    *  只改跟随，不改甩出初速（初速取指针轨迹）与 throwPower 的抛掷增益。缺键按 true。 */
   dragSpring?: boolean;
+  /** 飞行最大倾斜角（°）：速度越快身体越歪，封顶此值；缺省 = 75（接近横着飞）。与手机「倾斜控制重力」无关。 */
+  flightTiltMaxDeg?: number;
+  /** 达到最大倾斜所需参考速度（px/s）；缺省 = 1800。 */
+  flightTiltRefSpeed?: number;
 }
 
 /** 字体种类预设 id（font.family 白名单；清单与对应字体栈见 shared/fonts.ts）。 */
